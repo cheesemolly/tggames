@@ -93,6 +93,7 @@ export function openGame(container, entry, { platform, onExit }) {
       variant: typeof result.variant === 'string' && result.variant ? result.variant : null,
       locale: LOCALES.includes(result.locale) ? result.locale : 'ru',
       share: typeof result.share === 'string' && result.share ? result.share : null,
+      title: typeof result.title === 'string' && result.title ? result.title : null,
     };
   }
 
@@ -129,7 +130,7 @@ export function openGame(container, entry, { platform, onExit }) {
     },
       el('div', { class: 'result-card', onclick: (e) => e.stopPropagation() },
         hideButton,
-        el('h2', { class: 'result-title' }, t.outcome[result.outcome]),
+        el('h2', { class: 'result-title' }, result.title ?? t.outcome[result.outcome]),
         result.message && el('p', { class: 'result-message' }, result.message),
         result.score !== null && el('p', { class: 'result-line' }, `${t.score}: ${result.score}`),
         el('p', { class: 'result-line' }, `${t.time}: ${formatDuration(result.durationMs)}`),

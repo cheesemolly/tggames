@@ -1,0 +1,421 @@
+/*
+ * Block Blast. Цвета — переменные --bb-*; скин «telegram» (по умолчанию) берёт фон и текст из темы Telegram,
+ * остальные скины — свои палитры (data-skin на контейнере игры). Цвета блоков — 8 переменных --bb-c1…c8.
+ */
+
+[data-game="block-blast"] {
+  --bb-bg: var(--tg-theme-bg-color);
+  --bb-surface: var(--tg-theme-secondary-bg-color);
+  --bb-text: var(--tg-theme-text-color);
+  --bb-hint: var(--tg-theme-hint-color);
+  --bb-accent: var(--tg-theme-button-color);
+  --bb-accent-text: var(--tg-theme-button-text-color);
+  --bb-board: color-mix(in srgb, var(--tg-theme-text-color) 12%, var(--tg-theme-bg-color));
+  --bb-empty: color-mix(in srgb, var(--tg-theme-text-color) 6%, var(--tg-theme-bg-color));
+  --bb-shine: rgb(255 255 255 / 0.38);
+  --bb-shade: rgb(0 0 0 / 0.24);
+  --bb-c1: #ff4d4d; --bb-c2: #ff9f1c; --bb-c3: #ffd23f; --bb-c4: #3ddc84;
+  --bb-c5: #2ec4f1; --bb-c6: #3a86ff; --bb-c7: #9b5de5; --bb-c8: #ff5fa2;
+
+  --toast-top: 120px;
+  --toast-bg: var(--bb-text);
+  --toast-fg: var(--bb-bg);
+}
+
+/* Скины — применяются и к корню игры, и к квадрату-образцу в настройках */
+[data-game="block-blast"] [data-skin="telegram"] {
+  --bb-board: color-mix(in srgb, var(--tg-theme-text-color) 12%, var(--tg-theme-bg-color));
+  --bb-accent: var(--tg-theme-button-color);
+}
+[data-game="block-blast"][data-skin="classic"], [data-game="block-blast"] [data-skin="classic"] {
+  --bb-bg: #3d5fa8; --bb-surface: #34508f; --bb-text: #ffffff; --bb-hint: #c6d3f0;
+  --bb-accent: #ffc93c; --bb-accent-text: #1b2340; --bb-board: #1b2442; --bb-empty: #26315a;
+}
+[data-game="block-blast"][data-skin="sky"], [data-game="block-blast"] [data-skin="sky"] {
+  --bb-bg: #8ec5f2; --bb-surface: #b7dbf8; --bb-text: #10365e; --bb-hint: #3f6c96;
+  --bb-accent: #1f6fe0; --bb-accent-text: #ffffff; --bb-board: #b6dbf7; --bb-empty: #d6ebfc;
+  --bb-c1: #1f5fd6; --bb-c2: #2f78e8; --bb-c3: #3b92f2; --bb-c4: #1b4db8;
+  --bb-c5: #2aa7f0; --bb-c6: #4f86ec; --bb-c7: #2447b0; --bb-c8: #36b5f5;
+}
+[data-game="block-blast"][data-skin="dark"], [data-game="block-blast"] [data-skin="dark"] {
+  --bb-bg: #2b2b2e; --bb-surface: #3a3a3e; --bb-text: #f2f2f2; --bb-hint: #a0a0a8;
+  --bb-accent: #4fc3f7; --bb-accent-text: #10202a; --bb-board: #1c1c1f; --bb-empty: #28282c;
+  --bb-c1: #4fc3f7; --bb-c2: #ffb74d; --bb-c3: #81c784; --bb-c4: #e57373;
+  --bb-c5: #ba68c8; --bb-c6: #fff176; --bb-c7: #4dd0e1; --bb-c8: #f06292;
+}
+[data-game="block-blast"][data-skin="wood"], [data-game="block-blast"] [data-skin="wood"] {
+  --bb-bg: #7a4e2d; --bb-surface: #8d5c37; --bb-text: #fff4e6; --bb-hint: #e0c3a0;
+  --bb-accent: #e0a86b; --bb-accent-text: #3b2413; --bb-board: #4a2e1d; --bb-empty: #573724;
+  --bb-shine: rgb(255 244 225 / 0.45); --bb-shade: rgb(60 30 10 / 0.3);
+  --bb-c1: #e3c69f; --bb-c2: #d9b58a; --bb-c3: #cca277; --bb-c4: #e8d2b0;
+  --bb-c5: #c79b6d; --bb-c6: #dcbc93; --bb-c7: #bf9063; --bb-c8: #efdcc0;
+}
+[data-game="block-blast"][data-skin="neon"], [data-game="block-blast"] [data-skin="neon"] {
+  --bb-bg: #0a0a14; --bb-surface: #17172a; --bb-text: #eeeeff; --bb-hint: #8a8ab0;
+  --bb-accent: #ff3df2; --bb-accent-text: #ffffff; --bb-board: #0e0e1c; --bb-empty: #151528;
+  --bb-c1: #ff3df2; --bb-c2: #3df2ff; --bb-c3: #b8ff3d; --bb-c4: #ffe23d;
+  --bb-c5: #ff7a3d; --bb-c6: #7a5cff; --bb-c7: #3dff9e; --bb-c8: #ff3d6e;
+}
+[data-game="block-blast"][data-skin="candy"], [data-game="block-blast"] [data-skin="candy"] {
+  --bb-bg: #ffe3ef; --bb-surface: #ffd0e3; --bb-text: #6b2a4a; --bb-hint: #b07595;
+  --bb-accent: #ff6fae; --bb-accent-text: #ffffff; --bb-board: #ffc7dc; --bb-empty: #ffe6f0;
+  --bb-c1: #ff8fb8; --bb-c2: #ffb86b; --bb-c3: #ffd966; --bb-c4: #7fdca0;
+  --bb-c5: #7fd6ff; --bb-c6: #a9a3ff; --bb-c7: #d69cff; --bb-c8: #ff9e9e;
+}
+
+[data-game="block-blast"] .bb-c1 { --c: var(--bb-c1); }
+[data-game="block-blast"] .bb-c2 { --c: var(--bb-c2); }
+[data-game="block-blast"] .bb-c3 { --c: var(--bb-c3); }
+[data-game="block-blast"] .bb-c4 { --c: var(--bb-c4); }
+[data-game="block-blast"] .bb-c5 { --c: var(--bb-c5); }
+[data-game="block-blast"] .bb-c6 { --c: var(--bb-c6); }
+[data-game="block-blast"] .bb-c7 { --c: var(--bb-c7); }
+[data-game="block-blast"] .bb-c8 { --c: var(--bb-c8); }
+
+/* ---------- раскладка ---------- */
+
+.game-root[data-game="block-blast"] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+  background: var(--bb-bg);
+  color: var(--bb-text);
+  transition: background-color 0.3s ease, color 0.3s ease;
+  touch-action: none;                    /* перетаскивание не должно прокручивать страницу */
+  user-select: none;
+  -webkit-user-select: none;
+}
+[data-game="block-blast"] .btn { background: var(--bb-accent); color: var(--bb-accent-text); }
+[data-game="block-blast"] .btn-secondary { background: var(--bb-bg); color: var(--bb-text); }
+
+[data-game="block-blast"] .bb {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+[data-game="block-blast"] .bb-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 4px;
+}
+[data-game="block-blast"] .bb-title { font-size: 20px; font-weight: 700; line-height: 1.2; }
+[data-game="block-blast"] .bb-sub { font-size: 13px; color: var(--bb-hint); }
+[data-game="block-blast"] .bb-actions { display: flex; gap: 6px; }
+[data-game="block-blast"] .bb-icon-btn {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: var(--bb-surface);
+  color: var(--bb-text);
+  font: inherit;
+  font-size: 16px;
+  cursor: pointer;
+  transition: transform 0.1s ease, background-color 0.3s ease;
+}
+[data-game="block-blast"] .bb-icon-btn:active { transform: scale(0.92); }
+
+[data-game="block-blast"] .bb-score {
+  text-align: center;
+  font-size: 40px;
+  font-weight: 800;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 2px 0 var(--bb-shade);
+}
+
+/* поле — квадрат по меньшей стороне свободного места */
+[data-game="block-blast"] .bb-board-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  container-type: size;
+  isolation: isolate;                    /* радужная рамка (::before, z-index −1) остаётся над фоном экрана */
+}
+[data-game="block-blast"] .bb-frame {
+  --size: min(100cqw, 100cqh);
+  position: relative;
+  width: var(--size);
+  height: var(--size);
+  padding: 4px;
+  border-radius: 10px;
+  background: var(--bb-board);
+  transition: box-shadow 0.4s ease, background-color 0.3s ease;
+}
+[data-game="block-blast"] .bb-board {
+  --cs: calc((var(--size) - 8px) / 8);
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  grid-template-rows: repeat(8, 1fr);
+  width: 100%;
+  height: 100%;
+  gap: 2px;
+}
+[data-game="block-blast"] .bb-cell {
+  border-radius: calc(var(--cs) * 0.12);
+  background: var(--bb-empty);
+  transition: background-color 0.3s ease;
+}
+
+/* объёмный блок: светлая грань сверху/слева, тёмная снизу/справа */
+[data-game="block-blast"] .bb-block {
+  background: var(--c);
+  border-radius: calc(var(--cs) * 0.12);
+  box-shadow:
+    inset 0 calc(var(--cs) * 0.1) 0 var(--bb-shine),
+    inset calc(var(--cs) * 0.07) 0 0 color-mix(in srgb, var(--bb-shine) 50%, transparent),
+    inset 0 calc(var(--cs) * -0.1) 0 var(--bb-shade),
+    inset calc(var(--cs) * -0.07) 0 0 color-mix(in srgb, var(--bb-shade) 60%, transparent);
+}
+[data-game="block-blast"][data-skin="neon"] .bb-block {
+  box-shadow: 0 0 calc(var(--cs) * 0.25) var(--c), inset 0 0 calc(var(--cs) * 0.2) rgb(255 255 255 / 0.5);
+}
+
+/* тень фигуры при перетаскивании */
+[data-game="block-blast"] .bb-ghost {
+  background: color-mix(in srgb, var(--c) 45%, var(--bb-empty));
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--c) 80%, transparent);
+}
+/* линии, которые сгорят, если отпустить: цвет фигуры и свечение */
+[data-game="block-blast"] .bb-will-clear {
+  animation: bb-will-clear 0.7s ease-in-out infinite alternate;
+}
+@keyframes bb-will-clear {
+  from { filter: brightness(1); }
+  to { filter: brightness(1.35) drop-shadow(0 0 calc(var(--cs) * 0.2) var(--c)); }
+}
+
+/* ---------- лоток ---------- */
+
+[data-game="block-blast"] .bb-tray {
+  flex: none;
+  height: 112px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+[data-game="block-blast"] .bb-slot {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  touch-action: none;
+  cursor: grab;
+  transition: opacity 0.25s ease, filter 0.25s ease;
+}
+[data-game="block-blast"] .bb-slot-taken .bb-piece { visibility: hidden; }
+[data-game="block-blast"] .bb-slot-dim { opacity: 0.35; filter: grayscale(0.8); }
+
+[data-game="block-blast"] .bb-piece { display: grid; gap: 2px; pointer-events: none; }
+[data-game="block-blast"] .bb-drag {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+  filter: drop-shadow(0 8px 10px rgb(0 0 0 / 0.3));
+}
+
+/* ---------- сгорание и конец игры ---------- */
+
+[data-game="block-blast"] .bb-clearing {
+  animation: bb-clear 0.38s ease-in forwards;
+  animation-delay: var(--d, 0ms);
+}
+@keyframes bb-clear {
+  0% { transform: scale(1); filter: brightness(1); }
+  35% { transform: scale(1.12); filter: brightness(2.2); }
+  100% { transform: scale(0.2); opacity: 0; filter: brightness(2.5); }
+}
+[data-game="block-blast"] .bb-clearing-rainbow {
+  animation: bb-clear-rainbow 0.38s linear forwards;
+  animation-delay: var(--d, 0ms);
+}
+@keyframes bb-clear-rainbow {
+  0% { transform: scale(1); filter: hue-rotate(0deg) saturate(1.6) brightness(1.2); }
+  40% { transform: scale(1.15); filter: hue-rotate(180deg) saturate(2) brightness(1.6); }
+  100% { transform: scale(0.2); opacity: 0; filter: hue-rotate(360deg) saturate(2) brightness(2.2); }
+}
+[data-game="block-blast"] .bb-dead {
+  animation: bb-dead 0.5s ease forwards;
+  animation-delay: var(--d, 0ms);
+}
+@keyframes bb-dead { to { filter: grayscale(1) brightness(0.6); } }
+
+/* ---------- свечение поля, пока живо комбо ---------- */
+
+[data-game="block-blast"] .bb-frame[data-glow="1"] {
+  box-shadow: 0 0 0 2px var(--bb-accent), 0 0 18px color-mix(in srgb, var(--bb-accent) 60%, transparent);
+}
+[data-game="block-blast"] .bb-frame[data-glow="2"] {
+  box-shadow: 0 0 0 3px var(--bb-accent), 0 0 30px var(--bb-accent);
+  animation: bb-pulse 1.2s ease-in-out infinite;
+}
+@keyframes bb-pulse {
+  50% { box-shadow: 0 0 0 3px var(--bb-accent), 0 0 44px var(--bb-accent); }
+}
+/* радужная рамка: вращающийся конический градиент под полем */
+[data-game="block-blast"] .bb-frame[data-glow="3"]::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  z-index: -1;
+  border-radius: 13px;
+  background: conic-gradient(from var(--bb-angle, 0deg), #ff4d4d, #ffd23f, #3ddc84, #2ec4f1, #9b5de5, #ff5fa2, #ff4d4d);
+  filter: blur(6px);
+  animation: bb-rainbow 1.6s linear infinite;
+}
+[data-game="block-blast"] .bb-frame[data-glow="3"]::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  z-index: -1;
+  border-radius: 12px;
+  background: conic-gradient(from var(--bb-angle, 0deg), #ff4d4d, #ffd23f, #3ddc84, #2ec4f1, #9b5de5, #ff5fa2, #ff4d4d);
+  animation: bb-rainbow 1.6s linear infinite;
+}
+@property --bb-angle { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
+@keyframes bb-rainbow { to { --bb-angle: 360deg; } }
+
+/* вспышка экрана — на максимальном уровне */
+[data-game="block-blast"] .bb-flash {
+  position: absolute;
+  inset: -8px;
+  z-index: 4;
+  pointer-events: none;
+  background: #ffffff;
+  opacity: 0;
+}
+[data-game="block-blast"] .bb-flash-on { animation: bb-flash 0.35s ease-out; }
+@keyframes bb-flash { 0% { opacity: 0.55; } 100% { opacity: 0; } }
+
+[data-game="block-blast"] .bb-fx {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 3;
+  pointer-events: none;
+}
+
+/* ---------- всплывающие надписи ---------- */
+
+[data-game="block-blast"] .bb-floats { position: absolute; inset: 0; z-index: 5; pointer-events: none; }
+[data-game="block-blast"] .bb-float {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font-weight: 800;
+  white-space: nowrap;
+  color: #ffffff;
+  text-shadow: 0 2px 0 rgb(0 0 0 / 0.35), 0 0 12px rgb(0 0 0 / 0.25);
+  animation: bb-float 1.1s ease-out forwards;
+}
+@keyframes bb-float {
+  0% { opacity: 0; transform: translate(-50%, -30%) scale(0.6); }
+  15% { opacity: 1; transform: translate(-50%, -50%) scale(1.15); }
+  30% { transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -140%) scale(1); }
+}
+[data-game="block-blast"] .bb-float-small { font-size: 16px; animation-duration: 0.7s; }
+[data-game="block-blast"] .bb-float-bonus { font-size: 30px; color: #ffe066; }
+[data-game="block-blast"] .bb-float-combo {
+  font-size: 34px;
+  font-style: italic;
+  color: #ffffff;
+  animation: bb-float-combo 1.4s ease-out forwards;
+}
+@keyframes bb-float-combo {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.4) rotate(-6deg); }
+  20% { opacity: 1; transform: translate(-50%, -50%) scale(1.2) rotate(0); }
+  35% { transform: translate(-50%, -50%) scale(1); }
+  75% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -80%) scale(1.05); }
+}
+[data-game="block-blast"] .bb-float.bb-tier-2 { text-shadow: 0 2px 0 rgb(0 0 0 / 0.35), 0 0 18px var(--bb-accent); }
+[data-game="block-blast"] .bb-float.bb-tier-3,
+[data-game="block-blast"] .bb-float.bb-tier-4 {
+  color: transparent;
+  background: linear-gradient(90deg, #ff4d4d, #ffd23f, #3ddc84, #2ec4f1, #9b5de5, #ff5fa2, #ff4d4d) 0 0 / 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-stroke: 1px rgb(255 255 255 / 0.6);
+  filter: drop-shadow(0 2px 0 rgb(0 0 0 / 0.35)) drop-shadow(0 0 10px rgb(255 255 255 / 0.5));
+  animation-name: bb-float-combo, bb-rainbow-text;
+  animation-duration: 1.4s, 0.8s;
+  animation-timing-function: ease-out, linear;
+  animation-iteration-count: 1, infinite;
+  animation-fill-mode: forwards, none;
+}
+[data-game="block-blast"] .bb-float.bb-tier-4 { font-size: 40px; }
+@keyframes bb-rainbow-text { to { background-position: 200% 0; } }
+
+/* ---------- окна ---------- */
+
+[data-game="block-blast"] .bb-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--bb-bg) 85%, transparent);
+}
+[data-game="block-blast"] .bb-card {
+  width: 100%;
+  max-width: 360px;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--bb-surface);
+}
+[data-game="block-blast"] .bb-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+[data-game="block-blast"] .bb-card-head h2 { margin: 0; font-size: 18px; }
+[data-game="block-blast"] .bb-card .bb-icon-btn { background: var(--bb-bg); }
+[data-game="block-blast"] .bb-note { margin: 0 0 12px; color: var(--bb-hint); }
+[data-game="block-blast"] .bb-card-actions { display: flex; gap: 8px; }
+[data-game="block-blast"] .bb-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 8px;
+  text-align: center;
+}
+[data-game="block-blast"] .bb-stat-value { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
+[data-game="block-blast"] .bb-stat-label { font-size: 12px; color: var(--bb-hint); }
+
+[data-game="block-blast"] .bb-skins { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 8px; }
+[data-game="block-blast"] .bb-skin {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--bb-text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+[data-game="block-blast"] .bb-swatch {
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--bb-board) 50%, var(--bb-accent) 50%);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bb-hint) 40%, transparent);
+  transition: transform 0.2s ease;
+}
+[data-game="block-blast"] .bb-skin:active .bb-swatch { transform: scale(0.92); }
+[data-game="block-blast"] .bb-skin[aria-checked="true"] .bb-swatch { outline: 3px solid var(--bb-accent); outline-offset: 3px; }
