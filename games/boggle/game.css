@@ -1,0 +1,363 @@
+/*
+ * Boggle. Цвета — переменные --bo-*; скин «telegram» (по умолчанию) — из темы Telegram,
+ * остальные — свои палитры (data-skin на контейнере игры). Размер букв — от размера поля (--n).
+ */
+
+[data-game="boggle"] {
+  --bo-bg: var(--tg-theme-bg-color);
+  --bo-surface: var(--tg-theme-secondary-bg-color);
+  --bo-text: var(--tg-theme-text-color);
+  --bo-hint: var(--tg-theme-hint-color);
+  --bo-accent: var(--tg-theme-button-color);
+  --bo-accent-text: var(--tg-theme-button-text-color);
+  --bo-board: color-mix(in srgb, var(--tg-theme-text-color) 8%, var(--tg-theme-bg-color));
+  --bo-tile: var(--tg-theme-secondary-bg-color);
+  --bo-tile-text: var(--tg-theme-text-color);
+  --bo-tile-edge: color-mix(in srgb, var(--tg-theme-text-color) 18%, transparent);
+  --bo-good: #2fb36b;
+  --bo-bad: var(--tg-theme-destructive-text-color);
+  --bo-warn: #e0a100;
+
+  --toast-top: 150px;
+  --toast-bg: var(--bo-text);
+  --toast-fg: var(--bo-bg);
+}
+
+[data-game="boggle"] [data-skin="telegram"] {
+  --bo-board: color-mix(in srgb, var(--tg-theme-text-color) 8%, var(--tg-theme-bg-color));
+  --bo-accent: var(--tg-theme-button-color);
+}
+[data-game="boggle"][data-skin="classic"], [data-game="boggle"] [data-skin="classic"] {   /* кубики на дереве */
+  --bo-bg: #f3e6cf; --bo-surface: #e6d3b3; --bo-text: #3b2a18; --bo-hint: #8a7050;
+  --bo-accent: #c0622b; --bo-accent-text: #ffffff; --bo-board: #8a5a34;
+  --bo-tile: #fbf3e3; --bo-tile-text: #2d2014; --bo-tile-edge: #cdb48c;
+}
+[data-game="boggle"][data-skin="night"], [data-game="boggle"] [data-skin="night"] {
+  --bo-bg: #10152a; --bo-surface: #1b2242; --bo-text: #e8ebff; --bo-hint: #8d94c0;
+  --bo-accent: #6c8cff; --bo-accent-text: #ffffff; --bo-board: #0b0f20;
+  --bo-tile: #222b52; --bo-tile-text: #eef1ff; --bo-tile-edge: #121834;
+}
+[data-game="boggle"][data-skin="paper"], [data-game="boggle"] [data-skin="paper"] {
+  --bo-bg: #faf8f3; --bo-surface: #efebe2; --bo-text: #22201c; --bo-hint: #8a857a;
+  --bo-accent: #22201c; --bo-accent-text: #faf8f3; --bo-board: #e4ded2;
+  --bo-tile: #ffffff; --bo-tile-text: #22201c; --bo-tile-edge: #cfc8b8;
+}
+[data-game="boggle"][data-skin="neon"], [data-game="boggle"] [data-skin="neon"] {
+  --bo-bg: #07070f; --bo-surface: #15152a; --bo-text: #f0f0ff; --bo-hint: #8a8ab0;
+  --bo-accent: #3df2ff; --bo-accent-text: #07070f; --bo-board: #0c0c1c;
+  --bo-tile: #111126; --bo-tile-text: #3df2ff; --bo-tile-edge: #2a2a55;
+  --bo-good: #b8ff3d; --bo-warn: #ffe23d;
+}
+[data-game="boggle"][data-skin="mint"], [data-game="boggle"] [data-skin="mint"] {
+  --bo-bg: #e7f7f1; --bo-surface: #cfeee2; --bo-text: #123c30; --bo-hint: #5a8a7b;
+  --bo-accent: #14a37f; --bo-accent-text: #ffffff; --bo-board: #b9e6d6;
+  --bo-tile: #ffffff; --bo-tile-text: #123c30; --bo-tile-edge: #9fd4c1;
+}
+
+.game-root[data-game="boggle"] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+  background: var(--bo-bg);
+  color: var(--bo-text);
+  transition: background-color 0.3s ease, color 0.3s ease;
+  user-select: none;
+  -webkit-user-select: none;
+}
+[data-game="boggle"] .btn { background: var(--bo-accent); color: var(--bo-accent-text); }
+[data-game="boggle"] .btn-secondary { background: var(--bo-surface); color: var(--bo-text); }
+
+[data-game="boggle"] .bo {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+[data-game="boggle"] .bo-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 4px; }
+[data-game="boggle"] .bo-title { font-size: 20px; font-weight: 700; line-height: 1.2; }
+[data-game="boggle"] .bo-sub { font-size: 13px; color: var(--bo-hint); }
+[data-game="boggle"] .bo-actions { display: flex; gap: 6px; }
+[data-game="boggle"] .bo-icon-btn {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: var(--bo-surface);
+  color: var(--bo-text);
+  font: inherit;
+  font-size: 16px;
+  cursor: pointer;
+  transition: transform 0.1s ease, background-color 0.3s ease;
+}
+[data-game="boggle"] .bo-icon-btn:active { transform: scale(0.92); }
+[data-game="boggle"] .bo-icon-btn:disabled { opacity: 0.4; }
+[data-game="boggle"] .bo-pause-btn { border-radius: 50%; }
+
+[data-game="boggle"] .bo-info {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  align-items: center;
+  gap: 4px;
+  padding: 0 4px;
+  text-align: center;
+}
+[data-game="boggle"] .bo-info-label { font-size: 12px; color: var(--bo-hint); }
+[data-game="boggle"] .bo-info-value { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
+[data-game="boggle"] .bo-time-low { color: var(--bo-bad); animation: bo-pulse 1s ease-in-out infinite; }
+@keyframes bo-pulse { 50% { transform: scale(1.12); } }
+
+/* текущее слово */
+[data-game="boggle"] .bo-current {
+  height: 36px;
+  display: grid;
+  place-items: center;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--bo-text);
+  transition: color 0.2s ease;
+}
+[data-game="boggle"] .bo-current-empty { font-size: 14px; font-weight: 500; letter-spacing: 0; color: var(--bo-hint); }
+[data-game="boggle"] .bo-current[data-kind="good"] { color: var(--bo-good); }
+[data-game="boggle"] .bo-current[data-kind="bad"] { color: var(--bo-bad); }
+[data-game="boggle"] .bo-current[data-kind="warn"] { color: var(--bo-warn); }
+
+/* поле — квадрат по меньшей стороне */
+[data-game="boggle"] .bo-board-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  container-type: size;
+}
+[data-game="boggle"] .bo-board {
+  --size: min(100cqw, 100cqh);
+  --gap: calc(var(--size) * 0.012 + 1px);
+  position: relative;
+  width: var(--size);
+  height: var(--size);
+  display: grid;
+  grid-template-columns: repeat(var(--n), 1fr);
+  grid-template-rows: repeat(var(--n), 1fr);
+  gap: var(--gap);
+  padding: var(--gap);
+  border-radius: 12px;
+  background: var(--bo-board);
+  touch-action: none;
+  transition: background-color 0.3s ease;
+}
+[data-game="boggle"] .bo-cell {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  min-height: 0;
+  border-radius: calc(var(--size) / var(--n) * 0.18);
+  background: var(--bo-tile);
+  color: var(--bo-tile-text);
+  box-shadow: inset 0 calc(var(--size) / var(--n) * -0.06) 0 var(--bo-tile-edge);
+  font-size: calc(var(--size) / var(--n) * 0.5);
+  font-weight: 700;
+  text-transform: uppercase;
+  line-height: 1;
+  transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+[data-game="boggle"][data-skin="neon"] .bo-letter { text-shadow: 0 0 8px currentColor; }
+[data-game="boggle"] .bo-letter { display: inline-block; pointer-events: none; }
+
+[data-game="boggle"] .bo-cell.bo-on { background: var(--bo-accent); color: var(--bo-accent-text); transform: scale(0.94); }
+[data-game="boggle"] .bo-cell.bo-good { background: var(--bo-good); color: #ffffff; }
+[data-game="boggle"] .bo-cell.bo-bad { background: var(--bo-bad); color: #ffffff; }
+[data-game="boggle"] .bo-cell.bo-warn { background: var(--bo-warn); color: #ffffff; }
+
+/* линия пути поверх клеток */
+[data-game="boggle"] .bo-line {
+  position: absolute;
+  inset: var(--gap);
+  width: calc(100% - 2 * var(--gap));
+  height: calc(100% - 2 * var(--gap));
+  pointer-events: none;
+  overflow: visible;
+}
+[data-game="boggle"] .bo-line polyline {
+  fill: none;
+  stroke: var(--bo-accent);
+  stroke-width: calc(40 / var(--n));
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.45;
+  vector-effect: none;
+  transition: stroke 0.15s ease;
+}
+[data-game="boggle"] .bo-line[data-kind="good"] polyline { stroke: var(--bo-good); }
+[data-game="boggle"] .bo-line[data-kind="bad"] polyline { stroke: var(--bo-bad); }
+[data-game="boggle"] .bo-line[data-kind="warn"] polyline { stroke: var(--bo-warn); }
+
+[data-game="boggle"] .bo-pause {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: var(--bo-bg);
+}
+[data-game="boggle"] .bo-pause .btn { width: auto; min-width: 220px; }
+
+/* найденные слова / разбор */
+[data-game="boggle"] .bo-list {
+  flex: none;
+  max-height: 30%;
+  min-height: 44px;
+  overflow-y: auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 6px;
+  padding: 2px 2px 4px;
+}
+[data-game="boggle"] .bo-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--bo-surface);
+  color: var(--bo-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+[data-game="boggle"] .bo-chip-pts {
+  font-size: 11px;
+  color: var(--bo-hint);
+}
+[data-game="boggle"] .bo-chip-found { background: color-mix(in srgb, var(--bo-good) 22%, var(--bo-surface)); }
+[data-game="boggle"] .bo-chip-missed { opacity: 0.6; }
+
+[data-game="boggle"] .bo-finish { flex: none; }
+
+[data-game="boggle"] .bo-float {
+  position: absolute;
+  z-index: 5;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--bo-good);
+  text-shadow: 0 2px 0 color-mix(in srgb, var(--bo-bg) 70%, transparent);
+  animation: bo-float 0.9s ease-out forwards;
+}
+@keyframes bo-float {
+  0% { opacity: 0; transform: translate(-50%, -20%) scale(0.6); }
+  20% { opacity: 1; transform: translate(-50%, -60%) scale(1.15); }
+  100% { opacity: 0; transform: translate(-50%, -180%) scale(1); }
+}
+
+/* окна */
+[data-game="boggle"] .bo-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--bo-bg) 85%, transparent);
+}
+[data-game="boggle"] .bo-card {
+  width: 100%;
+  max-width: 360px;
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--bo-surface);
+}
+[data-game="boggle"] .bo-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+[data-game="boggle"] .bo-card-head h2 { margin: 0; font-size: 18px; }
+[data-game="boggle"] .bo-card .bo-icon-btn { background: var(--bo-bg); }
+[data-game="boggle"] .bo-card .btn-secondary { background: var(--bo-bg); }
+[data-game="boggle"] .bo-note { margin: 8px 0 0; font-size: 13px; color: var(--bo-hint); }
+[data-game="boggle"] .bo-card-actions { display: flex; gap: 8px; margin-top: 12px; }
+[data-game="boggle"] .bo-section { margin: 4px 0 10px; font-size: 14px; }
+[data-game="boggle"] .bo-section + .bo-skins { margin-bottom: 0; }
+
+[data-game="boggle"] .bo-sizes { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin-bottom: 4px; }
+[data-game="boggle"] .bo-size {
+  display: grid;
+  gap: 2px;
+  padding: 8px 2px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--bo-bg);
+  color: var(--bo-text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+[data-game="boggle"] .bo-size span { font-size: 11px; color: var(--bo-hint); }
+[data-game="boggle"] .bo-size[aria-checked="true"] { background: var(--bo-accent); color: var(--bo-accent-text); }
+[data-game="boggle"] .bo-size[aria-checked="true"] span { color: inherit; opacity: 0.8; }
+[data-game="boggle"] .bo-sizes + .bo-note + .bo-section,
+[data-game="boggle"] .bo-sizes + .bo-section { margin-top: 16px; }
+
+[data-game="boggle"] .bo-skins { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 8px; }
+[data-game="boggle"] .bo-skin {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--bo-text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+[data-game="boggle"] .bo-swatch {
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--bo-board) 50%, var(--bo-accent) 50%);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bo-hint) 40%, transparent);
+  transition: transform 0.2s ease;
+}
+[data-game="boggle"] .bo-skin:active .bo-swatch { transform: scale(0.92); }
+[data-game="boggle"] .bo-skin[aria-checked="true"] .bo-swatch { outline: 3px solid var(--bo-accent); outline-offset: 3px; }
+
+[data-game="boggle"] .bo-tabs {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  padding: 2px;
+  margin-bottom: 12px;
+  border-radius: 10px;
+  background: var(--bo-bg);
+}
+[data-game="boggle"] .bo-tab {
+  padding: 6px 2px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--bo-hint);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+[data-game="boggle"] .bo-tab[aria-selected="true"] { background: var(--bo-accent); color: var(--bo-accent-text); }
+[data-game="boggle"] .bo-stats-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 8px; text-align: center; }
+[data-game="boggle"] .bo-stat-value { font-size: 22px; font-weight: 700; word-break: break-word; }
+[data-game="boggle"] .bo-stat-label { font-size: 12px; color: var(--bo-hint); }

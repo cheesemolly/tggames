@@ -4,6 +4,12 @@
 
 export const games = [
   {
+    id: 'boggle',
+    title: 'Boggle',
+    load: () => import('../games/boggle/index.js'),
+    css: new URL('../games/boggle/game.css', import.meta.url),
+  },
+  {
     id: 'block-blast',
     title: 'Block Blast',
     load: () => import('../games/block-blast/index.js'),
