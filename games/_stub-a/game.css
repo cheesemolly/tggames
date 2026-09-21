@@ -1,0 +1,13 @@
+/* Стили игры скоупятся атрибутом, который ставит оболочка: [data-game="<id>"]. */
+
+[data-game="_stub-a"] .stub-a {
+  display: grid;
+  gap: 12px;
+}
+
+[data-game="_stub-a"] .stub-a-counter {
+  font-size: 72px;
+  font-weight: 700;
+  text-align: center;
+  color: var(--tg-theme-accent-text-color);
+}
