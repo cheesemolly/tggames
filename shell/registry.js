@@ -4,6 +4,12 @@
 
 export const games = [
   {
+    id: 'block-blast',
+    title: 'Block Blast',
+    load: () => import('../games/block-blast/index.js'),
+    css: new URL('../games/block-blast/game.css', import.meta.url),
+  },
+  {
     id: 'sudoku',
     title: 'Судоку',
     load: () => import('../games/sudoku/index.js'),
