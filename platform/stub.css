@@ -1,0 +1,45 @@
+/* Стили браузерной заглушки Telegram. В самом Telegram этот файл не грузится. */
+
+.tg-stub-header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 48px;
+  padding: 0 8px;
+  background: var(--tg-theme-header-bg-color);
+  border-bottom: 1px solid var(--tg-theme-section-separator-color);
+}
+
+.tg-stub-title {
+  flex: 1;
+  padding-left: 8px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tg-stub-back:not([hidden]) + .tg-stub-title { padding-left: 0; }
+
+.tg-stub-back,
+.tg-stub-theme {
+  border: 0;
+  background: none;
+  color: var(--tg-theme-link-color);
+  font: inherit;
+  padding: 8px;
+  cursor: pointer;
+}
+.tg-stub-theme { font-size: 20px; line-height: 1; }
+
+.tg-stub-main {
+  flex: none;
+  border: 0;
+  padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
+  background: var(--tg-theme-button-color);
+  color: var(--tg-theme-button-text-color);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.tg-stub-main:active { opacity: 0.8; }

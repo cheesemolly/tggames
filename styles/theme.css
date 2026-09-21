@@ -1,0 +1,44 @@
+/*
+ * Дефолты CSS-переменных темы Telegram.
+ * В Telegram их перезаписывает telegram-web-app.js (inline-стилями на <html>),
+ * в браузере — действуют эти значения. Светлая/тёмная выбирается атрибутом data-theme.
+ * Это единственное место в проекте, где допустимы конкретные цвета.
+ */
+
+:root {
+  --tg-theme-bg-color: #ffffff;
+  --tg-theme-text-color: #000000;
+  --tg-theme-hint-color: #999999;
+  --tg-theme-link-color: #2481cc;
+  --tg-theme-button-color: #2481cc;
+  --tg-theme-button-text-color: #ffffff;
+  --tg-theme-secondary-bg-color: #efeff3;
+  --tg-theme-header-bg-color: #ffffff;
+  --tg-theme-bottom-bar-bg-color: #ffffff;
+  --tg-theme-accent-text-color: #2481cc;
+  --tg-theme-section-bg-color: #ffffff;
+  --tg-theme-section-header-text-color: #6d6d72;
+  --tg-theme-section-separator-color: #e7e7e7;
+  --tg-theme-subtitle-text-color: #999999;
+  --tg-theme-destructive-text-color: #ff3b30;
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --tg-theme-bg-color: #212121;
+  --tg-theme-text-color: #ffffff;
+  --tg-theme-hint-color: #aaaaaa;
+  --tg-theme-link-color: #8774e1;
+  --tg-theme-button-color: #8774e1;
+  --tg-theme-button-text-color: #ffffff;
+  --tg-theme-secondary-bg-color: #0f0f0f;
+  --tg-theme-header-bg-color: #212121;
+  --tg-theme-bottom-bar-bg-color: #212121;
+  --tg-theme-accent-text-color: #8774e1;
+  --tg-theme-section-bg-color: #2c2c2c;
+  --tg-theme-section-header-text-color: #aaaaaa;
+  --tg-theme-section-separator-color: #3a3a3a;
+  --tg-theme-subtitle-text-color: #aaaaaa;
+  --tg-theme-destructive-text-color: #ff595a;
+  color-scheme: dark;
+}
