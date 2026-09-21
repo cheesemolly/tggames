@@ -399,3 +399,36 @@
 [data-game="boggle"] .bo-bonus-btn .bo-info-value { color: var(--bo-gold); }
 [data-game="boggle"] .bo-float-bonus { color: var(--bo-gold); }
 [data-game="boggle"] .bo-card .bo-list { margin-bottom: 4px; }
+
+/* ---------- «Бонус!» ---------- */
+
+[data-game="boggle"] .bo-banner {
+  position: absolute;
+  z-index: 7;
+  transform: translate(-50%, -50%);
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+[data-game="boggle"] .bo-banner-title { display: flex; }
+[data-game="boggle"] .bo-banner-letter {
+  display: inline-block;
+  font-size: 54px;
+  font-weight: 900;
+  font-style: italic;
+  line-height: 1;
+  color: var(--bo-gold);
+  -webkit-text-stroke: 2px color-mix(in srgb, var(--bo-gold) 45%, #000000);
+  text-shadow: 0 4px 0 color-mix(in srgb, var(--bo-gold) 40%, #000000), 0 0 22px color-mix(in srgb, var(--bo-gold) 70%, transparent);
+}
+[data-game="boggle"] .bo-banner-word {
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bo-bg) 80%, transparent);
+  color: var(--bo-gold);
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
