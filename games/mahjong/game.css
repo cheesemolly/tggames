@@ -92,7 +92,9 @@
 [data-game="mahjong"] .mj-info b { color: var(--mj-text); font-variant-numeric: tabular-nums; }
 
 /* поле */
-[data-game="mahjong"] .mj-wrap { position: relative; flex: 1; min-height: 0; display: grid; place-items: center; }
+/* поле — отдельный слой: z-index плиток (до ~40 000, чтобы верхние перекрывали нижние) действуют только внутри,
+   и окна, «Серия ×N», искры остаются над полем */
+[data-game="mahjong"] .mj-wrap { position: relative; z-index: 0; isolation: isolate; flex: 1; min-height: 0; display: grid; place-items: center; }
 [data-game="mahjong"] .mj-board { position: relative; }
 
 /* плитка: светлая лицевая сторона, толщина — тени вправо-вниз */
