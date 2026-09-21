@@ -1,0 +1,270 @@
+/*
+ * Wordle. Цвета клеток — игровые (смысл «угадал / есть / нет»), темой Telegram не выражаются,
+ * поэтому заданы переменными игры — отдельно для светлой и тёмной темы. Остальное — через --tg-theme-*.
+ */
+
+[data-game="wordle"] {
+  --wd-correct: #6aaa64;
+  --wd-present: #c9b458;
+  --wd-absent: #787c7e;
+  --wd-on-color: #ffffff;
+  --wd-border: #d3d6da;
+  --wd-border-filled: #878a8c;
+  --wd-key-bg: #d3d6da;
+  --wd-gap: 5px;
+  --wd-key-gap: 4px;
+}
+
+:root[data-theme="dark"] [data-game="wordle"] {
+  --wd-correct: #538d4e;
+  --wd-present: #b59f3b;
+  --wd-absent: #3a3a3c;
+  --wd-border: #3a3a3c;
+  --wd-border-filled: #565758;
+  --wd-key-bg: #818384;
+}
+
+/* Игра на весь экран без прокрутки: шапка, доска (сжимается), клавиатура снизу. */
+.game-root[data-game="wordle"] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+}
+
+[data-game="wordle"] .wd {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Шапка: название + попытка слева, язык справа */
+[data-game="wordle"] .wd-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 4px;
+}
+[data-game="wordle"] .wd-heading { min-width: 0; }
+[data-game="wordle"] .wd-title { font-size: 20px; font-weight: 700; line-height: 1.2; }
+[data-game="wordle"] .wd-sub {
+  font-size: 13px;
+  color: var(--tg-theme-hint-color);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+[data-game="wordle"] .wd-actions { display: flex; align-items: center; gap: 6px; flex: none; }
+
+[data-game="wordle"] .wd-icon-btn {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: var(--tg-theme-secondary-bg-color);
+  color: var(--tg-theme-text-color);
+  font: inherit;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+[data-game="wordle"] .wd-langs {
+  display: flex;
+  padding: 2px;
+  border-radius: 10px;
+  background: var(--tg-theme-secondary-bg-color);
+}
+[data-game="wordle"] .wd-lang {
+  border: 0;
+  border-radius: 8px;
+  padding: 6px 10px;
+  background: none;
+  color: var(--tg-theme-hint-color);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+[data-game="wordle"] .wd-lang[aria-pressed="true"] {
+  background: var(--tg-theme-button-color);
+  color: var(--tg-theme-button-text-color);
+}
+
+/* Доска */
+[data-game="wordle"] .wd-board-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+[data-game="wordle"] .wd-board {
+  height: 100%;
+  max-height: 420px;
+  max-width: 100%;
+  aspect-ratio: 5 / 6;
+  display: grid;
+  grid-template-rows: repeat(6, 1fr);
+  gap: var(--wd-gap);
+}
+[data-game="wordle"] .wd-row {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: var(--wd-gap);
+}
+[data-game="wordle"] .wd-tile {
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--wd-border);
+  font-size: min(2rem, 5.5vh);
+  font-weight: 700;
+  line-height: 1;
+  text-transform: uppercase;
+  user-select: none;
+}
+[data-game="wordle"] .wd-tile.wd-filled { border-color: var(--wd-border-filled); }
+
+[data-game="wordle"] .wd-correct { --tile-bg: var(--wd-correct); }
+[data-game="wordle"] .wd-present { --tile-bg: var(--wd-present); }
+[data-game="wordle"] .wd-absent  { --tile-bg: var(--wd-absent); }
+
+[data-game="wordle"] .wd-tile.wd-correct,
+[data-game="wordle"] .wd-tile.wd-present,
+[data-game="wordle"] .wd-tile.wd-absent {
+  background: var(--tile-bg);
+  border-color: var(--tile-bg);
+  color: var(--wd-on-color);
+}
+
+/* Переворот клеток только что сделанного хода, по очереди (--i — номер клетки) */
+[data-game="wordle"] .wd-reveal .wd-tile {
+  animation: wd-flip 450ms ease-in-out both;
+  animation-delay: calc(var(--i) * 250ms);
+}
+@keyframes wd-flip {
+  0%, 50% {
+    transform: rotateX(0);
+    background: var(--tg-theme-bg-color);
+    border-color: var(--wd-border-filled);
+    color: var(--tg-theme-text-color);
+  }
+  50% { transform: rotateX(90deg); }
+  50.01%, 100% {
+    background: var(--tile-bg);
+    border-color: var(--tile-bg);
+    color: var(--wd-on-color);
+  }
+  100% { transform: rotateX(0); }
+}
+
+/* Клавиатура: ширина клавиши — от самого длинного ряда (--cols ставит JS) */
+[data-game="wordle"] .wd-kb {
+  flex: none;
+  display: grid;
+  gap: 6px;
+}
+[data-game="wordle"] .wd-kb-row {
+  display: flex;
+  justify-content: center;
+  gap: var(--wd-key-gap);
+}
+[data-game="wordle"] .wd-key {
+  --key-w: calc((100% - (var(--cols) - 1) * var(--wd-key-gap)) / var(--cols));
+  flex: none;
+  width: var(--key-w);
+  height: 52px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: var(--wd-key-bg);
+  color: var(--tg-theme-text-color);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  text-transform: uppercase;
+  cursor: pointer;
+  user-select: none;
+}
+[data-game="wordle"] .wd-key-wide {
+  width: calc(var(--key-w) * 1.5 + var(--wd-key-gap) * 0.5);
+  font-size: 20px;
+}
+[data-game="wordle"] .wd-key.wd-correct,
+[data-game="wordle"] .wd-key.wd-present,
+[data-game="wordle"] .wd-key.wd-absent {
+  background: var(--tile-bg);
+  color: var(--wd-on-color);
+}
+
+/* Статистика языка — поверх игры */
+[data-game="wordle"] .wd-stats {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--tg-theme-bg-color);
+  background: color-mix(in srgb, var(--tg-theme-bg-color) 85%, transparent);
+}
+[data-game="wordle"] .wd-stats-card {
+  width: 100%;
+  max-width: 360px;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--tg-theme-secondary-bg-color);
+}
+[data-game="wordle"] .wd-stats-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+[data-game="wordle"] .wd-stats-head h2 { margin: 0; font-size: 18px; }
+[data-game="wordle"] .wd-stats-head .wd-icon-btn { background: var(--tg-theme-bg-color); }
+[data-game="wordle"] .wd-stats-card h3 { margin: 16px 0 8px; font-size: 14px; }
+
+[data-game="wordle"] .wd-stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  text-align: center;
+}
+[data-game="wordle"] .wd-stat-value { font-size: 28px; font-weight: 700; line-height: 1.1; }
+[data-game="wordle"] .wd-stat-label { font-size: 11px; color: var(--tg-theme-hint-color); line-height: 1.2; }
+
+[data-game="wordle"] .wd-dist { display: grid; gap: 4px; }
+[data-game="wordle"] .wd-dist-row { display: flex; align-items: center; gap: 6px; }
+[data-game="wordle"] .wd-dist-label { width: 12px; font-size: 13px; font-weight: 700; }
+[data-game="wordle"] .wd-dist-bar {
+  padding: 2px 6px;
+  background: var(--wd-absent);
+  color: var(--wd-on-color);
+  font-size: 13px;
+  font-weight: 700;
+  text-align: right;
+}
+[data-game="wordle"] .wd-dist-last { background: var(--wd-correct); }
+
+@media (prefers-reduced-motion: reduce) {
+  [data-game="wordle"] .wd-reveal .wd-tile { animation: none; }
+}
+
+/* ---------- Движение ---------- */
+
+/* клетка с буквой — рамка темнеет плавно; клавиши перекрашиваются с переходом */
+[data-game="wordle"] .wd-tile { transition: border-color 0.12s ease; }
+[data-game="wordle"] .wd-key { transition: background-color 0.3s ease, color 0.3s ease, transform 0.1s ease; }
+[data-game="wordle"] .wd-key:active { transform: scale(0.92); opacity: 1; }
+[data-game="wordle"] .wd-lang { transition: background-color 0.2s ease, color 0.2s ease; }
+[data-game="wordle"] .wd-icon-btn { transition: transform 0.1s ease; }
+[data-game="wordle"] .wd-icon-btn:active { transform: scale(0.92); }
+[data-game="wordle"] .wd-dist-bar { transform-origin: left center; }

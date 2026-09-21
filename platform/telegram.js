@@ -8,6 +8,7 @@
 //   mainButton: show(), hide(), setText(text), onClick(cb), offClick(cb)
 //   backButton: show(), hide(), onClick(cb), offClick(cb)
 //   haptic: impact(style), notification(type), selection()
+//   share(text) → Promise<'shared' | 'copied' | 'cancelled' | 'failed'>
 
 import { el, loadCss } from '../shared/dom.js';
 
@@ -18,6 +19,24 @@ const webApp = window.Telegram?.WebApp;
 const inTelegram = Boolean(webApp?.initData);
 
 export const platform = inTelegram ? createTelegramPlatform(webApp) : createBrowserPlatform();
+
+/** Системное меню «Поделиться» (Web Share API), а где его нет — копирование в буфер обмена. */
+async function webShare(text) {
+  if (navigator.share) {
+    try {
+      await navigator.share({ text });
+      return 'shared';
+    } catch (err) {
+      if (err?.name === 'AbortError') return 'cancelled';   // закрыл меню «Поделиться»
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    return 'copied';
+  } catch {
+    return 'failed';
+  }
+}
 
 function createTelegramPlatform(tg) {
   const root = document.documentElement;
@@ -52,6 +71,13 @@ function createTelegramPlatform(tg) {
       impact: (style = 'light') => tg.HapticFeedback?.impactOccurred(style),
       notification: (type) => tg.HapticFeedback?.notificationOccurred(type),
       selection: () => tg.HapticFeedback?.selectionChanged(),
+    },
+
+    // Внутри Telegram ещё не проверено: если Web Share недоступен — окно выбора чата через t.me/share.
+    async share(text) {
+      if (navigator.share) return webShare(text);
+      tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(text)}`);
+      return 'shared';
     },
   };
 }
@@ -123,5 +149,7 @@ function createBrowserPlatform() {
       notification: (type) => log('haptic notification', type),
       selection: () => log('haptic selection'),
     },
+
+    share: webShare,
   };
 }

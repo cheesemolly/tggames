@@ -4,6 +4,24 @@
 
 export const games = [
   {
+    id: 'sudoku',
+    title: 'Судоку',
+    load: () => import('../games/sudoku/index.js'),
+    css: new URL('../games/sudoku/game.css', import.meta.url),
+  },
+  {
+    id: 'wordle',
+    title: 'Wordle',
+    load: () => import('../games/wordle/index.js'),
+    css: new URL('../games/wordle/game.css', import.meta.url),
+  },
+  {
+    id: 'guess-number',
+    title: 'Угадай число',
+    load: () => import('../games/guess-number/index.js'),
+    css: new URL('../games/guess-number/game.css', import.meta.url),
+  },
+  {
     id: '_stub-a',
     title: 'Заглушка A · кликер',
     load: () => import('../games/_stub-a/index.js'),

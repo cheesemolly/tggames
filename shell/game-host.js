@@ -10,15 +10,15 @@ import { el, loadCss } from '../shared/dom.js';
 import { formatDuration } from '../shared/format.js';
 import { createStorage } from '../platform/storage.js';
 import { recordResult } from './stats.js';
+import { LOCALES, shellText } from './i18n.js';
 import { saves } from './saves.js';
 
 const OUTCOMES = ['win', 'lose', 'quit'];
 
-const OUTCOME_TITLES = {
-  win: 'Победа!',
-  lose: 'Поражение',
-  quit: 'Игра окончена',
-};
+const EYE_PATH = 'M12 5C6.5 5 2.7 9.3 1.5 12c1.2 2.7 5 7 10.5 7s9.3-4.3 10.5-7C21.3 9.3 17.5 5 12 5Zm0 11.5a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9Zm0-2.5a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z';
+const EYE_ICON = `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="currentColor"><path d="${EYE_PATH}"/></svg>`;
+const EYE_OFF_ICON = `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="currentColor"><path d="${EYE_PATH}"/>`
+  + '<path d="M3 4.5 4.5 3l16.5 16.5-1.5 1.5Z"/></svg>';
 
 export function openGame(container, entry, { platform, onExit }) {
   const gameStorage = createStorage(`game:${entry.id}`);
@@ -89,20 +89,58 @@ export function openGame(container, entry, { platform, onExit }) {
       outcome: OUTCOMES.includes(result.outcome) ? result.outcome : 'quit',
       score: typeof result.score === 'number' ? result.score : null,
       durationMs: typeof result.durationMs === 'number' ? result.durationMs : elapsed(),
+      message: typeof result.message === 'string' ? result.message : null,
+      variant: typeof result.variant === 'string' && result.variant ? result.variant : null,
+      locale: LOCALES.includes(result.locale) ? result.locale : 'ru',
+      share: typeof result.share === 'string' && result.share ? result.share : null,
     };
   }
 
   function showResult(result, stats) {
-    container.append(el('div', { class: 'result' },
-      el('div', { class: 'result-card' },
-        el('h2', { class: 'result-title' }, OUTCOME_TITLES[result.outcome]),
-        result.score !== null && el('p', { class: 'result-line' }, `Очки: ${result.score}`),
-        el('p', { class: 'result-line' }, `Время: ${formatDuration(result.durationMs)}`),
-        stats.best !== null && el('p', { class: 'result-line' }, `Рекорд: ${stats.best}`),
-        el('button', { class: 'btn', onclick: restart }, 'Ещё раз'),
-        el('button', { class: 'btn btn-secondary', onclick: onExit }, 'В меню'),
+    const t = shellText(result.locale);
+
+    // «Глаз»: карточка прячется, остаётся только значок «показать» — доску можно заскринить.
+    // Оверлей при этом остаётся прозрачным слоем поверх игры: тап где угодно возвращает карточку.
+    const hideButton = el('button', {
+      class: 'result-eye',
+      'aria-label': t.hide,
+      title: t.hide,
+      onclick: () => overlay.classList.add('result-hidden'),
+    });
+    hideButton.innerHTML = EYE_OFF_ICON;
+    const showHint = el('div', { class: 'result-show', 'aria-label': t.show, role: 'button' });
+    showHint.innerHTML = EYE_ICON;
+
+    const shareButton = result.share && el('button', {
+      class: 'btn btn-secondary',
+      onclick: async () => {
+        const status = await platform.share(result.share);
+        const label = { copied: t.copied, failed: t.shareFailed }[status];
+        if (!label) return;
+        shareButton.textContent = label;
+        setTimeout(() => { shareButton.textContent = t.share; }, 2000);
+      },
+    }, t.share);
+
+    const overlay = el('div', {
+      class: 'result',
+      lang: result.locale,
+      onclick: () => overlay.classList.remove('result-hidden'),
+    },
+      el('div', { class: 'result-card', onclick: (e) => e.stopPropagation() },
+        hideButton,
+        el('h2', { class: 'result-title' }, t.outcome[result.outcome]),
+        result.message && el('p', { class: 'result-message' }, result.message),
+        result.score !== null && el('p', { class: 'result-line' }, `${t.score}: ${result.score}`),
+        el('p', { class: 'result-line' }, `${t.time}: ${formatDuration(result.durationMs)}`),
+        stats.best !== null && el('p', { class: 'result-line' }, `${t.best}: ${stats.best}`),
+        el('button', { class: 'btn', onclick: restart }, t.again),
+        shareButton,
+        el('button', { class: 'btn btn-secondary', onclick: onExit }, t.menu),
       ),
-    ));
+      showHint,
+    );
+    container.append(overlay);
   }
 
   function restart() {
