@@ -4,8 +4,8 @@
 
 export const games = [
   {
-    id: 'boggle',
-    title: 'Boggle',
+    id: 'boggle',               // id прежний — по нему хранятся партия, статистика и настройки
+    title: 'Филворд',
     load: () => import('../games/boggle/index.js'),
     css: new URL('../games/boggle/game.css', import.meta.url),
   },
