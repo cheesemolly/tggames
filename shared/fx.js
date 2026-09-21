@@ -1,12 +1,13 @@
-// Спецэффекты Block Blast на холсте поверх игры: частицы, лучи по сгорающим линиям, молнии, конфетти.
+// Спецэффекты на холсте поверх игры: частицы, лучи, молнии, конфетти (Block Blast, Маджонг).
 // Холст не ловит нажатия; цикл отрисовки крутится, только пока есть что рисовать.
 // При «уменьшить движение» эффекты не рисуются вовсе.
 
-import { reducedMotion } from '../../shared/motion.js';
+import { reducedMotion } from './motion.js';
 
-export function createFx(host) {
+/** host — элемент, поверх которого рисуем; className — класс холста (позиционирование — в CSS игры). */
+export function createFx(host, className = 'fx') {
   const canvas = document.createElement('canvas');
-  canvas.className = 'bb-fx';
+  canvas.className = className;
   const ctx = canvas.getContext('2d');
   let items = [];
   let raf = 0;

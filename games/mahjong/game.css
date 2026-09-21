@@ -1,0 +1,331 @@
+/*
+ * Маджонг. Цвета стола и плиток — переменные --mj-*; скин «telegram» (по умолчанию) — фон и текст из темы
+ * Telegram, остальные — свои палитры (data-skin на контейнере игры). Рисунки на плитках — часть картинки
+ * плитки (faces.js), лицевая сторона плитки светлая во всех скинах.
+ */
+
+[data-game="mahjong"] {
+  --mj-bg: var(--tg-theme-bg-color);
+  --mj-surface: var(--tg-theme-secondary-bg-color);
+  --mj-text: var(--tg-theme-text-color);
+  --mj-hint: var(--tg-theme-hint-color);
+  --mj-accent: var(--tg-theme-button-color);
+  --mj-accent-text: var(--tg-theme-button-text-color);
+  --mj-face: #fffaf0;
+  --mj-face-2: #f3ead7;
+  --mj-edge: #e2d3b3;
+  --mj-edge-dark: #b89f73;
+  --mj-outline: rgb(0 0 0 / 0.18);
+  --mj-spark: #ffd23f;
+
+  --toast-top: 90px;
+  --toast-bg: var(--mj-text);
+  --toast-fg: var(--mj-bg);
+}
+
+[data-game="mahjong"] [data-skin="telegram"] { --mj-bg: var(--tg-theme-bg-color); --mj-accent: var(--tg-theme-button-color); }
+[data-game="mahjong"][data-skin="felt"], [data-game="mahjong"] [data-skin="felt"] {
+  --mj-bg: #1f5e3b; --mj-surface: #174a2e; --mj-text: #f1f7f2; --mj-hint: #a9c9b3;
+  --mj-accent: #f2c14e; --mj-accent-text: #1f2a1f;
+}
+[data-game="mahjong"][data-skin="wood"], [data-game="mahjong"] [data-skin="wood"] {
+  --mj-bg: #6b4428; --mj-surface: #5a3920; --mj-text: #fff2e0; --mj-hint: #d9b894;
+  --mj-accent: #f0a04b; --mj-accent-text: #2e1a0c;
+}
+[data-game="mahjong"][data-skin="night"], [data-game="mahjong"] [data-skin="night"] {
+  --mj-bg: #121729; --mj-surface: #1c2340; --mj-text: #e8ebff; --mj-hint: #8d94c0;
+  --mj-accent: #7c8cff; --mj-accent-text: #ffffff;
+  --mj-face: #eef1ff; --mj-face-2: #dde2f6; --mj-edge: #b9c0e0; --mj-edge-dark: #7b84b3;
+}
+[data-game="mahjong"][data-skin="sakura"], [data-game="mahjong"] [data-skin="sakura"] {
+  --mj-bg: #ffe4ee; --mj-surface: #ffd0e1; --mj-text: #6e2445; --mj-hint: #b0718e;
+  --mj-accent: #ff5f98; --mj-accent-text: #ffffff;
+  --mj-edge: #f5c3d6; --mj-edge-dark: #d98aa9;
+}
+[data-game="mahjong"][data-skin="jade"], [data-game="mahjong"] [data-skin="jade"] {
+  --mj-bg: #0f3d33; --mj-surface: #0b2f27; --mj-text: #e6f5ef; --mj-hint: #93c2b2;
+  --mj-accent: #4fd1a5; --mj-accent-text: #062019;
+  --mj-edge: #5fbf96; --mj-edge-dark: #237a5a; --mj-spark: #9dffd5;
+}
+
+/* ---------- раскладка ---------- */
+
+.game-root[data-game="mahjong"] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+  background: var(--mj-bg);
+  color: var(--mj-text);
+  transition: background-color 0.3s ease, color 0.3s ease;
+  user-select: none;
+  -webkit-user-select: none;
+}
+[data-game="mahjong"] .btn { background: var(--mj-accent); color: var(--mj-accent-text); }
+[data-game="mahjong"] .btn-secondary { background: var(--mj-bg); color: var(--mj-text); }
+
+[data-game="mahjong"] .mj { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 6px; }
+[data-game="mahjong"] .mj-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 4px; }
+[data-game="mahjong"] .mj-title { font-size: 20px; font-weight: 700; line-height: 1.2; }
+[data-game="mahjong"] .mj-sub { font-size: 13px; color: var(--mj-hint); }
+[data-game="mahjong"] .mj-actions { display: flex; gap: 6px; }
+[data-game="mahjong"] .mj-icon-btn {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: var(--mj-surface);
+  color: var(--mj-text);
+  font: inherit;
+  font-size: 16px;
+  cursor: pointer;
+  transition: transform 0.1s ease, background-color 0.3s ease;
+}
+[data-game="mahjong"] .mj-icon-btn:active { transform: scale(0.92); }
+[data-game="mahjong"] .mj-icon-btn svg { width: 20px; height: 20px; }
+
+[data-game="mahjong"] .mj-info { display: flex; justify-content: center; gap: 18px; font-size: 14px; color: var(--mj-hint); }
+[data-game="mahjong"] .mj-info b { color: var(--mj-text); font-variant-numeric: tabular-nums; }
+
+/* поле */
+[data-game="mahjong"] .mj-wrap { position: relative; flex: 1; min-height: 0; display: grid; place-items: center; }
+[data-game="mahjong"] .mj-board { position: relative; }
+
+/* плитка: светлая лицевая сторона, толщина — тени вправо-вниз */
+[data-game="mahjong"] .mj-tile {
+  position: absolute;
+  width: var(--w);
+  height: var(--h);
+  padding: 0;
+  border: 0;
+  border-radius: calc(var(--w) * 0.12);
+  background: linear-gradient(160deg, var(--mj-face), var(--mj-face-2));
+  box-shadow:
+    inset 0 0 0 1px var(--mj-outline),
+    calc(var(--d) * 0.5) calc(var(--d) * 0.5) 0 var(--mj-edge),
+    var(--d) var(--d) 0 var(--mj-edge-dark),
+    calc(var(--d) + 1px) calc(var(--d) + 2px) calc(var(--d) * 1.5) rgb(0 0 0 / 0.25);
+  cursor: pointer;
+  transition: transform 0.15s ease, filter 0.25s ease, box-shadow 0.2s ease;
+}
+[data-game="mahjong"] .mj-face { display: grid; place-items: center; width: 100%; height: 100%; pointer-events: none; }
+[data-game="mahjong"] .mj-face svg { width: 88%; height: 88%; }
+[data-game="mahjong"] .mj-emoji { font-size: calc(var(--w) * 0.62); line-height: 1; }
+
+/* закрытые плитки — темнее (настройка) */
+[data-game="mahjong"] .mj-board.mj-dim .mj-tile.mj-blocked { filter: brightness(0.72) saturate(0.7); }
+
+[data-game="mahjong"] .mj-tile.mj-selected {
+  transform: translateY(calc(var(--d) * -0.8));
+  box-shadow:
+    inset 0 0 0 3px var(--mj-accent),
+    calc(var(--d) * 0.5) calc(var(--d) * 0.5) 0 var(--mj-edge),
+    var(--d) var(--d) 0 var(--mj-edge-dark),
+    0 0 calc(var(--w) * 0.35) color-mix(in srgb, var(--mj-accent) 70%, transparent);
+}
+[data-game="mahjong"] .mj-tile.mj-hint { animation: mj-hint 0.6s ease-in-out 3; }
+@keyframes mj-hint {
+  50% {
+    transform: translateY(calc(var(--d) * -1)) scale(1.06);
+    box-shadow: inset 0 0 0 3px var(--mj-spark), 0 0 calc(var(--w) * 0.5) var(--mj-spark);
+  }
+}
+[data-game="mahjong"] .mj-tile.mj-flying { z-index: 99999 !important; pointer-events: none; }
+
+/* инструменты снизу */
+[data-game="mahjong"] .mj-tools { flex: none; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+[data-game="mahjong"] .mj-tool {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: 8px 0;
+  border: 0;
+  border-radius: 12px;
+  background: var(--mj-surface);
+  color: var(--mj-text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: transform 0.1s ease, background-color 0.3s ease;
+}
+[data-game="mahjong"] .mj-tool:active { transform: scale(0.95); }
+[data-game="mahjong"] .mj-tool-icon { display: grid; }
+
+[data-game="mahjong"] .mj-fx { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 5; pointer-events: none; }
+
+/* «Серия ×N» */
+[data-game="mahjong"] .mj-floats { position: absolute; inset: 0; z-index: 6; pointer-events: none; }
+[data-game="mahjong"] .mj-float {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font-size: 26px;
+  font-weight: 900;
+  font-style: italic;
+  white-space: nowrap;
+  color: var(--mj-spark);
+  text-shadow: 0 2px 0 rgb(0 0 0 / 0.35), 0 0 12px rgb(0 0 0 / 0.25);
+  animation: mj-float 1.2s ease-out forwards;
+}
+@keyframes mj-float {
+  0% { opacity: 0; transform: translate(-50%, -30%) scale(0.5); }
+  20% { opacity: 1; transform: translate(-50%, -60%) scale(1.2); }
+  35% { transform: translate(-50%, -60%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -160%) scale(1); }
+}
+[data-game="mahjong"] .mj-tier-2 { font-size: 30px; text-shadow: 0 2px 0 rgb(0 0 0 / 0.35), 0 0 20px var(--mj-spark); }
+[data-game="mahjong"] .mj-tier-3 {
+  font-size: 34px;
+  color: transparent;
+  background: linear-gradient(90deg, #ff4d4d, #ffd23f, #3ddc84, #2ec4f1, #9b5de5, #ff5fa2, #ff4d4d) 0 0 / 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-stroke: 1px rgb(255 255 255 / 0.6);
+  filter: drop-shadow(0 2px 0 rgb(0 0 0 / 0.35));
+  animation: mj-float 1.2s ease-out forwards, mj-rainbow 0.8s linear infinite;
+}
+@keyframes mj-rainbow { to { background-position: 200% 0; } }
+
+/* ---------- окна ---------- */
+
+[data-game="mahjong"] .mj-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--mj-bg) 82%, transparent);
+}
+[data-game="mahjong"] .mj-card {
+  width: 100%;
+  max-width: 380px;
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--mj-surface);
+}
+[data-game="mahjong"] .mj-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+[data-game="mahjong"] .mj-card-head h2 { margin: 0; font-size: 18px; }
+[data-game="mahjong"] .mj-card .mj-icon-btn { background: var(--mj-bg); }
+[data-game="mahjong"] .mj-note { margin: 4px 0 0; font-size: 13px; color: var(--mj-hint); }
+[data-game="mahjong"] .mj-card-actions { display: flex; gap: 8px; margin-top: 14px; }
+[data-game="mahjong"] .mj-section { margin: 4px 0 10px; font-size: 14px; }
+
+/* выбор раскладки */
+[data-game="mahjong"] .mj-layouts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
+[data-game="mahjong"] .mj-layout {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: 8px 4px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--mj-bg);
+  color: var(--mj-text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: transform 0.12s ease;
+}
+[data-game="mahjong"] .mj-layout:active { transform: scale(0.95); }
+[data-game="mahjong"] .mj-layout span { font-size: 11px; color: var(--mj-hint); }
+[data-game="mahjong"] .mj-layout-on { box-shadow: inset 0 0 0 2px var(--mj-accent); }
+[data-game="mahjong"] .mj-preview { display: grid; place-items: center; width: 100%; height: 76px; }
+[data-game="mahjong"] .mj-preview svg { max-width: 90%; max-height: 72px; }
+[data-game="mahjong"] .mj-preview rect { stroke: var(--mj-edge-dark); stroke-width: 0.8; }
+[data-game="mahjong"] .mj-pv-z0 { fill: var(--mj-face-2); }
+[data-game="mahjong"] .mj-pv-z1 { fill: color-mix(in srgb, var(--mj-accent) 25%, var(--mj-face)); }
+[data-game="mahjong"] .mj-pv-z2 { fill: color-mix(in srgb, var(--mj-accent) 45%, var(--mj-face)); }
+[data-game="mahjong"] .mj-pv-z3,
+[data-game="mahjong"] .mj-pv-z4 { fill: color-mix(in srgb, var(--mj-accent) 70%, var(--mj-face)); }
+
+/* настройки */
+[data-game="mahjong"] .mj-styles { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin-bottom: 12px; }
+[data-game="mahjong"] .mj-style {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--mj-text);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+[data-game="mahjong"] .mj-sample {
+  --w: 44px;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 57px;
+  border-radius: 6px;
+  background: linear-gradient(160deg, var(--mj-face), var(--mj-face-2));
+  box-shadow: inset 0 0 0 1px var(--mj-outline), 3px 3px 0 var(--mj-edge-dark);
+  transition: transform 0.2s ease;
+}
+[data-game="mahjong"] .mj-sample svg { width: 88%; height: 88%; }
+[data-game="mahjong"] .mj-style[aria-checked="true"] .mj-sample { outline: 3px solid var(--mj-accent); outline-offset: 2px; }
+[data-game="mahjong"] .mj-style:active .mj-sample { transform: scale(0.92); }
+
+[data-game="mahjong"] .mj-setting { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 0 12px; cursor: pointer; }
+[data-game="mahjong"] .mj-setting-title { font-weight: 600; }
+[data-game="mahjong"] .mj-switch {
+  appearance: none;
+  flex: none;
+  position: relative;
+  width: 46px;
+  height: 28px;
+  margin: 0;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--mj-hint) 45%, var(--mj-bg));
+  cursor: pointer;
+  transition: background 0.15s;
+}
+[data-game="mahjong"] .mj-switch::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--mj-bg);
+  transition: transform 0.15s;
+}
+[data-game="mahjong"] .mj-switch:checked { background: var(--mj-accent); }
+[data-game="mahjong"] .mj-switch:checked::after { transform: translateX(18px); }
+
+[data-game="mahjong"] .mj-skins { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 8px; }
+[data-game="mahjong"] .mj-skin {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--mj-text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+[data-game="mahjong"] .mj-swatch {
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--mj-bg) 50%, var(--mj-accent) 50%);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mj-hint) 40%, transparent);
+  transition: transform 0.2s ease;
+}
+[data-game="mahjong"] .mj-skin:active .mj-swatch { transform: scale(0.92); }
+[data-game="mahjong"] .mj-skin[aria-checked="true"] .mj-swatch { outline: 3px solid var(--mj-accent); outline-offset: 3px; }
+
+[data-game="mahjong"] .mj-stats { width: 100%; border-collapse: collapse; font-size: 14px; }
+[data-game="mahjong"] .mj-stats th { font-size: 12px; font-weight: 600; color: var(--mj-hint); text-align: center; padding: 4px; }
+[data-game="mahjong"] .mj-stats td { padding: 6px 4px; text-align: center; border-top: 1px solid color-mix(in srgb, var(--mj-hint) 25%, transparent); }
+[data-game="mahjong"] .mj-stats td:first-child { text-align: left; font-weight: 600; }
