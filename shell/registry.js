@@ -4,6 +4,12 @@
 
 export const games = [
   {
+    id: '2048',
+    title: '2048',
+    load: () => import('../games/2048/index.js'),
+    css: new URL('../games/2048/game.css', import.meta.url),
+  },
+  {
     id: 'boggle',               // id прежний — по нему хранятся партия, статистика и настройки
     title: 'Филворд',
     load: () => import('../games/boggle/index.js'),
