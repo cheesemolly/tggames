@@ -60,8 +60,14 @@ test('snapLine: палец чуть мимо — прямая всё равно 
   }
 });
 
-test('генерация: банк нужного размера, слова частые, стоят по прямой там, где записаны', () => {
+test('размеры: не больше 8×8', () => {
+  assert.ok(SIZES.every((n) => n <= 8));
+  assert.ok(SIZES.every((n) => WORDS_BY_SIZE[n] > 0));
+});
+
+test('генерация: банк нужного размера, слова частые, стоят по прямой там, где записаны (по 30 полей)', () => {
   const rng = seeded(5);
+  for (let k = 0; k < 29; k++) for (const size of SIZES) generatePuzzle(size, dict, rng);
   const common = new Set(dict.common);
   for (const size of SIZES) {
     const { grid, bank, bonusTotal } = generatePuzzle(size, dict, rng);
@@ -80,8 +86,8 @@ test('генерация: банк нужного размера, слова ч�
 
 test('lineWords находит слова банка, бонусные — только по прямой', () => {
   const rng = seeded(8);
-  const { grid, bank } = generatePuzzle(10, dict, rng);
-  const words = lineWords(grid, 10, dict);
+  const { grid, bank } = generatePuzzle(8, dict, rng);
+  const words = lineWords(grid, 8, dict);
   for (const b of bank) assert.ok(words.has(b.word), b.word);
   for (const w of words) assert.ok(dict.set.has(w) && w.length >= 3);
 });
@@ -115,7 +121,7 @@ test('выделение: слово банка, в обратную сторо�
 test('сохранение и статистика', () => {
   const s = newGame(8, generatePuzzle(8, dict, seeded(2)));
   assert.ok(isValidState(JSON.parse(JSON.stringify(s))));
-  assert.equal(isValidState({ ...s, size: 9 }), false);
+  assert.equal(isValidState({ ...s, size: 12 }), false, 'большие поля убраны');
   assert.equal(isValidState({ ...s, grid: s.grid.slice(1) }), false);
   let st = emptyStats();
   st = recordGame(st, { ...s, score: 300, bonus: ['кот', 'дом'] });
