@@ -4,6 +4,12 @@
 
 export const games = [
   {
+    id: 'mahjong',
+    title: 'Маджонг',
+    load: () => import('../games/mahjong/index.js'),
+    css: new URL('../games/mahjong/game.css', import.meta.url),
+  },
+  {
     id: '2048',
     title: '2048',
     load: () => import('../games/2048/index.js'),

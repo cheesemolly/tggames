@@ -10,7 +10,7 @@ import {
   SIZE, canPlace, fitsAnywhere, linesAfter, lineCells, placePiece, isGameOver, trayEmpty, dealTray,
   newGame, isValidState, emptyStats, recordGame, isValidStats,
 } from './logic.js';
-import { createFx } from './fx.js';
+import { createFx } from '../../shared/fx.js';
 
 const SKINS = ['telegram', 'classic', 'sky', 'dark', 'wood', 'neon', 'candy'];
 const T = {
@@ -577,7 +577,7 @@ export default {
       toast.el,
     );
     container.append(root);
-    fx = createFx(root);
+    fx = createFx(root, 'bb-fx');
     root.append(fx.canvas);
     root.addEventListener('pointermove', onPointerMove);
     root.addEventListener('pointerup', onPointerUp);
