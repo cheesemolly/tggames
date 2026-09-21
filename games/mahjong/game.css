@@ -94,8 +94,47 @@
 /* поле */
 /* поле — отдельный слой: z-index плиток (до ~40 000, чтобы верхние перекрывали нижние) действуют только внутри,
    и окна, «Серия ×N», искры остаются над полем */
-[data-game="mahjong"] .mj-wrap { position: relative; z-index: 0; isolation: isolate; flex: 1; min-height: 0; display: grid; place-items: center; }
-[data-game="mahjong"] .mj-board { position: relative; }
+[data-game="mahjong"] .mj-wrap {
+  position: relative;
+  z-index: 0;
+  isolation: isolate;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  touch-action: none;            /* перетаскивание и щипок — свои, страница не прокручивается */
+}
+/* положение и масштаб поля — transform из JS (translate + scale от левого верхнего угла) */
+[data-game="mahjong"] .mj-board { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
+
+/* кнопки масштаба — только когда поле больше окна */
+[data-game="mahjong"] .mj-zoom {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  z-index: 100000;
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--mj-surface) 85%, transparent);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.2);
+}
+[data-game="mahjong"] .mj-zoom-btn {
+  min-width: 34px;
+  height: 34px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--mj-bg);
+  color: var(--mj-text);
+  font: inherit;
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+[data-game="mahjong"] .mj-zoom-btn:active { transform: scale(0.92); }
+[data-game="mahjong"] .mj-zoom-fit { font-size: 12px; font-weight: 600; }
 
 /* плитка: светлая лицевая сторона, толщина — тени вправо-вниз */
 [data-game="mahjong"] .mj-tile {

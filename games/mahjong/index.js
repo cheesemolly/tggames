@@ -18,11 +18,15 @@ const SKINS = ['telegram', 'felt', 'wood', 'night', 'sakura', 'jade'];
 const TILE_RATIO = 1.3;          // высота плитки к ширине
 const DEPTH = 0.12;              // толщина плитки (сдвиг слоя) к ширине
 const STREAK_MS = 3000;          // пары подряд быстрее этого — серия
+const MIN_TILE = 40;             // px — мельче плитки не делаем: большое поле двигается и масштабируется
+const MAX_SCALE = 2.5;
+const PAN_THRESHOLD = 6;         // px — дальше этого касание считается перетаскиванием, а не нажатием
 const T = {
   title: 'Маджонг',
   left: 'Осталось',
   pairs: 'Пар доступно',
   tools: { undo: 'Отменить', hint: 'Подсказка', shuffle: 'Перемешать' },
+  zoom: { in: 'Приблизить', out: 'Отдалить', fit: 'Показать всё', big: 'Крупно' },
   nothingToUndo: 'Нечего отменять',
   blocked: 'Плитка закрыта',
   streak: (n) => `Серия ×${n}`,
@@ -63,6 +67,11 @@ let finished = false;
 let streak = 0;
 let lastMatch = 0;
 let geo = null;                  // размеры плиток для текущего экрана
+let view = { s: 1, tx: 0, ty: 0 };  // масштаб и сдвиг поля
+let fitScale = 1;                // масштаб, при котором всё поле видно целиком
+const pointers = new Map();      // активные касания (для перетаскивания и щипка)
+let gesture = null;
+let suppressClick = false;       // после перетаскивания нажатие на плитку не засчитывается
 let modalActive = false;
 let modalToken = 0;
 const timers = new Set();
@@ -84,17 +93,22 @@ function save() {
 
 // ---------- геометрия и отрисовка ----------
 
-/** Размер плиток под свободное место: вся раскладка помещается целиком. */
-function measure() {
+/**
+ * Размер плиток под свободное место (не мельче MIN_TILE). reset — новая партия: масштаб 1, поле по центру;
+ * иначе (изменился размер окна, например Telegram развернул мини-приложение) масштаб сохраняется.
+ */
+function measure(reset = false) {
   const layout = LAYOUT_BY_ID[game.layout].tiles;
   const spanX = Math.max(...layout.map((t) => t.x)) + 2;
   const spanY = Math.max(...layout.map((t) => t.y)) + 2;
   const maxZ = Math.max(...layout.map((t) => t.z));
   const box = ui.wrap.getBoundingClientRect();
-  const w = Math.max(12, Math.min(
+  const fitW = Math.min(
     box.width / (spanX / 2 + maxZ * DEPTH),
     box.height / ((spanY / 2) * TILE_RATIO + maxZ * DEPTH),
-  ));
+  );
+  // не мельче MIN_TILE: большое поле не «отдаляется», а двигается и масштабируется
+  const w = Math.max(fitW, Math.min(MIN_TILE, fitW * 3));
   const h = w * TILE_RATIO;
   const d = w * DEPTH;
   geo = { w, h, d, maxZ, width: (spanX / 2) * w + maxZ * d, height: (spanY / 2) * h + maxZ * d };
@@ -103,6 +117,158 @@ function measure() {
   ui.board.style.setProperty('--w', `${w}px`);
   ui.board.style.setProperty('--h', `${h}px`);
   ui.board.style.setProperty('--d', `${d}px`);
+  fitScale = Math.min(1, box.width / geo.width, box.height / geo.height);
+  if (reset) view = { s: 1, tx: 0, ty: 0 };
+  else view.s = Math.max(fitScale, Math.min(MAX_SCALE, view.s));
+  clampView();
+  applyView();
+}
+
+// ---------- масштаб и перемещение поля ----------
+
+function wrapSize() {
+  const r = ui.wrap.getBoundingClientRect();
+  return { W: r.width, H: r.height, left: r.left, top: r.top };
+}
+
+/** Поле не уезжает за край: если меньше окна — по центру, если больше — края не отрываются от краёв окна. */
+function clampView() {
+  const { W, H } = wrapSize();
+  const bw = geo.width * view.s;
+  const bh = geo.height * view.s;
+  view.tx = bw <= W ? (W - bw) / 2 : Math.min(0, Math.max(W - bw, view.tx));
+  view.ty = bh <= H ? (H - bh) / 2 : Math.min(0, Math.max(H - bh, view.ty));
+}
+
+function applyView() {
+  ui.board.style.transform = `translate(${view.tx}px, ${view.ty}px) scale(${view.s})`;
+  // кнопки масштаба — когда поле не влезает целиком или его приблизили
+  const zoomable = fitScale < 0.999 || view.s > 1.001;
+  ui.zoom.hidden = !zoomable;
+  if (zoomable) ui.zoomFit.textContent = view.s > fitScale + 0.01 ? T.zoom.fit : T.zoom.big;
+}
+
+/** Масштаб s с неподвижной точкой (cx, cy) в координатах окна поля. */
+function zoomAt(s, cx, cy, animated = false) {
+  const next = Math.max(fitScale, Math.min(MAX_SCALE, s));
+  const bx = (cx - view.tx) / view.s;
+  const by = (cy - view.ty) / view.s;
+  view = { s: next, tx: cx - bx * next, ty: cy - by * next };
+  clampView();
+  if (animated && !reducedMotion()) {
+    ui.board.style.transition = 'transform 0.25s ease';
+    later(() => { if (ui) ui.board.style.transition = ''; }, 260);
+  }
+  applyView();
+}
+
+function zoomStep(factor) {
+  const { W, H } = wrapSize();
+  zoomAt(view.s * factor, W / 2, H / 2, true);
+}
+
+function zoomToggle() {
+  const { W, H } = wrapSize();
+  // «показать всё» — масштаб, при котором поле целиком в окне; «крупно» — обычный размер плиток
+  zoomAt(view.s > fitScale + 0.01 ? fitScale : 1, W / 2, H / 2, true);
+}
+
+/** Подвинуть поле так, чтобы плитки indices были видны. */
+function ensureVisible(indices) {
+  const wr = wrapSize();
+  const rects = indices.map((i) => ui.tiles[i].getBoundingClientRect());
+  const left = Math.min(...rects.map((r) => r.left)) - wr.left;
+  const right = Math.max(...rects.map((r) => r.right)) - wr.left;
+  const top = Math.min(...rects.map((r) => r.top)) - wr.top;
+  const bottom = Math.max(...rects.map((r) => r.bottom)) - wr.top;
+  const pad = 16;
+  let dx = 0;
+  let dy = 0;
+  if (right - left > wr.W - 2 * pad || bottom - top > wr.H - 2 * pad) {
+    zoomAt(fitScale, wr.W / 2, wr.H / 2, true);
+    return;
+  }
+  if (left < pad) dx = pad - left;
+  else if (right > wr.W - pad) dx = wr.W - pad - right;
+  if (top < pad) dy = pad - top;
+  else if (bottom > wr.H - pad) dy = wr.H - pad - bottom;
+  if (!dx && !dy) return;
+  view.tx += dx;
+  view.ty += dy;
+  clampView();
+  if (!reducedMotion()) {
+    ui.board.style.transition = 'transform 0.3s ease';
+    later(() => { if (ui) ui.board.style.transition = ''; }, 310);
+  }
+  applyView();
+}
+
+function localPoint(e) {
+  const { left, top } = wrapSize();
+  return { x: e.clientX - left, y: e.clientY - top };
+}
+
+function startGesture() {
+  const pts = [...pointers.values()];
+  if (pts.length >= 2) {
+    const [a, b] = pts;
+    gesture = {
+      mode: 'pinch',
+      dist: Math.hypot(a.x - b.x, a.y - b.y) || 1,
+      mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
+      view: { ...view },
+    };
+  } else if (pts.length === 1) {
+    gesture = { mode: 'pending', start: { ...pts[0] }, view: { ...view } };
+  } else {
+    gesture = null;
+  }
+}
+
+function onPointerDown(e) {
+  if (modalActive) return;
+  if (!pointers.size) suppressClick = false;
+  pointers.set(e.pointerId, localPoint(e));
+  startGesture();
+}
+
+function onPointerMove(e) {
+  if (!pointers.has(e.pointerId) || !gesture) return;
+  pointers.set(e.pointerId, localPoint(e));
+  const pts = [...pointers.values()];
+  if (gesture.mode === 'pinch' && pts.length >= 2) {
+    const [a, b] = pts;
+    const dist = Math.hypot(a.x - b.x, a.y - b.y);
+    const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    const s = Math.max(fitScale, Math.min(MAX_SCALE, gesture.view.s * (dist / gesture.dist)));
+    const bx = (gesture.mid.x - gesture.view.tx) / gesture.view.s;
+    const by = (gesture.mid.y - gesture.view.ty) / gesture.view.s;
+    view = { s, tx: mid.x - bx * s, ty: mid.y - by * s };
+    suppressClick = true;
+  } else {
+    const p = pts[0];
+    const dx = p.x - gesture.start.x;
+    const dy = p.y - gesture.start.y;
+    if (gesture.mode === 'pending' && Math.hypot(dx, dy) < PAN_THRESHOLD) return;
+    if (fitScale >= 0.999 && view.s <= 1.001) return;      // поле целиком в окне — двигать нечего
+    gesture.mode = 'pan';
+    suppressClick = true;
+    view = { ...view, tx: gesture.view.tx + dx, ty: gesture.view.ty + dy };
+  }
+  clampView();
+  applyView();
+}
+
+function onPointerUp(e) {
+  if (!pointers.delete(e.pointerId)) return;
+  startGesture();
+}
+
+function onWheel(e) {
+  if (modalActive) return;
+  e.preventDefault();
+  const p = localPoint(e);
+  zoomAt(view.s * (e.deltaY < 0 ? 1.12 : 1 / 1.12), p.x, p.y);
 }
 
 function tilePos(i) {
@@ -116,7 +282,7 @@ function tilePos(i) {
 }
 
 function buildBoard() {
-  measure();
+  measure(true);
   ui.tiles = game.tiles.map((tile, i) => {
     const { left, top, z } = tilePos(i);
     const node = el('button', {
@@ -169,6 +335,7 @@ function renderState() {
 // ---------- ходы ----------
 
 function onTile(i) {
+  if (suppressClick) return;
   if (busy || finished || modalActive || !game.tiles[i].alive) return;
   const free = new Set(freeTiles(game));
   if (!free.has(i)) {
@@ -209,7 +376,7 @@ function matchPair(a, b) {
   const fly = (node, r, dir) => animate(node, [
     { transform: 'none', opacity: 1 },
     { transform: 'translateY(-6px) scale(1.1)', opacity: 1, offset: 0.25 },
-    { transform: `translate(${mx - (r.left + r.width / 2)}px, ${my - (r.top + r.height / 2)}px) scale(0.5) rotate(${dir * 18}deg)`, opacity: 0 },
+    { transform: `translate(${(mx - (r.left + r.width / 2)) / view.s}px, ${(my - (r.top + r.height / 2)) / view.s}px) scale(0.5) rotate(${dir * 18}deg)`, opacity: 0 },
   ], { duration: 380, easing: 'ease-in', fill: 'forwards' });
   ui.tiles[a].classList.add('mj-flying');
   ui.tiles[b].classList.add('mj-flying');
@@ -274,6 +441,7 @@ function onHint() {
   game.hints += 1;
   save();
   api.platform.haptic.selection();
+  ensureVisible([a, b]);
   for (const i of [a, b]) {
     ui.tiles[i].classList.remove('mj-hint');
     void ui.tiles[i].offsetWidth;
@@ -294,7 +462,7 @@ function onShuffle() {
   const alive = ui.tiles.filter((_, i) => game.tiles[i].alive);
   const offsets = alive.map((node) => {
     const r = node.getBoundingClientRect();
-    return [cx - (r.left + r.width / 2), cy - (r.top + r.height / 2), (Math.random() - 0.5) * 60];
+    return [(cx - (r.left + r.width / 2)) / view.s, (cy - (r.top + r.height / 2)) / view.s, (Math.random() - 0.5) * 60];
   });
   const gather = alive.map((node, k) => animate(node, [
     { transform: 'none' },
@@ -537,7 +705,18 @@ export default {
       modal: el('div', { class: 'mj-modal', hidden: true }),
       tiles: null,
     };
-    ui.wrap = el('div', { class: 'mj-wrap' }, ui.board);
+    ui.zoomFit = el('button', { class: 'mj-zoom-btn mj-zoom-fit', onclick: zoomToggle });
+    ui.zoom = el('div', { class: 'mj-zoom', hidden: true },
+      el('button', { class: 'mj-zoom-btn', 'aria-label': T.zoom.out, title: T.zoom.out, onclick: () => zoomStep(1 / 1.3) }, '−'),
+      el('button', { class: 'mj-zoom-btn', 'aria-label': T.zoom.in, title: T.zoom.in, onclick: () => zoomStep(1.3) }, '+'),
+      ui.zoomFit,
+    );
+    ui.wrap = el('div', { class: 'mj-wrap' }, ui.board, ui.zoom);
+    ui.wrap.addEventListener('pointerdown', onPointerDown);
+    ui.wrap.addEventListener('wheel', onWheel, { passive: false });
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', onPointerUp);
 
     root = el('div', { class: 'mj' },
       el('div', { class: 'mj-header' },
@@ -588,6 +767,11 @@ export default {
     timers.forEach(clearTimeout);
     timers.clear();
     document.removeEventListener('keydown', onKeydown);
+    window.removeEventListener('pointermove', onPointerMove);
+    window.removeEventListener('pointerup', onPointerUp);
+    window.removeEventListener('pointercancel', onPointerUp);
+    pointers.clear();
+    gesture = null;
     ui?.resize?.disconnect();
     fx?.dispose();
     toast?.dispose();
