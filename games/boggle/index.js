@@ -1,45 +1,46 @@
-// Boggle: сетка букв (4×4 … 10×10), за отведённое время ищешь слова, проводя пальцем по соседним клеткам
-// (включая диагонали). После конца — разбор: все слова сетки, тап по слову показывает его путь.
-// Партия, статистика (по размеру поля) и настройки (размер, скин) — в api.storage игры.
+// «Слова на сетке» (филворд): на поле спрятаны слова банка (список внизу). Выделяешь пальцем прямую —
+// горизонталь, вертикаль или диагональ, без поворотов. Слово банка остаётся на поле цветной капсулой,
+// любое другое слово словаря — бонус (очки + список по кнопке «Бонус»). Времени нет; партия кончается,
+// когда найдены все слова банка. Партия, статистика (по размеру поля) и настройки — в api.storage игры.
 
 import { el } from '../../shared/dom.js';
-import { formatDuration } from '../../shared/format.js';
 import { animate, showLayer, hideLayer, pop, shake, reducedMotion, EASE_OUT } from '../../shared/motion.js';
 import { createToast } from '../../shared/toast.js';
 import {
-  SIZES, DEFAULT_SIZE, TIME_BY_SIZE, createDictionary, generateGrid, solve, findPath, isAdjacent,
-  pathWord, wordScore, checkWord, addWord, newGame, isValidState, emptyStats, recordGame, isValidStats,
+  SIZES, DEFAULT_SIZE, WORDS_BY_SIZE, createDictionary, generatePuzzle, snapLine, cellsWord,
+  checkSelection, applyWord, bonusPoints, isComplete, newGame, isValidState,
+  emptyStats, recordGame, isValidStats,
 } from './logic.js';
 
 const SKINS = ['telegram', 'classic', 'night', 'paper', 'neon', 'mint'];
+const CAPSULE_COLORS = 8;
 const T = {
   title: 'Boggle',
   sub: (size) => `Поле ${size}×${size}`,
-  info: { time: 'Время', words: 'Слова', score: 'Очки' },
+  info: { found: 'Слова', bonus: 'Бонус', score: 'Очки' },
   loading: 'Загрузка словаря…',
   loadFailed: 'Не удалось загрузить словарь',
-  hint: 'Проведи пальцем по буквам',
+  hint: 'Проведи по прямой: → ↓ ↘ и в любую сторону',
   repeat: 'Уже найдено',
   unknown: 'Нет в словаре',
-  timeUp: 'Время вышло!',
-  reviewHint: 'Нажми на слово — покажу, где оно',
-  finish: 'Итоги',
-  pause: 'Пауза',
-  resume: 'Продолжить',
-  endNow: 'Закончить партию',
+  bonusToast: (word, pts) => `Бонус: ${word.toUpperCase()} +${pts}`,
   newGame: 'Новая игра',
   restartQuestion: 'Начать заново? Найденные слова пропадут.',
   restart: 'Начать заново',
   cancel: 'Отмена',
-  resultTitle: 'Время вышло',
-  result: (found, total, longest) => `Найдено ${found} из ${total}` + (longest ? ` · самое длинное: ${longest.toUpperCase()}` : ''),
+  bonus: {
+    title: 'Бонусные слова',
+    empty: 'Пока нет. Бонус — любое слово, которого нет в списке внизу, но оно есть в словаре.',
+    left: (n) => (n > 0 ? `На поле ещё ${n} бонусных слов.` : 'Все бонусные слова найдены!'),
+  },
+  resultTitle: 'Все слова найдены!',
+  result: (n, bonus, total) => `Слов: ${n} · бонусных: ${bonus} из ${total}`,
   stats: {
-    open: 'Статистика', title: 'Статистика', played: 'Сыграно', best: 'Рекорд', words: 'Слов найдено',
-    longest: 'Самое длинное', close: 'Закрыть',
+    open: 'Статистика', title: 'Статистика', played: 'Сыграно', best: 'Рекорд', bonus: 'Бонусных слов', close: 'Закрыть',
   },
   settings: {
     open: 'Настройки', title: 'Настройки', size: 'Размер поля', skin: 'Оформление', close: 'Закрыть',
-    nextGame: 'Новый размер — со следующей партии.', minutes: (s) => `${Math.round(TIME_BY_SIZE[s] / 60)} мин`,
+    words: (n) => `${WORDS_BY_SIZE[n]} слов`, nextGame: 'Новый размер — со следующей партии.',
   },
   skins: { telegram: 'Как в Telegram', classic: 'Кубики', night: 'Ночь', paper: 'Бумага', neon: 'Неон', mint: 'Мята' },
 };
@@ -51,12 +52,7 @@ const ICONS = {
   restart: svg('<path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/>'),
   stats: svg('<rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="7" width="4" height="14" rx="1"/><rect x="17" y="3" width="4" height="18" rx="1"/>', true),
   gear: svg('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/>'),
-  pause: svg('<rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/>', true),
 };
-
-// Засчитывать клетку, только если палец ближе к её центру, чем HIT × размер клетки —
-// иначе при движении по диагонали цеплялись бы соседние клетки.
-const HIT = 0.4;
 
 // Словарь — кэш данных, переживает destroy().
 let dictPromise = null;
@@ -81,14 +77,11 @@ let ui = null;
 let toast = null;
 let dict = null;
 let game = null;
-let allWords = [];            // все слова текущей сетки (для счётчика и разбора)
 let stats = {};
 let settings = { size: DEFAULT_SIZE, skin: 'telegram' };
-let path = [];                // текущее выделение
+let selection = [];
 let pointerId = null;
-let paused = false;
-let review = false;           // время вышло — разбор
-let runningSince = null;
+let finished = false;
 let modalActive = false;
 let modalToken = 0;
 const timers = new Set();
@@ -102,119 +95,101 @@ function later(fn, ms) {
   return id;
 }
 
-// ---------- время ----------
-
-function remaining() {
-  if (!game) return 0;
-  return Math.max(0, game.remainingMs - (runningSince === null ? 0 : performance.now() - runningSince));
-}
-
-function stopClock() {
-  if (game && runningSince !== null) game.remainingMs = remaining();
-  runningSince = null;
-}
-
-function startClock() {
-  if (game && !review && runningSince === null) runningSince = performance.now();
-}
-
 function save() {
-  if (!game || review) return;
-  if (runningSince !== null) {
-    game.remainingMs = remaining();
-    runningSince = performance.now();
-  }
-  api.storage.set('current', game);
-}
-
-function tick() {
-  if (!game || review || runningSince === null) return;
-  const left = remaining();
-  ui.time.textContent = formatDuration(Math.ceil(left / 1000) * 1000);
-  ui.time.classList.toggle('bo-time-low', left <= 15000);
-  if (left <= 0) timeUp();
+  if (game && !finished) api.storage.set('current', game);
 }
 
 // ---------- отрисовка ----------
 
 function renderInfo() {
   ui.sub.textContent = T.sub(game?.size ?? settings.size);
-  ui.words.textContent = game ? `${game.found.length}/${allWords.length}` : '—';
+  ui.found.textContent = game ? `${game.found.length}/${game.bank.length}` : '—';
+  ui.bonusCount.textContent = game ? game.bonus.length : '—';
   ui.score.textContent = game ? game.score : '—';
-  ui.time.textContent = game ? formatDuration(Math.ceil(remaining() / 1000) * 1000) : '—';
-  ui.pauseButton.disabled = !game || review;
 }
 
 function buildBoard() {
   const { size, grid } = game;
   ui.board.style.setProperty('--n', size);
-  ui.cells = grid.map((letter, i) => el('div', { class: 'bo-cell', 'data-i': i }, el('span', { class: 'bo-letter' }, letter)));
-  ui.board.replaceChildren(...ui.cells, ui.line);
+  ui.cells = grid.map((letter) => el('div', { class: 'bo-cell' }, el('span', { class: 'bo-letter' }, letter)));
+  ui.board.replaceChildren(ui.capsules, ...ui.cells);
   if (!reducedMotion()) {
     ui.cells.forEach((cell, i) => animate(cell, [
       { opacity: 0, transform: 'scale(0.6)' },
       { opacity: 1, transform: 'none' },
-    ], { duration: 260, delay: (Math.floor(i / size) + (i % size)) * 22, easing: EASE_OUT, fill: 'backwards' }));
+    ], { duration: 240, delay: (Math.floor(i / size) + (i % size)) * 14, easing: EASE_OUT, fill: 'backwards' }));
   }
 }
 
-/** Подсветка пути: клетки и линия через их центры. kind — '' | 'good' | 'bad' | 'warn' | 'show'. */
-function renderPath(cells = path, kind = '') {
-  const set = new Set(cells);
-  ui.cells.forEach((cell, i) => {
-    cell.classList.toggle('bo-on', set.has(i));
-    for (const k of ['good', 'bad', 'warn', 'show']) cell.classList.toggle(`bo-${k}`, k === kind && set.has(i));
-  });
+/** Капсула — толстая линия с круглыми концами от центра первой клетки до центра последней. */
+function capsule(cells, cls) {
   const n = game.size;
-  const pts = cells.map((i) => `${((i % n) + 0.5) * (100 / n)},${(Math.floor(i / n) + 0.5) * (100 / n)}`).join(' ');
-  ui.polyline.setAttribute('points', pts);
-  ui.line.dataset.kind = kind;
-  ui.current.textContent = cells.length ? pathWord(game.grid, cells).toUpperCase() : (review ? T.reviewHint : T.hint);
+  const at = (i) => [((i % n) + 0.5) * (100 / n), (Math.floor(i / n) + 0.5) * (100 / n)];
+  const [x1, y1] = at(cells[0]);
+  const [x2, y2] = at(cells.at(-1));
+  const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  line.setAttribute('x1', x1);
+  line.setAttribute('y1', y1);
+  line.setAttribute('x2', x2);
+  line.setAttribute('y2', y2);
+  line.setAttribute('class', `bo-capsule ${cls}`);
+  line.style.strokeWidth = `${(100 / n) * 0.78}`;
+  return line;
+}
+
+function renderCapsules() {
+  ui.capsules.replaceChildren(...game.found.map((f, k) => capsule(f.cells, `bo-m${(k % CAPSULE_COLORS) + 1}`)));
+  const foundCells = new Set(game.found.flatMap((f) => f.cells));
+  ui.cells.forEach((cell, i) => cell.classList.toggle('bo-done', foundCells.has(i)));
+}
+
+/** Текущее выделение: kind — '' | 'good' | 'bonus' | 'bad' | 'warn'. */
+function renderSelection(cells = selection, kind = '') {
+  ui.selection?.remove();
+  ui.selection = null;
+  const set = new Set(cells);
+  ui.cells.forEach((cell, i) => cell.classList.toggle('bo-on', set.has(i)));
+  if (cells.length) {
+    ui.selection = capsule(cells, `bo-sel ${kind ? `bo-sel-${kind}` : ''}`);
+    ui.capsules.append(ui.selection);
+  }
+  ui.current.textContent = cells.length ? cellsWord(game.grid, cells).toUpperCase() : T.hint;
   ui.current.classList.toggle('bo-current-empty', !cells.length);
   ui.current.dataset.kind = kind;
 }
 
-function chip(word, cls = '') {
-  return el('button', { class: `bo-chip ${cls}`, 'data-word': word, onclick: () => showWord(word) },
-    word.toUpperCase(), el('span', { class: 'bo-chip-pts' }, wordScore(word)));
-}
-
-function renderFound({ fresh = null } = {}) {
-  if (review) {
-    // Найденные — первыми; среди пропущенных сначала частые слова (их игрок наверняка знает), потом редкие.
-    const found = new Set(game.found);
-    const rank = (w) => (found.has(w) ? 2 : dict.common.has(w) ? 1 : 0);
-    const sorted = [...allWords].sort((a, b) => rank(b) - rank(a) || b.length - a.length);
-    ui.list.replaceChildren(...sorted.map((w) => chip(w, found.has(w) ? 'bo-chip-found' : 'bo-chip-missed')));
-    return;
-  }
-  ui.list.replaceChildren(...[...game.found].reverse().map((w) => chip(w, 'bo-chip-found')));
-  if (fresh) pop(ui.list.firstChild);
+function renderBank({ fresh = null } = {}) {
+  const found = new Set(game.found.map((f) => f.word));
+  const order = new Map(game.found.map((f, k) => [f.word, k]));
+  ui.bank.replaceChildren(...game.bank.map(({ word }) => {
+    const done = found.has(word);
+    const node = el('div', { class: done ? `bo-word bo-word-done bo-m${(order.get(word) % CAPSULE_COLORS) + 1}` : 'bo-word' },
+      word.toUpperCase());
+    if (word === fresh) pop(node, { from: 0.7 });
+    return node;
+  }));
 }
 
 // ---------- ввод пальцем ----------
 
-/** Клетка под точкой — только если точка достаточно близко к центру клетки. */
-function cellAt(clientX, clientY) {
-  const rect = ui.board.getBoundingClientRect();
+/** Точка пальца в «клетках» (дробно): считаем от центров первой и последней клетки — с учётом зазоров. */
+function pointToCell(clientX, clientY) {
   const n = game.size;
-  const cs = rect.width / n;
-  const col = Math.floor((clientX - rect.left) / cs);
-  const row = Math.floor((clientY - rect.top) / cs);
-  if (row < 0 || row >= n || col < 0 || col >= n) return -1;
-  const dx = clientX - (rect.left + (col + 0.5) * cs);
-  const dy = clientY - (rect.top + (row + 0.5) * cs);
-  return Math.hypot(dx, dy) <= cs * HIT ? row * n + col : -1;
-}
-
-function canInput() {
-  return Boolean(game && dict && !paused && !review && !modalActive);
+  const first = ui.cells[0].getBoundingClientRect();
+  const last = ui.cells[n * n - 1].getBoundingClientRect();
+  const pitchX = (last.left - first.left) / (n - 1);
+  const pitchY = (last.top - first.top) / (n - 1);
+  return {
+    row: (clientY - (first.top + first.height / 2)) / pitchY + 0.5,
+    col: (clientX - (first.left + first.width / 2)) / pitchX + 0.5,
+  };
 }
 
 function onPointerDown(e) {
-  if (!canInput() || pointerId !== null) return;
-  const cell = cellAt(e.clientX, e.clientY);
-  if (cell < 0) return;
+  if (!game || !dict || finished || modalActive || pointerId !== null) return;
+  const { row, col } = pointToCell(e.clientX, e.clientY);
+  const n = game.size;
+  if (row < 0 || row >= n || col < 0 || col >= n) return;
   e.preventDefault();
   pointerId = e.pointerId;
   try {
@@ -222,153 +197,101 @@ function onPointerDown(e) {
   } catch {
     // без захвата движения всё равно придут на поле
   }
-  path = [cell];
+  selection = [Math.floor(row) * n + Math.floor(col)];
   api.platform.haptic.selection();
-  renderPath();
-  pop(ui.cells[cell].firstChild, { from: 0.8, duration: 160 });
+  renderSelection();
 }
 
 function onPointerMove(e) {
   if (e.pointerId !== pointerId) return;
-  const cell = cellAt(e.clientX, e.clientY);
-  if (cell < 0 || cell === path.at(-1)) return;
-  if (cell === path.at(-2)) {                  // вернулся назад — убрать последнюю букву
-    path.pop();
-    renderPath();
-    return;
-  }
-  if (path.includes(cell) || !isAdjacent(path.at(-1), cell, game.size)) return;
-  path.push(cell);
+  const { row, col } = pointToCell(e.clientX, e.clientY);
+  const next = snapLine(selection[0], row, col, game.size);
+  if (next.length === selection.length && next.at(-1) === selection.at(-1)) return;
+  selection = next;
   api.platform.haptic.selection();
-  renderPath();
-  pop(ui.cells[cell].firstChild, { from: 0.8, duration: 160 });
+  renderSelection();
 }
 
 function onPointerUp(e) {
   if (e.pointerId !== pointerId) return;
   pointerId = null;
-  const cells = path;
-  path = [];
+  const cells = selection;
+  selection = [];
   if (cells.length) submit(cells);
 }
 
 function submit(cells) {
-  const word = pathWord(game.grid, cells);
-  const verdict = checkWord(game, word, dict);
+  const { verdict, word } = checkSelection(game, cells, dict);
   if (verdict === 'short') {
-    renderPath([]);
+    renderSelection([]);
     return;
   }
-  if (verdict === 'ok') {
-    const points = addWord(game, word);
-    api.platform.haptic.notification('success');
-    renderPath(cells, 'good');
-    floatPoints(`+${points}`, cells);
+  if (verdict === 'bank' || verdict === 'bonus') {
+    const points = applyWord(game, verdict, word, cells);
     save();
     renderInfo();
-    renderFound({ fresh: word });
-    pop(ui.score, { from: 0.8 });
+    floatPoints(`+${points}`, cells, verdict);
+    if (verdict === 'bank') {
+      api.platform.haptic.notification('success');
+      renderSelection([]);
+      renderCapsules();
+      const last = ui.capsules.lastChild;
+      animate(last, [{ opacity: 0 }, { opacity: 1 }], { duration: 250 });
+      renderBank({ fresh: word });
+      pop(ui.found, { from: 0.8 });
+      if (isComplete(game)) complete();
+      return;
+    }
+    api.platform.haptic.impact('medium');
+    renderSelection(cells, 'bonus');
+    toast.show(T.bonusToast(word, points), 1300);
+    pop(ui.bonusButton, { from: 0.8 });
   } else {
     api.platform.haptic.notification(verdict === 'repeat' ? 'warning' : 'error');
-    renderPath(cells, verdict === 'repeat' ? 'warn' : 'bad');
+    renderSelection(cells, verdict === 'repeat' ? 'warn' : 'bad');
     if (verdict === 'unknown') shake(ui.current);
-    toast.show(verdict === 'repeat' ? T.repeat : T.unknown, 1100);
-    if (verdict === 'repeat') flashChip(word);
+    toast.show(verdict === 'repeat' ? T.repeat : T.unknown, 1000);
   }
-  // подсветка результата держится немного и гаснет
   later(() => {
-    if (ui && !path.length && !review) renderPath([]);
+    if (ui && pointerId === null) renderSelection([]);
   }, 450);
 }
 
-function floatPoints(text, cells) {
+function floatPoints(text, cells, kind) {
   const last = ui.cells[cells.at(-1)].getBoundingClientRect();
   const rootRect = root.getBoundingClientRect();
   const node = el('div', {
-    class: 'bo-float',
+    class: `bo-float bo-float-${kind}`,
     style: `left: ${last.left + last.width / 2 - rootRect.left}px; top: ${last.top - rootRect.top}px;`,
   }, text);
   root.append(node);
   later(() => node.remove(), 1000);
 }
 
-function flashChip(word) {
-  const node = ui.list.querySelector(`[data-word="${word}"]`);
-  if (!node) return;
-  node.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: reducedMotion() ? 'auto' : 'smooth' });
-  pop(node, { from: 0.8 });
-}
+// ---------- конец партии ----------
 
-/** Разбор: показать путь слова на сетке — буквы загораются по очереди. */
-function showWord(word) {
-  if (!review) return;
-  const cells = findPath(game.grid, game.size, word);
-  if (!cells) return;
-  renderPath(cells, 'show');
-  cells.forEach((i, k) => animate(ui.cells[i], [{ transform: 'scale(1)' }, { transform: 'scale(1.15)' }, { transform: 'scale(1)' }],
-    { duration: 260, delay: k * 90, easing: 'ease-out' }));
-}
-
-// ---------- пауза, конец ----------
-
-function setPaused(value) {
-  if (!game || review || paused === value) return;
-  paused = value;
-  if (paused) {
-    stopClock();
-    ui.pauseCover.getAnimations().forEach((a) => a.cancel());
-    ui.pauseCover.hidden = false;
-    animate(ui.pauseCover, [{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: 'ease-out' });
-  } else {
-    startClock();
-    animate(ui.pauseCover, [{ opacity: 1 }, { opacity: 0 }], { duration: 200, easing: 'ease-in', fill: 'forwards' }).then(() => {
-      if (!ui) return;
-      if (!paused) ui.pauseCover.hidden = true;
-      ui.pauseCover.getAnimations().forEach((a) => a.cancel());
-    });
-  }
-  save();
-}
-
-function onVisibility() {
-  if (document.visibilityState === 'hidden') setPaused(true);
-}
-
-function timeUp() {
-  if (review) return;
-  paused = false;
-  ui.pauseCover.hidden = true;
-  stopClock();
-  game.remainingMs = 0;
-  review = true;
-  pointerId = null;
-  path = [];
+function complete() {
+  finished = true;
   api.storage.remove('current');
   stats[game.size] = recordGame(stats[game.size], game);
   api.storage.set('stats', stats);
-  api.platform.haptic.notification('warning');
-
-  ui.time.textContent = formatDuration(0);
-  ui.time.classList.remove('bo-time-low');
-  toast.show(T.timeUp, 1500);
-  shake(ui.board, { distance: 5 });
-  renderInfo();
-  renderPath([]);
-  renderFound();
-  ui.finishBar.hidden = false;
-  animate(ui.finishBar, [{ opacity: 0, transform: 'translateY(20px)' }, { opacity: 1, transform: 'none' }], { duration: 280, easing: EASE_OUT });
-}
-
-function report() {
-  const longest = game.found.reduce((a, w) => (w.length > a.length ? w : a), '');
-  api.finish({
-    outcome: 'quit',
+  // победная волна по буквам, капсулы пульсируют — потом экран результата
+  if (!reducedMotion()) {
+    const n = game.size;
+    ui.cells.forEach((cell, i) => animate(cell, [{ transform: 'scale(1)' }, { transform: 'scale(1.18)' }, { transform: 'scale(1)' }],
+      { duration: 420, delay: (Math.floor(i / n) + (i % n)) * 25, easing: 'ease-out' }));
+    [...ui.capsules.children].forEach((line, k) => animate(line, [{ opacity: 1 }, { opacity: 0.3 }, { opacity: 1 }],
+      { duration: 500, delay: k * 40 }));
+  }
+  const { size, score, bank, bonus, bonusTotal } = game;
+  later(() => api.finish({
+    outcome: 'win',
     title: T.resultTitle,
-    score: game.score,
-    variant: String(game.size),
+    score,
+    variant: String(size),
     locale: 'ru',
-    message: T.result(game.found.length, allWords.length, longest),
-  });
+    message: T.result(bank.length, bonus.length, bonusTotal),
+  }), reducedMotion() ? 0 : 1600);
 }
 
 // ---------- новая партия ----------
@@ -383,40 +306,27 @@ async function startGame(saved = null) {
     return;
   }
   if (!api) return;
-  if (saved) {
-    game = saved;
-    allWords = [...solve(game.grid, game.size, dict)];
-  } else {
-    const { grid, words } = generateGrid(settings.size, dict);
-    game = newGame(settings.size, grid, words.length);
-    allWords = words;
-  }
-  review = false;
-  paused = false;
-  ui.finishBar.hidden = true;
-  ui.pauseCover.hidden = true;
+  game = saved ?? newGame(settings.size, generatePuzzle(settings.size, dict));
+  finished = false;
+  selection = [];
   buildBoard();
-  renderPath([]);
-  renderFound();
+  renderCapsules();
+  renderSelection([]);
+  renderBank();
   renderInfo();
   save();
-  if (saved) setPaused(true);                   // вернулся к партии — сначала пауза, время не утекло
-  else startClock();
 }
 
 function askRestart() {
-  if (!game || review || !game.found.length) {
-    stopClock();
+  if (!game || finished || (!game.found.length && !game.bonus.length)) {
     startGame();
     return;
   }
-  const wasPaused = paused;
-  setPaused(true);
-  openModal(card(T.newGame, () => { if (!wasPaused) setPaused(false); },
+  openModal(card(T.newGame,
     el('p', { class: 'bo-note' }, T.restartQuestion),
     el('div', { class: 'bo-card-actions' },
-      el('button', { class: 'btn btn-secondary', onclick: () => { closeModal(); if (!wasPaused) setPaused(false); } }, T.cancel),
-      el('button', { class: 'btn', onclick: () => { closeModal(); stopClock(); startGame(); } }, T.restart),
+      el('button', { class: 'btn btn-secondary', onclick: closeModal }, T.cancel),
+      el('button', { class: 'btn', onclick: () => { closeModal(); startGame(); } }, T.restart),
     ),
   ));
 }
@@ -439,93 +349,85 @@ function closeModal() {
   });
 }
 
-function card(title, onClose, ...children) {
-  const close = () => {
-    closeModal();
-    onClose?.();
-  };
-  ui.modal.onEscape = close;
+function card(title, ...children) {
   return el('div', { class: 'bo-card', role: 'dialog', 'aria-label': title },
     el('div', { class: 'bo-card-head' },
       el('h2', {}, title),
-      el('button', { class: 'bo-icon-btn', 'aria-label': T.stats.close, title: T.stats.close, onclick: close }, '✕'),
+      el('button', { class: 'bo-icon-btn', 'aria-label': T.stats.close, title: T.stats.close, onclick: closeModal }, '✕'),
     ),
     ...children,
   );
 }
 
-function withPause(fn) {
-  const wasPaused = paused;
-  setPaused(true);
-  fn(() => { if (!wasPaused) setPaused(false); });
+function showBonus() {
+  if (!game) return;
+  const words = [...game.bonus].sort((a, b) => b.length - a.length || a.localeCompare(b));
+  openModal(card(T.bonus.title,
+    words.length
+      ? el('div', { class: 'bo-list' }, words.map((w) => el('span', { class: 'bo-chip' },
+        w.toUpperCase(), el('span', { class: 'bo-chip-pts' }, `+${bonusPoints(w)}`))))
+      : el('p', { class: 'bo-note' }, T.bonus.empty),
+    el('p', { class: 'bo-note' }, T.bonus.left(game.bonusTotal - game.bonus.length)),
+  ));
 }
 
 function showStats(initial = game?.size ?? settings.size) {
-  withPause((resume) => {
-    const render = (size) => {
-      const s = stats[size];
-      const item = (value, label) => el('div', { class: 'bo-stat' },
-        el('div', { class: 'bo-stat-value' }, value), el('div', { class: 'bo-stat-label' }, label));
-      openModal(card(T.stats.title, resume,
-        el('div', { class: 'bo-tabs', role: 'tablist' }, SIZES.map((n) => el('button', {
-          class: 'bo-tab', role: 'tab', 'aria-selected': String(n === size), onclick: () => render(n),
-        }, `${n}×${n}`))),
-        el('div', { class: 'bo-stats-grid' },
-          item(s.played, T.stats.played),
-          item(s.best, T.stats.best),
-          item(s.words, T.stats.words),
-          item(s.longest ? s.longest.toUpperCase() : '—', T.stats.longest),
-        ),
-      ));
-    };
-    render(initial);
-  });
+  const render = (size) => {
+    const s = stats[size];
+    const item = (value, label) => el('div', { class: 'bo-stat' },
+      el('div', { class: 'bo-stat-value' }, value), el('div', { class: 'bo-stat-label' }, label));
+    openModal(card(T.stats.title,
+      el('div', { class: 'bo-tabs', role: 'tablist' }, SIZES.map((n) => el('button', {
+        class: 'bo-tab', role: 'tab', 'aria-selected': String(n === size), onclick: () => render(n),
+      }, `${n}×${n}`))),
+      el('div', { class: 'bo-stats-grid' },
+        item(s.played, T.stats.played),
+        item(s.best, T.stats.best),
+        item(s.bonus, T.stats.bonus),
+      ),
+    ));
+  };
+  render(initial);
 }
 
 function showSettings() {
-  withPause((resume) => {
-    const note = el('p', { class: 'bo-note', hidden: true }, T.settings.nextGame);
-    const sizeButtons = SIZES.map((n) => el('button', {
-      class: 'bo-size', role: 'radio', 'aria-checked': String(n === settings.size),
-      onclick: () => {
-        settings.size = n;
-        api.storage.set('settings', settings);
-        sizeButtons.forEach((b, k) => b.setAttribute('aria-checked', String(SIZES[k] === n)));
-        // Партия ещё не начата по-настоящему (ни одного слова) — сразу новое поле, иначе — со следующей.
-        if (game && !review && !game.found.length) {
-          stopClock();
-          startGame().then(() => setPaused(true));
-        } else {
-          note.hidden = n === game?.size;
-        }
-      },
-    }, el('b', {}, `${n}×${n}`), el('span', {}, T.settings.minutes(n))));
-    const skinButtons = SKINS.map((id) => el('button', {
-      class: 'bo-skin', role: 'radio', 'aria-checked': String(id === settings.skin),
-      onclick: () => {
-        settings.skin = id;
-        host.dataset.skin = id;
-        api.storage.set('settings', settings);
-        skinButtons.forEach((b, k) => b.setAttribute('aria-checked', String(SKINS[k] === id)));
-      },
-    }, el('span', { class: 'bo-swatch', 'data-skin': id }), T.skins[id]));
+  const note = el('p', { class: 'bo-note', hidden: true }, T.settings.nextGame);
+  const sizeButtons = SIZES.map((n) => el('button', {
+    class: 'bo-size', role: 'radio', 'aria-checked': String(n === settings.size),
+    onclick: () => {
+      settings.size = n;
+      api.storage.set('settings', settings);
+      sizeButtons.forEach((b, k) => b.setAttribute('aria-checked', String(SIZES[k] === n)));
+      // В партии ещё ничего не найдено — сразу новое поле, иначе — со следующей партии.
+      if (game && !finished && !game.found.length && !game.bonus.length) startGame();
+      else note.hidden = n === game?.size;
+    },
+  }, el('b', {}, `${n}×${n}`), el('span', {}, T.settings.words(n))));
+  const skinButtons = SKINS.map((id) => el('button', {
+    class: 'bo-skin', role: 'radio', 'aria-checked': String(id === settings.skin),
+    onclick: () => {
+      settings.skin = id;
+      host.dataset.skin = id;
+      api.storage.set('settings', settings);
+      skinButtons.forEach((b, k) => b.setAttribute('aria-checked', String(SKINS[k] === id)));
+    },
+  }, el('span', { class: 'bo-swatch', 'data-skin': id }), T.skins[id]));
 
-    openModal(card(T.settings.title, resume,
-      el('h3', { class: 'bo-section' }, T.settings.size),
-      el('div', { class: 'bo-sizes', role: 'radiogroup' }, sizeButtons),
-      note,
-      el('h3', { class: 'bo-section' }, T.settings.skin),
-      el('div', { class: 'bo-skins', role: 'radiogroup' }, skinButtons),
-    ));
-  });
+  openModal(card(T.settings.title,
+    el('h3', { class: 'bo-section' }, T.settings.size),
+    el('div', { class: 'bo-sizes', role: 'radiogroup' }, sizeButtons),
+    note,
+    el('h3', { class: 'bo-section' }, T.settings.skin),
+    el('div', { class: 'bo-skins', role: 'radiogroup' }, skinButtons),
+  ));
 }
 
 function onKeydown(e) {
-  if (e.key === 'Escape' && modalActive) ui.modal.onEscape?.();
+  if (e.key === 'Escape' && modalActive) closeModal();
 }
 
-function iconButton(icon, label, onclick, cls = '') {
-  const button = el('button', { class: `bo-icon-btn ${cls}`, 'aria-label': label, title: label, onclick });
+function iconButton(icon, label, onclick) {
+  const button = el('button', { class: 'bo-icon-btn', 'aria-label': label, title: label, onclick });
   button.innerHTML = icon;
   return button;
 }
@@ -550,32 +452,26 @@ export default {
     };
     host.dataset.skin = settings.skin;
 
-    const svgNs = 'http://www.w3.org/2000/svg';
-    const line = document.createElementNS(svgNs, 'svg');
-    line.setAttribute('viewBox', '0 0 100 100');
-    line.setAttribute('preserveAspectRatio', 'none');
-    line.classList.add('bo-line');
-    const polyline = document.createElementNS(svgNs, 'polyline');
-    line.append(polyline);
+    const capsules = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    capsules.setAttribute('viewBox', '0 0 100 100');
+    capsules.setAttribute('preserveAspectRatio', 'none');
+    capsules.classList.add('bo-capsules');
 
     ui = {
       sub: el('div', { class: 'bo-sub' }),
-      time: el('div', { class: 'bo-info-value' }),
-      words: el('div', { class: 'bo-info-value' }),
+      found: el('div', { class: 'bo-info-value' }),
+      bonusCount: el('span', {}),
       score: el('div', { class: 'bo-info-value' }),
       current: el('div', { class: 'bo-current bo-current-empty' }),
       board: el('div', { class: 'bo-board', onpointerdown: onPointerDown }),
-      line,
-      polyline,
+      capsules,
+      selection: null,
       cells: [],
-      list: el('div', { class: 'bo-list' }),
-      pauseCover: el('div', { class: 'bo-pause', hidden: true },
-        el('button', { class: 'btn', onclick: () => setPaused(false) }, T.resume),
-        el('button', { class: 'btn btn-secondary', onclick: () => timeUp() }, T.endNow)),
-      finishBar: el('div', { class: 'bo-finish', hidden: true }, el('button', { class: 'btn', onclick: report }, T.finish)),
+      bank: el('div', { class: 'bo-bank' }),
       modal: el('div', { class: 'bo-modal', hidden: true }),
     };
-    ui.pauseButton = iconButton(ICONS.pause, T.pause, () => setPaused(true), 'bo-pause-btn');
+    ui.bonusButton = el('button', { class: 'bo-bonus-btn', onclick: showBonus },
+      el('div', { class: 'bo-info-label' }, T.info.bonus), el('div', { class: 'bo-info-value' }, '★ ', ui.bonusCount));
     ui.board.addEventListener('pointermove', onPointerMove);
     ui.board.addEventListener('pointerup', onPointerUp);
     ui.board.addEventListener('pointercancel', onPointerUp);
@@ -590,49 +486,36 @@ export default {
           iconButton(ICONS.gear, T.settings.open, showSettings),
         ),
       ),
-      el('div', { class: 'bo-info' },
-        infoItem(T.info.time, ui.time), infoItem(T.info.words, ui.words), infoItem(T.info.score, ui.score), ui.pauseButton),
+      el('div', { class: 'bo-info' }, infoItem(T.info.found, ui.found), ui.bonusButton, infoItem(T.info.score, ui.score)),
       ui.current,
-      el('div', { class: 'bo-board-wrap' }, ui.board, ui.pauseCover),
-      ui.list,
-      ui.finishBar,
+      el('div', { class: 'bo-board-wrap' }, ui.board),
+      ui.bank,
       ui.modal,
       toast.el,
     );
     container.append(root);
     document.addEventListener('keydown', onKeydown);
-    document.addEventListener('visibilitychange', onVisibility);
-    const tickId = setInterval(tick, 250);
-    timers.add(tickId);
     renderInfo();
 
-    await startGame(isValidState(savedGame) && savedGame.remainingMs > 0 ? savedGame : null);
+    await startGame(isValidState(savedGame) && !isComplete(savedGame) ? savedGame : null);
   },
 
   getState() {
-    if (!game || review || !game.found.length) return null;
+    if (!game || finished || (!game.found.length && !game.bonus.length)) return null;
     save();
     return { size: game.size };
   },
 
   destroy() {
-    if (game && !review) {
-      stopClock();
-      api?.storage.set('current', game);
-    }
-    timers.forEach((id) => {
-      clearTimeout(id);
-      clearInterval(id);
-    });
+    save();
+    timers.forEach(clearTimeout);
     timers.clear();
     document.removeEventListener('keydown', onKeydown);
-    document.removeEventListener('visibilitychange', onVisibility);
     toast?.dispose();
     root?.remove();
-    api = host = root = ui = toast = game = runningSince = null;
+    api = host = root = ui = toast = game = null;
     pointerId = null;
-    path = [];
-    allWords = [];
-    paused = review = modalActive = false;
+    selection = [];
+    finished = modalActive = false;
   },
 };
