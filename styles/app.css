@@ -41,6 +41,9 @@ body {
   padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
 }
 
+/* Корень игры — отдельный слой: z-index внутри игры (эффекты, капсулы, окна) не перекроют экран результата. */
+.game-root { isolation: isolate; }
+
 h1, h2 { margin: 0 0 8px; line-height: 1.2; }
 .hint { color: var(--tg-theme-hint-color); margin: 0 0 16px; }
 

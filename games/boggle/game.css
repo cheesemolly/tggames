@@ -17,6 +17,10 @@
   --bo-good: #2fb36b;
   --bo-bad: var(--tg-theme-destructive-text-color);
   --bo-warn: #e0a100;
+  --bo-gold: #f5b700;
+  /* цвета капсул найденных слов — игровые, одинаковые во всех скинах */
+  --bo-m1: #ff6b6b; --bo-m2: #ffa94d; --bo-m3: #ffd43b; --bo-m4: #69db7c;
+  --bo-m5: #4dabf7; --bo-m6: #9775fa; --bo-m7: #f783ac; --bo-m8: #38d9a9;
 
   --toast-top: 150px;
   --toast-bg: var(--bo-text);
@@ -99,11 +103,10 @@
 }
 [data-game="boggle"] .bo-icon-btn:active { transform: scale(0.92); }
 [data-game="boggle"] .bo-icon-btn:disabled { opacity: 0.4; }
-[data-game="boggle"] .bo-pause-btn { border-radius: 50%; }
 
 [data-game="boggle"] .bo-info {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: center;
   gap: 4px;
   padding: 0 4px;
@@ -111,9 +114,6 @@
 }
 [data-game="boggle"] .bo-info-label { font-size: 12px; color: var(--bo-hint); }
 [data-game="boggle"] .bo-info-value { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
-[data-game="boggle"] .bo-time-low { color: var(--bo-bad); animation: bo-pulse 1s ease-in-out infinite; }
-@keyframes bo-pulse { 50% { transform: scale(1.12); } }
-
 /* текущее слово */
 [data-game="boggle"] .bo-current {
   height: 36px;
@@ -126,7 +126,7 @@
   transition: color 0.2s ease;
 }
 [data-game="boggle"] .bo-current-empty { font-size: 14px; font-weight: 500; letter-spacing: 0; color: var(--bo-hint); }
-[data-game="boggle"] .bo-current[data-kind="good"] { color: var(--bo-good); }
+[data-game="boggle"] .bo-current[data-kind="bonus"] { color: var(--bo-gold); }
 [data-game="boggle"] .bo-current[data-kind="bad"] { color: var(--bo-bad); }
 [data-game="boggle"] .bo-current[data-kind="warn"] { color: var(--bo-warn); }
 
@@ -174,51 +174,11 @@
 [data-game="boggle"][data-skin="neon"] .bo-letter { text-shadow: 0 0 8px currentColor; }
 [data-game="boggle"] .bo-letter { display: inline-block; pointer-events: none; }
 
-[data-game="boggle"] .bo-cell.bo-on { background: var(--bo-accent); color: var(--bo-accent-text); transform: scale(0.94); }
-[data-game="boggle"] .bo-cell.bo-good { background: var(--bo-good); color: #ffffff; }
-[data-game="boggle"] .bo-cell.bo-bad { background: var(--bo-bad); color: #ffffff; }
-[data-game="boggle"] .bo-cell.bo-warn { background: var(--bo-warn); color: #ffffff; }
-
-/* линия пути поверх клеток */
-[data-game="boggle"] .bo-line {
-  position: absolute;
-  inset: var(--gap);
-  width: calc(100% - 2 * var(--gap));
-  height: calc(100% - 2 * var(--gap));
-  pointer-events: none;
-  overflow: visible;
-}
-[data-game="boggle"] .bo-line polyline {
-  fill: none;
-  stroke: var(--bo-accent);
-  stroke-width: calc(40 / var(--n));
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  opacity: 0.45;
-  vector-effect: none;
-  transition: stroke 0.15s ease;
-}
-[data-game="boggle"] .bo-line[data-kind="good"] polyline { stroke: var(--bo-good); }
-[data-game="boggle"] .bo-line[data-kind="bad"] polyline { stroke: var(--bo-bad); }
-[data-game="boggle"] .bo-line[data-kind="warn"] polyline { stroke: var(--bo-warn); }
-
-[data-game="boggle"] .bo-pause {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  background: var(--bo-bg);
-}
-[data-game="boggle"] .bo-pause .btn { width: auto; min-width: 220px; }
+[data-game="boggle"] .bo-cell.bo-on { transform: scale(1.08); }
 
 /* найденные слова / разбор */
 [data-game="boggle"] .bo-list {
-  flex: none;
-  max-height: 30%;
-  min-height: 44px;
+  max-height: 50vh;
   overflow-y: auto;
   display: flex;
   flex-wrap: wrap;
@@ -244,10 +204,7 @@
   font-size: 11px;
   color: var(--bo-hint);
 }
-[data-game="boggle"] .bo-chip-found { background: color-mix(in srgb, var(--bo-good) 22%, var(--bo-surface)); }
-[data-game="boggle"] .bo-chip-missed { opacity: 0.6; }
 
-[data-game="boggle"] .bo-finish { flex: none; }
 
 [data-game="boggle"] .bo-float {
   position: absolute;
@@ -294,7 +251,7 @@
 [data-game="boggle"] .bo-section { margin: 4px 0 10px; font-size: 14px; }
 [data-game="boggle"] .bo-section + .bo-skins { margin-bottom: 0; }
 
-[data-game="boggle"] .bo-sizes { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin-bottom: 4px; }
+[data-game="boggle"] .bo-sizes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-bottom: 4px; }
 [data-game="boggle"] .bo-size {
   display: grid;
   gap: 2px;
@@ -340,7 +297,7 @@
 
 [data-game="boggle"] .bo-tabs {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   padding: 2px;
   margin-bottom: 12px;
   border-radius: 10px;
@@ -361,3 +318,84 @@
 [data-game="boggle"] .bo-stats-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 8px; text-align: center; }
 [data-game="boggle"] .bo-stat-value { font-size: 22px; font-weight: 700; word-break: break-word; }
 [data-game="boggle"] .bo-stat-label { font-size: 12px; color: var(--bo-hint); }
+
+/* ---------- капсулы: найденные слова и текущее выделение ---------- */
+
+[data-game="boggle"] .bo-board { position: relative; }
+[data-game="boggle"] .bo-capsules {
+  position: absolute;
+  inset: var(--gap);
+  width: calc(100% - 2 * var(--gap));
+  height: calc(100% - 2 * var(--gap));
+  pointer-events: none;
+  overflow: visible;
+}
+[data-game="boggle"] .bo-cell { position: relative; z-index: 1; background: color-mix(in srgb, var(--bo-tile) 86%, transparent); }
+[data-game="boggle"] .bo-cell.bo-done { background: color-mix(in srgb, var(--bo-tile) 55%, transparent); }
+[data-game="boggle"] .bo-capsules { z-index: 2; mix-blend-mode: normal; }
+[data-game="boggle"] .bo-capsule { stroke-linecap: round; opacity: 0.45; }
+[data-game="boggle"] .bo-sel { stroke: var(--bo-accent); opacity: 0.5; transition: stroke 0.15s ease; }
+[data-game="boggle"] .bo-sel-bonus { stroke: var(--bo-gold); opacity: 0.65; }
+[data-game="boggle"] .bo-sel-bad { stroke: var(--bo-bad); }
+[data-game="boggle"] .bo-sel-warn { stroke: var(--bo-warn); }
+[data-game="boggle"] .bo-capsule.bo-m1 { stroke: var(--bo-m1); }
+[data-game="boggle"] .bo-capsule.bo-m2 { stroke: var(--bo-m2); }
+[data-game="boggle"] .bo-capsule.bo-m3 { stroke: var(--bo-m3); }
+[data-game="boggle"] .bo-capsule.bo-m4 { stroke: var(--bo-m4); }
+[data-game="boggle"] .bo-capsule.bo-m5 { stroke: var(--bo-m5); }
+[data-game="boggle"] .bo-capsule.bo-m6 { stroke: var(--bo-m6); }
+[data-game="boggle"] .bo-capsule.bo-m7 { stroke: var(--bo-m7); }
+[data-game="boggle"] .bo-capsule.bo-m8 { stroke: var(--bo-m8); }
+
+/* ---------- банк слов ---------- */
+
+[data-game="boggle"] .bo-bank {
+  flex: none;
+  max-height: 28%;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 4px 6px;
+  padding: 2px;
+}
+[data-game="boggle"] .bo-word {
+  position: relative;
+  padding: 4px 6px;
+  border-radius: 8px;
+  background: var(--bo-surface);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-align: center;
+  transition: opacity 0.3s ease, background-color 0.3s ease;
+}
+[data-game="boggle"] .bo-word-done {
+  opacity: 0.55;
+  text-decoration: line-through;
+  text-decoration-thickness: 2px;
+}
+[data-game="boggle"] .bo-word-done.bo-m1 { background: color-mix(in srgb, var(--bo-m1) 35%, var(--bo-surface)); }
+[data-game="boggle"] .bo-word-done.bo-m2 { background: color-mix(in srgb, var(--bo-m2) 35%, var(--bo-surface)); }
+[data-game="boggle"] .bo-word-done.bo-m3 { background: color-mix(in srgb, var(--bo-m3) 35%, var(--bo-surface)); }
+[data-game="boggle"] .bo-word-done.bo-m4 { background: color-mix(in srgb, var(--bo-m4) 35%, var(--bo-surface)); }
+[data-game="boggle"] .bo-word-done.bo-m5 { background: color-mix(in srgb, var(--bo-m5) 35%, var(--bo-surface)); }
+[data-game="boggle"] .bo-word-done.bo-m6 { background: color-mix(in srgb, var(--bo-m6) 35%, var(--bo-surface)); }
+[data-game="boggle"] .bo-word-done.bo-m7 { background: color-mix(in srgb, var(--bo-m7) 35%, var(--bo-surface)); }
+[data-game="boggle"] .bo-word-done.bo-m8 { background: color-mix(in srgb, var(--bo-m8) 35%, var(--bo-surface)); }
+
+/* ---------- кнопка «Бонус» ---------- */
+
+[data-game="boggle"] .bo-bonus-btn {
+  padding: 2px 0;
+  border: 0;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bo-gold) 18%, transparent);
+  color: var(--bo-text);
+  font: inherit;
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+[data-game="boggle"] .bo-bonus-btn:active { transform: scale(0.95); }
+[data-game="boggle"] .bo-bonus-btn .bo-info-value { color: var(--bo-gold); }
+[data-game="boggle"] .bo-float-bonus { color: var(--bo-gold); }
+[data-game="boggle"] .bo-card .bo-list { margin-bottom: 4px; }
