@@ -104,6 +104,7 @@ h1, h2 { margin: 0 0 8px; line-height: 1.2; }
   background: color-mix(in srgb, var(--tg-theme-bg-color) 85%, transparent);
 }
 .result-card {
+  position: relative;
   width: 100%;
   max-width: 360px;
   padding: 24px 16px 16px;
@@ -114,8 +115,99 @@ h1, h2 { margin: 0 0 8px; line-height: 1.2; }
   gap: 8px;
 }
 .result-title { font-size: 24px; margin-bottom: 4px; }
+.result-message { margin: 0 0 4px; }
 .result-line { margin: 0; color: var(--tg-theme-hint-color); }
 .result-card .btn:first-of-type { margin-top: 8px; }
 .result-card .btn-secondary { background: var(--tg-theme-bg-color); }
 
+/* «Глаз»: спрятать карточку результата, чтобы видеть доску */
+.result-eye {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: var(--tg-theme-bg-color);
+  color: var(--tg-theme-hint-color);
+  cursor: pointer;
+}
+/* Карточка прячется плавно; остаётся значок «показать» сверху, он сам исчезает — на скриншоте только доска */
+.result-card { transition: opacity 0.22s ease, transform 0.22s ease; }
+.result { transition: background-color 0.22s ease; }
+.result-show {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--tg-theme-secondary-bg-color);
+  color: var(--tg-theme-hint-color);
+  opacity: 0;
+  transform: translateX(-50%);
+  pointer-events: none;
+  cursor: pointer;
+}
+.result.result-hidden { background: transparent; }
+.result.result-hidden .result-card {
+  opacity: 0;
+  transform: translateY(24px) scale(0.97);
+  pointer-events: none;
+}
+.result.result-hidden .result-show { animation: result-show-fade 2.5s ease-in forwards; }
+@keyframes result-show-fade {
+  0% { opacity: 0; }
+  10%, 60% { opacity: 0.8; }
+  100% { opacity: 0; }
+}
+
 .error-text { color: var(--tg-theme-destructive-text-color); word-break: break-word; }
+
+/* ---------- Движение ---------- */
+
+@keyframes fade-in { from { opacity: 0; } }
+@keyframes rise-in { from { opacity: 0; transform: translateY(16px) scale(0.98); } }
+
+.screen { animation: fade-in 0.2s ease-out; }
+.result { animation: fade-in 0.25s ease-out; }
+.result-card { animation: rise-in 0.32s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.game-card { animation: rise-in 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; animation-delay: calc(var(--i, 0) * 50ms); }
+
+.btn, .game-card { transition: transform 0.12s ease, opacity 0.12s ease, background-color 0.2s ease; }
+.btn:active, .game-card:active { transform: scale(0.97); }
+
+/* Всплывающее сообщение (shared/toast.js) */
+.toast {
+  position: absolute;
+  top: var(--toast-top, 56px);
+  left: 50%;
+  z-index: 5;
+  padding: 10px 16px;
+  border-radius: 10px;
+  background: var(--toast-bg, var(--tg-theme-text-color));
+  color: var(--toast-fg, var(--tg-theme-bg-color));
+  font-weight: 700;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, -8px) scale(0.96);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.toast.toast-show { opacity: 1; transform: translate(-50%, 0) scale(1); }
+
+/* Системная настройка «уменьшить движение» — без анимаций */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+}

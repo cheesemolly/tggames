@@ -1,0 +1,460 @@
+/*
+ * Судоку. Оформление — как у Wordle (шапка, иконки, окна).
+ * Все цвета игры — 8 базовых переменных --sd-*, остальное выводится из них через color-mix.
+ * Скин «telegram» (по умолчанию) берёт базовые цвета из темы Telegram, остальные скины — свои палитры
+ * (атрибут data-skin на корне игры; настройка в окне ⚙).
+ */
+
+[data-game="sudoku"] {
+  --sd-bg: var(--tg-theme-bg-color);
+  --sd-surface: var(--tg-theme-secondary-bg-color);
+  --sd-text: var(--tg-theme-text-color);
+  --sd-hint: var(--tg-theme-hint-color);
+  --sd-accent: var(--tg-theme-button-color);
+  --sd-accent-text: var(--tg-theme-button-text-color);
+  --sd-link: var(--tg-theme-link-color);
+  --sd-danger: var(--tg-theme-destructive-text-color);
+
+  --sd-line: color-mix(in srgb, var(--sd-hint) 40%, var(--sd-bg));
+  --sd-line-strong: color-mix(in srgb, var(--sd-text) 70%, var(--sd-bg));
+  --sd-selected: color-mix(in srgb, var(--sd-accent) 38%, var(--sd-bg));
+  --sd-peer: color-mix(in srgb, var(--sd-hint) 16%, var(--sd-bg));
+  --sd-same: color-mix(in srgb, var(--sd-accent) 24%, var(--sd-bg));
+  --sd-user: var(--sd-link);
+  --sd-error: var(--sd-danger);
+  --sd-conflict: color-mix(in srgb, var(--sd-danger) 22%, var(--sd-bg));
+  --sd-hint-area: color-mix(in srgb, var(--sd-accent) 12%, var(--sd-bg));
+  --sd-hint-key: color-mix(in srgb, var(--sd-accent) 32%, var(--sd-bg));
+  --sd-hint-elim: color-mix(in srgb, var(--sd-danger) 16%, var(--sd-bg));
+  --sd-flash: color-mix(in srgb, var(--sd-accent) 45%, var(--sd-bg));   /* волна заполнения */
+
+  /* общая всплывашка (shared/toast.js) — под строкой статуса и в цветах скина */
+  --toast-top: 96px;
+  --toast-bg: var(--sd-text);
+  --toast-fg: var(--sd-bg);
+}
+
+/* Скины. Палитра применяется и к корню игры, и к квадрату-образцу в настройках (фон / акцент). */
+[data-game="sudoku"] [data-skin="telegram"] {
+  --sd-bg: var(--tg-theme-bg-color); --sd-accent: var(--tg-theme-button-color);
+}
+[data-game="sudoku"][data-skin="classic"], [data-game="sudoku"] [data-skin="classic"] {       /* белый и голубой */
+  --sd-bg: #ffffff; --sd-surface: #edf2f9; --sd-text: #1e2b3c; --sd-hint: #7a8799;
+  --sd-accent: #2f7de1; --sd-accent-text: #ffffff; --sd-link: #2a6fd6; --sd-danger: #e5484d;
+}
+[data-game="sudoku"][data-skin="claude"], [data-game="sudoku"] [data-skin="claude"] {        /* чёрный и оранжевый, как в Claude */
+  --sd-bg: #1f1e1d; --sd-surface: #2c2b28; --sd-text: #f2eee6; --sd-hint: #9d978c;
+  --sd-accent: #d97757; --sd-accent-text: #ffffff; --sd-link: #e8906c; --sd-danger: #ff4f86;
+}
+[data-game="sudoku"][data-skin="sepia"], [data-game="sudoku"] [data-skin="sepia"] {         /* кремовый и коричневый */
+  --sd-bg: #f6efe0; --sd-surface: #ebe0c9; --sd-text: #3d2e1e; --sd-hint: #8b7860;
+  --sd-accent: #9a6b3f; --sd-accent-text: #ffffff; --sd-link: #8a5a2b; --sd-danger: #c0392b;
+}
+[data-game="sudoku"][data-skin="forest"], [data-game="sudoku"] [data-skin="forest"] {        /* тёмно-зелёный и мятный */
+  --sd-bg: #14201c; --sd-surface: #1e2e29; --sd-text: #e2eee8; --sd-hint: #86a097;
+  --sd-accent: #3ecf9e; --sd-accent-text: #0c1a15; --sd-link: #62d9b0; --sd-danger: #ff6b6b;
+}
+[data-game="sudoku"][data-skin="night"], [data-game="sudoku"] [data-skin="night"] {         /* тёмно-синий и фиолетовый */
+  --sd-bg: #121629; --sd-surface: #1d2342; --sd-text: #e6e8f5; --sd-hint: #8b90b3;
+  --sd-accent: #8b7cff; --sd-accent-text: #ffffff; --sd-link: #a99dff; --sd-danger: #ff6b81;
+}
+
+.game-root[data-game="sudoku"] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+  background: var(--sd-bg);
+  color: var(--sd-text);
+}
+
+/* Общие классы оболочки (.btn, .hint) внутри судоку — в цветах скина */
+[data-game="sudoku"] .btn { background: var(--sd-accent); color: var(--sd-accent-text); }
+[data-game="sudoku"] .btn-secondary { background: var(--sd-surface); color: var(--sd-text); }
+[data-game="sudoku"] .hint { color: var(--sd-hint); }
+
+[data-game="sudoku"] .sd {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Шапка — как у Wordle */
+[data-game="sudoku"] .sd-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 4px;
+}
+[data-game="sudoku"] .sd-title { font-size: 20px; font-weight: 700; line-height: 1.2; }
+[data-game="sudoku"] .sd-sub { font-size: 13px; color: var(--sd-hint); }
+[data-game="sudoku"] .sd-actions { display: flex; gap: 6px; }
+
+[data-game="sudoku"] .sd-icon-btn {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: var(--sd-surface);
+  color: var(--sd-text);
+  font: inherit;
+  font-size: 16px;
+  cursor: pointer;
+}
+[data-game="sudoku"] .sd-icon-btn svg { width: 20px; height: 20px; }
+[data-game="sudoku"] .sd-icon-btn:disabled { opacity: 0.4; }
+
+/* Строка «Сложность · Ошибки · Очки · Время · пауза» */
+[data-game="sudoku"] .sd-info {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+  align-items: center;
+  gap: 4px;
+  padding: 0 4px;
+  text-align: center;
+}
+[data-game="sudoku"] .sd-info-label { font-size: 12px; color: var(--sd-hint); }
+[data-game="sudoku"] .sd-info-value { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+[data-game="sudoku"] .sd-pause-btn { border-radius: 50%; }
+
+/* Доска: квадрат по меньшей стороне свободного места */
+[data-game="sudoku"] .sd-board-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: flex-start;              /* доска сразу под строкой статуса, свободное место — ниже */
+  justify-content: center;
+  container-type: size;
+}
+[data-game="sudoku"] .sd-board {
+  --size: min(100cqw, 100cqh);
+  width: var(--size);
+  height: var(--size);
+  display: grid;
+  grid-template-columns: repeat(9, 1fr);
+  grid-template-rows: repeat(9, 1fr);
+  border: 2px solid var(--sd-line-strong);
+  user-select: none;
+  touch-action: manipulation;
+}
+
+[data-game="sudoku"] .sd-cell {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  min-height: 0;
+  border-right: 1px solid var(--sd-line);
+  border-bottom: 1px solid var(--sd-line);
+  font-size: calc(var(--size) * 0.068);
+  line-height: 1;
+  cursor: pointer;
+}
+[data-game="sudoku"] .sd-c-thick { border-right: 2px solid var(--sd-line-strong); }
+[data-game="sudoku"] .sd-r-thick { border-bottom: 2px solid var(--sd-line-strong); }
+[data-game="sudoku"] .sd-c-last { border-right: 0; }
+[data-game="sudoku"] .sd-r-last { border-bottom: 0; }
+
+[data-game="sudoku"] .sd-given { color: var(--sd-text); }
+[data-game="sudoku"] .sd-user { color: var(--sd-user); }
+[data-game="sudoku"] .sd-wrong { color: var(--sd-error); }
+
+/* Фон — по приоритету: чем ниже правило, тем важнее */
+[data-game="sudoku"] .sd-peer { background: var(--sd-peer); }
+[data-game="sudoku"] .sd-hint-area { background: var(--sd-hint-area); }
+[data-game="sudoku"] .sd-same { background: var(--sd-same); }
+[data-game="sudoku"] .sd-hint-elim { background: var(--sd-hint-elim); }
+[data-game="sudoku"] .sd-hint-key { background: var(--sd-hint-key); }
+[data-game="sudoku"] .sd-conflict { background: var(--sd-conflict); }
+[data-game="sudoku"] .sd-selected { background: var(--sd-selected); }
+[data-game="sudoku"] .sd-hint-target {
+  background: var(--sd-selected);
+  box-shadow: inset 0 0 0 2px var(--sd-accent);
+}
+
+/* Заметки: сетка 3×3 мелких цифр */
+[data-game="sudoku"] .sd-notes {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  width: 100%;
+  height: 100%;
+  padding: 1px;
+  font-size: calc(var(--size) * 0.028);
+  color: var(--sd-hint);
+}
+[data-game="sudoku"] .sd-notes span { display: grid; place-items: center; }
+[data-game="sudoku"] .sd-notes .sd-note-on { color: var(--sd-accent); font-weight: 700; }
+
+/* Пауза: доска закрыта */
+[data-game="sudoku"] .sd-pause-cover {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--sd-bg);
+}
+[data-game="sudoku"] .sd-resume { width: auto; padding: 14px 32px; }
+
+/* Инструменты и цифры */
+[data-game="sudoku"] .sd-controls { position: relative; flex: none; display: grid; gap: 4px; }
+
+[data-game="sudoku"] .sd-tools { display: grid; grid-template-columns: repeat(4, 1fr); }
+[data-game="sudoku"] .sd-tool {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: 6px 0;
+  border: 0;
+  background: none;
+  color: var(--sd-hint);
+  font: inherit;
+  cursor: pointer;
+}
+[data-game="sudoku"] .sd-tool:disabled { opacity: 0.4; }
+[data-game="sudoku"] .sd-tool-icon { display: grid; }
+[data-game="sudoku"] .sd-tool-label { font-size: 12px; }
+
+[data-game="sudoku"] .sd-badge {
+  position: absolute;
+  top: 0;
+  left: calc(50% + 6px);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+[data-game="sudoku"] .sd-badge-pill {
+  padding: 3px 5px;
+  border-radius: 8px;
+  background: var(--sd-hint);
+  color: var(--sd-bg);
+}
+[data-game="sudoku"] .sd-badge-pill.sd-badge-on {
+  background: var(--sd-accent);
+  color: var(--sd-accent-text);
+}
+[data-game="sudoku"] .sd-badge-count {
+  display: grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  background: var(--sd-accent);
+  color: var(--sd-accent-text);
+}
+
+[data-game="sudoku"] .sd-pad { display: grid; grid-template-columns: repeat(9, 1fr); }
+[data-game="sudoku"] .sd-digit {
+  height: 56px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--sd-user);
+  font: inherit;
+  font-size: 32px;
+  cursor: pointer;
+}
+[data-game="sudoku"] .sd-digit:active { background: var(--sd-surface); }
+[data-game="sudoku"] .sd-pad-notes .sd-digit { color: var(--sd-hint); font-size: 26px; }
+
+/* Подсказка — на месте инструментов и цифр; доска над ней уменьшается и видна целиком */
+[data-game="sudoku"] .sd-controls.sd-hint-open .sd-tools,
+[data-game="sudoku"] .sd-controls.sd-hint-open .sd-pad { display: none; }
+[data-game="sudoku"] .sd-hint-card {
+  width: 100%;
+  max-height: 42vh;
+  overflow-y: auto;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--sd-surface);
+}
+[data-game="sudoku"] .sd-hint-steps { margin: 0 0 12px; padding: 0; list-style: none; display: grid; gap: 8px; }
+[data-game="sudoku"] .sd-hint-numbered { padding-left: 20px; list-style: decimal; }
+[data-game="sudoku"] .sd-hint-title { font-weight: 700; margin-bottom: 2px; }
+[data-game="sudoku"] .sd-hint-text { font-size: 14px; line-height: 1.35; }
+[data-game="sudoku"] .sd-hint-actions { display: flex; gap: 8px; }
+[data-game="sudoku"] .sd-hint-actions .btn { padding: 10px 12px; }
+[data-game="sudoku"] .sd-hint-actions .btn-secondary { background: var(--sd-bg); }
+
+/* Окна: новая игра и статистика */
+[data-game="sudoku"] .sd-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--sd-bg);
+  background: color-mix(in srgb, var(--sd-bg) 85%, transparent);
+}
+[data-game="sudoku"] .sd-card {
+  width: 100%;
+  max-width: 360px;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--sd-surface);
+}
+[data-game="sudoku"] .sd-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+[data-game="sudoku"] .sd-card-head h2 { margin: 0; font-size: 18px; }
+[data-game="sudoku"] .sd-card .sd-icon-btn { background: var(--sd-bg); }
+[data-game="sudoku"] .sd-card .btn-secondary { background: var(--sd-bg); }
+[data-game="sudoku"] .sd-warning { margin: -4px 0 12px; }
+[data-game="sudoku"] .sd-picker { display: grid; gap: 8px; }
+
+[data-game="sudoku"] .sd-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  padding: 2px;
+  margin-bottom: 12px;
+  border-radius: 10px;
+  background: var(--sd-bg);
+}
+[data-game="sudoku"] .sd-tab {
+  padding: 6px 2px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--sd-hint);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+[data-game="sudoku"] .sd-tab[aria-selected="true"] {
+  background: var(--sd-accent);
+  color: var(--sd-accent-text);
+}
+[data-game="sudoku"] .sd-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 8px;
+  text-align: center;
+}
+[data-game="sudoku"] .sd-stat-value { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
+[data-game="sudoku"] .sd-stat-label { font-size: 12px; color: var(--sd-hint); }
+
+
+/* Настройки */
+[data-game="sudoku"] .sd-setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0 12px;
+  cursor: pointer;
+}
+[data-game="sudoku"] .sd-setting-title { font-weight: 600; }
+[data-game="sudoku"] .sd-setting-desc { font-size: 13px; color: var(--sd-hint); }
+
+/* Переключатель */
+[data-game="sudoku"] .sd-switch {
+  appearance: none;
+  flex: none;
+  position: relative;
+  width: 46px;
+  height: 28px;
+  margin: 0;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--sd-hint) 45%, var(--sd-bg));
+  cursor: pointer;
+  transition: background 0.15s;
+}
+[data-game="sudoku"] .sd-switch::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--sd-bg);
+  transition: transform 0.15s;
+}
+[data-game="sudoku"] .sd-switch:checked { background: var(--sd-accent); }
+[data-game="sudoku"] .sd-switch:checked::after { transform: translateX(18px); }
+
+[data-game="sudoku"] .sd-section-title { margin: 4px 0 10px; font-size: 14px; font-weight: 700; }
+
+/* Скины: квадрат, разрезанный по диагонали на фон и акцент */
+[data-game="sudoku"] .sd-skins {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px 8px;
+}
+[data-game="sudoku"] .sd-skin {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--sd-text);
+  font: inherit;
+  font-size: 12px;
+  text-align: center;
+  cursor: pointer;
+}
+[data-game="sudoku"] .sd-swatch {
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--sd-bg) 50%, var(--sd-accent) 50%);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sd-hint) 40%, transparent);
+}
+[data-game="sudoku"] .sd-skin[aria-checked="true"] .sd-swatch {
+  outline: 3px solid var(--sd-accent);
+  outline-offset: 3px;
+}
+
+/* ---------- Движение ---------- */
+
+/* смена скина — цвета перетекают */
+.game-root[data-game="sudoku"],
+[data-game="sudoku"] .sd-icon-btn,
+[data-game="sudoku"] .sd-badge,
+[data-game="sudoku"] .sd-digit,
+[data-game="sudoku"] .sd-tool {
+  transition: background-color 0.3s ease, color 0.3s ease, opacity 0.25s ease, transform 0.25s ease;
+}
+/* выбор клетки — подсветка перетекает */
+[data-game="sudoku"] .sd-cell { transition: background-color 0.15s ease, color 0.15s ease; }
+[data-game="sudoku"] .sd-val { display: inline-block; }
+
+[data-game="sudoku"] .sd-icon-btn:active,
+[data-game="sudoku"] .sd-tool:active { transform: scale(0.92); }
+[data-game="sudoku"] .sd-digit:active { transform: scale(0.9); }
+
+/* цифра, которой больше нет на доске (все 9 стоят), — плавно исчезает */
+[data-game="sudoku"] .sd-digit.sd-digit-done {
+  opacity: 0;
+  transform: scale(0.6);
+  pointer-events: none;
+}
+
+/* цель подсказки мягко пульсирует */
+[data-game="sudoku"] .sd-hint-target { animation: sd-target 1.4s ease-in-out infinite; }
+@keyframes sd-target {
+  0%, 100% { box-shadow: inset 0 0 0 2px var(--sd-accent); }
+  50% { box-shadow: inset 0 0 0 4px var(--sd-accent); }
+}
+
+/* образец скина при нажатии чуть сжимается */
+[data-game="sudoku"] .sd-swatch { transition: transform 0.2s ease, outline-color 0.2s ease; }
+[data-game="sudoku"] .sd-skin:active .sd-swatch { transform: scale(0.92); }
