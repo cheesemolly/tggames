@@ -95,10 +95,11 @@ h1, h2 { margin: 0 0 8px; line-height: 1.2; }
   font-size: 12px;
 }
 
-/* Экран результата поверх игры */
+/* Экран результата поверх игры — явный верхний слой, что бы ни рисовала игра под ним */
 .result {
   position: absolute;
   inset: 0;
+  z-index: 100;
   display: flex;
   align-items: center;
   justify-content: center;

@@ -23,7 +23,7 @@ const T = {
   hint: 'Проведи по прямой: → ↓ ↘ и в любую сторону',
   repeat: 'Уже найдено',
   unknown: 'Нет в словаре',
-  bonusToast: (word, pts) => `Бонус: ${word.toUpperCase()} +${pts}`,
+  bonusBanner: 'Бонус!',
   newGame: 'Новая игра',
   restartQuestion: 'Начать заново? Найденные слова пропадут.',
   restart: 'Начать заново',
@@ -113,6 +113,7 @@ function buildBoard() {
   ui.board.style.setProperty('--n', size);
   ui.cells = grid.map((letter) => el('div', { class: 'bo-cell' }, el('span', { class: 'bo-letter' }, letter)));
   ui.board.replaceChildren(ui.capsules, ...ui.cells);
+  syncCapsules();
   if (!reducedMotion()) {
     ui.cells.forEach((cell, i) => animate(cell, [
       { opacity: 0, transform: 'scale(0.6)' },
@@ -121,10 +122,18 @@ function buildBoard() {
   }
 }
 
-/** Капсула — толстая линия с круглыми концами от центра первой клетки до центра последней. */
+/**
+ * Капсула — толстая линия с круглыми концами от центра первой клетки до центра последней.
+ * Координаты — в пикселях, по реальным центрам клеток на экране (с учётом зазоров между ними).
+ */
 function capsule(cells, cls) {
-  const n = game.size;
-  const at = (i) => [((i % n) + 0.5) * (100 / n), (Math.floor(i / n) + 0.5) * (100 / n)];
+  // offset* — из раскладки, без учёта transform: анимации клеток (появление, увеличение) не сбивают капсулу.
+  // Холст капсул стоит внутри поля с отступом, равным padding поля.
+  const pad = parseFloat(getComputedStyle(ui.board).paddingLeft) || 0;
+  const at = (i) => {
+    const cell = ui.cells[i];
+    return [cell.offsetLeft + cell.offsetWidth / 2 - pad, cell.offsetTop + cell.offsetHeight / 2 - pad];
+  };
   const [x1, y1] = at(cells[0]);
   const [x2, y2] = at(cells.at(-1));
   const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
@@ -133,8 +142,18 @@ function capsule(cells, cls) {
   line.setAttribute('x2', x2);
   line.setAttribute('y2', y2);
   line.setAttribute('class', `bo-capsule ${cls}`);
-  line.style.strokeWidth = `${(100 / n) * 0.78}`;
+  line.style.strokeWidth = `${ui.cells[cells[0]].offsetWidth * 0.78}`;
   return line;
+}
+
+/** Холст капсул — в пикселях поля; при изменении размера капсулы перестраиваются. */
+function syncCapsules() {
+  const box = ui.capsules.getBoundingClientRect();
+  ui.capsules.setAttribute('viewBox', `0 0 ${box.width} ${box.height}`);
+  if (game) {
+    renderCapsules();
+    renderSelection(selection);
+  }
 }
 
 function renderCapsules() {
@@ -230,7 +249,7 @@ function submit(cells) {
     const points = applyWord(game, verdict, word, cells);
     save();
     renderInfo();
-    floatPoints(`+${points}`, cells, verdict);
+    if (verdict === 'bank') floatPoints(`+${points}`, cells, verdict);
     if (verdict === 'bank') {
       api.platform.haptic.notification('success');
       renderSelection([]);
@@ -244,7 +263,7 @@ function submit(cells) {
     }
     api.platform.haptic.impact('medium');
     renderSelection(cells, 'bonus');
-    toast.show(T.bonusToast(word, points), 1300);
+    bonusBanner(word, points);
     pop(ui.bonusButton, { from: 0.8 });
   } else {
     api.platform.haptic.notification(verdict === 'repeat' ? 'warning' : 'error');
@@ -266,6 +285,43 @@ function floatPoints(text, cells, kind) {
   }, text);
   root.append(node);
   later(() => node.remove(), 1000);
+}
+
+/** «Бонус!» над полем: буквы подпрыгивают по одной (Б, о, н, у, с, !), под ними слово и очки, потом тает. */
+function bonusBanner(word, points) {
+  ui.banner?.remove();
+  const letters = [...T.bonusBanner].map((ch) => el('span', { class: 'bo-banner-letter' }, ch));
+  const banner = el('div', { class: 'bo-banner' },
+    el('div', { class: 'bo-banner-title' }, letters),
+    el('div', { class: 'bo-banner-word' }, `${word.toUpperCase()} +${points}`),
+  );
+  const board = ui.board.getBoundingClientRect();
+  const rootRect = root.getBoundingClientRect();
+  banner.style.left = `${board.left + board.width / 2 - rootRect.left}px`;
+  banner.style.top = `${board.top + board.height / 2 - rootRect.top}px`;
+  root.append(banner);
+  ui.banner = banner;
+
+  if (reducedMotion()) {
+    later(() => banner.remove(), 1200);
+    return;
+  }
+  letters.forEach((letter, k) => animate(letter, [
+    { transform: 'translateY(0) scale(0.2)', opacity: 0 },
+    { transform: 'translateY(-45%) scale(1.25)', opacity: 1, offset: 0.45 },
+    { transform: 'translateY(8%) scale(0.95)', offset: 0.7 },
+    { transform: 'translateY(0) scale(1)', opacity: 1 },
+  ], { duration: 460, delay: k * 90, easing: 'ease-out', fill: 'backwards' }));
+  const word2 = banner.lastChild;
+  animate(word2, [{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }],
+    { duration: 260, delay: letters.length * 90, easing: EASE_OUT, fill: 'backwards' });
+  later(() => {
+    animate(banner, [{ opacity: 1, transform: 'translate(-50%, -50%) scale(1)' }, { opacity: 0, transform: 'translate(-50%, -60%) scale(1.05)' }],
+      { duration: 320, easing: 'ease-in', fill: 'forwards' }).then(() => {
+      banner.remove();
+      if (ui?.banner === banner) ui.banner = null;
+    });
+  }, letters.length * 90 + 900);
 }
 
 // ---------- конец партии ----------
@@ -472,6 +528,8 @@ export default {
     };
     ui.bonusButton = el('button', { class: 'bo-bonus-btn', onclick: showBonus },
       el('div', { class: 'bo-info-label' }, T.info.bonus), el('div', { class: 'bo-info-value' }, '★ ', ui.bonusCount));
+    ui.resize = new ResizeObserver(() => syncCapsules());
+    ui.resize.observe(ui.board);
     ui.board.addEventListener('pointermove', onPointerMove);
     ui.board.addEventListener('pointerup', onPointerUp);
     ui.board.addEventListener('pointercancel', onPointerUp);
@@ -511,6 +569,7 @@ export default {
     timers.forEach(clearTimeout);
     timers.clear();
     document.removeEventListener('keydown', onKeydown);
+    ui?.resize?.disconnect();
     toast?.dispose();
     root?.remove();
     api = host = root = ui = toast = game = null;

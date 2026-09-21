@@ -4,7 +4,7 @@
   "type": "module",
   "description": "Только для тестов (node --test). Зависимостей и сборки нет.",
   "scripts": {
-    "start": "python -m http.server 8000",
+    "start": "python tools/serve.py 8000",
     "test": "node --test"
   }
 }
