@@ -1,29 +1,42 @@
-// «Соедини точки» (по видео My Talking Tom Connect) — правила и генерация уровней, без DOM, тестируется в Node.
+// «Соедини точки» (по видео My Talking Tom Connect, правила как во Flow Free) — без DOM, тестируется в Node.
 //
 // Поле size×size (size ≤ 8). Пары точек одного цвета соединяются линиями по клеткам (вверх/вниз/влево/вправо);
-// линии не пересекаются и не проходят через чужие точки и стены. Заполнять всё поле НЕ нужно.
-// Тоннель — клетка-перекрёсток: через неё можно пройти только насквозь (не поворачивая), по одной линии
-// на каждое направление — одна вдоль (горизонталь), другая поперёк (вертикаль). axis — только для рисунка
-// (какая линия «внутри трубы»).
+// линии не пересекаются и не проходят через чужие точки и стены. Раунд пройден, когда соединены все пары
+// И ЗАПОЛНЕНЫ ВСЕ КЛЕТКИ. Тоннель — клетка-перекрёсток: сквозь него только прямо, и его надо пройти в обе
+// стороны — одна линия вдоль, другая поперёк (одной линии нельзя пересечь саму себя). axis — только для
+// рисунка (какая линия «внутри трубы»).
 //
-// Уровень строится от решения: сначала прокладываются случайные линии, потом их концы становятся точками —
-// поэтому любой уровень решаем. Раунды усложняются: поле растёт, с 7-го — стены, с 12-го — тоннели.
+// Уровни — из банка levels.json (tools/generate-bank.js): у каждого ровно одно решение (проверено перебором,
+// solver.js). В партии уровень случайно поворачивается/отражается и перекрашивается — единственность сохраняется.
 
 export const MAX_SIZE = 8;
 export const HINTS_PER_GAME = 3;
+export const STATE_VERSION = 2;
 
-// ---------- параметры раунда ----------
+// ---------- раунды ----------
 
-/** Размер поля, число пар, стен и тоннелей, время на раунд (с) — по номеру раунда (с 1). */
+/** Раунды 1–20 по порядку (размер, стены, тоннели), дальше — по кругу варианты 8×8. */
+const ROUNDS = [
+  [3, 0, 0], [4, 0, 0], [4, 0, 0], [5, 0, 0], [5, 0, 0], [5, 1, 0], [6, 0, 0], [6, 1, 0], [6, 2, 0], [6, 0, 1],
+  [7, 0, 0], [7, 1, 1], [7, 2, 0], [7, 0, 1], [7, 2, 1], [8, 0, 0], [8, 2, 0], [8, 0, 1], [8, 2, 1], [8, 1, 2],
+];
+const LOOP = [[8, 0, 1], [8, 2, 1], [8, 1, 2], [8, 3, 1], [8, 0, 2], [8, 2, 2], [8, 1, 3], [8, 0, 3]];
+
+/** Сколько пар допускает генератор для размера поля (меньше пар — длиннее линии, сложнее). */
+export const PAIRS = { 3: [2, 3], 4: [3, 4], 5: [4, 5], 6: [5, 6], 7: [5, 7], 8: [6, 9] };
+
+export const tierKey = (size, walls, tunnels) => `${size}:${walls}:${tunnels}`;
+
+/** Все варианты поля, которые встречаются в раундах (для генератора банка). */
+export const ALL_TIERS = [...new Map([...ROUNDS, ...LOOP].map((t) => [tierKey(...t), t])).values()];
+
+/** Размер, стены, тоннели, ключ банка и время на раунд (с) — по номеру раунда (с 1). */
 export function levelParams(round) {
   const r = Math.max(1, round);
-  const size = r <= 2 ? 3 : r <= 5 ? 4 : r <= 9 ? 5 : r <= 14 ? 6 : r <= 20 ? 7 : MAX_SIZE;
-  const pairsBase = { 3: 3, 4: 3, 5: 4, 6: 5, 7: 6, 8: 7 }[size];
-  const pairs = Math.min(pairsBase + (r % 3 === 0 ? 1 : 0) + (r > 26 ? 1 : 0) + (r > 34 ? 1 : 0), size + 1);
-  const walls = r < 7 ? 0 : Math.min(1 + Math.floor((r - 7) / 4), 4);
-  const tunnels = r < 12 ? 0 : Math.min(1 + Math.floor((r - 12) / 5), 3);
-  const timeSec = 12 + pairs * 5 + size * 2 + tunnels * 4;
-  return { size, pairs, walls, tunnels, timeSec };
+  const [size, walls, tunnels] = r <= ROUNDS.length ? ROUNDS[r - 1] : LOOP[(r - ROUNDS.length - 1) % LOOP.length];
+  const cells = size * size - walls + tunnels;          // тоннель проходится дважды
+  const timeSec = Math.round(6 + cells * 0.8 + tunnels * 3);
+  return { size, walls, tunnels, key: tierKey(size, walls, tunnels), timeSec };
 }
 
 // ---------- геометрия ----------
@@ -56,7 +69,58 @@ export function straightAfter(a, b, size) {
   return r >= 0 && r < size && c >= 0 && c < size ? r * size + c : -1;
 }
 
-// ---------- генерация ----------
+// ---------- банк уровней ----------
+
+const ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_';
+
+/** Уровень в строку банка: «размер.стены.тоннели.линии» (клетка — один символ, тоннель — клетка + h/v). */
+export function encodeLevel(level) {
+  const c = (i) => ALPHABET[i];
+  return [
+    level.size,
+    level.walls.map(c).join(''),
+    level.tunnels.map((t) => c(t.cell) + t.axis).join(''),
+    level.solution.map((p) => p.map(c).join('')).join(','),
+  ].join('.');
+}
+
+export function decodeLevel(str) {
+  const [size, walls, tunnels, paths] = str.split('.');
+  const d = (ch) => ALPHABET.indexOf(ch);
+  const solution = paths.split(',').map((p) => [...p].map(d));
+  const tunnelList = [];
+  for (let k = 0; k < tunnels.length; k += 2) tunnelList.push({ cell: d(tunnels[k]), axis: tunnels[k + 1] });
+  return {
+    size: Number(size),
+    walls: [...walls].map(d),
+    tunnels: tunnelList,
+    dots: solution.map((p) => [p[0], p.at(-1)]),
+    solution,
+  };
+}
+
+/** Поворот/отражение (t = 0…7) и перестановка цветов — у уровня остаётся ровно одно решение. */
+export function transformLevel(level, t, colorOrder = null) {
+  const n = level.size;
+  const swap = t >= 4;                                   // транспонирование — оси тоннелей меняются
+  const map = (i) => {
+    let r = Math.floor(i / n);
+    let c = i % n;
+    if (swap) [r, c] = [c, r];
+    if (t & 1) c = n - 1 - c;
+    if (t & 2) r = n - 1 - r;
+    return r * n + c;
+  };
+  const order = colorOrder ?? level.solution.map((_, k) => k);
+  const solution = order.map((k) => level.solution[k].map(map));
+  return {
+    size: n,
+    walls: level.walls.map(map),
+    tunnels: level.tunnels.map(({ cell, axis }) => ({ cell: map(cell), axis: swap ? (axis === 'h' ? 'v' : 'h') : axis })),
+    dots: solution.map((p) => [p[0], p.at(-1)]),
+    solution,
+  };
+}
 
 function shuffle(arr, rng) {
   for (let i = arr.length - 1; i > 0; i--) {
@@ -66,118 +130,29 @@ function shuffle(arr, rng) {
   return arr;
 }
 
-/**
- * Одна попытка: стены и тоннели, затем линии-случайные блуждания (через тоннели — только насквозь).
- * Возвращает уровень или null.
- */
-function tryLevel({ size, pairs, walls, tunnels }, rng) {
-  const n = size * size;
-  const wallSet = new Set();
-  const tunnelMap = new Map();          // клетка → 'h' | 'v' (рисунок)
-  const interior = [];
-  for (let i = 0; i < n; i++) {
-    const r = rowOf(i, size);
-    const c = colOf(i, size);
-    if (r > 0 && r < size - 1 && c > 0 && c < size - 1) interior.push(i);
-  }
-  for (const i of shuffle([...interior], rng).slice(0, tunnels)) tunnelMap.set(i, rng() < 0.5 ? 'h' : 'v');
-  const free = shuffle([...Array(n).keys()].filter((i) => !tunnelMap.has(i)), rng);
-  for (const i of free) {
-    if (wallSet.size >= walls) break;
-    // стена не рядом с тоннелем (иначе сквозь него не пройти)
-    if (neighbors(i, size).some((j) => tunnelMap.has(j))) continue;
-    wallSet.add(i);
-  }
-
-  const cellColor = new Map();          // обычная клетка → цвет
-  const tunnelUse = new Map([...tunnelMap.keys()].map((i) => [i, { h: -1, v: -1 }]));
-  const solution = [];
-  const budget = Math.max(3, Math.floor(((n - wallSet.size) * 0.8) / pairs));
-
-  const enterable = (cell) => !wallSet.has(cell) && !tunnelMap.has(cell) && !cellColor.has(cell);
-
-  for (let color = 0; color < pairs; color++) {
-    const starts = shuffle([...Array(n).keys()].filter(enterable), rng);
-    let placed = null;
-    for (const start of starts.slice(0, 12)) {
-      const target = 3 + Math.floor(rng() * Math.max(1, budget - 1));
-      const path = [start];
-      const used = new Set([start]);
-      const tunnelSteps = [];
-      while (path.length < target) {
-        const cur = path.at(-1);
-        let moved = false;
-        for (const next of shuffle(neighbors(cur, size), rng)) {
-          if (used.has(next)) continue;
-          if (tunnelMap.has(next)) {
-            const axis = axisOf(cur, next, size);
-            const beyond = straightAfter(cur, next, size);
-            if (tunnelUse.get(next)[axis] !== -1 || beyond < 0 || used.has(beyond) || !enterable(beyond)) continue;
-            path.push(next, beyond);
-            used.add(next);
-            used.add(beyond);
-            tunnelSteps.push([next, axis]);
-            moved = true;
-            break;
-          }
-          if (!enterable(next)) continue;
-          path.push(next);
-          used.add(next);
-          moved = true;
-          break;
-        }
-        if (!moved) break;
-      }
-      if (path.length >= 3) {
-        placed = { path, tunnelSteps };
-        break;
-      }
-    }
-    if (!placed) return null;
-    for (const cell of placed.path) if (!tunnelMap.has(cell)) cellColor.set(cell, color);
-    for (const [cell, axis] of placed.tunnelSteps) tunnelUse.get(cell)[axis] = color;
-    solution.push(placed.path);
-  }
-
-  // тоннель должен быть нужен: сквозь каждый проходит хотя бы одна линия решения
-  for (const use of tunnelUse.values()) if (use.h === -1 && use.v === -1) return null;
-
-  return {
-    size,
-    walls: [...wallSet],
-    tunnels: [...tunnelMap].map(([cell, axis]) => ({ cell, axis })),
-    dots: solution.map((p) => [p[0], p.at(-1)]),
-    solution,
-  };
-}
-
-export function generateLevel(round, rng = Math.random) {
-  const params = levelParams(round);
-  for (let attempt = 0; attempt < 400; attempt++) {
-    const level = tryLevel(params, rng);
-    if (level) return level;
-  }
-  // запасной путь: без тоннелей и стен (не должен понадобиться — проверено тестом)
-  for (let attempt = 0; attempt < 400; attempt++) {
-    const level = tryLevel({ ...params, walls: 0, tunnels: 0 }, rng);
-    if (level) return level;
-  }
-  throw new Error(`Не удалось собрать раунд ${round}`);
+/** Уровень раунда из банка ({ tiers: { key: [строки] } }) — случайный, повёрнутый и перекрашенный. */
+export function pickLevel(bank, round, rng = Math.random) {
+  const { key } = levelParams(round);
+  const list = bank.tiers[key];
+  if (!list?.length) throw new Error(`В банке нет уровней ${key}`);
+  const base = decodeLevel(list[Math.floor(rng() * list.length)]);
+  const order = shuffle(base.solution.map((_, k) => k), rng);
+  return transformLevel(base, Math.floor(rng() * 8), order);
 }
 
 // ---------- проверка линий ----------
 
 /**
  * Проверка набора линий paths (по цвету — массив клеток, начиная с точки). Возвращает
- * { valid, connected: [bool по цвету], complete } — complete: все пары соединены и нет нарушений.
+ * { valid, connected: [bool по цвету], filled, total, complete }: filled/total — занято «мест» (клетка;
+ * тоннель — два места, вдоль и поперёк); complete — всё соединено, всё заполнено, нарушений нет.
  */
 export function checkPaths(level, paths) {
   const { size } = level;
   const walls = new Set(level.walls);
   const tunnels = new Map(level.tunnels.map((t) => [t.cell, t.axis]));
   const dotColor = new Map(level.dots.flatMap(([a, b], color) => [[a, color], [b, color]]));
-  const cellOwner = new Map();
-  const tunnelOwner = new Map();
+  const taken = new Set();                     // клетка или «клетка:ось» для тоннеля
   let valid = true;
   const connected = level.dots.map(() => false);
 
@@ -187,27 +162,26 @@ export function checkPaths(level, paths) {
     if (path[0] !== a && path[0] !== b) valid = false;
     const seen = new Set();
     path.forEach((cell, k) => {
-      if (walls.has(cell) || seen.has(cell)) valid = false;
+      if (walls.has(cell) || seen.has(cell)) valid = false;      // в т.ч. крест линии с самой собой
       seen.add(cell);
       if (k > 0 && !isAdjacent(path[k - 1], cell, size)) valid = false;
       if (dotColor.has(cell) && dotColor.get(cell) !== color) valid = false;
       if (dotColor.get(cell) === color && k > 0 && k < path.length - 1) valid = false;
+      let key = cell;
       if (tunnels.has(cell)) {
-        if (k === 0 || k === path.length - 1) return;       // незаконченная линия может стоять в тоннеле
-        const axis = axisOf(path[k - 1], cell, size);
-        if (axisOf(cell, path[k + 1], size) !== axis) valid = false;   // в тоннеле не поворачивают
-        const key = `${cell}:${axis}`;
-        if (tunnelOwner.has(key)) valid = false;
-        tunnelOwner.set(key, color);
-      } else {
-        if (cellOwner.has(cell)) valid = false;
-        cellOwner.set(cell, color);
+        const axis = k > 0 ? axisOf(path[k - 1], cell, size) : 'h';
+        if (k > 0 && k < path.length - 1 && axisOf(cell, path[k + 1], size) !== axis) valid = false;   // не поворачивают
+        key = `${cell}:${axis}`;
       }
+      if (taken.has(key)) valid = false;
+      taken.add(key);
     });
     const last = path.at(-1);
     connected[color] = path.length > 1 && (path[0] === a ? last === b : last === a) && !tunnels.has(last);
   });
-  return { valid, connected, complete: valid && connected.every(Boolean) };
+  const total = size * size - walls.size + tunnels.size;
+  const filled = Math.min(taken.size, total);
+  return { valid, connected, filled, total, complete: valid && connected.every(Boolean) && filled === total };
 }
 
 // ---------- рисование пальцем ----------
@@ -310,32 +284,38 @@ export function emptyPaths(level) {
 
 // ---------- партия ----------
 
-export function newGame(rng = Math.random) {
-  const level = generateLevel(1, rng);
-  return { round: 1, score: 0, hintsLeft: HINTS_PER_GAME, level, paths: emptyPaths(level), timeLeftMs: null };
+export function newGame(bank, rng = Math.random) {
+  const level = pickLevel(bank, 1, rng);
+  return { v: STATE_VERSION, round: 1, score: 0, hintsLeft: HINTS_PER_GAME, level, paths: emptyPaths(level), timeLeftMs: null };
 }
 
-/** Очки за раунд: за пары и размер + бонус за оставшееся время (если таймер включён). */
+/** Очки за раунд: по числу мест (клетки, тоннель — дважды) + бонус за оставшееся время (если таймер включён). */
 export function roundPoints(level, timeLeftMs = null) {
-  const base = level.dots.length * level.size * 5;
-  const bonus = timeLeftMs === null ? 0 : Math.round(timeLeftMs / 1000) * 3;
+  const base = (level.size * level.size - level.walls.length + level.tunnels.length) * 5;
+  const bonus = timeLeftMs === null ? 0 : Math.round(timeLeftMs / 1000) * 5;
   return base + bonus;
 }
 
-export function nextRound(state, rng = Math.random) {
+export function nextRound(state, bank, rng = Math.random) {
   state.round += 1;
-  state.level = generateLevel(state.round, rng);
+  state.level = pickLevel(bank, state.round, rng);
   state.paths = emptyPaths(state.level);
   state.timeLeftMs = null;
 }
 
-/** Подсказка: одна ещё не соединённая линия из решения (чужие линии, мешающие ей, обрезаются). */
+/**
+ * Подсказка: одна линия из решения — сначала несоединённая, иначе соединённая не так, как в решении
+ * (чужие линии, мешающие ей, обрезаются). Возвращает цвет или -1.
+ */
 export function applyHint(state) {
   if (state.hintsLeft <= 0) return -1;
   const { connected } = checkPaths(state.level, state.paths);
-  const color = connected.findIndex((c) => !c);
+  const sol = state.level.solution;
+  const same = (p, s) => p.join() === s.join() || p.join() === [...s].reverse().join();
+  let color = connected.findIndex((c) => !c);
+  if (color < 0) color = state.paths.findIndex((p, k) => !same(p, sol[k]));
   if (color < 0) return -1;
-  const solution = state.level.solution[color];
+  const solution = sol[color];
   let paths = state.paths.map((p, k) => (k === color ? [] : [...p]));
   paths[color] = [solution[0]];
   for (const cell of solution.slice(1)) paths = stepTo(state.level, paths, color, cell).paths;
@@ -346,6 +326,7 @@ export function applyHint(state) {
 
 export function isValidState(s) {
   const lv = s?.level;
+  if (s?.v !== STATE_VERSION) return false;             // сохранения старых правил — новая партия
   if (!lv || !Number.isInteger(lv.size) || lv.size < 3 || lv.size > MAX_SIZE) return false;
   const n = lv.size * lv.size;
   const cellOk = (i) => Number.isInteger(i) && i >= 0 && i < n;
@@ -353,6 +334,7 @@ export function isValidState(s) {
     && Array.isArray(lv.walls) && lv.walls.every(cellOk)
     && Array.isArray(lv.tunnels) && lv.tunnels.every((t) => cellOk(t.cell) && (t.axis === 'h' || t.axis === 'v'))
     && Array.isArray(lv.solution) && lv.solution.length === lv.dots.length
+    && lv.solution.every((p) => Array.isArray(p) && p.every(cellOk))
     && Array.isArray(s.paths) && s.paths.length === lv.dots.length && s.paths.every((p) => Array.isArray(p) && p.every(cellOk))
     && [s.round, s.score, s.hintsLeft].every((v) => Number.isInteger(v) && v >= 0)
     && (s.timeLeftMs === null || (Number.isFinite(s.timeLeftMs) && s.timeLeftMs >= 0));

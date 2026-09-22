@@ -138,6 +138,9 @@
 [data-game="connect-dots"] .cd-wall rect { fill: var(--cd-wall); stroke: var(--cd-wall-dark); stroke-width: 0.05; }
 [data-game="connect-dots"] .cd-rivet { fill: var(--cd-wall-dark); }
 
+/* клетка, занятая линией, — подкрашена её цветом */
+[data-game="connect-dots"] .cd-fill { opacity: 0.2; }
+
 [data-game="connect-dots"] .cd-path {
   fill: none;
   stroke-width: 0.34;
@@ -148,7 +151,8 @@
 [data-game="connect-dots"] .cd-path-done { opacity: 1; }
 [data-game="connect-dots"] .cd-path-over { stroke-linecap: butt; opacity: 1; }
 
-[data-game="connect-dots"] .cd-tunnel-body { fill: var(--cd-tunnel); stroke: var(--cd-tunnel-rim); stroke-width: 0.04; }
+/* труба полупрозрачная: линия внутри неё видна — понятно, что эта сторона тоннеля занята */
+[data-game="connect-dots"] .cd-tunnel-body { fill: var(--cd-tunnel); fill-opacity: 0.62; stroke: var(--cd-tunnel-rim); stroke-width: 0.04; }
 [data-game="connect-dots"] .cd-tunnel-rim { stroke: var(--cd-tunnel-rim); stroke-width: 0.06; }
 
 [data-game="connect-dots"] .cd-dot {
