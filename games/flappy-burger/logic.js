@@ -1,13 +1,14 @@
-// Flappy Burger: бургер машет листом салата и пролетает в проёмы между препятствиями. Кухня: сверху вытяжки,
-// снизу плиты. Время от времени — дверь «ВЫХОД» на ночную улицу (там препятствия — мусорные баки), потом дверь
-// обратно на кухню. Без DOM, тестируется в Node. Физика по мотивам Flappy Bird (FlapPyBird): постоянная
+// Flappy Burger: бургер машет листом салата и пролетает в проёмы между препятствиями. Кухня ↔ ночная улица через
+// стены с открытыми дверями. Без DOM, тестируется в Node. Физика по мотивам Flappy Bird (FlapPyBird): постоянная
 // гравитация, взмах задаёт скорость вверх, скорость падения ограничена.
 //
 // Мир — в игровых пикселях: экран W×H, пол высотой GROUND. dist — сколько мир прокрутился; у препятствия x —
-// мировая координата левого края, на экране — x − dist. Проём — [gapY − GAP/2, gapY + GAP/2].
+// мировая координата левого края, w — ширина, на экране — x − dist. Проём: центр gapY у левого края, высота gap;
+// у диагонального (slope ≠ 0) центр проёма смещается на slope пикселей на каждый пиксель вправо («лесенкой» по 4 px).
 //
-// Проходимость: проём всегда GAP; центр соседнего проёма сдвигается не больше чем на MAX_UP вверх / MAX_DOWN вниз —
-// с запасом меньше, чем бургер успевает подняться/опуститься за время между препятствиями (тест: бот пролетает
+// Разнообразие: у каждого вида своя случайная ширина, свободное место между препятствиями — FREE_MIN…FREE_MAX.
+// Проходимость: сдвиг центра проёма относительно предыдущего (его правого края) ограничен MAX_UP/MAX_DOWN на
+// каждые 64 px свободного места — меньше, чем бургер успевает подняться/опуститься (тест: автопилот пролетает
 // сотни препятствий на разных зёрнах).
 
 export const W = 160;
@@ -21,89 +22,121 @@ export const GRAVITY = 560;                // px/с²
 export const FLAP = -165;                  // px/с — скорость сразу после взмаха
 export const MAX_FALL = 230;
 export const SPEED = 64;                   // px/с — скорость прокрутки
-export const OB_W = 28;
-export const SPACING = 92;                 // между левыми краями соседних препятствий
+export const OB_W = 28;                    // обычная ширина (стена с дверью — всегда такая)
+export const FREE_MIN = 56;                // свободного места между препятствиями
+export const FREE_MAX = 88;
 export const GAP = 64;
-export const MAX_UP = 48;                  // насколько следующий проём может быть выше
-export const MAX_DOWN = 64;                // и ниже
+export const DIAG_GAP = 70;                // у диагонального проём чуть выше
+export const MAX_UP = 48;                  // на 64 px свободного места следующий проём может быть выше на столько
+export const MAX_DOWN = 64;                // и ниже на столько
 export const EDGE = 26;                    // проём не ближе к потолку/полу (до края проёма)
 export const FIRST_X = W + 40;             // первое препятствие (мировая x)
 export const SCENE_MIN = 6;                // препятствий в сцене
 export const SCENE_MAX = 11;
 export const STEP = 1 / 120;               // шаг физики
 export const DOOR_H = 100;                 // дверной проём между сценами — от пола, выше обычного проёма
-/** Виды препятствий по сценам (идут вперемешку, один вид дважды подряд не встречается). */
+export const SLICE = 4;                    // ширина «ступеньки» диагонального препятствия
+/** Виды препятствий по сценам (идут вперемешку, один вид дважды подряд не встречается) и их ширины. */
 export const TYPES = {
-  kitchen: ['hood', 'fridge', 'buns'],     // вытяжка+плита, шкафчик+холодильник, лампа+стойка с булками
-  street: ['bins', 'tower', 'pole'],       // мусорные баки, щит+небоскрёб, светофор+фонарный столб
+  kitchen: ['hood', 'fridge', 'buns', 'chute'],     // вытяжка+плита, шкафчик+холодильник, лампа+булки, наклонный короб
+  street: ['bins', 'tower', 'pole', 'stairs'],      // баки, щит+небоскрёб, светофор+фонарь, пожарная лестница
 };
+export const WIDTHS = {
+  hood: [24, 28, 36], fridge: [28, 34], buns: [24, 28, 34], chute: [40, 48, 56],
+  bins: [24, 28, 36], tower: [28, 36, 44], pole: [24, 28], stairs: [40, 48, 56],
+  door: [OB_W],
+};
+export const DIAGONAL = new Set(['chute', 'stairs']);
 
 // ---------- форма препятствий (хитбоксы = то, что нарисовано) ----------
 
+/** Центр проёма препятствия в мировой точке x (у диагонального — со сдвигом по ступенькам). */
+export function gapCenterAt(ob, worldX) {
+  if (!ob.slope) return ob.gapY;
+  const dx = Math.max(0, Math.min(ob.w - 1, worldX - ob.x));
+  return ob.gapY + ob.slope * (Math.floor(dx / SLICE) * SLICE + SLICE / 2);
+}
+
+/** Центр проёма на выходе (у правого края). */
+export const exitGapY = (ob) => gapCenterAt(ob, ob.x + ob.w - 1);
+
 /**
  * Прямоугольники препятствия в координатах относительно его левого края x: { part, x, y, w, h } — хитбоксы
- * совпадают с нарисованным. Проём препятствия — [gapY − gap/2, gapY + gap/2].
+ * совпадают с нарисованным.
  */
 export function obstacleRects(ob) {
+  const w = ob.w ?? OB_W;
   const gap = ob.gap ?? GAP;
   const top = ob.gapY - gap / 2;
   const bottom = ob.gapY + gap / 2;
+  const mid = w / 2;
   const floor = (rect) => ({ ...rect, h: PLAY_H - rect.y });
   let rects;
   switch (ob.type) {
     case 'door':
-      // стена от потолка до верха дверного проёма (проём — до пола)
-      rects = [{ part: 'wall', x: 0, y: 0, w: OB_W, h: top }];
+      rects = [{ part: 'wall', x: 0, y: 0, w, h: top }];              // стена до верха проёма, проём — до пола
+      break;
+    case 'chute':
+    case 'stairs':
+      // ступеньки по SLICE px: у каждой свой проём
+      rects = [];
+      for (let i = 0; i * SLICE < w; i++) {
+        const c = gapCenterAt(ob, ob.x + i * SLICE);
+        const t = Math.round(c - gap / 2);
+        const b = Math.round(c + gap / 2);
+        rects.push({ part: 'diag-top', x: i * SLICE, y: 0, w: SLICE, h: t, i });
+        rects.push({ part: 'diag-bottom', x: i * SLICE, y: b, w: SLICE, h: PLAY_H - b, i });
+      }
       break;
     case 'fridge':
       rects = [
-        { part: 'rod', x: 12, y: 0, w: 4, h: top - 20 },
-        { part: 'cabinet', x: 0, y: top - 20, w: OB_W, h: 20 },
-        floor({ part: 'fridge', x: 1, y: bottom, w: OB_W - 2 }),
+        { part: 'rod', x: mid - 2, y: 0, w: 4, h: top - 20 },
+        { part: 'cabinet', x: 0, y: top - 20, w, h: 20 },
+        floor({ part: 'fridge', x: 1, y: bottom, w: w - 2 }),
       ];
       break;
     case 'buns':
       rects = [
-        { part: 'rod', x: 12, y: 0, w: 4, h: top - 10 },
-        { part: 'lamp', x: 3, y: top - 10, w: 22, h: 10 },
-        floor({ part: 'rack', x: 0, y: bottom, w: OB_W }),
+        { part: 'rod', x: mid - 2, y: 0, w: 4, h: top - 10 },
+        { part: 'lamp', x: 3, y: top - 10, w: w - 6, h: 10 },
+        floor({ part: 'rack', x: 0, y: bottom, w }),
       ];
       break;
     case 'tower':
       rects = [
         { part: 'rope', x: 5, y: 0, w: 2, h: top - 22 },
-        { part: 'rope', x: 21, y: 0, w: 2, h: top - 22 },
-        { part: 'billboard', x: 0, y: top - 22, w: OB_W, h: 22 },
-        floor({ part: 'tower', x: 0, y: bottom, w: OB_W }),
+        { part: 'rope', x: w - 7, y: 0, w: 2, h: top - 22 },
+        { part: 'billboard', x: 0, y: top - 22, w, h: 22 },
+        floor({ part: 'tower', x: 0, y: bottom, w }),
       ];
       break;
     case 'pole':
       rects = [
-        { part: 'pole-top', x: 11, y: 0, w: 6, h: top - 26 },
-        { part: 'traffic', x: 7, y: top - 26, w: 14, h: 26 },
-        { part: 'lamp-head', x: 2, y: bottom, w: 24, h: 5 },
-        floor({ part: 'pole', x: 10, y: bottom + 5, w: 8 }),
+        { part: 'pole-top', x: mid - 3, y: 0, w: 6, h: top - 26 },
+        { part: 'traffic', x: mid - 7, y: top - 26, w: 14, h: 26 },
+        { part: 'lamp-head', x: 2, y: bottom, w: w - 4, h: 5 },
+        floor({ part: 'pole', x: mid - 4, y: bottom + 5, w: 8 }),
       ];
       break;
     case 'bins': {
-      // баки высотой 18 (крышка 3 — во всю ширину, корпус 24 — уже): стопкой снизу и перевёрнутые сверху
+      // баки высотой 18 (крышка 3 — во всю ширину, корпус — уже): стопкой снизу и перевёрнутые сверху
       rects = [];
       for (let y = bottom, k = 0; y < PLAY_H; y += 18, k++) {
-        rects.push({ part: 'lid', x: 0, y, w: OB_W, h: 3, k });
-        rects.push({ part: 'bin', x: 2, y: y + 3, w: OB_W - 4, h: Math.min(15, PLAY_H - y - 3), k });
+        rects.push({ part: 'lid', x: 0, y, w, h: 3, k });
+        rects.push({ part: 'bin', x: 2, y: y + 3, w: w - 4, h: Math.min(15, PLAY_H - y - 3), k });
       }
       for (let y = top, k = 0; y > 0; y -= 18, k++) {
-        rects.push({ part: 'lid-down', x: 0, y: y - 3, w: OB_W, h: 3, k });
-        rects.push({ part: 'bin-down', x: 2, y: Math.max(0, y - 18), w: OB_W - 4, h: Math.min(15, y - 3), k });
+        rects.push({ part: 'lid-down', x: 0, y: y - 3, w, h: 3, k });
+        rects.push({ part: 'bin-down', x: 2, y: Math.max(0, y - 18), w: w - 4, h: Math.min(15, y - 3), k });
       }
       break;
     }
     default:                                // 'hood': воздуховод и колпак вытяжки сверху, плита снизу
       rects = [
-        { part: 'duct', x: 8, y: 0, w: 12, h: top - 16 },
-        { part: 'hood-top', x: 4, y: top - 16, w: 20, h: 6 },
-        { part: 'hood', x: 0, y: top - 10, w: OB_W, h: 10 },
-        floor({ part: 'stove', x: 0, y: bottom, w: OB_W }),
+        { part: 'duct', x: mid - 6, y: 0, w: 12, h: top - 16 },
+        { part: 'hood-top', x: 4, y: top - 16, w: w - 8, h: 6 },
+        { part: 'hood', x: 0, y: top - 10, w, h: 10 },
+        floor({ part: 'stove', x: 0, y: bottom, w }),
       ];
   }
   return rects.filter((r) => r.h > 0);
@@ -115,46 +148,85 @@ function randInt(rng, a, b) {
   return a + Math.floor(rng() * (b - a + 1));
 }
 
+const pick = (arr, rng) => arr[Math.floor(rng() * arr.length)];
+
 export function newGame(rng = Math.random) {
   const s = {
     y: PLAY_H * 0.42, vy: 0, dist: 0, idle: 0, t: 0, score: 0, phase: 'ready', flapT: -1,
     obstacles: [], gates: [], scene: 'kitchen', sceneLeft: randInt(rng, SCENE_MIN, SCENE_MAX),
-    nextX: FIRST_X, lastGapY: PLAY_H / 2, lastType: null, visits: { kitchen: 1, street: 0 },
+    nextX: FIRST_X, free: FREE_MAX, lastGapY: PLAY_H / 2, lastType: null, visits: { kitchen: 1, street: 0 },
   };
   fillAhead(s, rng);
   return s;
 }
 
-/** Достроить препятствия (и двери между сценами) на экран вперёд. */
+/** Достроить препятствия (и стены с дверями между сценами) на экран вперёд. */
 export function fillAhead(s, rng = Math.random) {
-  while (s.nextX < s.dist + W + OB_W + 8) {
+  while (s.nextX < s.dist + W + 64) {
+    const x = s.nextX;
     if (s.sceneLeft <= 0) {
-      // дверь — стена с проёмом до пола; граница сцен — её левый край (в проёме уже видна новая сцена)
+      // стена с дверью; граница сцен — её левый край (фон за проёмом — фасад здания)
       const to = s.scene === 'kitchen' ? 'street' : 'kitchen';
-      s.obstacles.push({ x: s.nextX, gapY: PLAY_H - DOOR_H / 2, gap: DOOR_H, scene: s.scene, to, type: 'door', passed: false });
-      s.gates.push({ x: s.nextX, from: s.scene, to });
+      s.obstacles.push({ x, w: OB_W, gapY: PLAY_H - DOOR_H / 2, gap: DOOR_H, slope: 0, scene: s.scene, to, type: 'door', passed: false });
+      s.gates.push({ x, from: s.scene, to });
       s.scene = to;
       s.sceneLeft = randInt(rng, SCENE_MIN, SCENE_MAX);
       s.lastGapY = Math.min(PLAY_H - EDGE - GAP / 2, PLAY_H - DOOR_H / 2);
       s.lastType = null;
-      s.nextX += SPACING;
+      s.free = randInt(rng, FREE_MIN, FREE_MAX);
+      s.nextX = x + OB_W + s.free;
       continue;
     }
-    let lo = Math.max(EDGE + GAP / 2, s.lastGapY - MAX_UP);
-    const hi = Math.min(PLAY_H - EDGE - GAP / 2, s.lastGapY + MAX_DOWN);
-    // перед дверью проём не выше, чем позволяет спуститься под её притолоку (центр бургера — ниже на 12 px)
-    if (s.sceneLeft === 1) lo = Math.min(hi, Math.max(lo, PLAY_H - DOOR_H + 12 - MAX_DOWN));
-    const gapY = Math.round(lo + rng() * (hi - lo));
-    const kinds = TYPES[s.scene].filter((t) => t !== s.lastType);
-    const type = kinds[Math.floor(rng() * kinds.length)];
-    s.obstacles.push({ x: s.nextX, gapY, gap: GAP, scene: s.scene, type, passed: false });
-    s.lastType = type;
-    s.lastGapY = gapY;
+    const type = pick(TYPES[s.scene].filter((t) => t !== s.lastType), rng);
+    const w = pick(WIDTHS[type], rng);
+    const diag = DIAGONAL.has(type);
+    const gap = diag ? DIAG_GAP : GAP;
+    // вход проёма — в пределах досягаемости от выхода предыдущего (пропорционально свободному месту)
+    const k = s.free / 64;
+    const lo0 = Math.max(EDGE + gap / 2, s.lastGapY - MAX_UP * k);
+    const hi0 = Math.min(PLAY_H - EDGE - gap / 2, s.lastGapY + MAX_DOWN * k);
+    let slope = 0;
+    let lo = lo0;
+    let hi = hi0;
+    if (diag) {
+      // наклон — туда, где выход проёма останется в границах
+      const steps = Math.ceil(w / SLICE);
+      const shiftPer = pick([0.35, 0.45], rng);
+      const shift = (s2) => s2 * (steps - 0.5) * SLICE;
+      const down = Math.min(hi, PLAY_H - EDGE - gap / 2 - shift(shiftPer));
+      const up = Math.max(lo, EDGE + gap / 2 + shift(shiftPer));
+      const canDown = down >= lo;
+      const canUp = up <= hi;
+      if (canDown && (!canUp || rng() < 0.5)) {
+        slope = shiftPer;
+        hi = down;
+      } else if (canUp) {
+        slope = -shiftPer;
+        lo = up;
+      }
+    }
+    // перед дверью выход проёма — не выше, чем позволяет спуститься под её притолоку (центр бургера ниже на 12 px)
+    const needLow = PLAY_H - DOOR_H + 12 - MAX_DOWN * (FREE_MIN / 64);
+    let gapY = Math.round(lo + rng() * (hi - lo));
+    const ob = { x, w, gapY, gap, slope, scene: s.scene, type, passed: false };
+    if (s.sceneLeft === 1 && exitGapY(ob) < needLow) {
+      ob.slope = 0;
+      ob.gapY = gapY = Math.round(Math.min(hi0, Math.max(lo0, needLow)));
+      if (diag) {
+        ob.type = TYPES[s.scene][0];
+        ob.w = WIDTHS[ob.type][0];
+        ob.gap = GAP;
+      }
+    }
+    s.obstacles.push(ob);
+    s.lastType = ob.type;
+    s.lastGapY = exitGapY(ob);
     s.sceneLeft -= 1;
-    s.nextX += SPACING;
+    s.free = randInt(rng, FREE_MIN, FREE_MAX);
+    s.nextX = x + ob.w + s.free;
   }
   // ушедшее за левый край — выбросить
-  s.obstacles = s.obstacles.filter((o) => o.x + OB_W > s.dist - 4);
+  s.obstacles = s.obstacles.filter((o) => o.x + o.w > s.dist - 4);
   s.gates = s.gates.filter((g) => g.x > s.dist - W);
 }
 
@@ -184,7 +256,7 @@ function hits(s) {
   if (by + BURGER_H >= PLAY_H) return 'ground';
   for (const o of s.obstacles) {
     const sx = o.x - s.dist;
-    if (sx > bx + BURGER_W || sx + OB_W < bx) continue;
+    if (sx > bx + BURGER_W || sx + o.w < bx) continue;
     for (const r of obstacleRects(o)) {
       if (bx < sx + r.x + r.w && bx + BURGER_W > sx + r.x && by < r.y + r.h && by + BURGER_H > r.y) return 'obstacle';
     }
@@ -233,7 +305,7 @@ export function step(s, dt, rng = Math.random) {
       events.push('gate');
     }
     for (const o of s.obstacles) {
-      if (!o.passed && o.x - s.dist + OB_W < BURGER_X) {
+      if (!o.passed && o.x - s.dist + o.w < BURGER_X) {
         o.passed = true;
         s.score += 1;
         events.push('score');
@@ -256,7 +328,7 @@ export function step(s, dt, rng = Math.random) {
 
 /** Следующее препятствие перед бургером (для бота и подсказок). */
 export function nextObstacle(s) {
-  return s.obstacles.find((o) => o.x - s.dist + OB_W >= BURGER_X) ?? null;
+  return s.obstacles.find((o) => o.x - s.dist + o.w >= BURGER_X) ?? null;
 }
 
 // ---------- статистика ----------
