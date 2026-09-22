@@ -7,6 +7,8 @@
 // углом: 'tl' | 'tr' | 'bl' | 'br'. r < 0 — ряд уровня ещё выше экрана (невидим и неосязаем).
 // Бонус (кольцо, шарики пролетают сквозь): 'laserH' | 'laserV' | 'laserX' — удар по всем блокам ряда/столбца,
 // 'triple' — следующий бросок ×3 шарика (исчезает), 'scatter' — шарик отлетает в случайную сторону.
+// Лазеры не входят в картинку уровня: они появляются в случайных пустых клетках, где в их ряду/столбце есть
+// блоки, и живут LASER_LIFE секунд полёта шариков (время идёт только во время хода — прицел их не «съедает»).
 
 export const COLS = 8;
 export const ROWS = 12;                 // ряд ROWS-1 — нижний: блок в нём — проигрыш
@@ -19,6 +21,10 @@ export const STATE_VERSION = 1;
 export const SHAPES = ['sq', 'tl', 'tr', 'bl', 'br'];
 export const POWERS = ['laserH', 'laserV', 'laserX', 'triple', 'scatter'];
 export const MIN_ANGLE = (8 * Math.PI) / 180;       // угол от горизонта: 8°…172°
+export const LASER_LIFE = 15;           // с полёта — столько живёт лазер
+export const LASER_EVERY = 12;          // с полёта между появлениями лазеров (подобрано ботом, см. CLAUDE.md)
+export const LASER_MAX = 1;             // одновременно на поле
+export const LASERS = ['laserH', 'laserV', 'laserX'];
 
 // ---------- геометрия ----------
 
@@ -177,8 +183,8 @@ function tryLevel(level, rng) {
   for (let k = 1; k < rows; k++) for (let c = 0; c < COLS; c++) {
     if (!filled(k, c) && (filled(k, c - 1) || filled(k, c + 1) || filled(k + 1, c) || filled(k - 1, c))) empties.push([k, c]);
   }
-  const count = Math.min(empties.length, 2 + Math.floor(rows / 5));
-  const pool = level < 2 ? ['laserH', 'laserV', 'triple'] : POWERS;
+  const count = Math.min(empties.length, 1 + Math.floor(rows / 8));
+  const pool = level < 2 ? ['triple'] : ['triple', 'scatter'];
   for (let n = 0; n < count; n++) {
     const j = Math.floor(rng() * empties.length);
     const [k, c] = empties.splice(j, 1)[0];
@@ -198,7 +204,7 @@ export function newLevel(level, rng = Math.random) {
   const total = blocks.reduce((s, b) => s + b.hp, 0);
   return {
     v: STATE_VERSION, level, balls: ballsFor(level), x: COLS / 2, turn: 0, triple: false,
-    blocks, powers, total, dealt: 0, pattern, nextId: id,
+    blocks, powers, total, dealt: 0, pattern, nextId: id, clock: 0, nextLaser: 0,
   };
 }
 
@@ -238,6 +244,63 @@ function fixSteep(ball) {
     ball.vx *= k;
     ball.vy *= k;
   }
+}
+
+/** Пустая видимая клетка, чей ряд/столбец не пуст; лазер ставится туда, где он полезнее. */
+export function spawnLaser(state, rng = Math.random) {
+  const busy = new Set([...state.blocks, ...state.powers].map((x) => `${x.r}:${x.c}`));
+  const rowCount = new Map();
+  const colCount = new Map();
+  for (const b of state.blocks) {
+    if (b.r < 0) continue;
+    rowCount.set(b.r, (rowCount.get(b.r) ?? 0) + 1);
+    colCount.set(b.c, (colCount.get(b.c) ?? 0) + 1);
+  }
+  const options = [];
+  for (let r = 0; r < ROWS - 3; r++) for (let c = 0; c < COLS; c++) {
+    if (busy.has(`${r}:${c}`)) continue;
+    const h = rowCount.get(r) ?? 0;
+    const v = colCount.get(c) ?? 0;
+    if (Math.max(h, v) < 2) continue;
+    options.push({ r, c, h, v, w: Math.max(h, v) });
+  }
+  if (!options.length) return null;
+  // случайно, но полезные клетки — чаще
+  let t = rng() * options.reduce((a, o) => a + o.w, 0);
+  const o = options.find((x) => (t -= x.w) <= 0) ?? options[options.length - 1];
+  const kind = o.h >= 2 && o.v >= 2 && rng() < 0.25 ? 'laserX' : o.h >= o.v ? 'laserH' : 'laserV';
+  const power = { id: state.nextId++, r: o.r, c: o.c, kind, born: state.clock };
+  state.powers.push(power);
+  return power;
+}
+
+/** Время полёта: старые лазеры гаснут, новые появляются. */
+function tickLasers(state, sim, dt, rng) {
+  state.clock += dt;
+  const before = state.powers.length;
+  state.powers = state.powers.filter((p) => {
+    if (!LASERS.includes(p.kind) || state.clock - p.born < LASER_LIFE) return true;
+    sim.events.push({ type: 'expire', id: p.id, r: p.r, c: p.c, kind: p.kind });
+    return false;
+  });
+  if (state.powers.length !== before) sim.grid = null;
+  if (state.clock >= state.nextLaser) {
+    state.nextLaser = state.clock + LASER_EVERY;
+    if (state.powers.filter((p) => LASERS.includes(p.kind)).length < LASER_MAX) {
+      const p = spawnLaser(state, rng);
+      if (p) sim.events.push({ type: 'spawn', id: p.id });
+    }
+  }
+}
+
+/** Сетка клеток → блок с готовым контуром (чтобы шарик проверял только 9 клеток вокруг себя). */
+function buildGrid(state) {
+  const grid = new Array(COLS * ROWS).fill(null);
+  for (const b of state.blocks) {
+    if (b.r < 0 || b.r >= ROWS) continue;
+    grid[b.r * COLS + b.c] = { b, poly: polygon(b.shape, b.r, b.c) };
+  }
+  return grid;
 }
 
 function damage(state, sim, block, amount = 1) {
@@ -293,19 +356,25 @@ function moveBall(state, sim, ball, h, rng) {
     if (sim.firstX === null) sim.firstX = Math.max(BALL_R * 2, Math.min(COLS - BALL_R * 2, ball.x));
     return;
   }
-  // блоки в клетках вокруг шарика — берём самое глубокое касание
+  // блоки в 9 клетках вокруг шарика — берём самое глубокое касание
   const r0 = Math.floor(ball.y);
   const c0 = Math.floor(ball.x);
+  const grid = sim.grid;
   let hit = null;
   let hitBlock = null;
-  for (const b of state.blocks) {
-    if (b.r < 0 || Math.abs(b.r - r0) > 1 || Math.abs(b.c - c0) > 1) continue;
-    const res = circlePolygon(ball.x, ball.y, BALL_R, polygon(b.shape, b.r, b.c));
-    if (!res) continue;
-    const depth = BALL_R - Math.hypot(ball.x - res.px, ball.y - res.py);
-    if (!hit || depth > hit.depth) {
-      hit = { ...res, depth };
-      hitBlock = b;
+  for (let r = r0 - 1; r <= r0 + 1; r++) {
+    if (r < 0 || r >= ROWS) continue;
+    for (let c = c0 - 1; c <= c0 + 1; c++) {
+      if (c < 0 || c >= COLS) continue;
+      const cellItem = grid[r * COLS + c];
+      if (!cellItem || cellItem.b.hp <= 0) continue;
+      const res = circlePolygon(ball.x, ball.y, BALL_R, cellItem.poly);
+      if (!res) continue;
+      const depth = BALL_R - Math.hypot(ball.x - res.px, ball.y - res.py);
+      if (!hit || depth > hit.depth) {
+        hit = { ...res, depth };
+        hitBlock = cellItem.b;
+      }
     }
   }
   if (hit) {
@@ -342,6 +411,8 @@ export function step(state, sim, dt, rng = Math.random) {
     sim.launched++;
     sim.nextLaunch += LAUNCH_GAP;
   }
+  tickLasers(state, sim, dt, rng);
+  if (!sim.grid) sim.grid = buildGrid(state);
   const subs = Math.max(1, Math.ceil((SPEED * dt) / 0.07));
   const h = dt / subs;
   for (const ball of sim.balls) {
@@ -431,6 +502,14 @@ export function tracePath(state, x, angle, reflectLen = 2.5) {
 
 // ---------- сохранение и статистика ----------
 
+/** Сохранение первой версии (без часов лазеров) — дополнить. */
+export function normalizeState(s) {
+  if (!Number.isFinite(s.clock)) s.clock = 0;
+  if (!Number.isFinite(s.nextLaser)) s.nextLaser = 0;
+  for (const p of s.powers) if (LASERS.includes(p.kind) && !Number.isFinite(p.born)) p.born = s.clock;
+  return s;
+}
+
 export function isValidState(s) {
   if (s?.v !== STATE_VERSION) return false;
   const int = (v) => Number.isInteger(v);
@@ -438,7 +517,8 @@ export function isValidState(s) {
     && Array.isArray(s.blocks) && s.blocks.every((b) => int(b.id) && int(b.r) && int(b.c) && b.c >= 0 && b.c < COLS
       && b.r < ROWS - 1 && SHAPES.includes(b.shape) && int(b.hp) && b.hp > 0 && int(b.max))
     && Array.isArray(s.powers) && s.powers.every((p) => int(p.r) && int(p.c) && POWERS.includes(p.kind))
-    && int(s.total) && int(s.dealt) && int(s.turn) && typeof s.triple === 'boolean' && s.pattern && int(s.nextId);
+    && int(s.total) && int(s.dealt) && int(s.turn) && typeof s.triple === 'boolean' && s.pattern && int(s.nextId)
+    && (s.clock === undefined || Number.isFinite(s.clock)) && (s.nextLaser === undefined || Number.isFinite(s.nextLaser));
 }
 
 export function emptyStats() {
