@@ -4,6 +4,12 @@
 
 export const games = [
   {
+    id: 'checkers',
+    title: 'Шашки',
+    load: () => import('../games/checkers/index.js'),
+    css: new URL('../games/checkers/game.css', import.meta.url),
+  },
+  {
     id: 'flappy-burger',
     title: 'Flappy Burger',
     load: () => import('../games/flappy-burger/index.js'),

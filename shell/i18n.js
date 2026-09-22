@@ -3,7 +3,7 @@
 
 const STRINGS = {
   ru: {
-    outcome: { win: 'Победа!', lose: 'Поражение', quit: 'Игра окончена' },
+    outcome: { win: 'Победа!', lose: 'Поражение', draw: 'Ничья', quit: 'Игра окончена' },
     score: 'Очки',
     time: 'Время',
     best: 'Рекорд',
@@ -16,7 +16,7 @@ const STRINGS = {
     show: 'Показать результат',
   },
   uk: {
-    outcome: { win: 'Перемога!', lose: 'Поразка', quit: 'Гру завершено' },
+    outcome: { win: 'Перемога!', lose: 'Поразка', draw: 'Нічия', quit: 'Гру завершено' },
     score: 'Очки',
     time: 'Час',
     best: 'Рекорд',
@@ -29,7 +29,7 @@ const STRINGS = {
     show: 'Показати результат',
   },
   en: {
-    outcome: { win: 'You won!', lose: 'You lost', quit: 'Game over' },
+    outcome: { win: 'You won!', lose: 'You lost', draw: 'Draw', quit: 'Game over' },
     score: 'Score',
     time: 'Time',
     best: 'Best',
