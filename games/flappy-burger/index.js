@@ -490,7 +490,7 @@ function drawPart(ox, ob, r, t) {
   }
 }
 
-/** Стена с дверным проёмом (препятствие-переход между сценами). */
+/** Стена над проходом (препятствие-переход между сценами): кирпич и вывеска. */
 function drawDoorWall(ox, ob, t) {
   const top = ob.gapY - ob.gap / 2;
   const toStreet = ob.to === 'street';
@@ -503,8 +503,6 @@ function drawDoorWall(ox, ob, t) {
       for (let k = (yy / 5) % 2 ? 3 : 0; k < OB_W; k += 7) px(x + k, yy - 4, 1, 4, '#6d3a2d');
     }
     px(x, 0, 3, top, '#efe0c2');                                 // штукатурка со стороны кухни
-    px(x, top - 4, OB_W, 4, '#5a5f66');
-    px(x, top - 4, OB_W, 1, '#8a9099');
     px(x + 3, top - 17, 22, 10, '#1f9d4a');
     px(x + 3, top - 17, 22, 1, '#5fd88a');
     pixelText('EXIT', x + 14, top - 14, 1, '#ffffff');
@@ -518,14 +516,7 @@ function drawDoorWall(ox, ob, t) {
     const on = Math.sin(t * 8) > -0.6;
     px(x + 1, top - 26, 26, 10, '#1a1020');
     pixelText('BURGER', x + 14, top - 23, 1, on ? '#ff8a3d' : '#7a3d1a');
-    for (let k = 0; k < OB_W; k += 4) px(x + k, top - 7, 4, 7, (k / 4) % 2 ? '#ffffff' : '#d93b3b');
-    px(x, top - 1, OB_W, 1, '#8a2020');
   }
-  // тень косяков и порог
-  lc.fillStyle = 'rgba(0, 0, 0, 0.35)';
-  lc.fillRect(x, top, 2, PLAY_H - top);
-  lc.fillRect(x + OB_W - 2, top, 2, PLAY_H - top);
-  px(x, PLAY_H - 2, OB_W, 2, toStreet ? '#5a5f66' : '#6b4a2a');
 }
 
 /** Кирпичная кладка прямоугольником (фон). */
@@ -724,11 +715,10 @@ function drawObstacle(ox, ob, t) {
 }
 
 /**
- * Передний слой двери — поверх бургера: кирпичная стена (продолжение стены над проёмом), в ней дверной проём
- * с наличником и порогом; створка приоткрыта внутрь (видна в перспективе у косяка), за ней — ночь (выход на
- * улицу) или тёплый свет кухни (вход в бургерную). Бургер скрывается за стеной — «входит в дверь».
+ * Передний слой перехода — сплошная кирпичная стена поверх бургера (продолжение стены над проёмом): бургер
+ * скрывается за ней, пролетая сквозь здание. Двери нет (решение владельца).
  */
-function drawDoorFront(ox, ob, t) {
+function drawDoorFront(ox, ob) {
   const top = ob.gapY - ob.gap / 2;
   const toStreet = ob.to === 'street';
   const [base, mortar] = toStreet ? ['#8a4b3a', '#6d3a2d'] : ['#5a2e2e', '#442222'];
@@ -739,39 +729,6 @@ function drawDoorFront(ox, ob, t) {
     for (let k = (yy / 5) % 2 ? 3 : 0; k < OB_W; k += 7) px(ox + k, Math.max(top, yy - 4), 1, Math.min(4, yy - top), mortar);
   }
   if (toStreet) px(ox, top, 3, PLAY_H - top, '#efe0c2');                    // штукатурка со стороны кухни
-  // проём
-  const dx = ox + 5;
-  const dw = OB_W - 10;
-  const dy = top + 6;
-  const dh = PLAY_H - 2 - dy;
-  const [casing, casingLight] = toStreet ? ['#5a5f66', '#8a9099'] : ['#6b4a2a', '#9c6234'];
-  px(dx - 2, dy - 2, dw + 4, dh + 2, casing);
-  px(dx - 2, dy - 2, dw + 4, 1, casingLight);
-  if (toStreet) {
-    // за дверью — ночь: тёмно-синий, звёздочка и полоска света фонаря на полу
-    px(dx, dy, dw, dh, '#10152e');
-    px(dx, dy + Math.floor(dh * 0.6), dw, dh - Math.floor(dh * 0.6), '#1b2240');
-    px(dx + dw - 5, dy + 6, 1, 1, '#ffffff');
-    px(dx + 2, dy + dh - 3, dw - 4, 1, '#3a4270');
-  } else {
-    // за дверью — тёплый свет кухни и плитка пола
-    px(dx, dy, dw, dh, '#ffcf7a');
-    px(dx, dy, dw, 3, '#ffe3a8');
-    for (let y = dy + dh - 8; y < dy + dh; y += 4) {
-      for (let x = dx; x < dx + dw; x += 4) px(x, y, 2, 2, ((x - dx + y) / 4) % 2 ? '#e9e2d0' : '#3b3b3b');
-    }
-  }
-  // створка приоткрыта внутрь: узкая, в перспективе, у левого косяка
-  const leaf = toStreet ? ['#3f5a66', '#5f7f8e', '#9fd3ff'] : ['#5a3519', '#9c6234', '#ffcf7a'];
-  for (let i = 0; i < 6; i++) {
-    const shift = Math.floor(i / 2);
-    px(dx + i, dy + shift, 1, dh - shift * 2, i === 0 ? leaf[0] : leaf[1]);
-  }
-  px(dx + 2, dy + 8, 3, 6, leaf[2]);                                         // окошко створки
-  px(dx + 4, dy + Math.floor(dh * 0.55), 1, 3, toStreet ? '#c9d1d6' : '#ffd98a');
-  // порог
-  px(dx - 2, PLAY_H - 2, dw + 4, 2, casing);
-  void t;
 }
 
 
@@ -839,7 +796,7 @@ function render() {
   // передний слой дверей — поверх бургера
   for (const o of s.obstacles) {
     const ox = Math.round(o.x) - d;
-    if (o.type === 'door' && ox < W + 4 && ox + OB_W + 4 > 0) drawDoorFront(ox, o, s.t);
+    if (o.type === 'door' && ox < W + 4 && ox + OB_W + 4 > 0) drawDoorFront(ox, o);
   }
   // счёт пиксельными цифрами
   if (s.phase !== 'ready') {
