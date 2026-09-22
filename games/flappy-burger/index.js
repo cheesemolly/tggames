@@ -1,0 +1,705 @@
+// Flappy Burger — пиксельная графика: всё рисуется в буфер W×H (160×256 игровых пикселей) и увеличивается без
+// сглаживания в целое число экранных пикселей. Кухня (вытяжки и плиты) ↔ ночная улица (мусорные баки) через двери.
+// Нажатие / пробел — взмах. Забег не сохраняется (он короткий); статистика — в api.storage игры.
+
+import { el } from '../../shared/dom.js';
+import { showLayer, hideLayer, pop, reducedMotion } from '../../shared/motion.js';
+import { createToast } from '../../shared/toast.js';
+import {
+  W, H, GROUND, PLAY_H, BURGER_X, BURGER_W, BURGER_H, MAX_FALL, FLAP, OB_W,
+  newGame, step, flap, sceneAt, obstacleRects, emptyStats, recordGame, isValidStats,
+} from './logic.js';
+
+const T = {
+  title: 'Flappy Burger',
+  best: (n) => `Рекорд: ${n}`,
+  tap: 'Коснись, чтобы взлететь',
+  street: 'На улицу!',
+  kitchen: 'Обратно на кухню!',
+  over: 'Игра окончена',
+  result: (n) => `Пролетел препятствий: ${n}`,
+  share: (n) => `🍔 Flappy Burger: ${n}`,
+  stats: { open: 'Статистика', title: 'Статистика', games: 'Игр', best: 'Рекорд', total: 'Всего препятствий', streets: 'Выходов на улицу', close: 'Закрыть' },
+};
+
+const svgIcon = (body) => `<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="currentColor">${body}</svg>`;
+const ICON_STATS = svgIcon('<rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="7" width="4" height="14" rx="1"/><rect x="17" y="3" width="4" height="18" rx="1"/>');
+
+let api = null;
+let host = null;
+let root = null;
+let ui = null;
+let toast = null;
+let game = null;
+let stats = emptyStats();
+let raf = 0;
+let rafAt = 0;
+let lastFrame = 0;
+let finished = false;
+let particles = [];                // { x, y, vx, vy, c, t, life }
+let flashT = -1;                   // вспышка удара (время s.t)
+let shakeT = -1;
+let scorePopT = -1;
+let modalActive = false;
+let modalToken = 0;
+const timers = new Set();
+
+function later(fn, ms) {
+  const id = setTimeout(() => {
+    timers.delete(id);
+    fn();
+  }, ms);
+  timers.add(id);
+  return id;
+}
+
+// ---------- пиксельные примитивы ----------
+
+let lc = null;                     // контекст буфера W×H
+
+function px(x, y, w, h, color) {
+  lc.fillStyle = color;
+  lc.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h));
+}
+
+/** Детерминированный «случайный» номер для узоров фона (чтобы фон не мерцал между кадрами). */
+function hash(n) {
+  let x = Math.imul(n ^ 0x9e3779b9, 0x85ebca6b);
+  x ^= x >>> 13;
+  x = Math.imul(x, 0xc2b2ae35);
+  x ^= x >>> 16;
+  return (x >>> 0) / 4294967296;
+}
+
+// шрифт 3×5: цифры и буквы вывесок
+const FONT = {
+  0: '111101101101111', 1: '010110010010111', 2: '111001111100111', 3: '111001111001111', 4: '101101111001001',
+  5: '111100111001111', 6: '111100111101111', 7: '111001010010010', 8: '111101111101111', 9: '111101111001111',
+  E: '111100111100111', X: '101101010101101', I: '111010010010111', T: '111010010010010', B: '110101110101110',
+  U: '101101101101111', R: '110101110101101', G: '111100101101111',
+};
+
+function pixelText(str, x, y, scale, color, outline = null) {
+  const glyph = (ch, gx, gy, col) => {
+    const bits = FONT[ch];
+    if (!bits) return;
+    for (let i = 0; i < 15; i++) if (bits[i] === '1') px(gx + (i % 3) * scale, gy + Math.floor(i / 3) * scale, scale, scale, col);
+  };
+  const width = str.length * 4 * scale - scale;
+  let cx = Math.round(x - width / 2);
+  for (const ch of str) {
+    if (outline) for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1], [1, 1]]) glyph(ch, cx + dx, y + dy, outline);
+    glyph(ch, cx, y, color);
+    cx += 4 * scale;
+  }
+}
+
+// ---------- бургер ----------
+
+// 16×12, «.» — прозрачно. Верхняя булка с кунжутом и глазами, салат, сыр с помидором, котлета, нижняя булка.
+const BURGER = [
+  '....oooooooo....',
+  '..ooOOsOOOOsoo..',
+  '.oOOOOOOOsOOOOo.',
+  '.oOsOOOwwOOwwOo.',
+  'oOOOOOOwkOOwkOOo',
+  'gGgGgGgGgGgGgGgG',
+  'rrryyyyyyyyyyrrr',
+  '..y..yY...y..Y..',
+  'bbbbbbbbbbbbbbbb',
+  'bBbbBbbbBbbBbbBb',
+  'oOOOOOOOOOOOOOOo',
+  '.oooooooooooooo.',
+];
+const PAL = {
+  o: '#6b3a12', O: '#e89a3c', s: '#fff3c4', w: '#ffffff', k: '#1b1b1b', g: '#2f8f2f', G: '#58c24a',
+  y: '#ffd23f', Y: '#e6a800', r: '#d94040', b: '#5a2e1a', B: '#7a4028',
+};
+// крыло-лист салата: три кадра взмаха
+const WINGS = [
+  ['..gG', '.gGG', 'gGG.'],
+  ['gGGG', 'gGG.', '....'],
+  ['....', 'gGG.', 'gGGG'],
+];
+
+const sprites = [];
+function burgerSprites() {
+  if (sprites.length) return sprites;
+  for (const wing of WINGS) {
+    const c = document.createElement('canvas');
+    c.width = 20;
+    c.height = 12;
+    const x = c.getContext('2d');
+    const put = (rows, ox, oy) => rows.forEach((row, ry) => [...row].forEach((ch, rx) => {
+      if (ch === '.') return;
+      x.fillStyle = PAL[ch];
+      x.fillRect(ox + rx, oy + ry, 1, 1);
+    }));
+    put(BURGER, 4, 0);
+    put(wing, 0, 4);
+    sprites.push(c);
+  }
+  return sprites;
+}
+
+function drawBurger(s) {
+  const frames = burgerSprites();
+  const sinceFlap = s.t - s.flapT;
+  let frame = 0;
+  if (s.phase === 'ready') frame = Math.floor(s.t * 6) % 3;
+  else if (s.phase === 'play' && sinceFlap < 0.3) frame = 1 + (Math.floor(sinceFlap * 20) % 2);
+  // наклон как в Flappy Bird: вверх после взмаха, носом вниз при падении
+  let angle = 0;
+  if (s.phase !== 'ready') {
+    const k = (s.vy - FLAP) / (MAX_FALL - FLAP);
+    angle = (-25 + Math.max(0, Math.min(1, k)) * 105) * (Math.PI / 180);
+  }
+  lc.save();
+  lc.translate(Math.round(BURGER_X + BURGER_W / 2), Math.round(s.y + BURGER_H / 2));
+  lc.rotate(angle);
+  lc.drawImage(frames[frame], -12, -6);
+  lc.restore();
+}
+
+// ---------- фон: кухня ----------
+
+function kitchenBackground(scroll, t) {
+  // стена в плитку
+  const o0 = Math.floor(scroll * 0.2);
+  px(0, 0, W, PLAY_H, '#efe0c2');
+  for (let x = -(o0 % 12); x < W; x += 12) px(x, 0, 1, PLAY_H, '#dccba6');
+  for (let y = 8; y < PLAY_H; y += 12) px(0, y, W, 1, '#dccba6');
+  // верхние шкафы, карниз, рейлинг с поварёшками
+  const o1 = Math.floor(scroll * 0.45);
+  px(0, 10, W, 4, '#7b4a24');
+  for (let base = -(o1 % 56) - 56; base < W; base += 56) {
+    px(base + 3, 14, 50, 30, '#7b4a24');
+    px(base + 4, 15, 23, 28, '#9c6234');
+    px(base + 29, 15, 23, 28, '#9c6234');
+    px(base + 7, 18, 17, 22, '#b0733f');
+    px(base + 32, 18, 17, 22, '#b0733f');
+    px(base + 24, 34, 2, 3, '#ffd98a');
+    px(base + 30, 34, 2, 3, '#ffd98a');
+  }
+  px(0, 54, W, 1, '#6c6c6c');
+  for (let base = -(o1 % 56) - 28; base < W; base += 56) {
+    const n = Math.floor((base + o1) / 56);
+    if (hash(n) < 0.5) {
+      px(base + 10, 55, 1, 8, '#6c6c6c');                       // поварёшка
+      px(base + 8, 63, 5, 3, '#8f969c');
+    } else {
+      px(base + 12, 55, 1, 5, '#6c6c6c');                       // сковородка
+      px(base + 6, 60, 13, 3, '#2b2b2b');
+      px(base + 7, 63, 11, 1, '#454545');
+    }
+  }
+  // дальний стол: столешница, шкафчики, банки и холодильник
+  const o2 = Math.floor(scroll * 0.6);
+  const topY = PLAY_H - 38;
+  px(0, topY, W, 4, '#b8c2cc');
+  px(0, topY, W, 1, '#e3e8ec');
+  px(0, topY + 4, W, PLAY_H - topY - 4, '#8d6a4a');
+  for (let x = -(o2 % 35); x < W; x += 35) {
+    px(x, topY + 4, 1, PLAY_H - topY - 4, '#6e5037');
+    px(x + 15, topY + 12, 4, 2, '#d8b98a');
+  }
+  for (let base = -(o2 % 70) - 70; base < W; base += 70) {
+    const n = Math.floor((base + o2) / 70);
+    if (hash(n * 7) < 0.3) {
+      px(base + 4, PLAY_H - 92, 30, 92, '#aab4bd');                // холодильник
+      px(base + 5, PLAY_H - 91, 28, 90, '#e8eef2');
+      px(base + 5, PLAY_H - 60, 28, 1, '#aab4bd');
+      px(base + 28, PLAY_H - 84, 2, 14, '#9aa3ab');
+      px(base + 28, PLAY_H - 54, 2, 18, '#9aa3ab');
+      px(base + 10, PLAY_H - 86, 6, 5, hash(n) < 0.5 ? '#ff6b6b' : '#6bc5ff'); // магнитик
+    } else {
+      px(base + 10, topY - 9, 6, 9, ['#e05555', '#4c9be0', '#e0b34c'][((n % 3) + 3) % 3]);
+      px(base + 10, topY - 11, 6, 2, '#5b5b5b');
+      px(base + 20, topY - 6, 8, 6, '#fafafa');
+      px(base + 21, topY - 5, 6, 1, '#c9c9c9');
+    }
+  }
+  void t;
+}
+
+function kitchenGround(scroll) {
+  const o = Math.floor(scroll);
+  px(0, PLAY_H, W, 2, '#3a3a3a');
+  for (let y = PLAY_H + 2, row = 0; y < H; y += 8, row++) {
+    for (let x = -(o % 16) - 16; x < W; x += 8) {
+      const col = Math.floor((x + o) / 8) + row;
+      px(x, y, 8, 8, col % 2 === 0 ? '#f2f2f2' : '#2b2b2b');
+    }
+  }
+}
+
+// ---------- фон: ночная улица ----------
+
+function streetBackground(scroll, t) {
+  // небо полосами (пиксельный градиент), звёзды, луна
+  const bands = ['#0a0f2c', '#0d1335', '#10173d', '#131b45', '#171f4d', '#1b2455'];
+  const bh = Math.ceil(PLAY_H / bands.length);
+  bands.forEach((c, i) => px(0, i * bh, W, bh, c));
+  const os = Math.floor(scroll * 0.05);
+  for (let i = 0; i < 40; i++) {
+    const x = Math.floor(hash(i * 3) * 400) - os;
+    const sx = ((x % 400) + 400) % 400;
+    if (sx >= W) continue;
+    const y = Math.floor(hash(i * 3 + 1) * 110);
+    const tw = Math.sin(t * 3 + i) > 0.6;
+    px(sx, y, 1, 1, tw ? '#ffffff' : '#9aa5d6');
+  }
+  px(118, 22, 12, 12, '#f5f1d0');
+  px(116, 24, 16, 8, '#f5f1d0');
+  px(120, 20, 8, 16, '#f5f1d0');
+  px(121, 25, 3, 3, '#d9d3a8');
+  px(126, 29, 2, 2, '#d9d3a8');
+  // дальние дома с окнами
+  const o1 = Math.floor(scroll * 0.2);
+  for (let base = -(o1 % 34) - 34, n = Math.floor(o1 / 34) - 1; base < W; base += 34, n++) {
+    const h = 60 + Math.floor(hash(n) * 70);
+    px(base, PLAY_H - h, 32, h, '#161d44');
+    for (let wy = PLAY_H - h + 6; wy < PLAY_H - 8; wy += 8) {
+      for (let wx = base + 4; wx < base + 30; wx += 7) {
+        const lit = hash(n * 97 + wx * 13 + wy) < 0.35;
+        px(wx, wy, 3, 4, lit ? '#f7d56a' : '#232b5c');
+      }
+    }
+  }
+  // ближние кирпичные стены, пожарные лестницы, фонари
+  const o2 = Math.floor(scroll * 0.45);
+  for (let base = -(o2 % 64) - 64, n = Math.floor(o2 / 64) - 1; base < W; base += 64, n++) {
+    const h = 70 + Math.floor(hash(n * 5 + 1) * 40);
+    px(base, PLAY_H - h, 62, h, '#3d2b3f');
+    for (let y = PLAY_H - h + 3; y < PLAY_H; y += 5) {
+      px(base, y, 62, 1, '#2f2031');
+      for (let x = base + ((y / 5) % 2 ? 4 : 0); x < base + 62; x += 9) px(x, y, 1, 5, '#2f2031');
+    }
+    // окно и пожарная лестница
+    px(base + 10, PLAY_H - h + 12, 12, 14, '#1b1422');
+    px(base + 11, PLAY_H - h + 13, 10, 12, hash(n * 11) < 0.5 ? '#f2c14e' : '#2a2f55');
+    for (let k = 0; k < 3; k++) {
+      const y = PLAY_H - h + 30 + k * 16;
+      if (y > PLAY_H - 10) break;
+      px(base + 30, y, 26, 1, '#15151b');
+      px(base + 30 + (k % 2 ? 0 : 20), y, 6, 16, 'rgba(20, 20, 27, 0.9)');
+    }
+  }
+  // фонари с конусом света
+  for (let base = -(o2 % 96) + 40; base < W + 40; base += 96) {
+    px(base, PLAY_H - 64, 2, 64, '#2a2a33');
+    px(base - 4, PLAY_H - 66, 10, 3, '#2a2a33');
+    px(base - 2, PLAY_H - 63, 6, 2, '#ffe8a0');
+    lc.fillStyle = 'rgba(255, 232, 160, 0.10)';
+    lc.beginPath();
+    lc.moveTo(base - 2, PLAY_H - 61);
+    lc.lineTo(base + 4, PLAY_H - 61);
+    lc.lineTo(base + 20, PLAY_H);
+    lc.lineTo(base - 18, PLAY_H);
+    lc.fill();
+  }
+}
+
+function streetGround(scroll) {
+  const o = Math.floor(scroll);
+  px(0, PLAY_H, W, 10, '#56586a');
+  px(0, PLAY_H, W, 1, '#7a7c8f');
+  for (let x = -(o % 16); x < W; x += 16) px(x, PLAY_H + 1, 1, 9, '#46485a');
+  px(0, PLAY_H + 10, W, 2, '#3a3b48');
+  px(0, PLAY_H + 12, W, H - PLAY_H - 12, '#24252e');
+  for (let x = -(o % 24); x < W; x += 24) px(x, PLAY_H + 19, 12, 2, '#c9a227');
+}
+
+// ---------- препятствия ----------
+
+function drawKitchenObstacle(ox, ob, t) {
+  for (const r of obstacleRects(ob)) {
+    const x = ox + r.x;
+    if (r.part === 'duct') {
+      px(x, r.y, r.w, r.h, '#aeb7bf');
+      px(x, r.y, 2, r.h, '#d8dee3');
+      px(x + r.w - 2, r.y, 2, r.h, '#7f8891');
+      for (let y = r.y + r.h - 6; y > r.y; y -= 14) px(x, y, r.w, 1, '#8e979f');
+    } else if (r.part === 'hood-top') {
+      px(x, r.y, r.w, r.h, '#c5ccd2');
+      px(x, r.y, r.w, 1, '#e6ebee');
+      px(x, r.y, 1, r.h, '#8e979f');
+      px(x + r.w - 1, r.y, 1, r.h, '#8e979f');
+    } else if (r.part === 'hood') {
+      px(x, r.y, r.w, r.h, '#b4bcc3');
+      px(x, r.y, r.w, 1, '#e6ebee');
+      for (let k = 4; k < r.w - 4; k += 4) px(x + k, r.y + 3, 2, 3, '#8e979f');
+      px(x, r.y + r.h - 2, r.w, 2, '#4a5158');
+      // лампы и свет вниз (свет — просто картинка, не препятствие)
+      const on = '#fff2a0';
+      px(x + 5, r.y + r.h - 1, 3, 1, on);
+      px(x + r.w - 8, r.y + r.h - 1, 3, 1, on);
+      lc.fillStyle = 'rgba(255, 242, 160, 0.13)';
+      lc.fillRect(x + 3, r.y + r.h, r.w - 6, 10);
+    } else if (r.part === 'stove') {
+      const h = r.h;
+      px(x, r.y, r.w, Math.min(3, h), '#3a3f45');
+      // конфорки светятся
+      const glow = Math.sin(t * 6 + ox) > 0 ? '#ff6a3a' : '#d24a2a';
+      px(x + 4, r.y + 1, 7, 1, glow);
+      px(x + r.w - 11, r.y + 1, 7, 1, glow);
+      if (h > 3) {
+        px(x, r.y + 3, r.w, h - 3, '#9aa3ab');
+        px(x + 1, r.y + 3, r.w - 2, h - 4, '#e3e6e9');
+        for (let k = 0; k < 4; k++) px(x + 4 + k * 6, r.y + 5, 3, 2, '#3a3f45');
+        if (h > 22) {
+          px(x + 4, r.y + 10, r.w - 8, 1, '#9aa3ab');
+          px(x + 4, r.y + 13, r.w - 8, Math.min(12, h - 16), '#2b2f36');
+          px(x + 6, r.y + 15, r.w - 12, Math.max(0, Math.min(8, h - 20)), '#ff9d3a');
+        }
+      }
+    }
+  }
+}
+
+function drawStreetObstacle(ox, ob) {
+  const colors = [['#3e7f55', '#2f6b46', '#25563a', '#5fae78'], ['#6c7a8f', '#56657a', '#46536a', '#8c9ab0']];
+  for (const r of obstacleRects(ob)) {
+    const x = ox + r.x;
+    const [lid, body, rib, light] = colors[(r.k + (ob.gapY >> 3)) % 2];
+    if (r.part === 'lid' || r.part === 'lid-down') {
+      px(x, r.y, r.w, r.h, lid);
+      px(x, r.part === 'lid' ? r.y : r.y + r.h - 1, r.w, 1, light);
+    } else {
+      px(x, r.y, r.w, r.h, body);
+      px(x, r.y, 2, r.h, light);
+      for (let k = 5; k < r.w - 2; k += 5) px(x + k, r.y + 1, 1, Math.max(0, r.h - 2), rib);
+      if (r.h > 8) px(x + r.w / 2 - 3, r.y + Math.floor(r.h / 2) - 1, 6, 3, rib);   // эмблема
+    }
+  }
+}
+
+function drawGate(g, scroll, t) {
+  const gx = Math.round(g.x - scroll);
+  if (gx < -40 || gx > W + 10) return;
+  const toStreet = g.to === 'street';
+  const frame = toStreet ? '#6b4a2a' : '#4a3a4a';
+  // gx — левый косяк (граница сцен), проём 26 px
+  const mid = gx + 13;
+  px(gx - 4, 40, 4, PLAY_H - 40, frame);
+  px(gx + 26, 40, 4, PLAY_H - 40, frame);
+  px(gx - 4, 36, 34, 4, frame);
+  if (toStreet) {
+    px(mid - 11, 25, 22, 10, '#1f9d4a');
+    px(mid - 11, 25, 22, 1, '#5fd88a');
+    pixelText('EXIT', mid, 28, 1, '#ffffff');
+  } else {
+    const on = Math.sin(t * 8) > -0.6;
+    px(mid - 14, 24, 28, 11, '#1a1020');
+    pixelText('BURGER', mid, 27, 1, on ? '#ff8a3d' : '#7a3d1a');
+  }
+}
+
+// ---------- кадр ----------
+
+function drawScene(scene, scroll, t) {
+  if (scene === 'street') streetBackground(scroll, t);
+  else kitchenBackground(scroll, t);
+}
+
+function drawGround(scene, scroll) {
+  if (scene === 'street') streetGround(scroll);
+  else kitchenGround(scroll);
+}
+
+/** Отрезки экрана по сценам: дверь делит экран на «до» и «после». */
+function segments(s, scroll) {
+  const cuts = s.gates.map((g) => g.x - scroll).filter((x) => x > 0 && x < W).sort((a, b) => a - b);
+  const out = [];
+  let x0 = 0;
+  for (const x of [...cuts, W]) {
+    out.push([x0, x, sceneAt(s, scroll + (x0 + x) / 2)]);
+    x0 = x;
+  }
+  return out;
+}
+
+function render() {
+  const s = game;
+  if (!s || !ui) return;
+  const scroll = s.dist + s.idle;
+  const segs = segments(s, s.dist);
+  for (const [x0, x1, scene] of segs) {
+    lc.save();
+    lc.beginPath();
+    lc.rect(Math.floor(x0), 0, Math.ceil(x1 - x0), H);
+    lc.clip();
+    drawScene(scene, scroll, s.t);
+    lc.restore();
+  }
+  for (const g of s.gates) drawGate(g, s.dist, s.t);
+  for (const o of s.obstacles) {
+    const ox = Math.round(o.x - s.dist);
+    if (ox > W || ox + OB_W < 0) continue;
+    if (o.scene === 'street') drawStreetObstacle(ox, o);
+    else drawKitchenObstacle(ox, o, s.t);
+  }
+  for (const [x0, x1, scene] of segs) {
+    lc.save();
+    lc.beginPath();
+    lc.rect(Math.floor(x0), PLAY_H, Math.ceil(x1 - x0), GROUND);
+    lc.clip();
+    drawGround(scene, scroll);
+    lc.restore();
+  }
+  // крошки
+  for (const p of particles) px(p.x, p.y, 1, 1, p.c);
+  drawBurger(s);
+  // счёт пиксельными цифрами
+  if (s.phase !== 'ready') {
+    const lift = s.t - scorePopT < 0.12 ? 2 : 0;
+    pixelText(String(s.score), W / 2, 14 - lift, 3, '#ffffff', '#3b2412');
+  }
+  // вспышка удара
+  if (flashT >= 0 && s.t - flashT < 0.3) {
+    lc.fillStyle = `rgba(255, 255, 255, ${0.85 * (1 - (s.t - flashT) / 0.3)})`;
+    lc.fillRect(0, 0, W, H);
+  }
+  // вывод на экран: целое число экранных пикселей на игровой пиксель, тряска после удара
+  const c = ui.ctx;
+  c.imageSmoothingEnabled = false;
+  let dx = 0;
+  let dy = 0;
+  if (shakeT >= 0 && s.t - shakeT < 0.3) {
+    dx = Math.round((Math.random() - 0.5) * 4) * ui.scale;
+    dy = Math.round((Math.random() - 0.5) * 4) * ui.scale;
+  }
+  c.drawImage(ui.low, dx, dy, W * ui.scale, H * ui.scale);
+}
+
+function resize() {
+  const box = ui.stage.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  // экранных пикселей на игровой: целое, чтобы все «пиксели» были одного размера
+  ui.scale = Math.max(1, Math.floor(Math.min(box.width / W, box.height / H) * dpr));
+  ui.canvas.width = W * ui.scale;
+  ui.canvas.height = H * ui.scale;
+  ui.canvas.style.width = `${(W * ui.scale) / dpr}px`;
+  ui.canvas.style.height = `${(H * ui.scale) / dpr}px`;
+  render();
+}
+
+// ---------- цикл ----------
+
+function loop(now) {
+  raf = 0;
+  if (!ui || !game) return;
+  const dt = Math.min(1 / 30, (now - lastFrame) / 1000 || 0);
+  lastFrame = now;
+  if (!modalActive) {
+    const events = step(game, dt);
+    for (const e of events) onEvent(e);
+    // крошки падают и гаснут
+    particles = particles.filter((p) => {
+      p.t += dt;
+      p.vy += 300 * dt;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      return p.t < p.life && p.y < PLAY_H;
+    });
+  }
+  render();
+  if (game.phase !== 'over' || particles.length || game.t - flashT < 0.4) {
+    rafAt = now;
+    raf = requestAnimationFrame(loop);
+  }
+}
+
+function kick() {
+  if (!ui) return;
+  const now = performance.now();
+  if (raf && now - rafAt < 250) return;
+  cancelAnimationFrame(raf);
+  lastFrame = now;
+  rafAt = now;
+  raf = requestAnimationFrame(loop);
+}
+
+function crumbs(n, colors, speed) {
+  if (reducedMotion()) return;
+  for (let k = 0; k < n; k++) {
+    particles.push({
+      x: BURGER_X + 2 + Math.random() * 10, y: game.y + BURGER_H - 2,
+      vx: -20 - Math.random() * speed, vy: -Math.random() * speed, c: colors[k % colors.length], t: 0, life: 0.5 + Math.random() * 0.4,
+    });
+  }
+}
+
+function onEvent(e) {
+  if (e === 'score') {
+    scorePopT = game.t;
+    api.platform.haptic.selection();
+  } else if (e === 'gate') {
+    const toStreet = sceneAt(game, game.dist + BURGER_X) === 'street';
+    toast.show(toStreet ? T.street : T.kitchen, 1400);
+  } else if (e === 'hit') {
+    flashT = game.t;
+    shakeT = game.t;
+    api.platform.haptic.notification('error');
+    crumbs(14, ['#e89a3c', '#58c24a', '#ffd23f', '#5a2e1a', '#fff3c4'], 90);
+  } else if (e === 'over') {
+    if (flashT < 0) {
+      flashT = game.t;
+      shakeT = game.t;
+      api.platform.haptic.notification('error');
+    }
+    gameOver();
+  }
+}
+
+function onFlap() {
+  if (!game || modalActive || finished) return;
+  if (game.phase === 'ready') ui.hint.classList.add('fb-hint-hide');
+  if (flap(game)) {
+    api.platform.haptic.impact('light');
+    crumbs(3, ['#fff3c4', '#58c24a', '#e89a3c'], 30);
+    kick();
+  }
+}
+
+function gameOver() {
+  if (finished) return;
+  finished = true;
+  const score = game.score;
+  const isBest = score > stats.best;
+  stats = recordGame(stats, game);
+  api.storage.set('stats', stats);
+  ui.sub.textContent = T.best(stats.best);
+  later(() => api?.finish({
+    outcome: 'lose', title: T.over, score, locale: 'ru', message: T.result(score) + (isBest && score > 0 ? ' — новый рекорд!' : ''),
+    share: T.share(score),
+  }), reducedMotion() ? 0 : 900);
+}
+
+// ---------- окна ----------
+
+function openModal(content) {
+  modalToken++;
+  ui.modal.replaceChildren(content);
+  if (!modalActive) showLayer(ui.modal);
+  modalActive = true;
+}
+
+function closeModal() {
+  if (!modalActive) return;
+  modalActive = false;
+  const token = ++modalToken;
+  hideLayer(ui.modal, () => token === modalToken).then(() => {
+    if (ui && token === modalToken) ui.modal.replaceChildren();
+  });
+  kick();
+}
+
+function showStats() {
+  const item = (value, label) => el('div', { class: 'fb-stat' }, el('div', { class: 'fb-stat-value' }, value), el('div', { class: 'fb-stat-label' }, label));
+  openModal(el('div', { class: 'fb-card', role: 'dialog', 'aria-label': T.stats.title },
+    el('div', { class: 'fb-card-head' },
+      el('h2', {}, T.stats.title),
+      el('button', { class: 'fb-icon-btn', 'aria-label': T.stats.close, title: T.stats.close, onclick: closeModal }, '✕'),
+    ),
+    el('div', { class: 'fb-stats-grid' },
+      item(stats.best, T.stats.best), item(stats.games, T.stats.games),
+      item(stats.total, T.stats.total), item(stats.streets, T.stats.streets),
+    ),
+  ));
+}
+
+function onKeydown(e) {
+  if (e.key === 'Escape' && modalActive) {
+    closeModal();
+    return;
+  }
+  if ((e.key === ' ' || e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') && !e.repeat) {
+    e.preventDefault();
+    onFlap();
+  }
+}
+
+function onVisibility() {
+  if (document.visibilityState === 'visible') kick();
+}
+
+export default {
+  id: 'flappy-burger',
+  title: 'Flappy Burger',
+
+  async init(container, gameApi) {
+    api = gameApi;
+    host = container;
+    toast = createToast();
+    const savedStats = await api.storage.get('stats');
+    if (!api) return;
+    stats = isValidStats(savedStats) ? savedStats : emptyStats();
+
+    ui = {
+      sub: el('div', { class: 'fb-sub' }, T.best(stats.best)),
+      canvas: el('canvas', { class: 'fb-canvas' }),
+      hint: el('div', { class: 'fb-hint' }, el('span', { class: 'fb-hint-hand' }, '👆'), T.tap),
+      modal: el('div', { class: 'fb-modal', hidden: true }),
+      low: document.createElement('canvas'),
+    };
+    ui.low.width = W;
+    ui.low.height = H;
+    lc = ui.low.getContext('2d');
+    lc.imageSmoothingEnabled = false;
+    ui.ctx = ui.canvas.getContext('2d');
+    ui.stage = el('div', { class: 'fb-stage' }, ui.canvas, ui.hint);
+    const statsButton = el('button', { class: 'fb-icon-btn', 'aria-label': T.stats.open, title: T.stats.open, onclick: showStats });
+    statsButton.innerHTML = ICON_STATS;
+
+    root = el('div', { class: 'fb' },
+      el('div', { class: 'fb-header' },
+        el('div', {}, el('div', { class: 'fb-title' }, T.title), ui.sub),
+        el('div', { class: 'fb-actions' }, statsButton),
+      ),
+      ui.stage,
+      ui.modal,
+      toast.el,
+    );
+    container.append(root);
+    ui.stage.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      e.preventDefault();
+      onFlap();
+    });
+    // iOS: частые тапы не должны приближать страницу
+    ui.stage.addEventListener('touchend', (e) => e.preventDefault(), { passive: false });
+    document.addEventListener('keydown', onKeydown);
+    document.addEventListener('visibilitychange', onVisibility);
+
+    game = newGame();
+    finished = false;
+    // для проверки из Claude (страница-обёртка с автопилотом): ?fbdebug в адресе
+    if (new URLSearchParams(location.search).has('fbdebug')) window.__flappy = { get game() { return game; }, flap: onFlap };
+    ui.resizeObserver = new ResizeObserver(() => resize());
+    ui.resizeObserver.observe(ui.stage);
+    pop(ui.hint, { from: 0.8, duration: 400 });
+    kick();
+  },
+
+  getState() {
+    return null;                   // забег короткий — не сохраняем
+  },
+
+  destroy() {
+    cancelAnimationFrame(raf);
+    raf = 0;
+    timers.forEach((id) => clearTimeout(id));
+    timers.clear();
+    document.removeEventListener('keydown', onKeydown);
+    document.removeEventListener('visibilitychange', onVisibility);
+    ui?.resizeObserver?.disconnect();
+    toast?.dispose();
+    root?.remove();
+    api = host = root = ui = toast = game = lc = null;
+    particles = [];
+    flashT = shakeT = scorePopT = -1;
+    finished = false;
+    modalActive = false;
+  },
+};

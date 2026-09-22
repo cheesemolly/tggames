@@ -1,0 +1,98 @@
+/*
+ * Flappy Burger. Сама игра — пиксельная картинка на Canvas (свои цвета кухни и улицы — часть картинки);
+ * шапка, подсказка и окна — в цветах темы Telegram. Холст увеличивается без сглаживания (image-rendering).
+ */
+
+.game-root[data-game="flappy-burger"] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+  user-select: none;
+  -webkit-user-select: none;
+  --toast-top: 120px;
+}
+[data-game="flappy-burger"] .fb { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+[data-game="flappy-burger"] .fb-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 4px; }
+[data-game="flappy-burger"] .fb-title { font-size: 20px; font-weight: 700; line-height: 1.2; }
+[data-game="flappy-burger"] .fb-sub { font-size: 13px; color: var(--tg-theme-hint-color); }
+[data-game="flappy-burger"] .fb-actions { display: flex; gap: 6px; }
+[data-game="flappy-burger"] .fb-icon-btn {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: var(--tg-theme-secondary-bg-color);
+  color: var(--tg-theme-text-color);
+  font: inherit;
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+[data-game="flappy-burger"] .fb-icon-btn:active { transform: scale(0.92); }
+[data-game="flappy-burger"] .fb-icon-btn svg { width: 20px; height: 20px; }
+
+/* сцена: холст по центру, нажатие в любом месте — взмах */
+[data-game="flappy-burger"] .fb-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  touch-action: none;
+  cursor: pointer;
+}
+[data-game="flappy-burger"] .fb-canvas {
+  display: block;
+  border-radius: 6px;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.25);
+}
+[data-game="flappy-burger"] .fb-hint {
+  position: absolute;
+  left: 50%;
+  top: 62%;
+  transform: translateX(-50%);
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: rgb(0 0 0 / 0.55);
+  color: #fff;
+  font: 700 15px/1.2 ui-monospace, "Courier New", monospace;
+  text-align: center;
+  pointer-events: none;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+[data-game="flappy-burger"] .fb-hint-hand { font-size: 24px; animation: fb-tap 0.9s ease-in-out infinite; }
+@keyframes fb-tap { 50% { transform: translateY(4px) scale(0.92); } }
+[data-game="flappy-burger"] .fb-hint-hide { opacity: 0; transform: translate(-50%, 10px); }
+
+/* окна */
+[data-game="flappy-burger"] .fb-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--tg-theme-bg-color) 82%, transparent);
+}
+[data-game="flappy-burger"] .fb-card {
+  width: 100%;
+  max-width: 380px;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--tg-theme-secondary-bg-color);
+}
+[data-game="flappy-burger"] .fb-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+[data-game="flappy-burger"] .fb-card-head h2 { margin: 0; font-size: 18px; }
+[data-game="flappy-burger"] .fb-card .fb-icon-btn { background: var(--tg-theme-bg-color); }
+[data-game="flappy-burger"] .fb-stats-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+[data-game="flappy-burger"] .fb-stat { padding: 10px; border-radius: 12px; background: var(--tg-theme-bg-color); text-align: center; }
+[data-game="flappy-burger"] .fb-stat-value { font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; }
+[data-game="flappy-burger"] .fb-stat-label { font-size: 12px; color: var(--tg-theme-hint-color); }
