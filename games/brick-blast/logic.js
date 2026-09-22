@@ -225,7 +225,7 @@ export function startTurn(state, angle) {
   const count = state.triple ? state.balls * 3 : state.balls;
   return {
     angle: a, count, launched: 0, t: 0, nextLaunch: 0, balls: [], firstX: null, done: false, cleared: false,
-    tripled: state.triple, x0: state.x, events: [],
+    tripled: state.triple, caughtTriple: false, x0: state.x, events: [],
   };
 }
 
@@ -329,6 +329,7 @@ function triggerPower(state, sim, ball, power, rng) {
   }
   if (power.kind === 'triple') {
     state.triple = true;
+    sim.caughtTriple = true;
     state.powers = state.powers.filter((p) => p !== power);
     sim.events.push({ type: 'triple', id: power.id });
   }
@@ -436,7 +437,9 @@ export function recall(sim) {
 export function endTurn(state, sim) {
   state.turn += 1;
   if (sim.firstX !== null) state.x = sim.firstX;
-  if (sim.tripled) state.triple = false;
+  // ×3 — на следующий бросок, если его поймали в этом ходу (в том числе во время броска ×3: иначе новый бонус
+  // сгорал вместе со старым)
+  state.triple = Boolean(sim.caughtTriple);
   if (!state.blocks.length) return 'win';
   const shift = () => {
     for (const b of state.blocks) b.r += 1;

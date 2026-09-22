@@ -87,6 +87,15 @@ test('бонусы: лазер бьёт весь ряд, ×3 — на следу
   assert.equal(next.count, 3);
   endTurn(t, next);
   assert.equal(t.triple, false, '×3 — на один бросок');
+  // во время броска ×3 поймали ещё ×3 — следующий бросок тоже ×3 (раньше новый бонус сгорал)
+  const v = level([{ r: 1, c: 0, hp: 50 }], [{ r: 6, c: 4, kind: 'triple' }]);
+  v.x = 4.5;
+  v.triple = true;
+  const vs = runTurn(v, Math.PI / 2);
+  assert.ok(vs.tripled && vs.count === 3);
+  assert.equal(endTurn(v, vs), 'next');
+  assert.equal(v.triple, true, 'пойманный во время ×3 бонус — на следующий бросок');
+  assert.equal(startTurn(v, 1).count, 3);
   const u = newLevel(3, seeded(2));
   const sim = startTurn(u, 1.2);
   step(u, sim, 0.3);
