@@ -13,7 +13,7 @@ import { recordResult } from './stats.js';
 import { LOCALES, shellText } from './i18n.js';
 import { saves } from './saves.js';
 
-const OUTCOMES = ['win', 'lose', 'quit'];
+const OUTCOMES = ['win', 'lose', 'draw', 'quit'];
 
 const EYE_PATH = 'M12 5C6.5 5 2.7 9.3 1.5 12c1.2 2.7 5 7 10.5 7s9.3-4.3 10.5-7C21.3 9.3 17.5 5 12 5Zm0 11.5a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9Zm0-2.5a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z';
 const EYE_ICON = `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="currentColor"><path d="${EYE_PATH}"/></svg>`;
