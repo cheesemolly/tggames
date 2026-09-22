@@ -25,8 +25,11 @@ const T = {
   noHints: 'Подсказки закончились',
   cleared: (n) => `Раунд ${n} пройден!`,
   newRound: (n) => `Раунд ${n}`,
+  rules: 'Соедини пары точек и заполни линиями все клетки',
+  fillAll: 'Пары соединены — теперь заполни все клетки',
   walls: 'Новое: стены — через них не пройти',
-  tunnels: 'Новое: тоннели — сквозь них можно пройти только прямо, и две линии могут пересечься',
+  tunnels: 'Новое: тоннели — сквозь них только прямо, и каждый надо пройти в обе стороны',
+  filled: 'Заполнено',
   timeUp: 'Время вышло!',
   resultTitle: 'Время вышло',
   result: (rounds) => `Пройдено раундов: ${rounds}`,
@@ -57,6 +60,7 @@ let ui = null;
 let toast = null;
 let fx = null;
 let game = null;
+let bank = null;                // банк уровней levels.json (грузится один раз)
 let stats = emptyStats();
 let settings = { timer: true, skin: 'telegram' };
 let drawing = null;             // { color, pointerId }
@@ -166,8 +170,20 @@ function renderBoard() {
     layers.grid.append(g);
   }
 
-  const { connected } = checkPaths(level, game.paths);
+  const { connected, filled, total } = checkPaths(level, game.paths);
+  ui.fill.textContent = `${Math.floor((filled / total) * 100)}%`;
   const tunnelAxis = new Map(level.tunnels.map((t) => [t.cell, t.axis]));
+
+  // занятые клетки подкрашиваются цветом линии
+  game.paths.forEach((path, color) => {
+    if (path.length < 2) return;
+    for (const cell of path) {
+      if (tunnelAxis.has(cell)) continue;
+      layers.grid.append(svgEl('rect', {
+        x: cell % n, y: Math.floor(cell / n), width: 1, height: 1, class: 'cd-fill', style: `fill: ${colorVar(color)}`,
+      }));
+    }
+  });
 
   // линии
   game.paths.forEach((path, color) => {
@@ -305,7 +321,12 @@ function onPointerUp(e) {
   drawing = null;
   renderBoard();
   save();
-  if (checkPaths(game.level, game.paths).complete) roundCleared();
+  const check = checkPaths(game.level, game.paths);
+  if (check.complete) roundCleared();
+  else if (check.valid && check.connected.every(Boolean)) {
+    toast.show(T.fillAll, 2200);
+    shake(ui.board, { distance: 4, duration: 300 });
+  }
 }
 
 // ---------- раунды ----------
@@ -343,7 +364,7 @@ function roundCleared() {
     const prev = levelParams(game.round);
     animate(ui.svg, [{ transform: 'none', opacity: 1 }, { transform: 'scale(0.85)', opacity: 0 }], { duration: 220, easing: 'ease-in', fill: 'forwards' }).then(() => {
       if (!ui) return;
-      nextRound(game);
+      nextRound(game, bank);
       busy = false;
       ui.svg.getAnimations().forEach((a) => a.cancel());
       renderBoard();
@@ -514,7 +535,8 @@ function startGame(saved = null) {
     stats.played += 1;
     api.storage.set('stats', stats);
   }
-  game = saved ?? newGame();
+  game = saved ?? newGame(bank);
+  if (!saved) later(() => toast?.show(T.rules, 2800), 350);
   over = false;
   busy = false;
   drawing = null;
@@ -553,9 +575,11 @@ export default {
     api = gameApi;
     host = container;
     toast = createToast();
-    const [savedGame, savedStats, savedSettings] = await Promise.all([
+    const [savedGame, savedStats, savedSettings, levels] = await Promise.all([
       api.storage.get('current'), api.storage.get('stats'), api.storage.get('settings'),
+      bank ?? fetch(new URL('./levels.json', import.meta.url)).then((r) => r.json()),
     ]);
+    bank = levels;
     if (!api) return;
     stats = isValidStats(savedStats) ? savedStats : emptyStats();
     settings = {
@@ -568,6 +592,7 @@ export default {
       sub: el('div', { class: 'cd-sub' }),
       score: el('b', {}),
       best: el('b', {}),
+      fill: el('b', {}),
       svg: svgEl('svg', { class: 'cd-svg' }),
       hintBadge: el('span', { class: 'cd-badge' }),
       timerFill: el('div', { class: 'cd-timer-fill' }),
@@ -593,7 +618,8 @@ export default {
           iconButton(ICONS.gear, T.settings.open, showSettings),
         ),
       ),
-      el('div', { class: 'cd-info' }, el('span', {}, `${T.score}: `, ui.score), el('span', {}, `${T.best}: `, ui.best)),
+      el('div', { class: 'cd-info' },
+        el('span', {}, `${T.score}: `, ui.score), el('span', {}, `${T.filled}: `, ui.fill), el('span', {}, `${T.best}: `, ui.best)),
       ui.wrap,
       ui.timer,
       el('div', { class: 'cd-tools' }, toolButton(ICONS.reset, T.tools.reset, onReset), ui.hintButton),
