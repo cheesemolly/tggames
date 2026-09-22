@@ -4,6 +4,12 @@
 
 export const games = [
   {
+    id: 'brick-blast',
+    title: 'Brick Blast',
+    load: () => import('../games/brick-blast/index.js'),
+    css: new URL('../games/brick-blast/game.css', import.meta.url),
+  },
+  {
     id: 'loop',
     title: 'Петля',
     load: () => import('../games/loop/index.js'),

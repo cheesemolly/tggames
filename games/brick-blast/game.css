@@ -1,0 +1,267 @@
+/*
+ * Brick Blast. Цвета — переменные --bk-*; поле рисуется на Canvas, игра читает их через проверочный элемент
+ * (Canvas не понимает var() и color-mix()). Скин «telegram» (по умолчанию) — страница и поле из темы Telegram,
+ * «classic» — как в видео (синяя страница, тёмно-синее поле). Цвета блоков по прочности (--bk-t1…t5) и шариков —
+ * игровые, заданы в каждом скине.
+ */
+
+[data-game="brick-blast"], [data-game="brick-blast"] [data-skin="telegram"] {
+  --bk-page: var(--tg-theme-bg-color);
+  --bk-surface: var(--tg-theme-secondary-bg-color);
+  --bk-text: var(--tg-theme-text-color);
+  --bk-hint: var(--tg-theme-hint-color);
+  --bk-accent: var(--tg-theme-button-color);
+  --bk-accent-text: var(--tg-theme-button-text-color);
+  --bk-field: color-mix(in srgb, var(--tg-theme-text-color) 82%, var(--tg-theme-bg-color));
+  --bk-grid: color-mix(in srgb, var(--tg-theme-bg-color) 12%, transparent);
+  --bk-ball: #ffc21a;
+  --bk-ball3: #ff6fb5;
+  --bk-number: #16203a;
+  --bk-t1: #35b6e8; --bk-t2: #3dbb4a; --bk-t3: #f2b632; --bk-t4: #e5484d; --bk-t5: #9b5fd6;
+  --bk-laser: #fff6a8;
+  --bk-danger: #ff3b3b;
+  --bk-p-laser: #ff5fb0; --bk-p-triple: #ff9a2e; --bk-p-scatter: #4d8dff;
+  --toast-top: 110px;
+  --toast-bg: var(--bk-text);
+  --toast-fg: var(--bk-page);
+}
+[data-game="brick-blast"][data-skin="classic"], [data-game="brick-blast"] [data-skin="classic"] {
+  --bk-page: #3a55a0; --bk-surface: #4a66b3; --bk-text: #ffffff; --bk-hint: #c4d0f2;
+  --bk-accent: #ff9f1c; --bk-accent-text: #1b2440;
+  --bk-field: #1d2346; --bk-grid: rgb(255 255 255 / 0.05);
+  --bk-ball: #ffc21a; --bk-ball3: #ff6fb5; --bk-number: #16203a;
+  --bk-t1: #35b6e8; --bk-t2: #3dbb4a; --bk-t3: #f2b632; --bk-t4: #e5484d; --bk-t5: #9b5fd6;
+}
+[data-game="brick-blast"][data-skin="neon"], [data-game="brick-blast"] [data-skin="neon"] {
+  --bk-page: #120a2e; --bk-surface: #22164a; --bk-text: #f3eaff; --bk-hint: #9c8cc7;
+  --bk-accent: #ff2bd6; --bk-accent-text: #ffffff;
+  --bk-field: #07031a; --bk-grid: rgb(160 120 255 / 0.1);
+  --bk-ball: #3dfff0; --bk-ball3: #ff3df2; --bk-number: #0b0620;
+  --bk-t1: #3dc8ff; --bk-t2: #3dff8b; --bk-t3: #fff23d; --bk-t4: #ff3d7f; --bk-t5: #c23dff;
+  --bk-laser: #ffffff; --bk-p-laser: #ff3df2; --bk-p-triple: #fff23d; --bk-p-scatter: #3dc8ff;
+}
+[data-game="brick-blast"][data-skin="candy"], [data-game="brick-blast"] [data-skin="candy"] {
+  --bk-page: #ffe8f3; --bk-surface: #ffd3e8; --bk-text: #5c2143; --bk-hint: #b0718e;
+  --bk-accent: #ff5fa2; --bk-accent-text: #ffffff;
+  --bk-field: #fff7fb; --bk-grid: rgb(255 95 162 / 0.12);
+  --bk-ball: #ff8f4d; --bk-ball3: #a66bff; --bk-number: #4a1a36;
+  --bk-t1: #8fd3ff; --bk-t2: #8fe3b5; --bk-t3: #ffd97a; --bk-t4: #ff8fa3; --bk-t5: #c9a3ff;
+  --bk-laser: #ff5fa2; --bk-danger: #ff3b6b;
+}
+[data-game="brick-blast"][data-skin="forest"], [data-game="brick-blast"] [data-skin="forest"] {
+  --bk-page: #1f3a2a; --bk-surface: #2a4d38; --bk-text: #eaf5ec; --bk-hint: #9dbfa6;
+  --bk-accent: #f2c14e; --bk-accent-text: #1f2a1f;
+  --bk-field: #102018; --bk-grid: rgb(255 255 255 / 0.05);
+  --bk-ball: #f2e58a; --bk-ball3: #ff9fd0; --bk-number: #13241a;
+  --bk-t1: #7fc8a9; --bk-t2: #a4d65e; --bk-t3: #f2c14e; --bk-t4: #e07a5f; --bk-t5: #b392ac;
+}
+[data-game="brick-blast"][data-skin="graphite"], [data-game="brick-blast"] [data-skin="graphite"] {
+  --bk-page: #22262b; --bk-surface: #2f343b; --bk-text: #eef1f4; --bk-hint: #8e98a3;
+  --bk-accent: #9fb0c0; --bk-accent-text: #16191d;
+  --bk-field: #14171a; --bk-grid: rgb(255 255 255 / 0.04);
+  --bk-ball: #ffffff; --bk-ball3: #ffb86b; --bk-number: #14171a;
+  --bk-t1: #9fb7c9; --bk-t2: #b9c9a0; --bk-t3: #e6cf8b; --bk-t4: #d99a8f; --bk-t5: #b8a2d1;
+}
+
+/* ---------- раскладка ---------- */
+
+.game-root[data-game="brick-blast"] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+  background: var(--bk-page);
+  color: var(--bk-text);
+  transition: background-color 0.3s ease, color 0.3s ease;
+  user-select: none;
+  -webkit-user-select: none;
+}
+[data-game="brick-blast"] .btn { background: var(--bk-accent); color: var(--bk-accent-text); }
+[data-game="brick-blast"] .btn-secondary { background: var(--bk-page); color: var(--bk-text); }
+
+[data-game="brick-blast"] .bk { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+[data-game="brick-blast"] .bk-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 4px; }
+[data-game="brick-blast"] .bk-title { font-size: 20px; font-weight: 700; line-height: 1.2; }
+[data-game="brick-blast"] .bk-sub { font-size: 13px; color: var(--bk-hint); }
+[data-game="brick-blast"] .bk-actions { display: flex; gap: 6px; }
+[data-game="brick-blast"] .bk-icon-btn {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: var(--bk-surface);
+  color: var(--bk-text);
+  font: inherit;
+  font-size: 16px;
+  cursor: pointer;
+  transition: transform 0.1s ease, background-color 0.3s ease;
+}
+[data-game="brick-blast"] .bk-icon-btn:active { transform: scale(0.92); }
+[data-game="brick-blast"] .bk-icon-btn svg { width: 20px; height: 20px; }
+
+/* прогресс уровня со звёздами (как в видео) */
+[data-game="brick-blast"] .bk-progress { position: relative; flex: none; height: 22px; margin: 0 24px; }
+[data-game="brick-blast"] .bk-progress-track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 8px;
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--bk-text) 18%, transparent);
+}
+[data-game="brick-blast"] .bk-progress-fill {
+  width: 100%;
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #ff8a00, #ffc21a);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 0.3s ease-out;
+}
+[data-game="brick-blast"] .bk-star {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  font-size: 20px;
+  line-height: 22px;
+  color: color-mix(in srgb, var(--bk-text) 30%, transparent);
+  transition: color 0.3s ease, text-shadow 0.3s ease;
+}
+[data-game="brick-blast"] .bk-star-on { color: #ffc21a; text-shadow: 0 0 8px rgb(255 194 26 / 0.7); }
+
+/* поле */
+[data-game="brick-blast"] .bk-wrap { flex: 1; min-height: 0; display: grid; place-items: center; }
+[data-game="brick-blast"] .bk-canvas { display: block; border-radius: 10px; touch-action: none; }
+
+/* низ: ползунок прицела / «вернуть шарики» / зона отмены */
+[data-game="brick-blast"] .bk-bottom { position: relative; flex: none; height: 52px; display: grid; place-items: center; }
+[data-game="brick-blast"] .bk-track { position: relative; width: min(78%, 320px); height: 44px; touch-action: none; cursor: pointer; }
+[data-game="brick-blast"] .bk-track-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 20px;
+  height: 4px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--bk-text) 25%, transparent);
+}
+[data-game="brick-blast"] .bk-knob {
+  position: absolute;
+  top: 12px;
+  width: 20px;
+  height: 20px;
+  margin-left: -10px;
+  border-radius: 50%;
+  background: var(--bk-text);
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.3);
+}
+[data-game="brick-blast"] .bk-recall {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 18px;
+  background: var(--bk-surface);
+  color: var(--bk-text);
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+[data-game="brick-blast"] .bk-recall:active { transform: scale(0.92); }
+[data-game="brick-blast"] .bk-cancel { font-size: 14px; font-weight: 600; color: var(--bk-hint); text-align: center; }
+[data-game="brick-blast"] .bk-bottom > * { grid-area: 1 / 1; transition: opacity 0.2s ease; }
+[data-game="brick-blast"] .bk-bottom:not([data-mode="aim"]) .bk-track,
+[data-game="brick-blast"] .bk-bottom:not([data-mode="fly"]) .bk-recall,
+[data-game="brick-blast"] .bk-bottom:not([data-mode="cancel"]) .bk-cancel { opacity: 0; pointer-events: none; }
+
+[data-game="brick-blast"] .bk-fx { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 5; pointer-events: none; }
+
+/* ---------- окна ---------- */
+
+[data-game="brick-blast"] .bk-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--bk-page) 82%, transparent);
+}
+[data-game="brick-blast"] .bk-card {
+  width: 100%;
+  max-width: 380px;
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--bk-surface);
+}
+[data-game="brick-blast"] .bk-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+[data-game="brick-blast"] .bk-card-head h2 { margin: 0; font-size: 18px; }
+[data-game="brick-blast"] .bk-card .bk-icon-btn { background: var(--bk-page); }
+[data-game="brick-blast"] .bk-note { margin: 4px 0 0; font-size: 14px; color: var(--bk-hint); }
+[data-game="brick-blast"] .bk-card-actions { display: flex; gap: 8px; margin-top: 14px; }
+[data-game="brick-blast"] .bk-card-actions .btn { flex: 1; }
+[data-game="brick-blast"] .bk-section { margin: 4px 0 10px; font-size: 14px; }
+
+[data-game="brick-blast"] .bk-stats-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+[data-game="brick-blast"] .bk-stat { padding: 10px; border-radius: 12px; background: var(--bk-page); text-align: center; }
+[data-game="brick-blast"] .bk-stat-value { font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; }
+[data-game="brick-blast"] .bk-stat-label { font-size: 12px; color: var(--bk-hint); }
+
+/* победа: как «Well Done!» в видео — миниатюра пройденного уровня */
+[data-game="brick-blast"] .bk-won { display: grid; justify-items: center; gap: 12px; text-align: center; }
+[data-game="brick-blast"] .bk-won-title { margin: 0; font-size: 28px; font-weight: 800; }
+[data-game="brick-blast"] .bk-mini {
+  max-width: 100%;
+  max-height: 42vh;
+  object-fit: contain;
+  border-radius: 10px;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--bk-text) 20%, transparent), 0 8px 24px rgb(0 0 0 / 0.3);
+}
+[data-game="brick-blast"] .bk-won-badge {
+  margin-top: -26px;
+  padding: 4px 14px;
+  border-radius: 12px;
+  background: var(--bk-page);
+  font-size: 14px;
+  font-weight: 600;
+}
+[data-game="brick-blast"] .bk-won .btn { width: 100%; }
+
+[data-game="brick-blast"] .bk-skins { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 8px; }
+[data-game="brick-blast"] .bk-skin {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--bk-text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+/* образец: поле и блоки скина */
+[data-game="brick-blast"] .bk-swatch {
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  background:
+    linear-gradient(var(--bk-t1), var(--bk-t1)) 8px 8px / 16px 16px no-repeat,
+    linear-gradient(var(--bk-t2), var(--bk-t2)) 28px 8px / 16px 16px no-repeat,
+    linear-gradient(var(--bk-t3), var(--bk-t3)) 8px 28px / 16px 16px no-repeat,
+    radial-gradient(circle at 36px 36px, var(--bk-ball) 4px, transparent 5px),
+    var(--bk-field);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bk-hint) 40%, transparent);
+  transition: transform 0.2s ease;
+}
+[data-game="brick-blast"] .bk-skin:active .bk-swatch { transform: scale(0.92); }
+[data-game="brick-blast"] .bk-skin[aria-checked="true"] .bk-swatch { outline: 3px solid var(--bk-accent); outline-offset: 3px; }
