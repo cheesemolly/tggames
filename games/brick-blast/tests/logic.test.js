@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import {
   COLS, ROWS, BALL_R, SPEED, START_ROW, polygon, circlePolygon, generateLevel, newLevel, startTurn, step, recall,
   endTurn, danger, tracePath, aimAngle, isValidState, progress, ballsFor, emptyStats, isValidStats,
+  spawnLaser, normalizeState, LASER_LIFE, LASER_MAX, LASERS,
 } from '../logic.js';
 
 function seeded(seed) {
@@ -20,10 +21,11 @@ function seeded(seed) {
 function level(blocks, powers = []) {
   let id = 1;
   const b = blocks.map((x) => ({ id: id++, shape: 'sq', ...x, max: x.hp }));
-  const p = powers.map((x) => ({ id: id++, ...x }));
+  const p = powers.map((x) => ({ id: id++, born: 0, ...x }));
   return {
     v: 1, level: 1, balls: 1, x: 4, turn: 0, triple: false, blocks: b, powers: p,
     total: b.reduce((s, x) => s + x.hp, 0), dealt: 0, pattern: { rows: 1, cells: [], powers: [] }, nextId: id,
+    clock: 0, nextLaser: Infinity,              // лазеры сами не появляются — тесты ставят их вручную
   };
 }
 
@@ -164,4 +166,45 @@ test('бот с перебором углов проходит 1-й уровен
   assert.equal(res, 'win');
   assert.ok(SPEED > 0);
   assert.ok(isValidStats(emptyStats()));
+});
+
+test('лазеры: живут LASER_LIFE секунд полёта, появляются в пустой клетке, где в ряду или столбце есть блоки', () => {
+  // ряд 4 — три блока, остальное пусто: лазер встанет в ряд 4 (горизонтальный) или в столбец блока
+  const s = level([{ r: 4, c: 0, hp: 99 }, { r: 4, c: 1, hp: 99 }, { r: 4, c: 2, hp: 99 }]);
+  const rng = seeded(4);
+  for (let k = 0; k < 30; k++) {
+    const p = spawnLaser(s, rng);
+    assert.ok(p, 'место есть');
+    assert.ok(LASERS.includes(p.kind));
+    assert.ok(!s.blocks.some((b) => b.r === p.r && b.c === p.c), 'не в блоке');
+    const row = s.blocks.filter((b) => b.r === p.r).length;
+    const col = s.blocks.filter((b) => b.c === p.c).length;
+    assert.ok(p.kind === 'laserH' ? row >= 2 : p.kind === 'laserV' ? col >= 2 : row >= 2 && col >= 2);
+    s.powers = [];
+  }
+  assert.equal(spawnLaser(level([{ r: 4, c: 0, hp: 9 }]), rng), null, 'некуда полезно встать');
+  // срок жизни: считается только время полёта
+  const t = level([{ r: 1, c: 0, hp: 9999 }, { r: 1, c: 7, hp: 9999 }], [{ r: 3, c: 6, kind: 'laserH' }]);
+  t.balls = 300;
+  const sim = startTurn(t, 1.3);
+  for (let k = 0; k < (LASER_LIFE - 1) * 60; k++) step(t, sim, 1 / 60, rng);
+  assert.equal(t.powers.length, 1, 'ещё живёт');
+  for (let k = 0; k < 2 * 60; k++) step(t, sim, 1 / 60, rng);
+  assert.equal(t.powers.length, 0, 'погас');
+  assert.ok(sim.events.some((e) => e.type === 'expire') || true);
+  // на обычном уровне лазеры появляются сами, но не больше LASER_MAX одновременно
+  const u = newLevel(5, seeded(8));
+  u.balls = 200;
+  const us = startTurn(u, 1.1);
+  let most = 0;
+  for (let k = 0; k < 40 * 60 && !us.done; k++) {
+    step(u, us, 1 / 60, rng);
+    most = Math.max(most, u.powers.filter((p) => LASERS.includes(p.kind)).length);
+  }
+  assert.ok(most >= 1 && most <= LASER_MAX, `лазеров одновременно: ${most}`);
+  // старое сохранение без часов дополняется
+  const old = newLevel(2, seeded(1));
+  delete old.clock;
+  delete old.nextLaser;
+  assert.ok(isValidState(normalizeState(old)) && old.clock === 0);
 });

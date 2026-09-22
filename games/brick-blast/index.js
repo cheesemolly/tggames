@@ -9,7 +9,7 @@ import { createToast } from '../../shared/toast.js';
 import { createFx } from '../../shared/fx.js';
 import {
   COLS, ROWS, BALL_R, POWER_R, MIN_ANGLE, newLevel, startTurn, step, recall, endTurn, danger, tracePath, aimAngle,
-  polygon, progress, isValidState, emptyStats, isValidStats,
+  polygon, progress, isValidState, normalizeState, emptyStats, isValidStats, LASER_LIFE, LASERS,
 } from './logic.js';
 
 const SKINS = ['telegram', 'classic', 'neon', 'candy', 'forest', 'graphite'];
@@ -68,7 +68,12 @@ let lastFrame = 0;
 let cell = 40;                     // размер клетки в CSS-пикселях
 let palette = null;                // цвета скина для Canvas
 const flashes = new Map();         // id блока → время удара
-let lasers = [];                   // { axis, r, c, t }
+let lasers = new Map();            // линия лазера ('h:ряд' / 'v:столбец') → время последней вспышки
+const powerBorn = new Map();       // id бонуса → когда появился на экране (анимация появления)
+let fading = [];                   // погасшие лазеры: { p, t } — тают
+const blockSprites = new Map();    // 'форма|цвет' → готовая картинка блока; 'форма|flash' — белый силуэт
+let burstsThisFrame = 0;
+let canvasOffset = null;           // положение холста в корне игры (для осколков), на кадр
 let shiftAnim = null;              // { from: сдвиг в рядах, t0 }
 let intro = null;                  // появление уровня: { t0 }
 let modalActive = false;
@@ -127,6 +132,7 @@ function resize() {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   dprNow = dpr;
   sprites.clear();
+  blockSprites.clear();
   fieldCache = null;
   ui.canvas.style.width = `${w}px`;
   ui.canvas.style.height = `${h}px`;
@@ -178,10 +184,10 @@ function text(c, str, x, y, size, color, { align = 'center', shadow = true, weig
   c.font = `${weight} ${Math.max(9, Math.round(size * cell))}px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`;
   c.textAlign = align;
   c.textBaseline = 'middle';
+  // тень — тёмная копия со сдвигом: размытая тень (shadowBlur) на сотне чисел за кадр слишком дорогая
   if (shadow) {
-    c.shadowColor = 'rgba(0, 0, 0, 0.45)';
-    c.shadowBlur = 2 * dprNow;
-    c.shadowOffsetY = 1 * dprNow;
+    c.fillStyle = 'rgba(0, 0, 0, 0.35)';
+    c.fillText(str, x * cell, y * cell + 1.2);
   }
   c.fillStyle = color;
   c.fillText(str, x * cell, y * cell);
@@ -199,63 +205,99 @@ function shapePath(c, b, r, pad) {
   c.closePath();
 }
 
-/** Блок: градиент сверху вниз, блик, светлая кромка; удар — вспышка, свечение и лёгкое «вжатие». */
+/**
+ * Картинка блока (рисуется один раз на форму и цвет): градиент сверху вниз, блик, светлая кромка.
+ * 'flash' — белый силуэт для вспышки удара. Картинка — клетка с полями PAD со всех сторон.
+ */
+const PAD = 0.1;
+function blockSprite(shape, color) {
+  const key = `${shape}|${color}`;
+  let img = blockSprites.get(key);
+  if (img) return img;
+  const size = (1 + PAD * 2) * cell * dprNow;
+  img = document.createElement('canvas');
+  img.width = Math.max(4, Math.ceil(size));
+  img.height = img.width;
+  const c = img.getContext('2d');
+  const k = img.width / (1 + PAD * 2);
+  c.setTransform(k, 0, 0, k, PAD * k, PAD * k);
+  const b = { shape, c: 0 };
+  shapePath(c, b, 0, 0.05);
+  if (color === 'flash') {
+    c.fillStyle = '#ffffff';
+    c.fill();
+  } else {
+    const g = c.createLinearGradient(0, 0, 0, 1);
+    g.addColorStop(0, shade(color, 0.28));
+    g.addColorStop(0.55, color);
+    g.addColorStop(1, shade(color, -0.22));
+    c.fillStyle = g;
+    c.fill();
+    c.save();
+    c.clip();
+    const gl = c.createLinearGradient(0, 0, 0, 0.5);
+    gl.addColorStop(0, 'rgba(255, 255, 255, 0.35)');
+    gl.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    c.fillStyle = gl;
+    c.fillRect(0, 0, 1, 0.5);
+    c.restore();
+    c.lineJoin = 'round';
+    c.strokeStyle = 'rgba(255, 255, 255, 0.32)';
+    c.lineWidth = 0.03;
+    shapePath(c, b, 0, 0.065);
+    c.stroke();
+  }
+  blockSprites.set(key, img);
+  return img;
+}
+
+/** Блок: готовая картинка; удар — белая вспышка и лёгкое «вжатие». */
 function drawBlock(c, b, dy, now) {
   const r = b.r + dy;
   if (r < -1) return;
-  const color = tierColor(b.hp);
   const flash = flashes.get(b.id);
   const k = flash ? Math.max(0, 1 - (now - flash) / 180) : 0;
-  c.save();
+  const s2 = 1 - 0.07 * k;
+  const size = (1 + PAD * 2) * s2;
+  const x = b.c + 0.5 - size / 2;
+  const y = r + 0.5 - size / 2;
+  c.drawImage(blockSprite(b.shape, tierColor(b.hp)), x, y, size, size);
   if (k > 0) {
-    const s2 = 1 - 0.07 * k;
-    c.translate(b.c + 0.5, r + 0.5);
-    c.scale(s2, s2);
-    c.translate(-(b.c + 0.5), -(r + 0.5));
-    c.shadowColor = color;
-    c.shadowBlur = 0.6 * cell * dprNow * k;
+    c.globalAlpha = 0.65 * k;
+    c.drawImage(blockSprite(b.shape, 'flash'), x, y, size, size);
+    c.globalAlpha = 1;
   }
-  shapePath(c, b, r, 0.05);
-  const g = c.createLinearGradient(0, r, 0, r + 1);
-  g.addColorStop(0, shade(color, 0.28));
-  g.addColorStop(0.55, color);
-  g.addColorStop(1, shade(color, -0.22));
-  c.fillStyle = g;
-  c.fill();
-  c.shadowBlur = 0;
-  c.save();
-  c.clip();
-  const gl = c.createLinearGradient(0, r, 0, r + 0.5);
-  gl.addColorStop(0, 'rgba(255, 255, 255, 0.35)');
-  gl.addColorStop(1, 'rgba(255, 255, 255, 0)');
-  c.fillStyle = gl;
-  c.fillRect(b.c, r, 1, 0.5);
-  if (k > 0) {
-    c.fillStyle = `rgba(255, 255, 255, ${0.6 * k})`;
-    c.fillRect(b.c, r, 1, 1);
-  }
-  c.restore();
-  c.lineJoin = 'round';
-  c.strokeStyle = 'rgba(255, 255, 255, 0.32)';
-  c.lineWidth = 0.03;
-  shapePath(c, b, r, 0.065);
-  c.stroke();
-  c.restore();
   // прочность: у квадрата — по центру, у треугольника — ближе к прямому углу
   const pos = { sq: [0.5, 0.52], tl: [0.34, 0.36], tr: [0.66, 0.36], bl: [0.34, 0.68], br: [0.66, 0.68] }[b.shape];
   text(c, String(b.hp), b.c + pos[0], r + pos[1], b.shape === 'sq' ? (b.hp >= 100 ? 0.3 : 0.36) : 0.25, palette.number);
 }
 
-function drawPower(c, p, dy, now) {
+function drawPower(c, p, dy, now, fade = 1) {
   const r = p.r + dy;
   if (r < 0) return;
   const x = p.c + 0.5;
   const y = r + 0.5;
-  const color = p.kind.startsWith('laser') ? palette.power.laser : palette.power[p.kind];
-  const pulse = 1 + Math.sin(now / 260 + p.id) * 0.06;
+  const laser = LASERS.includes(p.kind);
+  const color = laser ? palette.power.laser : palette.power[p.kind];
+  // появление: кольцо «впрыгивает»
+  if (!powerBorn.has(p.id)) powerBorn.set(p.id, now);
+  const age = Math.min(1, (now - powerBorn.get(p.id)) / 350);
+  const grow = age < 1 ? 1.25 * age - 0.25 * age * age * age : 1;
+  const pulse = (1 + Math.sin(now / 260 + p.id) * 0.06) * grow;
+  const left = laser && Number.isFinite(p.born) ? Math.max(0, 1 - (game.clock - p.born) / LASER_LIFE) : 1;
   c.save();
+  // последние 3 секунды лазер мигает
+  c.globalAlpha = fade * (laser && left * LASER_LIFE < 3 ? 0.55 + 0.45 * Math.abs(Math.sin(now / 140)) : 1);
   c.translate(x, y);
   c.scale(pulse, pulse);
+  if (laser) {
+    // сколько лазеру осталось — дуга вокруг кольца
+    c.strokeStyle = alpha(color, 0.9);
+    c.lineWidth = 0.06;
+    c.beginPath();
+    c.arc(0, 0, POWER_R + 0.09, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * left);
+    c.stroke();
+  }
   c.strokeStyle = color;
   c.lineWidth = 0.05;
   c.setLineDash([0.12, 0.07]);
@@ -416,26 +458,36 @@ function draw() {
     c.globalAlpha = 1;
   }
   for (const p of game.powers) drawPower(c, p, dy, now);
+  fading = fading.filter((f) => now - f.t < 400);
+  for (const f of fading) drawPower(c, f.p, dy, now, 1 - (now - f.t) / 400);
   for (const b of game.blocks) drawBlock(c, b, dy, now);
-  // лазеры
-  lasers = lasers.filter((l) => now - l.t < 280);
-  for (const l of lasers) {
-    const k = 1 - (now - l.t) / 280;
-    c.save();
-    c.strokeStyle = palette.laser;
-    c.shadowColor = palette.laser;
-    c.shadowBlur = 16;
-    c.globalAlpha = k;
-    c.lineWidth = 0.14 * k + 0.03;
-    c.beginPath();
-    if (l.axis === 'h') {
-      c.moveTo(0, l.r + 0.5);
-      c.lineTo(COLS, l.r + 0.5);
-    } else {
-      c.moveTo(l.c + 0.5, 0);
-      c.lineTo(l.c + 0.5, ROWS);
+  // лазеры: одна вспышка на линию, сколько бы шариков ни пролетело кольцо (без размытия — оно дорогое)
+  for (const [key, t] of lasers) {
+    const k = 1 - (now - t) / 260;
+    if (k <= 0) {
+      lasers.delete(key);
+      continue;
     }
-    c.stroke();
+    const [axis, n] = key.split(':');
+    const line = () => {
+      c.beginPath();
+      if (axis === 'h') {
+        c.moveTo(0, +n + 0.5);
+        c.lineTo(COLS, +n + 0.5);
+      } else {
+        c.moveTo(+n + 0.5, 0);
+        c.lineTo(+n + 0.5, ROWS);
+      }
+      c.stroke();
+    };
+    c.save();
+    c.lineCap = 'round';
+    c.strokeStyle = alpha(palette.laser, 0.25 * k);
+    c.lineWidth = 0.45 * k + 0.05;
+    line();
+    c.strokeStyle = alpha(palette.laser, 0.95 * k);
+    c.lineWidth = 0.1 * k + 0.02;
+    line();
     c.restore();
   }
   // прицел: пунктир до касания и отражённый отрезок
@@ -498,7 +550,7 @@ function loop(now) {
   }
 }
 
-const needsFrames = () => phase === 'fly' || shiftAnim || intro || lasers.length || flashes.size
+const needsFrames = () => phase === 'fly' || shiftAnim || intro || lasers.size || fading.length || flashes.size
   || game?.powers.length || (game && danger(game)) || aim;
 
 /** Запустить цикл кадров. Если заказанный кадр не пришёл за 250 мс (браузер придержал), заказываем заново. */
@@ -514,6 +566,8 @@ function kick() {
 
 function handleEvents() {
   const now = performance.now();
+  burstsThisFrame = 0;
+  canvasOffset = null;
   for (const e of sim.events) {
     if (e.type === 'hit') flashes.set(e.id, now);
     else if (e.type === 'break') {
@@ -524,7 +578,12 @@ function handleEvents() {
         api.platform.haptic.impact('light');
         lastHaptic = now;
       }
-    } else if (e.type === 'laser') lasers.push({ ...e, t: now });
+    } else if (e.type === 'laser') lasers.set(e.axis === 'h' ? `h:${e.r}` : `v:${e.c}`, now);
+    else if (e.type === 'expire') {
+      powerBorn.set(-e.id, -Infinity);            // гаснущее кольцо не «впрыгивает» заново
+      fading.push({ p: { ...e, id: -e.id, born: -Infinity }, t: now });
+    }
+    else if (e.type === 'spawn') powerBorn.delete(e.id);
     else if (e.type === 'triple') {
       toast.show(T.triple, 1800);
       api.platform.haptic.notification('success');
@@ -536,9 +595,14 @@ function handleEvents() {
 }
 
 function burstAt(x, y, color) {
-  const cr = ui.canvas.getBoundingClientRect();
-  const rr = root.getBoundingClientRect();
-  fx?.burst(cr.left - rr.left + x * cell, cr.top - rr.top + y * cell, color, 8, { speed: 200, size: 5 });
+  // лазер может разбить десяток блоков за кадр — осколки не больше чем от шести
+  if (++burstsThisFrame > 6) return;
+  if (!canvasOffset) {
+    const cr = ui.canvas.getBoundingClientRect();
+    const rr = root.getBoundingClientRect();
+    canvasOffset = [cr.left - rr.left, cr.top - rr.top];
+  }
+  fx?.burst(canvasOffset[0] + x * cell, canvasOffset[1] + y * cell, color, 6, { speed: 200, size: 5 });
 }
 
 // ---------- ход ----------
@@ -667,11 +731,14 @@ function miniature(pattern) {
 }
 
 function startLevel(animateIn) {
+  lastProgress = -1;
   phase = 'aim';
   sim = null;
   aim = null;
   flashes.clear();
-  lasers = [];
+  lasers.clear();
+  fading = [];
+  powerBorn.clear();
   shiftAnim = null;
   ui.sub.textContent = T.level(game.level);
   ui.bottom.dataset.mode = 'aim';
@@ -683,8 +750,11 @@ function startLevel(animateIn) {
 
 // ---------- прогресс ----------
 
+let lastProgress = -1;
 function renderProgress(force) {
   const p = force ?? progress(game);
+  if (p === lastProgress) return;                 // зовётся каждый кадр полёта — трогаем DOM, только если изменилось
+  lastProgress = p;
   ui.fill.style.transform = `scaleX(${p})`;
   ui.stars.forEach((star, k) => {
     const on = p >= [1 / 3, 2 / 3, 1][k] - 1e-9;
@@ -822,6 +892,7 @@ function showSettings() {
       buttons.forEach((b, k) => b.setAttribute('aria-checked', String(SKINS[k] === id)));
       readPalette();
       sprites.clear();
+      blockSprites.clear();
       fieldCache = null;
       draw();
     },
@@ -943,7 +1014,7 @@ export default {
     ui.resizeObserver.observe(ui.wrap);
 
     const fresh = !isValidState(saved);
-    game = fresh ? newLevel(1) : saved;
+    game = fresh ? newLevel(1) : normalizeState(saved);
     if (fresh) save();
     startLevel(true);
     if (fresh && stats.shots === 0) later(() => toast?.show(T.aimHelp, 3200), 700);
@@ -970,7 +1041,10 @@ export default {
   sprites.clear();
     phase = 'aim';
     flashes.clear();
-    lasers = [];
+    lasers.clear();
+    fading = [];
+    powerBorn.clear();
+    blockSprites.clear();
     modalActive = false;
   },
 };
