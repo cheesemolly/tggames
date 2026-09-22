@@ -198,7 +198,12 @@ h1, h2 { margin: 0 0 8px; line-height: 1.2; }
   background: var(--toast-bg, var(--tg-theme-text-color));
   color: var(--toast-fg, var(--tg-theme-bg-color));
   font-weight: 700;
-  white-space: nowrap;
+  /* длинный текст переносится, а не уходит за края экрана */
+  width: max-content;
+  max-width: calc(100% - 32px);
+  text-align: center;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
   pointer-events: none;
   opacity: 0;
   transform: translate(-50%, -8px) scale(0.96);
