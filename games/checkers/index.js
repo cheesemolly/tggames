@@ -8,7 +8,7 @@ import { animate, showLayer, hideLayer, shake, pop, reducedMotion } from '../../
 import { createToast } from '../../shared/toast.js';
 import {
   WHITE, BLACK, LEVEL_IDS, generateMoves, newGame, playMove, undoMove, result, bestMove, sameMove, moveTo, count,
-  isValidState, emptyStats, isValidStats, rowOf, colOf, isDark,
+  isValidState, emptyStats, migrateStats, MODES, rowOf, colOf, isDark,
 } from './logic.js';
 
 const SKINS = ['telegram', 'wood', 'green', 'marble', 'night', 'candy'];
@@ -18,7 +18,10 @@ const T = {
   levelHint: {
     novice: 'Часто ошибается', easy: 'Думает на 2 хода', medium: 'Думает на 4 хода', hard: 'Считает глубоко', master: 'Играет в полную силу',
   },
-  sub: (level, side) => `${T.levels[level]} · вы ${side === WHITE ? 'белыми' : 'чёрными'}`,
+  sub: (mode, level, side) => `${mode === 'giveaway' ? 'Поддавки · ' : ''}${T.levels[level]} · вы ${side === WHITE ? 'белыми' : 'чёрными'}`,
+  mode: 'Режим',
+  modes: { classic: 'Классика', giveaway: 'Поддавки' },
+  modeHint: { classic: 'Побей все шашки соперника', giveaway: 'Отдай все свои шашки первым' },
   yourTurn: 'Ваш ход',
   botTurn: 'Бот думает',
   mustCapture: 'Бить обязательно!',
@@ -38,6 +41,8 @@ const T = {
   reasons: {
     win: 'У бота не осталось ходов',
     lose: 'У вас не осталось ходов',
+    giveawayWin: 'Вы первым отдали все шашки',
+    giveawayLose: 'Бот первым отдал все шашки',
     resign: 'Вы сдались',
     repeat: 'Позиция повторилась трижды',
     kings: '15 ходов дамками без взятий',
@@ -67,7 +72,7 @@ let toast = null;
 let game = null;
 let stats = emptyStats();
 let settings = { skin: 'telegram', coords: true };
-let setup = { level: 'medium', color: 'white' };
+let setup = { level: 'medium', color: 'white', mode: 'classic' };
 let selected = null;               // { from, path: [...] } — выбранная шашка и уже пройденные поля боя
 let busy = false;                  // анимация или бот думает
 let over = false;
@@ -89,6 +94,15 @@ function later(fn, ms) {
 }
 
 const save = () => game && !over && api?.storage.set('current', game);
+const modeOf = (g) => (g?.mode === 'giveaway' ? 'giveaway' : 'classic');
+
+/**
+ * «Впрыгивание» шашки — свойством scale, а не transform: позиция шашки задана transform'ом, и анимация
+ * transform на время уводила её в левый верхний угол доски (a8).
+ */
+function popPiece(node, from = 0.6, duration = 360) {
+  return animate(node, [{ scale: from }, { scale: 1.12, offset: 0.6 }, { scale: 1 }], { duration, easing: 'ease-out' });
+}
 
 // ---------- доска ----------
 
@@ -166,7 +180,7 @@ function renderInfo(legal = null) {
   const theirs = game.player === WHITE ? c.bm + c.bk : c.wm + c.wk;
   ui.taken.mine.textContent = 12 - theirs;
   ui.taken.theirs.textContent = 12 - mine;
-  ui.sub.textContent = T.sub(game.level, game.player);
+  ui.sub.textContent = T.sub(modeOf(game), game.level, game.player);
   const botTurn = !over && game.turn !== game.player;
   ui.turn.textContent = over ? '' : botTurn ? T.botTurn : T.yourTurn;
   ui.turn.classList.toggle('ck-thinking', botTurn);
@@ -259,7 +273,8 @@ async function commitMove(m, alreadyMoved) {
   }
   // побитые снимаются в конце хода (турецкий удар)
   const gone = m.captures.map((c) => pieceAt(c)).filter(Boolean);
-  await Promise.all(gone.map((g) => animate(g, [{ opacity: 1, transform: getComputedStyle(g).transform }, { opacity: 0, transform: `${getComputedStyle(g).transform} scale(0.4)` }], { duration: 220, easing: 'ease-in' })));
+  // scale, а не transform — позицию шашки (transform) не трогаем
+  await Promise.all(gone.map((g) => animate(g, [{ opacity: 1, scale: 1 }, { opacity: 0, scale: 0.4 }], { duration: 220, easing: 'ease-in', fill: 'forwards' })));
   if (!ui) return;
   const wasMan = Math.abs(game.board[m.from]) === 1;
   playMove(game, m);
@@ -267,7 +282,7 @@ async function commitMove(m, alreadyMoved) {
   else api.platform.haptic.selection();
   renderPieces();
   const moved = pieceAt(moveTo(m));
-  if (wasMan && Math.abs(game.board[moveTo(m)]) === 2 && moved) pop(moved, { from: 0.6, duration: 360 });
+  if (wasMan && Math.abs(game.board[moveTo(m)]) === 2 && moved) popPiece(moved);
   busy = false;
   save();
   const res = result(game);
@@ -285,9 +300,9 @@ async function commitMove(m, alreadyMoved) {
  * Ход бота: в воркере; если воркера нет или он не ответил вовремя (старые браузеры молча не запускают
  * модульные воркеры) — в основном потоке.
  */
-function askBot(board, side, level) {
+function askBot(board, side, level, mode = 'classic') {
   const id = ++requestId;
-  const local = () => later(() => bestMove(board, side, { level }), 30);
+  const local = () => later(() => bestMove(board, side, { level, mode }), 30);
   if (!worker) return local();
   return new Promise((resolve) => {
     let settled = false;
@@ -299,7 +314,7 @@ function askBot(board, side, level) {
       resolve(e.data.move);
     };
     w.addEventListener('message', onMessage);
-    w.postMessage({ id, board, side, level });
+    w.postMessage({ id, board, side, level, mode });
     later(() => {
       if (settled) return;
       settled = true;
@@ -342,7 +357,7 @@ async function botTurn() {
   renderMarks();
   const started = Date.now();
   const snapshot = game;
-  const move = await askBot(game.board, game.turn, game.level);
+  const move = await askBot(game.board, game.turn, game.level, modeOf(game));
   if (!ui || game !== snapshot || over) return;
   // чтобы бот не «ходил мгновенно» — хотя бы полсекунды на раздумье
   const wait = Math.max(0, 500 - (Date.now() - started));
@@ -361,7 +376,8 @@ function finishGame(res, resigned = false) {
   busy = false;
   selected = null;
   renderMarks();
-  const lv = stats[game.level];
+  const mode = modeOf(game);
+  const lv = stats[mode][game.level];
   lv.played += 1;
   let outcome;
   let title;
@@ -379,20 +395,20 @@ function finishGame(res, resigned = false) {
   } else if (res.winner === game.player) {
     outcome = 'win';
     title = T.win;
-    reason = T.reasons.win;
+    reason = mode === 'giveaway' ? T.reasons.giveawayWin : T.reasons.win;
     lv.wins += 1;
   } else {
     outcome = 'lose';
     title = T.lose;
-    reason = T.reasons.lose;
+    reason = mode === 'giveaway' ? T.reasons.giveawayLose : T.reasons.lose;
     lv.losses += 1;
   }
   api.storage.set('stats', stats);
   api.storage.remove('current');
   api.platform.haptic.notification(outcome === 'win' ? 'success' : outcome === 'draw' ? 'warning' : 'error');
-  if (outcome === 'win') for (const p of ui.pieces.querySelectorAll(game.player === WHITE ? '.ck-white' : '.ck-black')) pop(p, { from: 0.8, duration: 400 });
+  if (outcome === 'win') for (const p of ui.pieces.querySelectorAll(game.player === WHITE ? '.ck-white' : '.ck-black')) popPiece(p, 0.8, 400);
   later(() => api?.finish({
-    outcome, title, locale: 'ru', variant: game.level, message: `${T.levels[game.level]} · ${reason}`,
+    outcome, title, locale: 'ru', variant: `${mode}-${game.level}`, message: `${T.modes[mode]} · ${T.levels[game.level]} · ${reason}`,
   }), reducedMotion() ? 0 : 900);
 }
 
@@ -415,7 +431,7 @@ async function onHint() {
   busy = true;
   renderInfo();
   const snapshot = game;
-  const move = await askBot(game.board, game.turn, 'medium');
+  const move = await askBot(game.board, game.turn, 'medium', modeOf(game));
   busy = false;
   if (!ui || game !== snapshot || over) return;
   hintMove = move;
@@ -472,6 +488,13 @@ function showNewGame(closable = true) {
       levelButtons.forEach((b, k) => b.setAttribute('aria-checked', String(LEVEL_IDS[k] === id)));
     },
   }, el('b', {}, T.levels[id]), el('span', {}, T.levelHint[id])));
+  const modeButtons = MODES.map((id) => el('button', {
+    class: 'ck-option', role: 'radio', 'aria-checked': String(setup.mode === id),
+    onclick: () => {
+      setup.mode = id;
+      modeButtons.forEach((b, k) => b.setAttribute('aria-checked', String(MODES[k] === id)));
+    },
+  }, el('b', {}, T.modes[id]), el('span', {}, T.modeHint[id])));
   const colorIds = ['white', 'black', 'random'];
   const colorButtons = colorIds.map((id) => el('button', {
     class: 'ck-color', role: 'radio', 'aria-checked': String(setup.color === id),
@@ -485,6 +508,8 @@ function showNewGame(closable = true) {
       el('h2', {}, T.newGame),
       closable ? el('button', { class: 'ck-icon-btn', 'aria-label': T.stats.close, title: T.stats.close, onclick: closeModal }, '✕') : null,
     ),
+    el('h3', { class: 'ck-section' }, T.mode),
+    el('div', { class: 'ck-levels ck-modes', role: 'radiogroup' }, modeButtons),
     el('h3', { class: 'ck-section' }, T.level),
     el('div', { class: 'ck-levels', role: 'radiogroup' }, levelButtons),
     el('h3', { class: 'ck-section' }, T.color),
@@ -499,12 +524,12 @@ function startGame() {
   const player = setup.color === 'random' ? (Math.random() < 0.5 ? WHITE : BLACK) : setup.color === 'white' ? WHITE : BLACK;
   if (game && !over && game.history.length >= 2) {
     // брошенная партия — поражение
-    stats[game.level].played += 1;
-    stats[game.level].losses += 1;
+    stats[modeOf(game)][game.level].played += 1;
+    stats[modeOf(game)][game.level].losses += 1;
     api.storage.set('stats', stats);
   }
   requestId++;
-  game = newGame(player, setup.level);
+  game = newGame(player, setup.level, setup.mode);
   over = false;
   busy = false;
   selected = null;
@@ -526,14 +551,13 @@ function intro() {
 }
 
 function showStats() {
-  const rows = LEVEL_IDS.map((id) => {
-    const s = stats[id];
-    return el('tr', {}, el('td', {}, T.levels[id]), el('td', {}, s.played), el('td', {}, s.wins), el('td', {}, s.losses), el('td', {}, s.draws));
-  });
-  openModal(card(T.stats.title, el('table', { class: 'ck-stats' },
+  const table = (mode) => el('table', { class: 'ck-stats' },
     el('thead', {}, el('tr', {}, el('th', {}, ''), el('th', {}, T.stats.played), el('th', {}, T.stats.wins), el('th', {}, T.stats.losses), el('th', {}, T.stats.draws))),
-    el('tbody', {}, rows),
-  )));
+    el('tbody', {}, LEVEL_IDS.map((id) => {
+      const s = stats[mode][id];
+      return el('tr', {}, el('td', {}, T.levels[id]), el('td', {}, s.played), el('td', {}, s.wins), el('td', {}, s.losses), el('td', {}, s.draws));
+    })));
+  openModal(card(T.stats.title, ...MODES.flatMap((mode) => [el('h3', { class: 'ck-section' }, T.modes[mode]), table(mode)])));
 }
 
 function showSettings() {
@@ -595,7 +619,7 @@ export default {
       api.storage.get('current'), api.storage.get('stats'), api.storage.get('settings'), api.storage.get('setup'),
     ]);
     if (!api) return;
-    stats = isValidStats(savedStats) ? savedStats : emptyStats();
+    stats = migrateStats(savedStats);
     settings = {
       skin: SKINS.includes(savedSettings?.skin) ? savedSettings.skin : 'telegram',
       coords: typeof savedSettings?.coords === 'boolean' ? savedSettings.coords : true,
@@ -603,6 +627,7 @@ export default {
     setup = {
       level: LEVEL_IDS.includes(savedSetup?.level) ? savedSetup.level : 'medium',
       color: ['white', 'black', 'random'].includes(savedSetup?.color) ? savedSetup.color : 'white',
+      mode: MODES.includes(savedSetup?.mode) ? savedSetup.mode : 'classic',
     };
     host.dataset.skin = settings.skin;
 

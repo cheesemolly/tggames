@@ -7,7 +7,7 @@ self.onmessage = (e) => {
     self.postMessage({ pong: true });
     return;
   }
-  const { id, board, side, level } = e.data;
-  const move = bestMove(board, side, { level });
+  const { id, board, side, level, mode } = e.data;
+  const move = bestMove(board, side, { level, mode });
   self.postMessage({ id, move });
 };

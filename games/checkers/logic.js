@@ -11,11 +11,15 @@
 // полей бой продолжается, встать нужно на такое; турецкий удар: шашку можно побить только раз, побитые снимаются
 // в конце хода и до того мешают. Ничья: троекратное повторение позиции; 15 ходов (30 полуходов) подряд без
 // взятий и ходов простыми.
+//
+// Поддавки (mode 'giveaway'): те же ходы и правила взятия, но цель обратная — выигрывает тот, кто отдал все шашки
+// или остался без ходов.
 
 export const WHITE = 1;
 export const BLACK = -1;
 export const DRAW_PLIES = 30;
 export const STATE_VERSION = 1;
+export const MODES = ['classic', 'giveaway'];
 const DIRS = [[-1, -1], [-1, 1], [1, -1], [1, 1]];
 
 export const rowOf = (i) => i >> 3;
@@ -179,10 +183,10 @@ export const sameMove = (a, b) => a.from === b.from && a.path.length === b.path.
 
 export const positionKey = (board, turn) => `${turn}:${board.join(',')}`;
 
-export function newGame(player = WHITE, level = 'medium') {
+export function newGame(player = WHITE, level = 'medium', mode = 'classic') {
   const board = initialBoard();
   return {
-    v: STATE_VERSION, board, turn: WHITE, player, level, quiet: 0,
+    v: STATE_VERSION, board, turn: WHITE, player, level, mode, quiet: 0,
     history: [],                                   // { move, board (до хода), quiet }
     seen: { [positionKey(board, WHITE)]: 1 },
     lastMove: null,
@@ -217,7 +221,8 @@ export function undoMove(s) {
 
 /** Итог: null — игра идёт; { winner } — победа; { draw: 'repeat' | 'kings' }. */
 export function result(s) {
-  if (!generateMoves(s.board, s.turn).length) return { winner: -s.turn };   // нет ходов (или фигур) — проигрыш
+  // нет ходов (или фигур): в классике — проигрыш, в поддавках — победа
+  if (!generateMoves(s.board, s.turn).length) return { winner: s.mode === 'giveaway' ? s.turn : -s.turn };
   if (s.seen[positionKey(s.board, s.turn)] >= 3) return { draw: 'repeat' };
   if (s.quiet >= DRAW_PLIES) return { draw: 'kings' };
   return null;
@@ -238,7 +243,7 @@ export function isValidState(s) {
   return s?.v === STATE_VERSION && Array.isArray(s.board) && s.board.length === 64
     && s.board.every((v, i) => [0, 1, 2, -1, -2].includes(v) && (v === 0 || isDark(i)))
     && (s.turn === WHITE || s.turn === BLACK) && (s.player === WHITE || s.player === BLACK)
-    && typeof s.level === 'string' && Number.isInteger(s.quiet) && Array.isArray(s.history) && s.seen && typeof s.seen === 'object';
+    && typeof s.level === 'string' && (s.mode === undefined || MODES.includes(s.mode)) && Number.isInteger(s.quiet) && Array.isArray(s.history) && s.seen && typeof s.seen === 'object';
 }
 
 // ---------- движок ----------
@@ -261,8 +266,26 @@ const WIN = 100000;
 const CENTER = new Set([27, 29, 34, 36, 18, 20, 43, 45].filter(isDark));
 const MAIN_DIAG = new Set([56, 49, 42, 35, 28, 21, 14, 7]);
 
+/**
+ * Оценка для поддавок с точки зрения side: чем меньше своих шашек и больше чужих — тем лучше; дамка «тяжелее»
+ * отдаётся (ходит далеко и реже попадает под бой) — считается дороже; простым лучше стоять вперёд, где их бьют.
+ */
+function evaluateGiveaway(board, side) {
+  let score = 0;
+  for (let i = 0; i < 64; i++) {
+    const v = board[i];
+    if (!v) continue;
+    const s = sideOf(v);
+    const adv = s === WHITE ? 7 - rowOf(i) : rowOf(i);
+    const val = Math.abs(v) === 2 ? 250 : 100 - adv * 3;
+    score -= s * val;
+  }
+  return score * side;
+}
+
 /** Оценка позиции с точки зрения side. */
-export function evaluate(board, side) {
+export function evaluate(board, side, mode = 'classic') {
+  if (mode === 'giveaway') return evaluateGiveaway(board, side);
   let score = 0;
   let whitePieces = 0;
   let blackPieces = 0;
@@ -327,6 +350,7 @@ function orderMoves(moves, best) {
  */
 export function bestMove(board, side, opts = {}) {
   const cfg = { ...(LEVELS[opts.level] ?? LEVELS.medium), ...opts };
+  const giveaway = cfg.mode === 'giveaway';
   const rng = cfg.rng ?? Math.random;
   const rootMoves = generateMoves(board, side);
   if (!rootMoves.length) return null;
@@ -343,10 +367,10 @@ export function bestMove(board, side, opts = {}) {
     if ((++nodes & 1023) === 0 && Date.now() > deadline) aborted = true;
     if (aborted) return 0;
     const moves = generateMoves(b, s);
-    if (!moves.length) return -WIN + ply;
+    if (!moves.length) return giveaway ? WIN - ply : -WIN + ply;     // поддавки: без ходов — выигрыш
     const capture = moves[0].captures.length > 0;
-    if (depth <= 0 && !capture) return evaluate(b, s);
-    if (depth <= -10) return evaluate(b, s);                  // предохранитель длинных разменов
+    if (depth <= 0 && !capture) return evaluate(b, s, cfg.mode);
+    if (depth <= -10) return evaluate(b, s, cfg.mode);        // предохранитель длинных разменов
     const key = hashOf(b, s);
     const entry = tt.get(key);
     if (entry && entry.depth >= depth) {
@@ -407,10 +431,23 @@ export function bestMove(board, side, opts = {}) {
 
 // ---------- статистика ----------
 
+const emptyLevels = () => Object.fromEntries(LEVEL_IDS.map((l) => [l, { played: 0, wins: 0, losses: 0, draws: 0 }]));
+
+/** Статистика: режим → уровень → { played, wins, losses, draws }. */
 export function emptyStats() {
-  return Object.fromEntries(LEVEL_IDS.map((l) => [l, { played: 0, wins: 0, losses: 0, draws: 0 }]));
+  return Object.fromEntries(MODES.map((m) => [m, emptyLevels()]));
 }
 
+const validLevels = (x) => Boolean(x) && LEVEL_IDS.every((l) => x[l]
+  && ['played', 'wins', 'losses', 'draws'].every((k) => Number.isInteger(x[l][k]) && x[l][k] >= 0));
+
 export function isValidStats(s) {
-  return Boolean(s) && LEVEL_IDS.every((l) => s[l] && ['played', 'wins', 'losses', 'draws'].every((k) => Number.isInteger(s[l][k]) && s[l][k] >= 0));
+  return Boolean(s) && MODES.every((m) => validLevels(s[m]));
+}
+
+/** Статистика первой версии (только уровни, без режимов) — это классика. */
+export function migrateStats(s) {
+  if (isValidStats(s)) return s;
+  if (validLevels(s)) return { classic: s, giveaway: emptyLevels() };
+  return emptyStats();
 }
