@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   WHITE, BLACK, DRAW_PLIES, initialBoard, generateMoves, applyMove, squareName, newGame, playMove, undoMove, result,
-  bestMove, evaluate, count, isValidState, emptyStats, isValidStats, LEVEL_IDS,
+  bestMove, evaluate, count, isValidState, emptyStats, isValidStats, migrateStats, LEVEL_IDS, MODES,
 } from '../logic.js';
 
 function seeded(seed) {
@@ -166,10 +166,39 @@ test('движок: берёт бесплатную шашку, не подст�
   assert.ok(evaluate(initialBoard(), WHITE) === 0, 'начальная позиция равна');
 });
 
-test('уровни и статистика', () => {
+test('уровни и статистика по режимам (старая статистика — это классика)', () => {
   assert.deepEqual(LEVEL_IDS, ['novice', 'easy', 'medium', 'hard', 'master']);
+  assert.deepEqual(MODES, ['classic', 'giveaway']);
   const st = emptyStats();
   assert.ok(isValidStats(st));
-  st.medium.wins = 1;
+  st.giveaway.medium.wins = 1;
   assert.ok(isValidStats(st));
+  const old = Object.fromEntries(LEVEL_IDS.map((l) => [l, { played: 2, wins: 1, losses: 1, draws: 0 }]));
+  const migrated = migrateStats(old);
+  assert.ok(isValidStats(migrated));
+  assert.equal(migrated.classic.easy.played, 2);
+  assert.equal(migrated.giveaway.easy.played, 0);
+  assert.ok(isValidStats(migrateStats(null)));
+});
+
+test('поддавки: без ходов и шашек — победа; бот отдаёт шашки, а не бьёт лишнее', () => {
+  // у белых нет шашек — в поддавках это победа белых
+  const empty = { ...newGame(WHITE, 'medium', 'giveaway'), board: board({ h8: -1 }), turn: WHITE, seen: {} };
+  assert.deepEqual(result(empty), { winner: WHITE });
+  const classic = { ...empty, mode: 'classic' };
+  assert.deepEqual(result(classic), { winner: BLACK }, 'в классике — проигрыш');
+  // старое сохранение без режима — классика
+  const s = newGame();
+  delete s.mode;
+  assert.ok(isValidState(JSON.parse(JSON.stringify(s))));
+  // белые c3 и g3, чёрная d6: ход c3-d4 подставляет шашку под бой (чёрные обязаны бить) — в поддавках это хорошо
+  const give = board({ c3: 1, g3: 1, e5: -1, h8: -1 });
+  const m = bestMove(give, WHITE, { level: 'medium', mode: 'giveaway', noise: 0 });
+  const after = applyMove(give, m);
+  const replies = generateMoves(after, BLACK);
+  assert.ok(replies.length && replies[0].captures.length > 0, `ход ${names(m)} должен подставить шашку`);
+  // та же позиция в классике — не подставляет
+  const cm = bestMove(give, WHITE, { level: 'medium', mode: 'classic', noise: 0 });
+  assert.ok(!generateMoves(applyMove(give, cm), BLACK)[0]?.captures.length, `классика: ${names(cm)} не подставляет`);
+  assert.ok(evaluate(board({ c3: 1, h8: -1, g7: -1 }), WHITE, 'giveaway') > 0, 'меньше шашек — лучше');
 });
