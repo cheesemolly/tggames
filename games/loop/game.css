@@ -102,6 +102,10 @@
 [data-game="loop"] [data-shape="square"] .lp-core { stroke-linejoin: miter; }
 /* после победы — двойной контур */
 [data-game="loop"].lp-won .lp-line { stroke-width: 0.17; }
+/* концы чуть заходят на соседнюю клетку: без щелей на стыках при масштабе (в решённом поле все концы
+   соединены). Круглые, а не квадратные: у дуги квадратный конец торчит за изгиб */
+[data-game="loop"].lp-won .lp-line,
+[data-game="loop"].lp-won .lp-core { stroke-linecap: round; }
 [data-game="loop"].lp-won .lp-core { opacity: 1; }
 
 /* «#N» перед уровнем */
