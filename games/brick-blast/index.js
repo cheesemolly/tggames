@@ -74,6 +74,10 @@ let intro = null;                  // появление уровня: { t0 }
 let modalActive = false;
 let modalToken = 0;
 let lastHaptic = 0;
+let dprNow = 1;
+const sprites = new Map();         // цвет → готовая картинка шарика
+let fieldCache = null;             // фон поля, нарисованный заранее
+let holding = null;                // палец зажат во время полёта — ускорение ×2 (id касания)
 const timers = new Set();
 
 function later(fn, ms) {
@@ -121,6 +125,9 @@ function resize() {
   const w = cell * COLS;
   const h = cell * FIELD_H;
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  dprNow = dpr;
+  sprites.clear();
+  fieldCache = null;
   ui.canvas.style.width = `${w}px`;
   ui.canvas.style.height = `${h}px`;
   ui.canvas.width = Math.round(w * dpr);
@@ -147,61 +154,96 @@ function insetPoly(shape, r, c, pad) {
   return pts.map(([x, y]) => [x + Math.sign(cx - x) * pad * (Math.abs(cx - x) > 1e-6), y + Math.sign(cy - y) * pad * (Math.abs(cy - y) > 1e-6)]);
 }
 
+/** rgb(…) → светлее (k > 0) или темнее (k < 0). */
+function shade(rgb, k) {
+  const m = rgb.match(/\d+(\.\d+)?/g);
+  if (!m) return rgb;
+  const [r, g, b] = m.slice(0, 3).map(Number).map((v) => Math.round(k > 0 ? v + (255 - v) * k : v * (1 + k)));
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
+/** rgb(…) с прозрачностью. */
+function alpha(rgb, a) {
+  const m = rgb.match(/\d+(\.\d+)?/g);
+  return m ? `rgba(${m[0]}, ${m[1]}, ${m[2]}, ${a})` : rgb;
+}
+
+/**
+ * Текст — в пикселях, а не в клетках: Safari не рисует шрифт меньше ~1px, даже если холст увеличен масштабом
+ * (из-за этого на айфоне пропадали числа на блоках).
+ */
+function text(c, str, x, y, size, color, { align = 'center', shadow = true, weight = 800 } = {}) {
+  c.save();
+  c.setTransform(dprNow, 0, 0, dprNow, 0, 0);
+  c.font = `${weight} ${Math.max(9, Math.round(size * cell))}px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`;
+  c.textAlign = align;
+  c.textBaseline = 'middle';
+  if (shadow) {
+    c.shadowColor = 'rgba(0, 0, 0, 0.45)';
+    c.shadowBlur = 2 * dprNow;
+    c.shadowOffsetY = 1 * dprNow;
+  }
+  c.fillStyle = color;
+  c.fillText(str, x * cell, y * cell);
+  c.restore();
+}
+
+function shapePath(c, b, r, pad) {
+  if (b.shape === 'sq') {
+    roundRect(c, b.c + pad, r + pad, 1 - pad * 2, 1 - pad * 2, 0.17);
+    return;
+  }
+  const pts = insetPoly(b.shape, r, b.c, pad);
+  c.beginPath();
+  pts.forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y)));
+  c.closePath();
+}
+
+/** Блок: градиент сверху вниз, блик, светлая кромка; удар — вспышка, свечение и лёгкое «вжатие». */
 function drawBlock(c, b, dy, now) {
   const r = b.r + dy;
   if (r < -1) return;
   const color = tierColor(b.hp);
   const flash = flashes.get(b.id);
-  const k = flash ? Math.max(0, 1 - (now - flash) / 160) : 0;
+  const k = flash ? Math.max(0, 1 - (now - flash) / 180) : 0;
   c.save();
   if (k > 0) {
+    const s2 = 1 - 0.07 * k;
+    c.translate(b.c + 0.5, r + 0.5);
+    c.scale(s2, s2);
+    c.translate(-(b.c + 0.5), -(r + 0.5));
     c.shadowColor = color;
-    c.shadowBlur = 14 * k;
+    c.shadowBlur = 0.6 * cell * dprNow * k;
   }
-  if (b.shape === 'sq') {
-    roundRect(c, b.c + 0.04, r + 0.04, 0.92, 0.92, 0.1);
-    c.fillStyle = color;
-    c.fill();
-    c.shadowBlur = 0;
-    // фаска: светлый верх, тёмный низ
-    c.save();
-    c.clip();
-    c.fillStyle = 'rgba(255,255,255,0.28)';
-    c.fillRect(b.c, r, 1, 0.1);
-    c.fillStyle = 'rgba(0,0,0,0.22)';
-    c.fillRect(b.c, r + 0.86, 1, 0.14);
-    if (k > 0) {
-      c.fillStyle = `rgba(255,255,255,${0.55 * k})`;
-      c.fillRect(b.c, r, 1, 1);
-    }
-    c.restore();
-  } else {
-    const pts = insetPoly(b.shape, r, b.c, 0.045);
-    c.beginPath();
-    pts.forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y)));
-    c.closePath();
-    c.fillStyle = color;
-    c.fill();
-    c.shadowBlur = 0;
-    c.lineJoin = 'round';
-    c.strokeStyle = 'rgba(0,0,0,0.18)';
-    c.lineWidth = 0.05;
-    c.stroke();
-    if (k > 0) {
-      c.fillStyle = `rgba(255,255,255,${0.55 * k})`;
-      c.fill();
-    }
+  shapePath(c, b, r, 0.05);
+  const g = c.createLinearGradient(0, r, 0, r + 1);
+  g.addColorStop(0, shade(color, 0.28));
+  g.addColorStop(0.55, color);
+  g.addColorStop(1, shade(color, -0.22));
+  c.fillStyle = g;
+  c.fill();
+  c.shadowBlur = 0;
+  c.save();
+  c.clip();
+  const gl = c.createLinearGradient(0, r, 0, r + 0.5);
+  gl.addColorStop(0, 'rgba(255, 255, 255, 0.35)');
+  gl.addColorStop(1, 'rgba(255, 255, 255, 0)');
+  c.fillStyle = gl;
+  c.fillRect(b.c, r, 1, 0.5);
+  if (k > 0) {
+    c.fillStyle = `rgba(255, 255, 255, ${0.6 * k})`;
+    c.fillRect(b.c, r, 1, 1);
   }
   c.restore();
-  // число: у квадрата — в центре, у треугольника — ближе к прямому углу
-  const pos = {
-    sq: [0.5, 0.52], tl: [0.33, 0.35], tr: [0.67, 0.35], bl: [0.33, 0.7], br: [0.67, 0.7],
-  }[b.shape];
-  c.fillStyle = palette.number;
-  c.font = `700 ${b.shape === 'sq' ? 0.34 : 0.27}px system-ui, -apple-system, "Segoe UI", sans-serif`;
-  c.textAlign = 'center';
-  c.textBaseline = 'middle';
-  c.fillText(String(b.hp), b.c + pos[0], r + pos[1]);
+  c.lineJoin = 'round';
+  c.strokeStyle = 'rgba(255, 255, 255, 0.32)';
+  c.lineWidth = 0.03;
+  shapePath(c, b, r, 0.065);
+  c.stroke();
+  c.restore();
+  // прочность: у квадрата — по центру, у треугольника — ближе к прямому углу
+  const pos = { sq: [0.5, 0.52], tl: [0.34, 0.36], tr: [0.66, 0.36], bl: [0.34, 0.68], br: [0.66, 0.68] }[b.shape];
+  text(c, String(b.hp), b.c + pos[0], r + pos[1], b.shape === 'sq' ? (b.hp >= 100 ? 0.3 : 0.36) : 0.25, palette.number);
 }
 
 function drawPower(c, p, dy, now) {
@@ -260,14 +302,82 @@ function drawPower(c, p, dy, now) {
   c.restore();
 }
 
-function drawBalls(c, balls, color) {
-  c.fillStyle = color;
+/** Картинка шарика: стеклянный блик, объём и мягкое свечение (рисуется один раз на цвет и размер). */
+function ballSprite(color) {
+  let img = sprites.get(color);
+  if (img) return img;
+  const px = Math.max(8, Math.ceil(BALL_R * 2 * 2.2 * cell * dprNow));
+  img = document.createElement('canvas');
+  img.width = px;
+  img.height = px;
+  const c = img.getContext('2d');
+  const R = px / 2;
+  const rb = R / 2.2;
+  const glow = c.createRadialGradient(R, R, rb * 0.8, R, R, R);
+  glow.addColorStop(0, alpha(color, 0.45));
+  glow.addColorStop(1, alpha(color, 0));
+  c.fillStyle = glow;
+  c.fillRect(0, 0, px, px);
+  const body = c.createRadialGradient(R - rb * 0.35, R - rb * 0.4, rb * 0.05, R, R, rb);
+  body.addColorStop(0, '#ffffff');
+  body.addColorStop(0.25, shade(color, 0.45));
+  body.addColorStop(0.7, color);
+  body.addColorStop(1, shade(color, -0.35));
+  c.fillStyle = body;
   c.beginPath();
-  for (const b of balls) {
-    c.moveTo(b.x + BALL_R, b.y);
-    c.arc(b.x, b.y, BALL_R, 0, Math.PI * 2);
-  }
+  c.arc(R, R, rb, 0, Math.PI * 2);
   c.fill();
+  sprites.set(color, img);
+  return img;
+}
+
+/** Шарики: короткий след по ходу полёта + картинка шарика. */
+function drawBalls(c, balls, color, trails = false) {
+  if (trails && balls.length) {
+    c.save();
+    c.strokeStyle = color;
+    c.globalAlpha = 0.28;
+    c.lineWidth = BALL_R * 1.3;
+    c.lineCap = 'round';
+    c.beginPath();
+    for (const b of balls) {
+      c.moveTo(b.x - b.vx * 0.022, b.y - b.vy * 0.022);
+      c.lineTo(b.x, b.y);
+    }
+    c.stroke();
+    c.restore();
+  }
+  const img = ballSprite(color);
+  const size = BALL_R * 2 * 2.2;
+  for (const b of balls) c.drawImage(img, b.x - size / 2, b.y - size / 2, size, size);
+}
+
+/** Фон поля: вертикальный градиент, виньетка и точки на пересечениях сетки (рисуется при изменении размера). */
+function fieldBackground() {
+  if (fieldCache) return fieldCache;
+  const img = document.createElement('canvas');
+  img.width = Math.max(1, Math.round(COLS * cell * dprNow));
+  img.height = Math.max(1, Math.round(ROWS * cell * dprNow));
+  const c = img.getContext('2d');
+  c.setTransform(cell * dprNow, 0, 0, cell * dprNow, 0, 0);
+  const g = c.createLinearGradient(0, 0, 0, ROWS);
+  g.addColorStop(0, shade(palette.field, 0.06));
+  g.addColorStop(1, shade(palette.field, -0.12));
+  c.fillStyle = g;
+  c.fillRect(0, 0, COLS, ROWS);
+  const v = c.createRadialGradient(COLS / 2, ROWS * 0.45, 1, COLS / 2, ROWS * 0.45, ROWS * 0.75);
+  v.addColorStop(0, 'rgba(255, 255, 255, 0.05)');
+  v.addColorStop(1, 'rgba(0, 0, 0, 0.18)');
+  c.fillStyle = v;
+  c.fillRect(0, 0, COLS, ROWS);
+  c.fillStyle = palette.grid;
+  for (let x = 1; x < COLS; x++) for (let y = 1; y < ROWS; y++) {
+    c.beginPath();
+    c.arc(x, y, 0.035, 0, Math.PI * 2);
+    c.fill();
+  }
+  fieldCache = img;
+  return img;
 }
 
 function draw() {
@@ -276,16 +386,7 @@ function draw() {
   const now = performance.now();
   c.clearRect(0, 0, COLS, FIELD_H);
   // поле и полосы столбцов
-  c.fillStyle = palette.field;
-  c.fillRect(0, 0, COLS, ROWS);
-  c.strokeStyle = palette.grid;
-  c.lineWidth = 0.02;
-  for (let k = 1; k < COLS; k++) {
-    c.beginPath();
-    c.moveTo(k, 0);
-    c.lineTo(k, ROWS);
-    c.stroke();
-  }
+  c.drawImage(fieldBackground(), 0, 0, COLS, ROWS);
   // сдвиг уровня / появление: блоки подъезжают сверху
   let dy = 0;
   if (shiftAnim) {
@@ -355,7 +456,9 @@ function draw() {
     }
   }
   const ballColor = sim?.tripled || (phase === 'aim' && game.triple) ? palette.ball3 : palette.ball;
-  if (sim) drawBalls(c, sim.balls.filter((b) => b.active), ballColor);
+  if (sim) drawBalls(c, sim.balls.filter((b) => b.active), ballColor, true);
+  // ускорение ×2, пока палец зажат
+  if (holding !== null && phase === 'fly') text(c, '⏩ ×2', COLS - 0.2, 0.45, 0.32, '#ffffff', { align: 'right' });
   c.restore();
   // линия запуска, шарик и счётчик
   c.fillStyle = palette.grid;
@@ -365,11 +468,8 @@ function draw() {
     const x = sim && phase === 'fly' ? sim.x0 : game.x;
     drawBalls(c, [{ x, y: ROWS - BALL_R }], ballColor);
     const left = phase === 'fly' && sim ? sim.count - sim.launched : (game.triple ? game.balls * 3 : game.balls);
-    c.fillStyle = ballColor;
-    c.font = '600 0.3px system-ui, -apple-system, "Segoe UI", sans-serif';
-    c.textBaseline = 'middle';
-    c.textAlign = x > COLS - 1.2 ? 'right' : 'left';
-    c.fillText(`×${left}`, x + (x > COLS - 1.2 ? -0.22 : 0.22), ROWS + 0.26);
+    const right = x > COLS - 1.2;
+    text(c, `×${left}`, x + (right ? -0.24 : 0.24), ROWS + 0.27, 0.3, ballColor, { align: right ? 'right' : 'left', shadow: false, weight: 700 });
   }
   // шарики, вернувшиеся на дно, собираются у новой точки запуска
   if (phase === 'fly' && sim?.firstX !== null) drawBalls(c, [{ x: sim.firstX, y: ROWS - BALL_R }], ballColor);
@@ -384,7 +484,7 @@ function loop(now) {
   lastFrame = now;
   if (phase === 'fly' && sim) {
     // затянувшийся ход ускоряется
-    const speed = sim.t > 10 ? 2.4 : sim.t > 5 ? 1.6 : 1;
+    const speed = (sim.t > 10 ? 2.4 : sim.t > 5 ? 1.6 : 1) * (holding !== null ? 2 : 1);
     step(game, sim, dt * speed);
     handleEvents();
     if (sim.done) finishTurn();
@@ -461,6 +561,7 @@ function shoot() {
 }
 
 function finishTurn() {
+  holding = null;
   const s = sim;
   const before = game.blocks.length ? game.blocks[0].r : 0;
   const firstId = game.blocks[0]?.id;
@@ -720,6 +821,8 @@ function showSettings() {
       api.storage.set('settings', settings);
       buttons.forEach((b, k) => b.setAttribute('aria-checked', String(SKINS[k] === id)));
       readPalette();
+      sprites.clear();
+      fieldCache = null;
       draw();
     },
   }, el('span', { class: 'bk-swatch', 'data-skin': id }), T.skins[id]));
@@ -820,6 +923,17 @@ export default {
       toast.el,
     );
     container.append(root);
+    // зажал экран во время полёта (не на кнопке) — шарики летят вдвое быстрее, отпустил — как было
+    root.addEventListener('pointerdown', (e) => {
+      if (phase !== 'fly' || modalActive || e.target.closest('button')) return;
+      holding = e.pointerId;
+      api.platform.haptic.selection();
+    });
+    const release = (e) => {
+      if (e.pointerId === holding) holding = null;
+    };
+    root.addEventListener('pointerup', release);
+    root.addEventListener('pointercancel', release);
     fx = createFx(root, 'bk-fx');
     root.append(fx.canvas);
     document.addEventListener('keydown', onKeydown);
@@ -852,7 +966,8 @@ export default {
     fx?.dispose();
     toast?.dispose();
     root?.remove();
-    api = host = root = ui = toast = fx = game = pending = sim = aim = shiftAnim = intro = palette = null;
+    api = host = root = ui = toast = fx = game = pending = sim = aim = shiftAnim = intro = palette = holding = fieldCache = null;
+  sprites.clear();
     phase = 'aim';
     flashes.clear();
     lasers = [];

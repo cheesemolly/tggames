@@ -16,8 +16,8 @@
   --bk-grid: color-mix(in srgb, var(--tg-theme-bg-color) 12%, transparent);
   --bk-ball: #ffc21a;
   --bk-ball3: #ff6fb5;
-  --bk-number: #16203a;
-  --bk-t1: #35b6e8; --bk-t2: #3dbb4a; --bk-t3: #f2b632; --bk-t4: #e5484d; --bk-t5: #9b5fd6;
+  --bk-number: #ffffff;
+  --bk-t1: #2fa8f0; --bk-t2: #2fc26b; --bk-t3: #f5a524; --bk-t4: #f0445a; --bk-t5: #9a5cf5;
   --bk-laser: #fff6a8;
   --bk-danger: #ff3b3b;
   --bk-p-laser: #ff5fb0; --bk-p-triple: #ff9a2e; --bk-p-scatter: #4d8dff;
@@ -29,14 +29,14 @@
   --bk-page: #3a55a0; --bk-surface: #4a66b3; --bk-text: #ffffff; --bk-hint: #c4d0f2;
   --bk-accent: #ff9f1c; --bk-accent-text: #1b2440;
   --bk-field: #1d2346; --bk-grid: rgb(255 255 255 / 0.05);
-  --bk-ball: #ffc21a; --bk-ball3: #ff6fb5; --bk-number: #16203a;
-  --bk-t1: #35b6e8; --bk-t2: #3dbb4a; --bk-t3: #f2b632; --bk-t4: #e5484d; --bk-t5: #9b5fd6;
+  --bk-ball: #ffc21a; --bk-ball3: #ff6fb5; --bk-number: #ffffff;
+  --bk-t1: #2fa8f0; --bk-t2: #2fc26b; --bk-t3: #f5a524; --bk-t4: #f0445a; --bk-t5: #9a5cf5;
 }
 [data-game="brick-blast"][data-skin="neon"], [data-game="brick-blast"] [data-skin="neon"] {
   --bk-page: #120a2e; --bk-surface: #22164a; --bk-text: #f3eaff; --bk-hint: #9c8cc7;
   --bk-accent: #ff2bd6; --bk-accent-text: #ffffff;
   --bk-field: #07031a; --bk-grid: rgb(160 120 255 / 0.1);
-  --bk-ball: #3dfff0; --bk-ball3: #ff3df2; --bk-number: #0b0620;
+  --bk-ball: #3dfff0; --bk-ball3: #ff3df2; --bk-number: #ffffff;
   --bk-t1: #3dc8ff; --bk-t2: #3dff8b; --bk-t3: #fff23d; --bk-t4: #ff3d7f; --bk-t5: #c23dff;
   --bk-laser: #ffffff; --bk-p-laser: #ff3df2; --bk-p-triple: #fff23d; --bk-p-scatter: #3dc8ff;
 }
@@ -44,23 +44,23 @@
   --bk-page: #ffe8f3; --bk-surface: #ffd3e8; --bk-text: #5c2143; --bk-hint: #b0718e;
   --bk-accent: #ff5fa2; --bk-accent-text: #ffffff;
   --bk-field: #fff7fb; --bk-grid: rgb(255 95 162 / 0.12);
-  --bk-ball: #ff8f4d; --bk-ball3: #a66bff; --bk-number: #4a1a36;
-  --bk-t1: #8fd3ff; --bk-t2: #8fe3b5; --bk-t3: #ffd97a; --bk-t4: #ff8fa3; --bk-t5: #c9a3ff;
+  --bk-ball: #ff8f4d; --bk-ball3: #a66bff; --bk-number: #ffffff;
+  --bk-t1: #5ab8f5; --bk-t2: #4fcf8c; --bk-t3: #ffb938; --bk-t4: #ff6384; --bk-t5: #a878f0;
   --bk-laser: #ff5fa2; --bk-danger: #ff3b6b;
 }
 [data-game="brick-blast"][data-skin="forest"], [data-game="brick-blast"] [data-skin="forest"] {
   --bk-page: #1f3a2a; --bk-surface: #2a4d38; --bk-text: #eaf5ec; --bk-hint: #9dbfa6;
   --bk-accent: #f2c14e; --bk-accent-text: #1f2a1f;
   --bk-field: #102018; --bk-grid: rgb(255 255 255 / 0.05);
-  --bk-ball: #f2e58a; --bk-ball3: #ff9fd0; --bk-number: #13241a;
-  --bk-t1: #7fc8a9; --bk-t2: #a4d65e; --bk-t3: #f2c14e; --bk-t4: #e07a5f; --bk-t5: #b392ac;
+  --bk-ball: #f2e58a; --bk-ball3: #ff9fd0; --bk-number: #ffffff;
+  --bk-t1: #3f9f86; --bk-t2: #6fae34; --bk-t3: #d19a22; --bk-t4: #c9583f; --bk-t5: #8f6aa0;
 }
 [data-game="brick-blast"][data-skin="graphite"], [data-game="brick-blast"] [data-skin="graphite"] {
   --bk-page: #22262b; --bk-surface: #2f343b; --bk-text: #eef1f4; --bk-hint: #8e98a3;
   --bk-accent: #9fb0c0; --bk-accent-text: #16191d;
   --bk-field: #14171a; --bk-grid: rgb(255 255 255 / 0.04);
-  --bk-ball: #ffffff; --bk-ball3: #ffb86b; --bk-number: #14171a;
-  --bk-t1: #9fb7c9; --bk-t2: #b9c9a0; --bk-t3: #e6cf8b; --bk-t4: #d99a8f; --bk-t5: #b8a2d1;
+  --bk-ball: #ffffff; --bk-ball3: #ffb86b; --bk-number: #ffffff;
+  --bk-t1: #6f8fa8; --bk-t2: #7f9a68; --bk-t3: #b89a4e; --bk-t4: #b0645a; --bk-t5: #8a72a8;
 }
 
 /* ---------- раскладка ---------- */
