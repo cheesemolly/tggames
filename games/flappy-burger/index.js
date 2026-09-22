@@ -357,7 +357,7 @@ function drawPart(ox, ob, r, t) {
       if (h > 3) {
         px(x, y + 3, w, h - 3, '#9aa3ab');
         px(x + 1, y + 3, w - 2, h - 4, '#e3e6e9');
-        for (let k = 0; k < 4; k++) px(x + 4 + k * 6, y + 5, 3, 2, '#3a3f45');
+        for (let k = 0; 4 + k * 6 + 3 <= w - 2; k++) px(x + 4 + k * 6, y + 5, 3, 2, '#3a3f45');
         if (h > 22) {
           px(x + 4, y + 10, w - 8, 1, '#9aa3ab');
           px(x + 4, y + 13, w - 8, Math.min(12, h - 16), '#2b2f36');
@@ -371,15 +371,17 @@ function drawPart(ox, ob, r, t) {
       px(x, y, w, h, '#6c6c6c');
       px(x, y, 1, h, '#8f969c');
       break;
-    case 'cabinet':
+    case 'cabinet': {
+      const half = Math.floor((w - 3) / 2);
       px(x, y, w, h, '#7b4a24');
-      px(x + 1, y + 1, 12, h - 2, '#9c6234');
-      px(x + 15, y + 1, 12, h - 2, '#9c6234');
-      px(x + 3, y + 3, 8, h - 6, '#b0733f');
-      px(x + 17, y + 3, 8, h - 6, '#b0733f');
-      px(x + 12, y + h - 7, 1, 3, '#ffd98a');
-      px(x + 15, y + h - 7, 1, 3, '#ffd98a');
+      px(x + 1, y + 1, half, h - 2, '#9c6234');
+      px(x + 2 + half, y + 1, w - 3 - half, h - 2, '#9c6234');
+      px(x + 3, y + 3, half - 4, h - 6, '#b0733f');
+      px(x + 4 + half, y + 3, w - 7 - half, h - 6, '#b0733f');
+      px(x + half, y + h - 7, 1, 3, '#ffd98a');
+      px(x + half + 3, y + h - 7, 1, 3, '#ffd98a');
       break;
+    }
     case 'fridge':
       px(x, y, w, h, '#aab4bd');
       px(x + 1, y + 1, w - 2, h - 2, '#e8eef2');
@@ -394,12 +396,12 @@ function drawPart(ox, ob, r, t) {
       break;
     // --- кухня: лампа и стойка с булками
     case 'lamp':
-      px(x + 7, y, 8, 2, '#a83228');
-      px(x + 4, y + 2, 14, 3, '#c0392b');
+      px(x + w / 2 - 4, y, 8, 2, '#a83228');
+      px(x + w / 2 - 7, y + 2, 14, 3, '#c0392b');
       px(x, y + 5, w, 4, '#c0392b');
       px(x, y + 5, w, 1, '#e0584a');
       px(x, y + 9, w, 1, '#7d231b');
-      px(x + 9, y + 9, 4, 1, '#fff2a0');
+      px(x + w / 2 - 2, y + 9, 4, 1, '#fff2a0');
       lc.fillStyle = 'rgba(255, 220, 140, 0.14)';
       lc.beginPath();
       lc.moveTo(x + 4, y + 10);
@@ -413,9 +415,7 @@ function drawPart(ox, ob, r, t) {
       px(x + w - 2, y, 2, h, '#8e979f');
       for (let yy = y; yy < y + h - 4; yy += 14) {
         px(x, yy + 5, w, 2, '#b8c2cc');
-        bun(x + 3, yy + 1);
-        bun(x + 11, yy + 1);
-        bun(x + 19, yy + 1);
+        for (let k = 0; 3 + k * 8 + 6 <= w - 2; k++) bun(x + 3 + k * 8, yy + 1);
       }
       break;
     // --- улица: мусорные баки
@@ -455,7 +455,7 @@ function drawPart(ox, ob, r, t) {
       px(x, y, w, 2, '#3a4680');                                // карниз крыши
       px(x + 2, y + 2, 2, h - 2, '#36417a');
       for (let yy = y + 5; yy < y + h - 2; yy += 6) {
-        for (let k = 0; k < 4; k++) {
+        for (let k = 0; 4 + k * 6 + 3 <= w - 2; k++) {
           const lit = hash(Math.floor(ob.x) * 31 + yy * 7 + k) < 0.45;
           px(x + 4 + k * 6, yy, 3, 3, lit ? '#ffd86b' : '#3a4680');
         }
@@ -484,6 +484,32 @@ function drawPart(ox, ob, r, t) {
       px(x + 8, y + h - 1, 8, 1, '#ffe8a0');
       lc.fillStyle = 'rgba(255, 232, 160, 0.16)';
       lc.fillRect(x + 4, y - 8, w - 8, 8);                       // свет вверх — картинка
+      break;
+    // --- диагональ: ступеньки по SLICE px (кухня — наклонный короб и столешница, улица — пожарная лестница)
+    case 'diag-top':
+      if (ob.scene === 'kitchen') {
+        px(x, y, w, h, '#aeb7bf');
+        if (r.i % 3 === 0) px(x, y, 1, h, '#8e979f');
+        px(x, y + h - 3, w, 1, '#d8dee3');
+        px(x, y + h - 2, w, 2, '#6f7880');
+      } else {
+        px(x, y, w, h, '#2e2f3a');
+        if (r.i % 2 === 0) px(x + 1, y + h - 6, 2, 2, '#4a4c5c');
+        px(x, y + h - 2, w, 2, '#5b5e70');
+      }
+      break;
+    case 'diag-bottom':
+      if (ob.scene === 'kitchen') {
+        px(x, y, w, h, '#8d6a4a');
+        px(x, y, w, 2, '#b8c2cc');
+        px(x, y, w, 1, '#e3e8ec');
+        if (r.i % 3 === 0) px(x, y + 2, 1, h - 2, '#6e5037');
+      } else {
+        px(x, y, w, h, '#5a5e6d');
+        px(x, y, w, 2, '#9da1b0');
+        px(x, y + 2, w, 1, '#3f4250');
+        if (r.i % 2 === 1) px(x + w - 1, y + 3, 1, h - 3, '#4a4d5b');
+      }
       break;
     default:
       break;
@@ -528,11 +554,29 @@ function drawDoorWall(ox, ob, t) {
   px(x, PLAY_H - 2, OB_W, 2, toStreet ? '#5a5f66' : '#6b4a2a');
 }
 
-/** Открытая створка — прижата к стене с внешней стороны, в плоскости фона (за бургером, не препятствие). */
+/** Кирпичная кладка прямоугольником (фон). */
+function bricks(x, y, w, h, base, mortar) {
+  px(x, y, w, h, base);
+  for (let yy = y + 3; yy < y + h; yy += 5) {
+    px(x, yy, w, 1, mortar);
+    for (let k = (Math.floor(yy / 5) % 2) * 3; k < w; k += 7) px(x + k, yy - 4, 1, 4, mortar);
+  }
+}
+
+/**
+ * Фасад здания за дверью и открытая створка — в плоскости фона (за бургером, не препятствие). Раньше за рамой
+ * был виден фон города — теперь кирпичная стена здания; сам проём — тот же кирпич в тени (проход сквозь стену).
+ */
 function drawDoorLeaf(ox, ob) {
   const top = ob.gapY - ob.gap / 2 + 2;
   const x = ox + OB_W;
   const h = PLAY_H - top - 2;
+  const toStreet = ob.to === 'street';
+  bricks(ox, 0, OB_W + 34, PLAY_H, toStreet ? '#8a4b3a' : '#5a2e2e', toStreet ? '#6d3a2d' : '#442222');
+  lc.fillStyle = 'rgba(0, 0, 0, 0.45)';
+  lc.fillRect(ox, top - 2, OB_W, PLAY_H - top + 2);
+  lc.fillStyle = 'rgba(0, 0, 0, 0.25)';
+  lc.fillRect(ox + OB_W + 30, 0, 4, PLAY_H);                   // угол здания
   if (ob.to === 'street') {
     // металлическая дверь запасного выхода с «антипаникой» и окошком
     px(x, top, 22, h, '#3f5a66');
@@ -607,11 +651,11 @@ function render() {
   // открытые створки дверей — в плоскости фона
   for (const o of s.obstacles) {
     const ox = Math.round(o.x) - d;
-    if (o.type === 'door' && ox < W && ox + OB_W + 24 > 0) drawDoorLeaf(ox, o);
+    if (o.type === 'door' && ox < W && ox + OB_W + 34 > 0) drawDoorLeaf(ox, o);
   }
   for (const o of s.obstacles) {
     const ox = Math.round(o.x) - d;
-    if (ox > W || ox + OB_W < 0) continue;
+    if (ox > W || ox + o.w < 0) continue;
     drawObstacle(ox, o, s.t);
   }
   for (const [x0, x1, scene] of segs) {
