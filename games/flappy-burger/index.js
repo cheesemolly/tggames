@@ -578,7 +578,7 @@ function drawGround(scene, scroll) {
 
 /** Отрезки экрана по сценам: дверь делит экран на «до» и «после». */
 function segments(s, scroll) {
-  const cuts = s.gates.map((g) => g.x - scroll).filter((x) => x > 0 && x < W).sort((a, b) => a - b);
+  const cuts = s.gates.map((g) => Math.round(g.x) - scroll).filter((x) => x > 0 && x < W).sort((a, b) => a - b);
   const out = [];
   let x0 = 0;
   for (const x of [...cuts, W]) {
@@ -591,8 +591,11 @@ function segments(s, scroll) {
 function render() {
   const s = game;
   if (!s || !ui) return;
-  const scroll = s.dist + s.idle;
-  const segs = segments(s, s.dist);
+  // всё на экране — от одной ЦЕЛОЙ прокрутки: стены дверей и граница фона сцен совпадают до пикселя
+  // (раньше граница шла по дробной координате, а стена — по округлённой: на стыке мерцала полоска)
+  const d = Math.round(s.dist);
+  const scroll = d + Math.round(s.idle);
+  const segs = segments(s, d);
   for (const [x0, x1, scene] of segs) {
     lc.save();
     lc.beginPath();
@@ -603,11 +606,11 @@ function render() {
   }
   // открытые створки дверей — в плоскости фона
   for (const o of s.obstacles) {
-    const ox = Math.round(o.x - s.dist);
+    const ox = Math.round(o.x) - d;
     if (o.type === 'door' && ox < W && ox + OB_W + 24 > 0) drawDoorLeaf(ox, o);
   }
   for (const o of s.obstacles) {
-    const ox = Math.round(o.x - s.dist);
+    const ox = Math.round(o.x) - d;
     if (ox > W || ox + OB_W < 0) continue;
     drawObstacle(ox, o, s.t);
   }
@@ -641,18 +644,22 @@ function render() {
     dx = Math.round((Math.random() - 0.5) * 4) * ui.scale;
     dy = Math.round((Math.random() - 0.5) * 4) * ui.scale;
   }
-  c.drawImage(ui.low, dx, dy, W * ui.scale, H * ui.scale);
+  c.drawImage(ui.low, dx, dy, ui.canvas.width, ui.canvas.height);
 }
 
 function resize() {
   const box = ui.stage.getBoundingClientRect();
   const dpr = window.devicePixelRatio || 1;
   // экранных пикселей на игровой: целое, чтобы все «пиксели» были одного размера
-  ui.scale = Math.max(1, Math.floor(Math.min(box.width / W, box.height / H) * dpr));
-  ui.canvas.width = W * ui.scale;
-  ui.canvas.height = H * ui.scale;
-  ui.canvas.style.width = `${(W * ui.scale) / dpr}px`;
-  ui.canvas.style.height = `${(H * ui.scale) / dpr}px`;
+  // во всю доступную площадь: экранных пикселей на игровой — сколько влезает. Если целое число почти не
+  // теряет места (≥ 95%) — берём целое (все пиксели одинаковые), иначе дробное: на экранах с плотностью ×2–×3
+  // разница в пиксель незаметна (раньше всегда брали целое — на айфоне игра была маленьким окошком)
+  const fit = Math.min(box.width / W, box.height / H) * dpr;
+  ui.scale = Math.floor(fit) >= fit * 0.95 ? Math.floor(fit) : fit;
+  ui.canvas.width = Math.max(1, Math.round(W * ui.scale));
+  ui.canvas.height = Math.max(1, Math.round(H * ui.scale));
+  ui.canvas.style.width = `${ui.canvas.width / dpr}px`;
+  ui.canvas.style.height = `${ui.canvas.height / dpr}px`;
   render();
 }
 
