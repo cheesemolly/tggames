@@ -12,8 +12,10 @@
   --bk-hint: var(--tg-theme-hint-color);
   --bk-accent: var(--tg-theme-button-color);
   --bk-accent-text: var(--tg-theme-button-text-color);
-  --bk-field: color-mix(in srgb, var(--tg-theme-text-color) 82%, var(--tg-theme-bg-color));
-  --bk-grid: color-mix(in srgb, var(--tg-theme-bg-color) 12%, transparent);
+  /* поле всегда тёмное (блоки и шарики яркие), с оттенком кнопки темы; раньше выводилось из цвета текста —
+     в тёмной теме оно становилось светлым */
+  --bk-field: color-mix(in srgb, var(--tg-theme-button-color) 18%, #0e1124);
+  --bk-grid: rgb(255 255 255 / 0.07);
   --bk-ball: #ffc21a;
   --bk-ball3: #ff6fb5;
   --bk-number: #ffffff;
@@ -181,7 +183,7 @@
 [data-game="brick-blast"] .bk-bottom:not([data-mode="fly"]) .bk-recall,
 [data-game="brick-blast"] .bk-bottom:not([data-mode="cancel"]) .bk-cancel { opacity: 0; pointer-events: none; }
 
-[data-game="brick-blast"] .bk-fx { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 5; pointer-events: none; }
+[data-game="brick-blast"] .bk-fx { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 9; pointer-events: none; }  /* выше окон: конфетти победы поверх затемнения */
 
 /* ---------- окна ---------- */
 
@@ -216,25 +218,72 @@
 [data-game="brick-blast"] .bk-stat-value { font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; }
 [data-game="brick-blast"] .bk-stat-label { font-size: 12px; color: var(--bk-hint); }
 
-/* победа: как «Well Done!» в видео — миниатюра пройденного уровня */
-[data-game="brick-blast"] .bk-won { display: grid; justify-items: center; gap: 12px; text-align: center; }
-[data-game="brick-blast"] .bk-won-title { margin: 0; font-size: 28px; font-weight: 800; }
+/* победа: как «Well Done!» в видео — лучи, звёзды, миниатюра пройденного уровня */
+[data-game="brick-blast"] .bk-won {
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 20px 16px 16px;
+  text-align: center;
+  background: radial-gradient(circle at 50% 28%, color-mix(in srgb, var(--bk-accent) 45%, var(--bk-surface)), var(--bk-surface) 72%);
+  box-shadow: 0 12px 40px rgb(0 0 0 / 0.35);
+}
+[data-game="brick-blast"] .bk-won > * { position: relative; }
+[data-game="brick-blast"] .bk-won-rays {
+  position: absolute !important;
+  left: 50%;
+  top: 28%;
+  width: 180%;
+  aspect-ratio: 1;
+  translate: -50% -50%;
+  background: repeating-conic-gradient(from 0deg, rgb(255 255 255 / 0.09) 0deg 10deg, transparent 10deg 20deg);
+  mask-image: radial-gradient(circle, #000 20%, transparent 65%);
+  -webkit-mask-image: radial-gradient(circle, #000 20%, transparent 65%);
+  animation: bk-rays 24s linear infinite;
+  pointer-events: none;
+}
+@keyframes bk-rays { to { rotate: 360deg; } }
+[data-game="brick-blast"] .bk-won-stars { display: flex; gap: 6px; align-items: flex-end; height: 44px; }
+[data-game="brick-blast"] .bk-won-star {
+  font-size: 34px;
+  line-height: 1;
+  color: #ffc21a;
+  text-shadow: 0 0 12px rgb(255 194 26 / 0.8), 0 2px 0 #c7880c;
+}
+[data-game="brick-blast"] .bk-won-star:nth-child(2) { font-size: 44px; }
+[data-game="brick-blast"] .bk-won-title {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  text-shadow: 0 2px 0 rgb(0 0 0 / 0.25), 0 0 18px color-mix(in srgb, var(--bk-accent) 60%, transparent);
+}
+[data-game="brick-blast"] .bk-won-frame { margin: 4px 0 18px; }
 [data-game="brick-blast"] .bk-mini {
-  max-width: 100%;
-  max-height: 42vh;
-  object-fit: contain;
-  border-radius: 10px;
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--bk-text) 20%, transparent), 0 8px 24px rgb(0 0 0 / 0.3);
-}
-[data-game="brick-blast"] .bk-won-badge {
-  margin-top: -26px;
-  padding: 4px 14px;
+  display: block;
   border-radius: 12px;
-  background: var(--bk-page);
-  font-size: 14px;
-  font-weight: 600;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--bk-text) 25%, transparent), 0 10px 28px rgb(0 0 0 / 0.4);
 }
-[data-game="brick-blast"] .bk-won .btn { width: 100%; }
+/* плашка — поверх нижнего края миниатюры (раньше миниатюра её закрывала) */
+[data-game="brick-blast"] .bk-won-badge {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  z-index: 1;
+  translate: -50% 50%;
+  padding: 5px 14px;
+  border-radius: 14px;
+  background: var(--bk-accent);
+  color: var(--bk-accent-text);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.3);
+}
+[data-game="brick-blast"] .bk-won-info { font-size: 13px; color: var(--bk-hint); }
+[data-game="brick-blast"] .bk-won .btn { width: 100%; margin-top: 4px; }
 
 [data-game="brick-blast"] .bk-skins { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 8px; }
 [data-game="brick-blast"] .bk-skin {

@@ -4,7 +4,7 @@
 // Поле рисуется на Canvas (шариков бывает несколько сотен). Партия, статистика, скин — в api.storage игры.
 
 import { el } from '../../shared/dom.js';
-import { showLayer, hideLayer, shake, pop, reducedMotion } from '../../shared/motion.js';
+import { animate, showLayer, hideLayer, shake, pop, reducedMotion, EASE_OUT } from '../../shared/motion.js';
 import { createToast } from '../../shared/toast.js';
 import { createFx } from '../../shared/fx.js';
 import {
@@ -23,7 +23,8 @@ const T = {
   triple: '×3 шарика на следующий бросок!',
   danger: 'Разбей блоки, пока они не дошли до низа',
   wonTitle: 'Отлично!',
-  completed: 'Пройден',
+  completed: (n) => `Уровень ${n} пройден`,
+  wonInfo: (turns, bricks) => `Ходов: ${turns} · Блоков разбито: ${bricks}`,
   next: (n) => `Уровень ${n}`,
   loseTitle: 'Блоки дошли до низа',
   loseMessage: (n) => `Уровень ${n} — попробуй ещё раз`,
@@ -665,10 +666,17 @@ function won() {
   later(() => {
     if (!ui) return;
     fx?.confetti([...palette.tiers, palette.ball], 140);
-    openModal(el('div', { class: 'bk-card bk-won', role: 'dialog' },
-      el('h2', { class: 'bk-won-title' }, T.wonTitle),
+    const stars = [0, 1, 2].map(() => el('span', { class: 'bk-won-star' }, '★'));
+    const title = el('h2', { class: 'bk-won-title' }, T.wonTitle);
+    const frame = el('div', { class: 'bk-won-frame' },
       miniature(done.pattern),
-      el('div', { class: 'bk-won-badge' }, `${T.level(done.level)} — ${T.completed}`),
+      el('div', { class: 'bk-won-badge' }, T.completed(done.level)));
+    const cardEl = el('div', { class: 'bk-card bk-won', role: 'dialog', 'aria-label': T.wonTitle },
+      el('div', { class: 'bk-won-rays', 'aria-hidden': 'true' }),
+      el('div', { class: 'bk-won-stars' }, stars),
+      title,
+      frame,
+      el('div', { class: 'bk-won-info' }, T.wonInfo(done.turn, done.pattern.cells.length)),
       el('button', {
         class: 'btn',
         onclick: () => {
@@ -678,7 +686,17 @@ function won() {
           startLevel(true);
         },
       }, T.next(done.level + 1)),
-    ));
+    );
+    openModal(cardEl);
+    // звёзды — по очереди, заголовок «впрыгивает», миниатюра выезжает снизу
+    stars.forEach((star, k) => animate(star, [
+      { transform: 'scale(0) rotate(-40deg)', opacity: 0 },
+      { transform: 'scale(1.35) rotate(8deg)', opacity: 1, offset: 0.6 },
+      { transform: 'none', opacity: 1 },
+    ], { duration: 420, delay: 250 + k * 160, easing: 'ease-out', fill: 'backwards' }));
+    pop(title, { from: 0.5, duration: 420 });
+    animate(frame, [{ transform: 'translateY(24px)', opacity: 0 }, { transform: 'none', opacity: 1 }],
+      { duration: 450, delay: 120, easing: EASE_OUT, fill: 'backwards' });
   }, reducedMotion() ? 0 : 500);
 }
 
@@ -701,31 +719,30 @@ function lost() {
   }, reducedMotion() ? 0 : 900);
 }
 
-/** Миниатюра уровня для окна победы (как в видео). */
+/**
+ * Миниатюра уровня для окна победы (как в видео): те же объёмные блоки, что в игре, в размере экрана —
+ * рисуется сразу в нужном разрешении (раньше рисовалась крошечной и растягивалась — была размытой).
+ */
 function miniature(pattern) {
   const canvas = el('canvas', { class: 'bk-mini' });
-  const size = 7;
-  const w = COLS * size;
-  const h = pattern.rows * size;
+  const px = Math.min(150 / COLS, 230 / pattern.rows);           // CSS-пикселей на клетку
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  canvas.width = w * dpr;
-  canvas.height = h * dpr;
-  canvas.style.width = '176px';
-  canvas.style.height = `${(176 * pattern.rows) / COLS}px`;
+  const w = COLS * px;
+  const h = pattern.rows * px;
+  canvas.width = Math.round(w * dpr);
+  canvas.height = Math.round(h * dpr);
+  canvas.style.width = `${w}px`;
+  canvas.style.height = `${h}px`;
   const c = canvas.getContext('2d');
-  c.setTransform(dpr * size, 0, 0, dpr * size, 0, 0);
-  c.fillStyle = palette.field;
+  c.setTransform(dpr * px, 0, 0, dpr * px, 0, 0);
+  const g = c.createLinearGradient(0, 0, 0, pattern.rows);
+  g.addColorStop(0, shade(palette.field, 0.06));
+  g.addColorStop(1, shade(palette.field, -0.12));
+  c.fillStyle = g;
   c.fillRect(0, 0, COLS, pattern.rows);
+  const size = 1 + PAD * 2;
   for (const x of pattern.cells) {
-    const pts = polygon(x.shape, pattern.rows - 1 - x.k, x.c);
-    c.beginPath();
-    pts.forEach(([px, py], i) => (i ? c.lineTo(px, py) : c.moveTo(px, py)));
-    c.closePath();
-    c.fillStyle = tierColor(x.hp);
-    c.fill();
-    c.strokeStyle = palette.field;
-    c.lineWidth = 0.12;
-    c.stroke();
+    c.drawImage(blockSprite(x.shape, tierColor(x.hp)), x.c - PAD, pattern.rows - 1 - x.k - PAD, size, size);
   }
   return canvas;
 }
