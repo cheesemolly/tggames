@@ -4,7 +4,7 @@
 // уровням и настройки — в api.storage игры.
 
 import { el } from '../../shared/dom.js';
-import { animate, showLayer, hideLayer, shake, pop, reducedMotion } from '../../shared/motion.js';
+import { animate, showLayer, hideLayer, pop, reducedMotion } from '../../shared/motion.js';
 import { createToast } from '../../shared/toast.js';
 import {
   WHITE, BLACK, LEVEL_IDS, generateMoves, newGame, playMove, undoMove, result, bestMove, sameMove, moveTo, count,
@@ -102,6 +102,16 @@ const modeOf = (g) => (g?.mode === 'giveaway' ? 'giveaway' : 'classic');
  */
 function popPiece(node, from = 0.6, duration = 360) {
   return animate(node, [{ scale: from }, { scale: 1.12, offset: 0.6 }, { scale: 1 }], { duration, easing: 'ease-out' });
+}
+
+/** Тряска шашки — свойством translate (не transform — по той же причине, иначе шашка прыгала на a8). */
+function shakePiece(node, distance = 3, duration = 300) {
+  if (!node) return Promise.resolve();
+  const d = `${distance}px`;
+  const k = `${distance * 0.6}px`;
+  return animate(node, [
+    { translate: '0 0' }, { translate: `-${d} 0` }, { translate: `${d} 0` }, { translate: `-${k} 0` }, { translate: `${k} 0` }, { translate: '0 0' },
+  ], { duration, easing: 'ease-in-out' });
 }
 
 // ---------- доска ----------
@@ -213,10 +223,10 @@ function onBoardTap(e) {
       renderMarks();
     } else if (legal.length && legal[0].captures.length) {
       toast.show(T.mustCapture);
-      for (const p of ui.pieces.querySelectorAll('.ck-must')) shake(p, { distance: 3, duration: 300 });
+      for (const p of ui.pieces.querySelectorAll('.ck-must')) shakePiece(p);
       api.platform.haptic.notification('warning');
     } else {
-      shake(pieceAt(i), { distance: 3, duration: 250 });
+      shakePiece(pieceAt(i), 3, 250);
     }
     return;
   }
