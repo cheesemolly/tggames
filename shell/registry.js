@@ -4,6 +4,12 @@
 
 export const games = [
   {
+    id: 'connect-dots',
+    title: 'Соедини точки',
+    load: () => import('../games/connect-dots/index.js'),
+    css: new URL('../games/connect-dots/game.css', import.meta.url),
+  },
+  {
     id: 'mahjong',
     title: 'Маджонг',
     load: () => import('../games/mahjong/index.js'),
