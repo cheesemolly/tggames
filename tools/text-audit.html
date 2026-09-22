@@ -1,11 +1,11 @@
 <!doctype html><meta charset="utf-8"><body style="margin:0">
 <!-- Проверка надписей: http://localhost:8000/tools/text-audit.html?w=360 — каждая игра, всплывашка и окна
      статистики/настроек в iframe нужной ширины; в <pre> — надписи за экраном или обрезанные (иначе OK).
-     Из Claude: msedge --headless --force-prefers-reduced-motion --virtual-time-budget=60000 --dump-dom <url> -->
+     Из Claude: msedge --headless --force-prefers-reduced-motion --virtual-time-budget=150000 --dump-dom <url> -->
 <pre id="out"></pre>
 <script type="module">
 const W = +(new URLSearchParams(location.search).get('w') || 360);
-const ids = ['checkers', 'flappy-burger', 'brick-blast', 'loop', 'connect-dots', 'mahjong', '2048', 'boggle', 'block-blast', 'sudoku', 'wordle', 'guess-number'];
+const ids = ['flags', 'checkers', 'flappy-burger', 'brick-blast', 'loop', 'connect-dots', 'mahjong', '2048', 'boggle', 'block-blast', 'sudoku', 'wordle', 'guess-number'];
 const out = document.getElementById('out');
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const log = [];

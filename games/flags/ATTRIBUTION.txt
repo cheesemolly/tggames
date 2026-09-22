@@ -1,0 +1,4 @@
+Флаги (flags/*.svg): lipis/flag-icons — https://github.com/lipis/flag-icons — лицензия MIT (flags/LICENSE).
+Страны (countries.json): русские названия, регионы и признак независимости — из mledoze/countries
+(пакет world-countries) — https://github.com/mledoze/countries — Open Database License (ODbL) 1.0;
+отображаемые названия и варианты ответа (США, ЮАР, ОАЭ, Беларусь/Белоруссия…) дополнены вручную.

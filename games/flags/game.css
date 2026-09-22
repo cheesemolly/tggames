@@ -1,0 +1,212 @@
+/*
+ * «Флаги». Цвета — из темы Telegram; игровые — зелёный/красный для верного и неверного ответа (--fl-ok/--fl-bad,
+ * заданы для обеих тем). Флаг — карточка 4:3 во всё свободное место (container query).
+ */
+
+[data-game="flags"] {
+  --fl-ok: #2fa84f;
+  --fl-bad: #e0473c;
+  --toast-top: 110px;
+}
+:root[data-theme="dark"] [data-game="flags"] {
+  --fl-ok: #3ccf66;
+  --fl-bad: #ff6155;
+}
+
+.game-root[data-game="flags"] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+  user-select: none;
+  -webkit-user-select: none;
+}
+[data-game="flags"] .fl { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+[data-game="flags"] .fl-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 4px; }
+[data-game="flags"] .fl-title { font-size: 20px; font-weight: 700; line-height: 1.2; }
+[data-game="flags"] .fl-sub { font-size: 13px; color: var(--tg-theme-hint-color); }
+[data-game="flags"] .fl-actions { display: flex; gap: 6px; }
+[data-game="flags"] .fl-icon-btn {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: var(--tg-theme-secondary-bg-color);
+  color: var(--tg-theme-text-color);
+  font: inherit;
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+[data-game="flags"] .fl-icon-btn:active { transform: scale(0.92); }
+[data-game="flags"] .fl-icon-btn svg { width: 20px; height: 20px; }
+
+[data-game="flags"] .fl-info { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 6px; font-size: 14px; color: var(--tg-theme-hint-color); }
+[data-game="flags"] .fl-info b { color: var(--tg-theme-text-color); font-variant-numeric: tabular-nums; }
+[data-game="flags"] .fl-lives { color: var(--fl-bad); letter-spacing: 2px; }
+[data-game="flags"] .fl-lives[hidden] { display: none; }
+[data-game="flags"] .fl-bar { height: 4px; margin: 0 6px; border-radius: 2px; overflow: hidden; background: var(--tg-theme-secondary-bg-color); }
+[data-game="flags"] .fl-bar-fill { height: 100%; background: var(--tg-theme-button-color); transform: scaleX(0); transform-origin: left center; transition: transform 0.35s ease; }
+
+/* флаг — во всё свободное место, пропорции 4:3 */
+[data-game="flags"] .fl-stage { flex: 1; min-height: 110px; display: grid; grid-template-rows: 1fr auto; justify-items: center; align-items: center; gap: 6px; container-type: size; }
+[data-game="flags"] .fl-card {
+  width: min(100cqw - 8px, (100cqh - 34px) * 4 / 3, 420px);
+  aspect-ratio: 4 / 3;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--tg-theme-secondary-bg-color);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.22), 0 0 0 1px color-mix(in srgb, var(--tg-theme-hint-color) 25%, transparent);
+}
+[data-game="flags"] .fl-flag { display: block; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+[data-game="flags"] .fl-verdict { min-height: 24px; font-size: 16px; font-weight: 700; text-align: center; }
+[data-game="flags"] .fl-ok { color: var(--fl-ok); }
+[data-game="flags"] .fl-bad { color: var(--fl-bad); }
+[data-game="flags"] .fl-next { flex: none; width: 100%; }
+[data-game="flags"] .fl-next[hidden] { display: none; }
+
+/* тест: 2×2 варианта */
+[data-game="flags"] .fl-answer { flex: none; }
+[data-game="flags"] .fl-answer[data-mode="test"] .fl-type,
+[data-game="flags"] .fl-answer[data-mode="type"] .fl-choices { display: none; }
+[data-game="flags"] .fl-choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+[data-game="flags"] .fl-choice {
+  min-height: 52px;
+  padding: 8px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--tg-theme-secondary-bg-color);
+  color: var(--tg-theme-text-color);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+  transition: transform 0.1s ease, background-color 0.25s ease, color 0.25s ease;
+}
+[data-game="flags"] .fl-choice:active { transform: scale(0.97); }
+[data-game="flags"] .fl-choice:disabled { cursor: default; }
+[data-game="flags"] .fl-choice.fl-right { background: var(--fl-ok); color: #fff; }
+[data-game="flags"] .fl-choice.fl-wrong { background: var(--fl-bad); color: #fff; }
+
+/* ввод: поле, автодополнение, клавиатура */
+[data-game="flags"] .fl-type { display: flex; flex-direction: column; gap: 6px; }
+[data-game="flags"] .fl-field-wrap {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 12px;
+  background: var(--tg-theme-secondary-bg-color);
+  box-shadow: inset 0 0 0 2px var(--tg-theme-button-color);
+  transition: box-shadow 0.25s ease;
+}
+[data-game="flags"] .fl-field-wrap.fl-field-ok { box-shadow: inset 0 0 0 2px var(--fl-ok); }
+[data-game="flags"] .fl-field-wrap.fl-field-bad { box-shadow: inset 0 0 0 2px var(--fl-bad); }
+[data-game="flags"] .fl-field { font-size: 18px; font-weight: 600; overflow-wrap: anywhere; }
+[data-game="flags"] .fl-field::first-letter { text-transform: uppercase; }
+[data-game="flags"] .fl-field::after { content: ''; display: inline-block; width: 2px; height: 1.1em; margin-left: 1px; vertical-align: -0.15em; background: var(--tg-theme-button-color); animation: fl-caret 1s steps(1) infinite; }
+[data-game="flags"] .fl-field-empty::before { content: attr(data-placeholder); color: var(--tg-theme-hint-color); font-weight: 400; font-size: 15px; }
+[data-game="flags"] .fl-field-ok .fl-field::after,
+[data-game="flags"] .fl-field-bad .fl-field::after { display: none; }
+@keyframes fl-caret { 50% { opacity: 0; } }
+[data-game="flags"] .fl-suggest { display: flex; flex-wrap: wrap; gap: 6px; min-height: 30px; max-height: 70px; overflow: hidden; }
+[data-game="flags"] .fl-suggestion {
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 15px;
+  background: color-mix(in srgb, var(--tg-theme-button-color) 16%, var(--tg-theme-secondary-bg-color));
+  color: var(--tg-theme-text-color);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.2;
+  cursor: pointer;
+  animation: fl-chip 0.18s ease-out;
+  transition: transform 0.1s ease;
+}
+[data-game="flags"] .fl-suggestion:active { transform: scale(0.95); }
+@keyframes fl-chip { from { opacity: 0; transform: translateY(4px); } }
+[data-game="flags"] .fl-keyboard { display: flex; flex-direction: column; gap: 5px; }
+[data-game="flags"] .fl-krow { display: flex; justify-content: center; gap: 4px; }
+[data-game="flags"] .fl-key {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 42px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: var(--tg-theme-secondary-bg-color);
+  color: var(--tg-theme-text-color);
+  font: inherit;
+  font-size: 17px;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: transform 0.08s ease, background-color 0.15s ease;
+}
+[data-game="flags"] .fl-key:active { transform: scale(0.92); background: color-mix(in srgb, var(--tg-theme-button-color) 30%, var(--tg-theme-secondary-bg-color)); }
+[data-game="flags"] .fl-key-wide { flex: 1.6 1 0; font-size: 14px; }
+[data-game="flags"] .fl-key-space { flex: 3 1 0; font-size: 13px; color: var(--tg-theme-hint-color); }
+[data-game="flags"] .fl-key-soft { color: var(--tg-theme-hint-color); }
+[data-game="flags"] .fl-key-enter { background: var(--tg-theme-button-color); color: var(--tg-theme-button-text-color); font-size: 18px; }
+
+/* окна */
+[data-game="flags"] .fl-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--tg-theme-bg-color) 82%, transparent);
+}
+[data-game="flags"] .fl-card-modal {
+  width: 100%;
+  max-width: 380px;
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--tg-theme-secondary-bg-color);
+}
+[data-game="flags"] .fl-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+[data-game="flags"] .fl-card-head h2 { margin: 0; font-size: 18px; }
+[data-game="flags"] .fl-card-modal .fl-icon-btn { background: var(--tg-theme-bg-color); }
+[data-game="flags"] .fl-section { margin: 10px 0 6px; font-size: 14px; }
+[data-game="flags"] .fl-note { margin: 4px 0 0; font-size: 13px; color: var(--tg-theme-hint-color); }
+[data-game="flags"] .fl-options { display: grid; gap: 6px; }
+[data-game="flags"] .fl-option,
+[data-game="flags"] .fl-region {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--tg-theme-bg-color);
+  color: var(--tg-theme-text-color);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+  transition: box-shadow 0.2s ease, transform 0.1s ease;
+}
+[data-game="flags"] .fl-option span,
+[data-game="flags"] .fl-region span { font-size: 12px; color: var(--tg-theme-hint-color); }
+[data-game="flags"] .fl-option[aria-checked="true"],
+[data-game="flags"] .fl-region[aria-checked="true"] { box-shadow: inset 0 0 0 2px var(--tg-theme-button-color); }
+[data-game="flags"] .fl-option:active,
+[data-game="flags"] .fl-region:active { transform: scale(0.98); }
+[data-game="flags"] .fl-regions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+[data-game="flags"] .fl-play { width: 100%; margin-top: 14px; }
+[data-game="flags"] .fl-stats-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+[data-game="flags"] .fl-stat { padding: 10px; border-radius: 12px; background: var(--tg-theme-bg-color); text-align: center; }
+[data-game="flags"] .fl-stat-value { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; }
+[data-game="flags"] .fl-stat-label { font-size: 12px; color: var(--tg-theme-hint-color); }
+[data-game="flags"] .fl-hard { display: grid; gap: 6px; }
+[data-game="flags"] .fl-hard-item { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+[data-game="flags"] .fl-hard-item img { width: 36px; height: 27px; border-radius: 3px; object-fit: cover; box-shadow: 0 0 0 1px color-mix(in srgb, var(--tg-theme-hint-color) 30%, transparent); }
+[data-game="flags"] .fl-hard-item span { flex: 1; }
