@@ -485,32 +485,6 @@ function drawPart(ox, ob, r, t) {
       lc.fillStyle = 'rgba(255, 232, 160, 0.16)';
       lc.fillRect(x + 4, y - 8, w - 8, 8);                       // свет вверх — картинка
       break;
-    // --- диагональ: ступеньки по SLICE px (кухня — наклонный короб и столешница, улица — пожарная лестница)
-    case 'diag-top':
-      if (ob.scene === 'kitchen') {
-        px(x, y, w, h, '#aeb7bf');
-        if (r.i % 3 === 0) px(x, y, 1, h, '#8e979f');
-        px(x, y + h - 3, w, 1, '#d8dee3');
-        px(x, y + h - 2, w, 2, '#6f7880');
-      } else {
-        px(x, y, w, h, '#2e2f3a');
-        if (r.i % 2 === 0) px(x + 1, y + h - 6, 2, 2, '#4a4c5c');
-        px(x, y + h - 2, w, 2, '#5b5e70');
-      }
-      break;
-    case 'diag-bottom':
-      if (ob.scene === 'kitchen') {
-        px(x, y, w, h, '#8d6a4a');
-        px(x, y, w, 2, '#b8c2cc');
-        px(x, y, w, 1, '#e3e8ec');
-        if (r.i % 3 === 0) px(x, y + 2, 1, h - 2, '#6e5037');
-      } else {
-        px(x, y, w, h, '#5a5e6d');
-        px(x, y, w, 2, '#9da1b0');
-        px(x, y + 2, w, 1, '#3f4250');
-        if (r.i % 2 === 1) px(x + w - 1, y + 3, 1, h - 3, '#4a4d5b');
-      }
-      break;
     default:
       break;
   }
@@ -600,12 +574,144 @@ function drawDoorLeaf(ox, ob) {
   }
 }
 
+// ---------- диагональные препятствия: ступенчатые «кучи» с наполнением ----------
+
+/** Узоры наполнения; координаты плиток привязаны к левому краю препятствия — при прокрутке узор не «плывёт». */
+function kitchenShelves(x0, y0, w, h, seed) {
+  // стеллаж: тёмная задняя стенка, полки каждые 12 px, на полках банки и бутылки
+  px(x0, y0, w, h, '#4e3420');
+  const jars = [['#e05555', '#8a2a2a'], ['#ffd23f', '#a88a10'], ['#f2f2f2', '#9aa3ab'], ['#4c9be0', '#2a5a8a'], ['#6fbf4a', '#3a7a2a']];
+  for (let y = y0 + h - 12; y > y0 - 12; y -= 12) {
+    px(x0, y + 10, w, 2, '#9c6234');
+    for (let x = x0 + 1, k = 0; x < x0 + w - 3; x += 5, k++) {
+      const [c, d] = jars[Math.floor(hash(seed + k * 13 + y * 7) * jars.length)];
+      const tall = hash(seed + k * 5 + y) < 0.5 ? 7 : 5;
+      px(x, y + 10 - tall, 4, tall, c);
+      px(x, y + 10 - tall, 4, 1, d);
+      px(x + 1, y + 11 - tall, 1, tall - 2, 'rgba(255,255,255,0.45)');
+    }
+  }
+}
+
+function kitchenCrates(x0, y0, w, h, seed) {
+  // деревянные ящики со снедью (кирпичной кладкой): булки, помидоры, салат
+  const fills = [['#e89a3c', '#f5c07a'], ['#d94040', '#ff7a7a'], ['#58c24a', '#8fe07a']];
+  for (let row = 0, y = y0 + h - 10; y > y0 - 10; row++, y -= 10) {
+    for (let x = x0 - (row % 2) * 7; x < x0 + w; x += 14) {
+      px(x, y, 14, 10, '#6b4a2a');
+      px(x + 1, y + 1, 12, 8, '#9c6234');
+      const [c, l] = fills[Math.floor(hash(seed + x * 3 + row * 17) * fills.length)];
+      for (let k = 0; k < 3; k++) {
+        px(x + 2 + k * 4, y + 2, 3, 3, c);
+        px(x + 2 + k * 4, y + 2, 1, 1, l);
+      }
+      px(x + 1, y + 6, 12, 1, '#7b4a24');                          // доска
+      px(x + 1, y + 8, 12, 1, '#7b4a24');
+    }
+  }
+}
+
+function streetWindows(x0, y0, w, h, seed) {
+  // угол дома: кирпич и окна (часть горит)
+  px(x0, y0, w, h, '#4a2f3f');
+  for (let y = y0 + 3; y < y0 + h; y += 5) px(x0, y, w, 1, '#3a2332');
+  for (let y = y0 + h - 14, row = 0; y > y0 - 10; y -= 12, row++) {
+    for (let x = x0 + 2, k = 0; x < x0 + w - 4; x += 8, k++) {
+      const lit = hash(seed + k * 29 + row * 11) < 0.45;
+      px(x - 1, y - 1, 6, 8, '#2a1a26');
+      px(x, y, 4, 6, lit ? '#ffd86b' : '#262b4f');
+      if (lit) px(x, y, 4, 1, '#fff1b0');
+    }
+  }
+}
+
+function streetJunk(x0, y0, w, h, seed) {
+  // куча коробок и мусорных мешков
+  for (let row = 0, y = y0 + h - 9; y > y0 - 9; row++, y -= 9) {
+    for (let x = x0 - (row % 2) * 6; x < x0 + w; x += 12) {
+      if (hash(seed + x * 7 + row * 3) < 0.3) {
+        px(x, y + 1, 12, 8, '#1f1f26');                             // мешок
+        px(x + 2, y, 8, 2, '#1f1f26');
+        px(x + 3, y + 2, 2, 3, '#3a3a46');
+        px(x + 5, y - 1, 2, 1, '#2a2a33');
+      } else {
+        px(x, y, 12, 9, '#8a5f33');                                  // коробка
+        px(x + 1, y + 1, 10, 7, '#b8844a');
+        px(x + 5, y + 1, 2, 7, '#d9c28a');                           // скотч
+        px(x + 1, y + 1, 10, 1, '#caa06a');
+      }
+    }
+  }
+}
+
+/** Ступенчатая часть (верх или низ): клип по ступенькам хитбокса, узор внутри, кромка вдоль ступенек. */
+function drawDiagonal(ox, ob, t) {
+  const rects = obstacleRects(ob);
+  const seed = Math.floor(ob.x);
+  for (const part of ['diag-top', 'diag-bottom']) {
+    const steps = rects.filter((r) => r.part === part);
+    if (!steps.length) continue;
+    lc.save();
+    lc.beginPath();
+    for (const r of steps) lc.rect(ox + r.x, r.y, r.w, r.h);
+    lc.clip();
+    const y0 = Math.min(...steps.map((r) => r.y));
+    const y1 = Math.max(...steps.map((r) => r.y + r.h));
+    const fill = ob.scene === 'kitchen'
+      ? (part === 'diag-top' ? kitchenShelves : kitchenCrates)
+      : (part === 'diag-top' ? streetWindows : streetJunk);
+    fill(ox, y0, ob.w, y1 - y0, seed + (part === 'diag-top' ? 0 : 999));
+    lc.restore();
+    // кромка вдоль ступенек
+    for (const r of steps) {
+      const x = ox + r.x;
+      if (part === 'diag-top') {
+        if (ob.scene === 'kitchen') {
+          px(x, r.y + r.h - 2, r.w, 2, '#b8c2cc');                   // стальной край полки
+          px(x, r.y + r.h - 1, r.w, 1, '#7f8891');
+        } else {
+          // неоновая трубка по краю дома
+          const on = Math.sin(t * 5 + r.i * 0.6) > -0.4;
+          px(x, r.y + r.h - 2, r.w, 2, on ? '#ff4fa3' : '#8a2a5a');
+          lc.fillStyle = on ? 'rgba(255, 79, 163, 0.18)' : 'rgba(255, 79, 163, 0.05)';
+          lc.fillRect(x, r.y + r.h, r.w, 4);
+        }
+      } else if (ob.scene === 'kitchen') {
+        px(x, r.y, r.w, 1, '#caa06a');
+      } else {
+        px(x, r.y, r.w, 1, '#d9c28a');
+      }
+    }
+  }
+}
+
 function drawObstacle(ox, ob, t) {
   if (ob.type === 'door') {
     drawDoorWall(ox, ob, t);
     return;
   }
+  if (ob.slope !== undefined && (ob.type === 'chute' || ob.type === 'stairs')) {
+    drawDiagonal(ox, ob, t);
+    return;
+  }
   for (const r of obstacleRects(ob)) drawPart(ox, ob, r, t);
+}
+
+/**
+ * Передний слой двери — наличники и нижняя кромка притолоки поверх бургера: он пролетает между задним слоем
+ * (фасад и тень проёма) и передним, как сквозь дверной проём.
+ */
+function drawDoorFront(ox, ob) {
+  const top = ob.gapY - ob.gap / 2;
+  const toStreet = ob.to === 'street';
+  const casing = toStreet ? '#5a5f66' : '#6b4a2a';
+  const light = toStreet ? '#8a9099' : '#9c6234';
+  px(ox - 2, top - 2, 5, PLAY_H - top + 2, casing);
+  px(ox - 2, top - 2, 1, PLAY_H - top + 2, light);
+  px(ox + OB_W - 3, top - 2, 5, PLAY_H - top + 2, casing);
+  px(ox + OB_W - 3, top - 2, 1, PLAY_H - top + 2, light);
+  px(ox - 2, top - 2, OB_W + 4, 3, casing);
+  px(ox - 2, top - 2, OB_W + 4, 1, light);
 }
 
 // ---------- кадр ----------
@@ -669,6 +775,11 @@ function render() {
   // крошки
   for (const p of particles) px(p.x, p.y, 1, 1, p.c);
   drawBurger(s);
+  // передний слой дверей — поверх бургера
+  for (const o of s.obstacles) {
+    const ox = Math.round(o.x) - d;
+    if (o.type === 'door' && ox < W + 4 && ox + OB_W + 4 > 0) drawDoorFront(ox, o);
+  }
   // счёт пиксельными цифрами
   if (s.phase !== 'ready') {
     const lift = s.t - scorePopT < 0.12 ? 2 : 0;
