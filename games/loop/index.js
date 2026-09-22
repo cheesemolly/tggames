@@ -96,14 +96,12 @@ const SHAPE_PARTS = {
   },
 };
 
-/** Фигура плитки: линия и «сердцевина» (видна после победы — двойной контур). */
-function tileShape(mask, shape) {
+/** Фигура плитки в одном слое: 'lp-line' — линия, 'lp-core' — «сердцевина» (после победы — двойной контур). */
+function tileShape(mask, shape, layer = 'lp-line') {
   const info = tileKind(mask);
   const g = svgEl('g', { transform: `rotate(${info.turns * 90})` });
-  for (const layer of ['lp-line', 'lp-core']) {
-    for (const [tag, attrs] of SHAPE_PARTS[shape][info.kind]) {
-      g.append(svgEl(tag, { ...attrs, class: `${layer} ${attrs.class ?? ''}`.trim() }));
-    }
+  for (const [tag, attrs] of SHAPE_PARTS[shape][info.kind]) {
+    g.append(svgEl(tag, { ...attrs, class: `${layer} ${attrs.class ?? ''}`.trim() }));
   }
   return g;
 }
@@ -118,21 +116,24 @@ function renderBoard() {
   ui.board.style.setProperty('--rows', rows);
   ui.board.dataset.shape = shape;
   spins = game.rot.slice();
-  const tiles = [];
-  base.forEach((mask, i) => {
-    if (!mask) return;
-    const r = Math.floor(i / cols);
-    const c = i % cols;
-    const cell = svgEl('g', { transform: `translate(${c + 0.5} ${r + 0.5})` });
-    const popper = svgEl('g', { class: 'lp-pop' });
-    const spin = svgEl('g', { class: 'lp-spin', 'data-i': i });
-    spin.style.transform = `rotate(${spins[i] * 90}deg)`;
-    spin.append(tileShape(mask, shape));
-    popper.append(spin);
-    cell.append(popper);
-    tiles.push(cell);
+  // два слоя: сначала линии всех плиток, поверх — сердцевины всех плиток. После победы концы линий заходят
+  // на соседнюю клетку (без щелей на стыках), и край соседа не перечёркивает сердцевину
+  const layers = ['lp-line', 'lp-core'].map((layer) => {
+    const group = svgEl('g');
+    base.forEach((mask, i) => {
+      if (!mask) return;
+      const cell = svgEl('g', { transform: `translate(${(i % cols) + 0.5} ${Math.floor(i / cols) + 0.5})` });
+      const popper = svgEl('g', { class: 'lp-pop', 'data-i': i });
+      const spin = svgEl('g', { class: 'lp-spin', 'data-i': i });
+      spin.style.transform = `rotate(${spins[i] * 90}deg)`;
+      spin.append(tileShape(mask, shape, layer));
+      popper.append(spin);
+      cell.append(popper);
+      group.append(cell);
+    });
+    return group;
   });
-  ui.svg.replaceChildren(...tiles);
+  ui.svg.replaceChildren(...layers);
   host.dataset.skin = game.palette;
   ui.sub.textContent = T.level(game.level);
 }
@@ -141,7 +142,7 @@ function renderBoard() {
 function introTiles() {
   const { rows, cols } = game;
   [...ui.svg.querySelectorAll('.lp-pop')].forEach((node) => {
-    const i = Number(node.firstChild.dataset.i);
+    const i = Number(node.dataset.i);
     const d = Math.hypot(Math.floor(i / cols) - (rows - 1) / 2, (i % cols) - (cols - 1) / 2);
     animate(node, [
       { transform: 'scale(0) rotate(-90deg)', opacity: 0 },
@@ -169,8 +170,7 @@ function onPointerDown(e) {
   e.preventDefault();
   const solved = rotateTile(game, i);
   spins[i] += 1;
-  const spin = ui.svg.querySelector(`.lp-spin[data-i="${i}"]`);
-  spin.style.transform = `rotate(${spins[i] * 90}deg)`;
+  for (const spin of ui.svg.querySelectorAll(`.lp-spin[data-i="${i}"]`)) spin.style.transform = `rotate(${spins[i] * 90}deg)`;
   api.platform.haptic.selection();
   if (solved) win();
   else save();
