@@ -367,6 +367,8 @@ export default {
     };
     ui.board = el('div', { class: 'lp-board' }, ui.svg);
     ui.svg.addEventListener('pointerdown', onPointerDown);
+    // iOS Safari приближает страницу по двойному тапу даже с touch-action: manipulation — гасим сам жест
+    ui.svg.addEventListener('touchend', (e) => e.preventDefault(), { passive: false });
 
     root = el('div', { class: 'lp' },
       el('div', { class: 'lp-header' },
