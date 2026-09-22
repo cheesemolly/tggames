@@ -314,3 +314,23 @@
 }
 [data-game="brick-blast"] .bk-skin:active .bk-swatch { transform: scale(0.92); }
 [data-game="brick-blast"] .bk-skin[aria-checked="true"] .bk-swatch { outline: 3px solid var(--bk-accent); outline-offset: 3px; }
+
+/* выбор уровня */
+[data-game="brick-blast"] .bk-levels { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin-top: 10px; }
+[data-game="brick-blast"] .bk-lvl {
+  position: relative;
+  padding: 10px 0;
+  border: 0;
+  border-radius: 10px;
+  background: var(--bk-page);
+  color: var(--bk-text);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+[data-game="brick-blast"] .bk-lvl:active { transform: scale(0.94); }
+[data-game="brick-blast"] .bk-lvl-current { box-shadow: inset 0 0 0 2px var(--bk-accent); }
+[data-game="brick-blast"] .bk-lvl-locked { opacity: 0.35; cursor: default; font-size: 12px; }
+[data-game="brick-blast"] .bk-lvl-done { position: absolute; top: 2px; right: 5px; font-size: 10px; color: #3dbb4a; }

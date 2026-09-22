@@ -32,6 +32,9 @@ const T = {
   restartQuestion: 'Начать этот уровень заново?',
   cancelBtn: 'Отмена',
   newLevel: 'Начать уровень заново',
+  levels: 'Уровни',
+  levelsTitle: 'Выбор уровня',
+  levelsNote: 'Открыты пройденные уровни и следующий. Текущая попытка сбросится.',
   stats: {
     open: 'Статистика', title: 'Статистика', level: 'Уровень', cleared: 'Пройдено', bestLevel: 'Лучший уровень',
     bricks: 'Разбито блоков', shots: 'Бросков', fails: 'Неудач', close: 'Закрыть',
@@ -47,6 +50,7 @@ const ICONS = {
   restart: svgIcon('<path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/>'),
   stats: svgIcon('<rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="7" width="4" height="14" rx="1"/><rect x="17" y="3" width="4" height="18" rx="1"/>', true),
   gear: svgIcon('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/>'),
+  levels: svgIcon('<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>'),
   recall: svgIcon('<circle cx="12" cy="6" r="2.5" fill="currentColor" stroke="none"/><path d="M12 11v9"/><path d="m8 16 4 4 4-4"/>'),
 };
 
@@ -920,6 +924,32 @@ function showSettings() {
   ));
 }
 
+/** Выбор уровня: открыты пройденные (stats.bestLevel) и следующий за ними. */
+function showLevels() {
+  if (phase !== 'aim') return;
+  const max = Math.max(stats.bestLevel + 1, game.level);
+  const cells = [];
+  for (let n = 1; n <= max + 3; n++) {
+    const open = n <= max;
+    cells.push(el('button', {
+      class: `bk-lvl${open ? '' : ' bk-lvl-locked'}${n === game.level ? ' bk-lvl-current' : ''}${n <= stats.bestLevel ? ' bk-lvl-passed' : ''}`,
+      disabled: !open,
+      onclick: () => {
+        closeModal();
+        if (n === game.level) return;
+        game = newLevel(n);
+        save();
+        startLevel(true);
+      },
+    }, open ? String(n) : '🔒', n <= stats.bestLevel ? el('span', { class: 'bk-lvl-done' }, '✓') : null));
+  }
+  openModal(card(T.levelsTitle,
+    el('p', { class: 'bk-note' }, T.levelsNote),
+    el('div', { class: 'bk-levels' }, cells),
+  ));
+  ui.modal.querySelector('.bk-lvl-current')?.scrollIntoView({ block: 'center' });
+}
+
 function askRestart() {
   if (phase !== 'aim') return;
   openModal(card(T.newLevel,
@@ -999,6 +1029,7 @@ export default {
       el('div', { class: 'bk-header' },
         el('div', {}, el('div', { class: 'bk-title' }, T.title), ui.sub),
         el('div', { class: 'bk-actions' },
+          iconButton(ICONS.levels, T.levels, showLevels),
           iconButton(ICONS.restart, T.newLevel, askRestart),
           iconButton(ICONS.stats, T.stats.open, showStats),
           iconButton(ICONS.gear, T.settings.open, showSettings),

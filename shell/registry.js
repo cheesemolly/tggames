@@ -4,6 +4,12 @@
 
 export const games = [
   {
+    id: 'words',
+    title: 'Слова из слова',
+    load: () => import('../games/words/index.js'),
+    css: new URL('../games/words/game.css', import.meta.url),
+  },
+  {
     id: 'flags',
     title: 'Флаги',
     load: () => import('../games/flags/index.js'),
