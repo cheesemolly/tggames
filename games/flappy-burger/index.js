@@ -312,87 +312,256 @@ function streetGround(scroll) {
 
 // ---------- препятствия ----------
 
-function drawKitchenObstacle(ox, ob, t) {
-  for (const r of obstacleRects(ob)) {
-    const x = ox + r.x;
-    if (r.part === 'duct') {
-      px(x, r.y, r.w, r.h, '#aeb7bf');
-      px(x, r.y, 2, r.h, '#d8dee3');
-      px(x + r.w - 2, r.y, 2, r.h, '#7f8891');
-      for (let y = r.y + r.h - 6; y > r.y; y -= 14) px(x, y, r.w, 1, '#8e979f');
-    } else if (r.part === 'hood-top') {
-      px(x, r.y, r.w, r.h, '#c5ccd2');
-      px(x, r.y, r.w, 1, '#e6ebee');
-      px(x, r.y, 1, r.h, '#8e979f');
-      px(x + r.w - 1, r.y, 1, r.h, '#8e979f');
-    } else if (r.part === 'hood') {
-      px(x, r.y, r.w, r.h, '#b4bcc3');
-      px(x, r.y, r.w, 1, '#e6ebee');
-      for (let k = 4; k < r.w - 4; k += 4) px(x + k, r.y + 3, 2, 3, '#8e979f');
-      px(x, r.y + r.h - 2, r.w, 2, '#4a5158');
-      // лампы и свет вниз (свет — просто картинка, не препятствие)
-      const on = '#fff2a0';
-      px(x + 5, r.y + r.h - 1, 3, 1, on);
-      px(x + r.w - 8, r.y + r.h - 1, 3, 1, on);
+/** Бургер-булочка 6×4 (для стойки с булками). */
+function bun(x, y) {
+  px(x + 1, y, 4, 1, '#f5c07a');
+  px(x, y + 1, 6, 2, '#e89a3c');
+  px(x + 1, y + 3, 4, 1, '#b8702a');
+  px(x + 2, y + 1, 1, 1, '#fff3c4');
+  px(x + 4, y + 2, 1, 1, '#fff3c4');
+}
+
+/** Одна часть препятствия (прямоугольник из obstacleRects) — своим рисунком. */
+function drawPart(ox, ob, r, t) {
+  const x = ox + r.x;
+  const { y, w, h } = r;
+  switch (r.part) {
+    // --- кухня: вытяжка и плита
+    case 'duct':
+      px(x, y, w, h, '#aeb7bf');
+      px(x, y, 2, h, '#d8dee3');
+      px(x + w - 2, y, 2, h, '#7f8891');
+      for (let yy = y + h - 6; yy > y; yy -= 14) px(x, yy, w, 1, '#8e979f');
+      break;
+    case 'hood-top':
+      px(x, y, w, h, '#c5ccd2');
+      px(x, y, w, 1, '#e6ebee');
+      px(x, y, 1, h, '#8e979f');
+      px(x + w - 1, y, 1, h, '#8e979f');
+      break;
+    case 'hood':
+      px(x, y, w, h, '#b4bcc3');
+      px(x, y, w, 1, '#e6ebee');
+      for (let k = 4; k < w - 4; k += 4) px(x + k, y + 3, 2, 3, '#8e979f');
+      px(x, y + h - 2, w, 2, '#4a5158');
+      px(x + 5, y + h - 1, 3, 1, '#fff2a0');
+      px(x + w - 8, y + h - 1, 3, 1, '#fff2a0');
       lc.fillStyle = 'rgba(255, 242, 160, 0.13)';
-      lc.fillRect(x + 3, r.y + r.h, r.w - 6, 10);
-    } else if (r.part === 'stove') {
-      const h = r.h;
-      px(x, r.y, r.w, Math.min(3, h), '#3a3f45');
-      // конфорки светятся
+      lc.fillRect(x + 3, y + h, w - 6, 10);                    // свет лампы — картинка, не препятствие
+      break;
+    case 'stove': {
+      px(x, y, w, Math.min(3, h), '#3a3f45');
       const glow = Math.sin(t * 6 + ox) > 0 ? '#ff6a3a' : '#d24a2a';
-      px(x + 4, r.y + 1, 7, 1, glow);
-      px(x + r.w - 11, r.y + 1, 7, 1, glow);
+      px(x + 4, y + 1, 7, 1, glow);
+      px(x + w - 11, y + 1, 7, 1, glow);
       if (h > 3) {
-        px(x, r.y + 3, r.w, h - 3, '#9aa3ab');
-        px(x + 1, r.y + 3, r.w - 2, h - 4, '#e3e6e9');
-        for (let k = 0; k < 4; k++) px(x + 4 + k * 6, r.y + 5, 3, 2, '#3a3f45');
+        px(x, y + 3, w, h - 3, '#9aa3ab');
+        px(x + 1, y + 3, w - 2, h - 4, '#e3e6e9');
+        for (let k = 0; k < 4; k++) px(x + 4 + k * 6, y + 5, 3, 2, '#3a3f45');
         if (h > 22) {
-          px(x + 4, r.y + 10, r.w - 8, 1, '#9aa3ab');
-          px(x + 4, r.y + 13, r.w - 8, Math.min(12, h - 16), '#2b2f36');
-          px(x + 6, r.y + 15, r.w - 12, Math.max(0, Math.min(8, h - 20)), '#ff9d3a');
+          px(x + 4, y + 10, w - 8, 1, '#9aa3ab');
+          px(x + 4, y + 13, w - 8, Math.min(12, h - 16), '#2b2f36');
+          px(x + 6, y + 15, w - 12, Math.max(0, Math.min(8, h - 20)), '#ff9d3a');
         }
       }
+      break;
     }
+    // --- кухня: подвесной шкафчик и холодильник
+    case 'rod':
+      px(x, y, w, h, '#6c6c6c');
+      px(x, y, 1, h, '#8f969c');
+      break;
+    case 'cabinet':
+      px(x, y, w, h, '#7b4a24');
+      px(x + 1, y + 1, 12, h - 2, '#9c6234');
+      px(x + 15, y + 1, 12, h - 2, '#9c6234');
+      px(x + 3, y + 3, 8, h - 6, '#b0733f');
+      px(x + 17, y + 3, 8, h - 6, '#b0733f');
+      px(x + 12, y + h - 7, 1, 3, '#ffd98a');
+      px(x + 15, y + h - 7, 1, 3, '#ffd98a');
+      break;
+    case 'fridge':
+      px(x, y, w, h, '#aab4bd');
+      px(x + 1, y + 1, w - 2, h - 2, '#e8eef2');
+      px(x + 1, y + 1, 2, h - 2, '#ffffff');
+      px(x + 1, y + 18, w - 2, 1, '#aab4bd');                 // морозилка сверху
+      px(x + w - 5, y + 5, 2, 9, '#9aa3ab');
+      if (h > 26) px(x + w - 5, y + 22, 2, Math.min(16, h - 26), '#9aa3ab');
+      px(x + 6, y + 6, 4, 4, '#ff6b6b');                       // магнитики
+      px(x + 12, y + 8, 3, 3, '#6bc5ff');
+      if (h > 30) px(x + 6, y + 24, 7, 5, '#fff7a8');          // записка
+      if (h > 6) px(x + 1, y + h - 3, w - 2, 2, '#6f7880');
+      break;
+    // --- кухня: лампа и стойка с булками
+    case 'lamp':
+      px(x + 7, y, 8, 2, '#a83228');
+      px(x + 4, y + 2, 14, 3, '#c0392b');
+      px(x, y + 5, w, 4, '#c0392b');
+      px(x, y + 5, w, 1, '#e0584a');
+      px(x, y + 9, w, 1, '#7d231b');
+      px(x + 9, y + 9, 4, 1, '#fff2a0');
+      lc.fillStyle = 'rgba(255, 220, 140, 0.14)';
+      lc.beginPath();
+      lc.moveTo(x + 4, y + 10);
+      lc.lineTo(x + w - 4, y + 10);
+      lc.lineTo(x + w + 2, y + 26);
+      lc.lineTo(x - 2, y + 26);
+      lc.fill();
+      break;
+    case 'rack':
+      px(x, y, 2, h, '#8e979f');
+      px(x + w - 2, y, 2, h, '#8e979f');
+      for (let yy = y; yy < y + h - 4; yy += 14) {
+        px(x, yy + 5, w, 2, '#b8c2cc');
+        bun(x + 3, yy + 1);
+        bun(x + 11, yy + 1);
+        bun(x + 19, yy + 1);
+      }
+      break;
+    // --- улица: мусорные баки
+    case 'lid':
+    case 'lid-down':
+    case 'bin':
+    case 'bin-down': {
+      const colors = [['#3e7f55', '#2f6b46', '#25563a', '#5fae78'], ['#6c7a8f', '#56657a', '#46536a', '#8c9ab0']];
+      const [lid, body, rib, light] = colors[(r.k + (ob.gapY >> 3)) % 2];
+      if (r.part === 'lid' || r.part === 'lid-down') {
+        px(x, y, w, h, lid);
+        px(x, r.part === 'lid' ? y : y + h - 1, w, 1, light);
+      } else {
+        px(x, y, w, h, body);
+        px(x, y, 2, h, light);
+        for (let k = 5; k < w - 2; k += 5) px(x + k, y + 1, 1, Math.max(0, h - 2), rib);
+        if (h > 8) px(x + w / 2 - 3, y + Math.floor(h / 2) - 1, 6, 3, rib);
+      }
+      break;
+    }
+    // --- улица: рекламный щит и небоскрёб
+    case 'rope':
+      px(x, y, w, h, '#2a2a33');
+      break;
+    case 'billboard': {
+      const on = Math.sin(t * 7 + ox) > -0.7;
+      px(x, y, w, h, '#1c1c24');
+      px(x + 1, y + 1, w - 2, h - 2, '#2d1b3d');
+      pixelText('BURGER', x + w / 2, y + 5, 1, on ? '#ff8a3d' : '#8a4a24');
+      px(x + 3, y + 13, w - 6, 1, on ? '#ff5d8f' : '#6a2a44');
+      px(x + 6, y + 16, w - 12, 2, '#ffd23f');
+      break;
+    }
+    case 'tower': {
+      px(x, y, w, h, '#1a2147');
+      px(x + 1, y + 2, w - 2, h - 2, '#2b3566');
+      px(x, y, w, 2, '#3a4680');                                // карниз крыши
+      px(x + 2, y + 2, 2, h - 2, '#36417a');
+      for (let yy = y + 5; yy < y + h - 2; yy += 6) {
+        for (let k = 0; k < 4; k++) {
+          const lit = hash(Math.floor(ob.x) * 31 + yy * 7 + k) < 0.45;
+          px(x + 4 + k * 6, yy, 3, 3, lit ? '#ffd86b' : '#3a4680');
+        }
+      }
+      break;
+    }
+    // --- улица: светофор и фонарный столб
+    case 'pole-top':
+    case 'pole':
+      px(x, y, w, h, '#2e2f3a');
+      px(x + 1, y, 1, h, '#4a4c5c');
+      break;
+    case 'traffic': {
+      px(x, y, w, h, '#1c1c24');
+      px(x + 1, y + 1, w - 2, h - 2, '#2a2a33');
+      const phase = Math.floor(t / 1.2) % 3;
+      const lights = [['#ff4040', '#4a1a1a'], ['#ffc83d', '#4a3a12'], ['#3ddc84', '#123a24']];
+      lights.forEach(([onColor, offColor], k) => {
+        px(x + 4, y + 2 + k * 8, 6, 6, phase === k ? onColor : offColor);
+      });
+      break;
+    }
+    case 'lamp-head':
+      px(x, y, w, h, '#3a3b48');
+      px(x, y, w, 1, '#56586a');
+      px(x + 8, y + h - 1, 8, 1, '#ffe8a0');
+      lc.fillStyle = 'rgba(255, 232, 160, 0.16)';
+      lc.fillRect(x + 4, y - 8, w - 8, 8);                       // свет вверх — картинка
+      break;
+    default:
+      break;
   }
 }
 
-function drawStreetObstacle(ox, ob) {
-  const colors = [['#3e7f55', '#2f6b46', '#25563a', '#5fae78'], ['#6c7a8f', '#56657a', '#46536a', '#8c9ab0']];
-  for (const r of obstacleRects(ob)) {
-    const x = ox + r.x;
-    const [lid, body, rib, light] = colors[(r.k + (ob.gapY >> 3)) % 2];
-    if (r.part === 'lid' || r.part === 'lid-down') {
-      px(x, r.y, r.w, r.h, lid);
-      px(x, r.part === 'lid' ? r.y : r.y + r.h - 1, r.w, 1, light);
-    } else {
-      px(x, r.y, r.w, r.h, body);
-      px(x, r.y, 2, r.h, light);
-      for (let k = 5; k < r.w - 2; k += 5) px(x + k, r.y + 1, 1, Math.max(0, r.h - 2), rib);
-      if (r.h > 8) px(x + r.w / 2 - 3, r.y + Math.floor(r.h / 2) - 1, 6, 3, rib);   // эмблема
-    }
-  }
-}
-
-function drawGate(g, scroll, t) {
-  const gx = Math.round(g.x - scroll);
-  if (gx < -40 || gx > W + 10) return;
-  const toStreet = g.to === 'street';
-  const frame = toStreet ? '#6b4a2a' : '#4a3a4a';
-  // gx — левый косяк (граница сцен), проём 26 px
-  const mid = gx + 13;
-  px(gx - 4, 40, 4, PLAY_H - 40, frame);
-  px(gx + 26, 40, 4, PLAY_H - 40, frame);
-  px(gx - 4, 36, 34, 4, frame);
+/** Стена с дверным проёмом (препятствие-переход между сценами). */
+function drawDoorWall(ox, ob, t) {
+  const top = ob.gapY - ob.gap / 2;
+  const toStreet = ob.to === 'street';
+  const x = ox;
   if (toStreet) {
-    px(mid - 11, 25, 22, 10, '#1f9d4a');
-    px(mid - 11, 25, 22, 1, '#5fd88a');
-    pixelText('EXIT', mid, 28, 1, '#ffffff');
+    // кирпичная стена кухни, стальная притолока, табличка EXIT
+    px(x, 0, OB_W, top, '#8a4b3a');
+    for (let yy = 3; yy < top; yy += 5) {
+      px(x, yy, OB_W, 1, '#6d3a2d');
+      for (let k = (yy / 5) % 2 ? 3 : 0; k < OB_W; k += 7) px(x + k, yy - 4, 1, 4, '#6d3a2d');
+    }
+    px(x, 0, 3, top, '#efe0c2');                                 // штукатурка со стороны кухни
+    px(x, top - 4, OB_W, 4, '#5a5f66');
+    px(x, top - 4, OB_W, 1, '#8a9099');
+    px(x + 3, top - 17, 22, 10, '#1f9d4a');
+    px(x + 3, top - 17, 22, 1, '#5fd88a');
+    pixelText('EXIT', x + 14, top - 14, 1, '#ffffff');
   } else {
+    // стена ресторана: тёмный кирпич, неон, полосатый козырёк
+    px(x, 0, OB_W, top, '#5a2e2e');
+    for (let yy = 3; yy < top; yy += 5) {
+      px(x, yy, OB_W, 1, '#442222');
+      for (let k = (yy / 5) % 2 ? 3 : 0; k < OB_W; k += 7) px(x + k, yy - 4, 1, 4, '#442222');
+    }
     const on = Math.sin(t * 8) > -0.6;
-    px(mid - 14, 24, 28, 11, '#1a1020');
-    pixelText('BURGER', mid, 27, 1, on ? '#ff8a3d' : '#7a3d1a');
+    px(x + 1, top - 26, 26, 10, '#1a1020');
+    pixelText('BURGER', x + 14, top - 23, 1, on ? '#ff8a3d' : '#7a3d1a');
+    for (let k = 0; k < OB_W; k += 4) px(x + k, top - 7, 4, 7, (k / 4) % 2 ? '#ffffff' : '#d93b3b');
+    px(x, top - 1, OB_W, 1, '#8a2020');
   }
+  // тень косяков и порог
+  lc.fillStyle = 'rgba(0, 0, 0, 0.35)';
+  lc.fillRect(x, top, 2, PLAY_H - top);
+  lc.fillRect(x + OB_W - 2, top, 2, PLAY_H - top);
+  px(x, PLAY_H - 2, OB_W, 2, toStreet ? '#5a5f66' : '#6b4a2a');
+}
+
+/** Открытая створка — прижата к стене с внешней стороны, в плоскости фона (за бургером, не препятствие). */
+function drawDoorLeaf(ox, ob) {
+  const top = ob.gapY - ob.gap / 2 + 2;
+  const x = ox + OB_W;
+  const h = PLAY_H - top - 2;
+  if (ob.to === 'street') {
+    // металлическая дверь запасного выхода с «антипаникой» и окошком
+    px(x, top, 22, h, '#3f5a66');
+    px(x + 1, top + 1, 20, h - 2, '#5f7f8e');
+    px(x + 1, top + 1, 2, h - 2, '#86a6b4');
+    px(x + 6, top + 10, 10, 14, '#2a3c44');
+    px(x + 7, top + 11, 8, 12, '#9fd3ff');
+    px(x + 8, top + 12, 2, 5, '#d8f0ff');
+    px(x + 3, top + Math.floor(h * 0.55), 16, 3, '#c9d1d6');
+    px(x + 3, top + Math.floor(h * 0.55) + 3, 16, 1, '#7d8a90');
+  } else {
+    // деревянная дверь ресторана с иллюминатором
+    px(x, top, 22, h, '#5a3519');
+    px(x + 1, top + 1, 20, h - 2, '#9c6234');
+    px(x + 1, top + 1, 2, h - 2, '#b8804a');
+    px(x + 6, top + 8, 10, 10, '#5a3519');
+    px(x + 7, top + 9, 8, 8, '#ffcf7a');
+    px(x + 8, top + 10, 2, 3, '#fff1c8');
+    px(x + 4, top + 26, 14, Math.max(0, h - 34), '#8a5429');
+    px(x + 16, top + Math.floor(h * 0.55), 3, 2, '#ffd98a');
+  }
+}
+
+function drawObstacle(ox, ob, t) {
+  if (ob.type === 'door') {
+    drawDoorWall(ox, ob, t);
+    return;
+  }
+  for (const r of obstacleRects(ob)) drawPart(ox, ob, r, t);
 }
 
 // ---------- кадр ----------
@@ -432,12 +601,15 @@ function render() {
     drawScene(scene, scroll, s.t);
     lc.restore();
   }
-  for (const g of s.gates) drawGate(g, s.dist, s.t);
+  // открытые створки дверей — в плоскости фона
+  for (const o of s.obstacles) {
+    const ox = Math.round(o.x - s.dist);
+    if (o.type === 'door' && ox < W && ox + OB_W + 24 > 0) drawDoorLeaf(ox, o);
+  }
   for (const o of s.obstacles) {
     const ox = Math.round(o.x - s.dist);
     if (ox > W || ox + OB_W < 0) continue;
-    if (o.scene === 'street') drawStreetObstacle(ox, o);
-    else drawKitchenObstacle(ox, o, s.t);
+    drawObstacle(ox, o, s.t);
   }
   for (const [x0, x1, scene] of segs) {
     lc.save();

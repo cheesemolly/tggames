@@ -31,33 +31,80 @@ export const FIRST_X = W + 40;             // первое препятстви�
 export const SCENE_MIN = 6;                // препятствий в сцене
 export const SCENE_MAX = 11;
 export const STEP = 1 / 120;               // шаг физики
+export const DOOR_H = 100;                 // дверной проём между сценами — от пола, выше обычного проёма
+/** Виды препятствий по сценам (идут вперемешку, один вид дважды подряд не встречается). */
+export const TYPES = {
+  kitchen: ['hood', 'fridge', 'buns'],     // вытяжка+плита, шкафчик+холодильник, лампа+стойка с булками
+  street: ['bins', 'tower', 'pole'],       // мусорные баки, щит+небоскрёб, светофор+фонарный столб
+};
 
 // ---------- форма препятствий (хитбоксы = то, что нарисовано) ----------
 
 /**
- * Прямоугольники препятствия в координатах относительно его левого края x: { x, y, w, h }.
- * Кухня: сверху — воздуховод и колпак вытяжки, снизу — плита. Улица: баки стопкой снизу и перевёрнутые сверху.
+ * Прямоугольники препятствия в координатах относительно его левого края x: { part, x, y, w, h } — хитбоксы
+ * совпадают с нарисованным. Проём препятствия — [gapY − gap/2, gapY + gap/2].
  */
 export function obstacleRects(ob) {
-  const top = ob.gapY - GAP / 2;
-  const bottom = ob.gapY + GAP / 2;
-  if (ob.scene === 'kitchen') {
-    return [
-      { part: 'duct', x: 8, y: 0, w: 12, h: Math.max(0, top - 16) },
-      { part: 'hood-top', x: 4, y: top - 16, w: 20, h: 6 },
-      { part: 'hood', x: 0, y: top - 10, w: OB_W, h: 10 },
-      { part: 'stove', x: 0, y: bottom, w: OB_W, h: PLAY_H - bottom },
-    ];
-  }
-  // улица: баки высотой 18 (крышка 3 — во всю ширину, корпус 24 — уже)
-  const rects = [];
-  for (let y = bottom, k = 0; y < PLAY_H; y += 18, k++) {
-    rects.push({ part: 'lid', x: 0, y, w: OB_W, h: 3, k });
-    rects.push({ part: 'bin', x: 2, y: y + 3, w: OB_W - 4, h: Math.min(15, PLAY_H - y - 3), k });
-  }
-  for (let y = top, k = 0; y > 0; y -= 18, k++) {
-    rects.push({ part: 'lid-down', x: 0, y: y - 3, w: OB_W, h: 3, k });
-    rects.push({ part: 'bin-down', x: 2, y: Math.max(0, y - 18), w: OB_W - 4, h: Math.min(15, y - 3), k });
+  const gap = ob.gap ?? GAP;
+  const top = ob.gapY - gap / 2;
+  const bottom = ob.gapY + gap / 2;
+  const floor = (rect) => ({ ...rect, h: PLAY_H - rect.y });
+  let rects;
+  switch (ob.type) {
+    case 'door':
+      // стена от потолка до верха дверного проёма (проём — до пола)
+      rects = [{ part: 'wall', x: 0, y: 0, w: OB_W, h: top }];
+      break;
+    case 'fridge':
+      rects = [
+        { part: 'rod', x: 12, y: 0, w: 4, h: top - 20 },
+        { part: 'cabinet', x: 0, y: top - 20, w: OB_W, h: 20 },
+        floor({ part: 'fridge', x: 1, y: bottom, w: OB_W - 2 }),
+      ];
+      break;
+    case 'buns':
+      rects = [
+        { part: 'rod', x: 12, y: 0, w: 4, h: top - 10 },
+        { part: 'lamp', x: 3, y: top - 10, w: 22, h: 10 },
+        floor({ part: 'rack', x: 0, y: bottom, w: OB_W }),
+      ];
+      break;
+    case 'tower':
+      rects = [
+        { part: 'rope', x: 5, y: 0, w: 2, h: top - 22 },
+        { part: 'rope', x: 21, y: 0, w: 2, h: top - 22 },
+        { part: 'billboard', x: 0, y: top - 22, w: OB_W, h: 22 },
+        floor({ part: 'tower', x: 0, y: bottom, w: OB_W }),
+      ];
+      break;
+    case 'pole':
+      rects = [
+        { part: 'pole-top', x: 11, y: 0, w: 6, h: top - 26 },
+        { part: 'traffic', x: 7, y: top - 26, w: 14, h: 26 },
+        { part: 'lamp-head', x: 2, y: bottom, w: 24, h: 5 },
+        floor({ part: 'pole', x: 10, y: bottom + 5, w: 8 }),
+      ];
+      break;
+    case 'bins': {
+      // баки высотой 18 (крышка 3 — во всю ширину, корпус 24 — уже): стопкой снизу и перевёрнутые сверху
+      rects = [];
+      for (let y = bottom, k = 0; y < PLAY_H; y += 18, k++) {
+        rects.push({ part: 'lid', x: 0, y, w: OB_W, h: 3, k });
+        rects.push({ part: 'bin', x: 2, y: y + 3, w: OB_W - 4, h: Math.min(15, PLAY_H - y - 3), k });
+      }
+      for (let y = top, k = 0; y > 0; y -= 18, k++) {
+        rects.push({ part: 'lid-down', x: 0, y: y - 3, w: OB_W, h: 3, k });
+        rects.push({ part: 'bin-down', x: 2, y: Math.max(0, y - 18), w: OB_W - 4, h: Math.min(15, y - 3), k });
+      }
+      break;
+    }
+    default:                                // 'hood': воздуховод и колпак вытяжки сверху, плита снизу
+      rects = [
+        { part: 'duct', x: 8, y: 0, w: 12, h: top - 16 },
+        { part: 'hood-top', x: 4, y: top - 16, w: 20, h: 6 },
+        { part: 'hood', x: 0, y: top - 10, w: OB_W, h: 10 },
+        floor({ part: 'stove', x: 0, y: bottom, w: OB_W }),
+      ];
   }
   return rects.filter((r) => r.h > 0);
 }
@@ -72,7 +119,7 @@ export function newGame(rng = Math.random) {
   const s = {
     y: PLAY_H * 0.42, vy: 0, dist: 0, idle: 0, t: 0, score: 0, phase: 'ready', flapT: -1,
     obstacles: [], gates: [], scene: 'kitchen', sceneLeft: randInt(rng, SCENE_MIN, SCENE_MAX),
-    nextX: FIRST_X, lastGapY: PLAY_H / 2, visits: { kitchen: 1, street: 0 },
+    nextX: FIRST_X, lastGapY: PLAY_H / 2, lastType: null, visits: { kitchen: 1, street: 0 },
   };
   fillAhead(s, rng);
   return s;
@@ -82,19 +129,26 @@ export function newGame(rng = Math.random) {
 export function fillAhead(s, rng = Math.random) {
   while (s.nextX < s.dist + W + OB_W + 8) {
     if (s.sceneLeft <= 0) {
-      // дверь: на её месте препятствия нет — воздух, за ней другая сцена
+      // дверь — стена с проёмом до пола; граница сцен — её левый край (в проёме уже видна новая сцена)
       const to = s.scene === 'kitchen' ? 'street' : 'kitchen';
-      // x — левый косяк двери (граница сцен): в проёме уже видна новая сцена
-      s.gates.push({ x: s.nextX + OB_W / 2 - 13, from: s.scene, to });
+      s.obstacles.push({ x: s.nextX, gapY: PLAY_H - DOOR_H / 2, gap: DOOR_H, scene: s.scene, to, type: 'door', passed: false });
+      s.gates.push({ x: s.nextX, from: s.scene, to });
       s.scene = to;
       s.sceneLeft = randInt(rng, SCENE_MIN, SCENE_MAX);
+      s.lastGapY = Math.min(PLAY_H - EDGE - GAP / 2, PLAY_H - DOOR_H / 2);
+      s.lastType = null;
       s.nextX += SPACING;
       continue;
     }
-    const lo = Math.max(EDGE + GAP / 2, s.lastGapY - MAX_UP);
+    let lo = Math.max(EDGE + GAP / 2, s.lastGapY - MAX_UP);
     const hi = Math.min(PLAY_H - EDGE - GAP / 2, s.lastGapY + MAX_DOWN);
+    // перед дверью проём не выше, чем позволяет спуститься под её притолоку (центр бургера — ниже на 12 px)
+    if (s.sceneLeft === 1) lo = Math.min(hi, Math.max(lo, PLAY_H - DOOR_H + 12 - MAX_DOWN));
     const gapY = Math.round(lo + rng() * (hi - lo));
-    s.obstacles.push({ x: s.nextX, gapY, scene: s.scene, passed: false });
+    const kinds = TYPES[s.scene].filter((t) => t !== s.lastType);
+    const type = kinds[Math.floor(rng() * kinds.length)];
+    s.obstacles.push({ x: s.nextX, gapY, gap: GAP, scene: s.scene, type, passed: false });
+    s.lastType = type;
     s.lastGapY = gapY;
     s.sceneLeft -= 1;
     s.nextX += SPACING;
