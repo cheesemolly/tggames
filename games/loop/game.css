@@ -1,0 +1,199 @@
+/*
+ * Петля. Палитра — 4 переменные: фон, линия и они же после победы (инверсия, как в видео). Палитра уровня —
+ * data-skin на контейнере игры (случайная на каждом уровне или фиксированная в настройках); «telegram» —
+ * цвета темы Telegram. Всё остальное (текст шапки, кнопки, окна) выводится из этих четырёх через color-mix.
+ */
+
+[data-game="loop"], [data-game="loop"] [data-skin="telegram"] {
+  --lp-bg: var(--tg-theme-bg-color);
+  --lp-line: var(--tg-theme-button-color);
+  --lp-won-bg: var(--tg-theme-button-color);
+  --lp-won-line: var(--tg-theme-button-text-color);
+}
+[data-game="loop"][data-skin="mint"], [data-game="loop"] [data-skin="mint"] { --lp-bg: #cfe3dd; --lp-line: #3f7d6b; --lp-won-bg: #062a21; --lp-won-line: #5fbf9f; }
+[data-game="loop"][data-skin="sky"], [data-game="loop"] [data-skin="sky"] { --lp-bg: #cfdfe8; --lp-line: #5a7f9c; --lp-won-bg: #0d2233; --lp-won-line: #7fb0d6; }
+[data-game="loop"][data-skin="sand"], [data-game="loop"] [data-skin="sand"] { --lp-bg: #efe3cf; --lp-line: #9a6b3c; --lp-won-bg: #2e1d0c; --lp-won-line: #d9a066; }
+[data-game="loop"][data-skin="lilac"], [data-game="loop"] [data-skin="lilac"] { --lp-bg: #e3dcef; --lp-line: #6e5a9e; --lp-won-bg: #1c1330; --lp-won-line: #a58be0; }
+[data-game="loop"][data-skin="rose"], [data-game="loop"] [data-skin="rose"] { --lp-bg: #f3d9dd; --lp-line: #a8505f; --lp-won-bg: #2c0e14; --lp-won-line: #e38a99; }
+[data-game="loop"][data-skin="lemon"], [data-game="loop"] [data-skin="lemon"] { --lp-bg: #f1edc9; --lp-line: #7d7427; --lp-won-bg: #24210a; --lp-won-line: #d8cc58; }
+[data-game="loop"][data-skin="coral"], [data-game="loop"] [data-skin="coral"] { --lp-bg: #fde2d4; --lp-line: #d0643f; --lp-won-bg: #3a1207; --lp-won-line: #ff9a73; }
+[data-game="loop"][data-skin="graphite"], [data-game="loop"] [data-skin="graphite"] { --lp-bg: #22262b; --lp-line: #9fb0c0; --lp-won-bg: #e7ecf0; --lp-won-line: #3b4652; }
+[data-game="loop"][data-skin="night"], [data-game="loop"] [data-skin="night"] { --lp-bg: #0f1b2d; --lp-line: #5fb3e0; --lp-won-bg: #cfe9f7; --lp-won-line: #1d4f73; }
+
+/* текущие цвета: обычные или «после победы» */
+[data-game="loop"] {
+  --lp-cur-bg: var(--lp-bg);
+  --lp-cur-line: var(--lp-line);
+  --lp-text: var(--lp-cur-line);
+  --lp-hint: color-mix(in srgb, var(--lp-cur-line) 65%, var(--lp-cur-bg));
+  --lp-surface: color-mix(in srgb, var(--lp-cur-line) 12%, var(--lp-cur-bg));
+  --toast-top: 90px;
+  --toast-bg: var(--lp-cur-line);
+  --toast-fg: var(--lp-cur-bg);
+}
+[data-game="loop"].lp-won { --lp-cur-bg: var(--lp-won-bg); --lp-cur-line: var(--lp-won-line); }
+
+/* ---------- раскладка ---------- */
+
+.game-root[data-game="loop"] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+  background: var(--lp-cur-bg);
+  color: var(--lp-text);
+  transition: background-color 0.5s ease, color 0.5s ease;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+[data-game="loop"] .lp { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+[data-game="loop"] .lp-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 4px; }
+[data-game="loop"] .lp-title { font-size: 20px; font-weight: 700; line-height: 1.2; }
+[data-game="loop"] .lp-sub { font-size: 13px; color: var(--lp-hint); transition: color 0.5s ease; }
+[data-game="loop"] .lp-actions { display: flex; gap: 6px; }
+[data-game="loop"] .lp-icon-btn {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: var(--lp-surface);
+  color: var(--lp-text);
+  font: inherit;
+  font-size: 16px;
+  cursor: pointer;
+  transition: transform 0.1s ease, background-color 0.5s ease, color 0.5s ease;
+}
+[data-game="loop"] .lp-icon-btn:active { transform: scale(0.92); }
+[data-game="loop"] .lp-icon-btn svg { width: 20px; height: 20px; }
+
+/* поле: прямоугольник cols×rows во всё свободное место, клетка не крупнее 72px */
+[data-game="loop"] .lp-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  container-type: size;
+}
+[data-game="loop"] .lp-board {
+  width: min(100cqw - 16px, (100cqh - 16px) * var(--cols) / var(--rows), var(--cols) * 72px);
+  aspect-ratio: var(--cols) / var(--rows);
+}
+[data-game="loop"] .lp-svg { display: block; width: 100%; height: 100%; overflow: visible; touch-action: manipulation; cursor: pointer; }
+
+[data-game="loop"] .lp-spin { transition: transform 0.18s ease-out; }
+[data-game="loop"] .lp-line,
+[data-game="loop"] .lp-core { fill: none; stroke-linecap: butt; }
+[data-game="loop"] .lp-line {
+  stroke: var(--lp-cur-line);
+  stroke-width: 0.12;
+  transition: stroke 0.5s ease, stroke-width 0.4s ease;
+}
+[data-game="loop"] .lp-line.lp-knob { fill: var(--lp-cur-bg); transition: stroke 0.5s ease, fill 0.5s ease, stroke-width 0.4s ease; }
+[data-game="loop"] .lp-core { stroke: var(--lp-cur-bg); stroke-width: 0.05; opacity: 0; transition: opacity 0.4s ease, stroke 0.5s ease; }
+[data-game="loop"] [data-shape="round"] .lp-line,
+[data-game="loop"] [data-shape="round"] .lp-core { stroke-linejoin: round; }
+[data-game="loop"] [data-shape="square"] .lp-line,
+[data-game="loop"] [data-shape="square"] .lp-core { stroke-linejoin: miter; }
+/* после победы — двойной контур */
+[data-game="loop"].lp-won .lp-line { stroke-width: 0.17; }
+[data-game="loop"].lp-won .lp-core { opacity: 1; }
+
+/* «#N» перед уровнем */
+[data-game="loop"] .lp-label {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  color: var(--lp-hint);
+  pointer-events: none;
+}
+[data-game="loop"] .lp-label[hidden] { display: none; }
+
+/* ---------- окна ---------- */
+
+[data-game="loop"] .lp-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--lp-cur-bg) 82%, transparent);
+}
+[data-game="loop"] .lp-card {
+  width: 100%;
+  max-width: 380px;
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 16px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--lp-cur-line) 8%, var(--lp-cur-bg));
+  box-shadow: 0 6px 24px rgb(0 0 0 / 0.18);
+}
+[data-game="loop"] .lp-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+[data-game="loop"] .lp-card-head h2 { margin: 0; font-size: 18px; }
+[data-game="loop"] .lp-card .lp-icon-btn { background: var(--lp-cur-bg); }
+[data-game="loop"] .lp-section { margin: 4px 0 10px; font-size: 14px; }
+
+[data-game="loop"] .lp-stats-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+[data-game="loop"] .lp-stat { padding: 10px; border-radius: 12px; background: var(--lp-cur-bg); text-align: center; }
+[data-game="loop"] .lp-stat-value { font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; }
+[data-game="loop"] .lp-stat-label { font-size: 12px; color: var(--lp-hint); }
+
+/* форма плиток */
+[data-game="loop"] .lp-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 14px; }
+[data-game="loop"] .lp-option {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 8px 4px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--lp-cur-bg);
+  color: var(--lp-text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.2s ease;
+}
+[data-game="loop"] .lp-option:active { transform: scale(0.95); }
+[data-game="loop"] .lp-option[aria-checked="true"] { box-shadow: inset 0 0 0 2px var(--lp-cur-line); }
+[data-game="loop"] .lp-sample { width: 40px; height: 40px; overflow: visible; }
+[data-game="loop"] .lp-sample .lp-core { display: none; }
+
+/* палитры: образец — фон и линия по диагонали */
+[data-game="loop"] .lp-skins { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px 6px; }
+[data-game="loop"] .lp-skin {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--lp-text);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+[data-game="loop"] .lp-swatch {
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--lp-bg) 50%, var(--lp-line) 50%);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--lp-cur-line) 30%, transparent);
+  transition: transform 0.2s ease;
+}
+[data-game="loop"] .lp-swatch-random {
+  background: conic-gradient(#3f7d6b 0 12.5%, #5a7f9c 0 25%, #9a6b3c 0 37.5%, #6e5a9e 0 50%, #a8505f 0 62.5%, #7d7427 0 75%, #d0643f 0 87.5%, #0f1b2d 0);
+}
+[data-game="loop"] .lp-skin:active .lp-swatch { transform: scale(0.92); }
+[data-game="loop"] .lp-skin[aria-checked="true"] .lp-swatch { outline: 3px solid var(--lp-cur-line); outline-offset: 3px; }

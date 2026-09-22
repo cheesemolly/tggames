@@ -4,6 +4,12 @@
 
 export const games = [
   {
+    id: 'loop',
+    title: 'Петля',
+    load: () => import('../games/loop/index.js'),
+    css: new URL('../games/loop/game.css', import.meta.url),
+  },
+  {
     id: 'connect-dots',
     title: 'Соедини точки',
     load: () => import('../games/connect-dots/index.js'),
