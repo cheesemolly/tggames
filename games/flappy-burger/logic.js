@@ -226,7 +226,8 @@ export function fillAhead(s, rng = Math.random) {
     s.nextX = x + ob.w + s.free;
   }
   // ушедшее за левый край — выбросить
-  s.obstacles = s.obstacles.filter((o) => o.x + o.w > s.dist - 4);
+  // у стены с дверью фасад и створка — правее стены (ещё 34 px): не выбрасывать, пока не уйдут за экран
+  s.obstacles = s.obstacles.filter((o) => o.x + o.w + (o.type === 'door' ? 40 : 0) > s.dist - 4);
   s.gates = s.gates.filter((g) => g.x > s.dist - W);
 }
 
