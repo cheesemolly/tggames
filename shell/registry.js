@@ -7,6 +7,9 @@
 //   bestLabel — подпись рекорда, bestValue — как показать его значение («Уровень 7»);
 //   progress: 'replace' — вместо статистики строка от самой игры (api.progress), 'append' — в конец.
 // Побед нет у бесконечных игр, а у уровневых важен уровень, а не число партий.
+//
+// admin: true — игра видна только владельцу (Telegram-id из ADMIN_IDS): так новая игра обкатывается,
+// не мозоля глаза остальным. Меню её не рисует, а маршрут `#/game/<id>` возвращает в меню.
 
 export const games = [
   {
@@ -34,6 +37,14 @@ export const games = [
     load: () => import('../games/flappy-burger/index.js'),
     css: new URL('../games/flappy-burger/game.css', import.meta.url),
     menu: { wins: false },                               // бесконечный забег, победить нельзя
+  },
+  {
+    id: 'bubble-shooter',
+    title: 'Шарики',
+    load: () => import('../games/bubble-shooter/index.js'),
+    css: new URL('../games/bubble-shooter/game.css', import.meta.url),
+    menu: { progress: 'replace' },                       // «Уровень 3»
+    admin: true,                                         // пока только для владельца (на время обкатки)
   },
   {
     id: 'brick-blast',

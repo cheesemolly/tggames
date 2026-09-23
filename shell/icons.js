@@ -40,6 +40,9 @@ export const GAME_ICONS = {
   'brick-blast': svg('<rect x="2.5" y="3.5" width="8.4" height="4.4" rx="1.2"/><rect x="13.1" y="3.5" width="8.4" height="4.4" rx="1.2"/>'
     + '<rect x="2.5" y="9.6" width="8.4" height="4.4" rx="1.2"/><rect x="13.1" y="9.6" width="8.4" height="4.4" rx="1.2"/>'
     + '<circle cx="12" cy="19.2" r="2.4" fill="currentColor" stroke="none"/>'),
+  'bubble-shooter': svg('<circle cx="7.5" cy="6" r="3.1"/><circle cx="14.5" cy="6" r="3.1"/>'
+    + '<circle cx="11" cy="11.8" r="3.1"/><circle cx="18" cy="11.8" r="3.1" opacity="0.5"/>'
+    + '<circle cx="11" cy="19.6" r="2.3" fill="currentColor" stroke="none"/><path d="M11 17.2v-1.6"/>'),
   'block-blast': svg('<rect x="3" y="3" width="8" height="8" rx="1.8"/><rect x="13" y="3" width="8" height="8" rx="1.8"/>'
     + '<rect x="3" y="13" width="8" height="8" rx="1.8"/>'
     + '<rect x="13" y="13" width="8" height="8" rx="1.8" fill="currentColor" stroke="none"/>'),
