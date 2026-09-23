@@ -4,4 +4,4 @@
 //   export const API_URL = 'https://tggames-api.ИМЯ.workers.dev';
 // Без косой черты в конце.
 
-export const API_URL = '';
+export const API_URL = 'https://tggames-api.cheesemolly3.workers.dev';
