@@ -281,6 +281,16 @@ function submit() {
   }, REVEAL_MS);
 }
 
+/**
+ * В меню у Wordle вместо рекорда — серия побед. Партии у трёх языков раздельные,
+ * поэтому берём наибольшую из текущих серий: это и есть «сколько подряд угадываю сейчас».
+ */
+function reportStreak() {
+  const best = Math.max(0, ...LANG_ORDER.map((id) => stats[id]?.streak ?? 0));
+  const played = LANG_ORDER.some((id) => (stats[id]?.played ?? 0) > 0);
+  api?.progress(played ? `Стрик: ${best}` : null);
+}
+
 function finishBoard() {
   const board = boards[lang];
   const cfg = LANGUAGES[lang];
@@ -288,6 +298,7 @@ function finishBoard() {
   const won = getStatus(board) === 'won';
 
   stats[lang] = recordGame(stats[lang], board);
+  reportStreak();
   boards[lang] = null;
   lastWin = won ? { lang, tries: board.guesses.length } : null;
   api.storage.set('stats', stats);
@@ -389,6 +400,7 @@ export default {
       boards[id] = isValidBoard(savedBoards?.[id]) ? savedBoards[id] : null;
       stats[id] = isValidStats(savedStats?.[id]) ? savedStats[id] : emptyStats();
     }
+    reportStreak();
 
     ui = {
       title: el('div', { class: 'wd-title' }),

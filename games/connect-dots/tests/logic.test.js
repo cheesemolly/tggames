@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   MAX_SIZE, ALL_TIERS, PAIRS, tierKey, levelParams, decodeLevel, encodeLevel, transformLevel, pickLevel,
-  checkPaths, startAt, stepTo, emptyPaths, newGame, nextRound, applyHint, roundPoints, isValidState,
+  checkPaths, startAt, stepTo, emptyPaths, newGame, nextRound, applyHint, isValidState,
   emptyStats, recordGame, isValidStats, neighbors,
 } from '../logic.js';
 import { solve, buildGraph } from '../solver.js';
@@ -225,18 +225,17 @@ test('подсказка прокладывает линию из решения
   }
 });
 
-test('очки, сохранение, статистика', () => {
+test('сохранение и статистика (очков в игре нет)', () => {
   const s = newGame(bank, seeded(3));
-  assert.ok(roundPoints(s.level, 10_000) > roundPoints(s.level, null), 'бонус за оставшееся время');
   assert.ok(isValidState(JSON.parse(JSON.stringify(s))));
   assert.equal(isValidState({ ...s, level: { ...s.level, size: 9 } }), false, 'больше 8×8 не бывает');
   assert.equal(isValidState({ ...s, v: undefined }), false, 'сохранение старых правил — новая партия');
   const level = pickLevel(bank, 12, seeded(4));
   assert.equal(level.tunnels.length, levelParams(12).tunnels);
   let st = emptyStats();
-  st = recordGame(st, { ...s, score: 500 }, 7);
-  st = recordGame(st, { ...s, score: 200 }, 3);
-  assert.deepEqual(st, { played: 2, bestRound: 7, bestScore: 500, rounds: 10 });
+  st = recordGame(st, 7);
+  st = recordGame(st, 3);
+  assert.deepEqual(st, { played: 2, bestRound: 7, rounds: 10 }, 'очков нет — считаем пройденные раунды');
   assert.ok(isValidStats(st));
   assert.equal(neighbors(0, 3).length, 2);
 });

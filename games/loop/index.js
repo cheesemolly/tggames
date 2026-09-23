@@ -62,7 +62,13 @@ function later(fn, ms) {
 let pending = null;             // следующий уровень, пока идёт анимация победы
 
 // во время анимации победы сохраняется уже следующий уровень — решённый не вернётся
-const save = () => (pending ?? game) && api?.storage.set('current', pending ?? game);
+// В меню у «Петли» партий нет — показывается текущий уровень.
+const save = () => {
+  const state = pending ?? game;
+  if (!state) return undefined;
+  api?.progress(`Уровень ${state.level}`);
+  return api?.storage.set('current', state);
+};
 
 // ---------- рисунок плитки ----------
 
@@ -389,6 +395,7 @@ export default {
     const fresh = !isValidState(saved);
     game = fresh ? newLevel(1, null, settings, RANDOM_POOL) : saved;
     if (fresh) save();
+    else api.progress(`Уровень ${game.level}`);
     busy = true;
     showLevelLabel(() => {
       if (!ui) return;

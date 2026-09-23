@@ -101,7 +101,13 @@ function later(fn, ms) {
 
 let pending = null;                // что сохранять вместо показанного уровня (после победы/проигрыша)
 
-const save = () => (pending ?? game) && api?.storage.set('current', pending ?? game);
+// В меню показывается уровень, а не число партий.
+const save = () => {
+  const state = pending ?? game;
+  if (!state) return undefined;
+  api?.progress(`Уровень ${state.level}`);
+  return api?.storage.set('current', state);
+};
 
 // ---------- цвета ----------
 
@@ -1064,6 +1070,7 @@ export default {
     const fresh = !isValidState(saved);
     game = fresh ? newLevel(1) : normalizeState(saved);
     if (fresh) save();
+    else api.progress(`Уровень ${game.level}`);
     startLevel(true);
     if (fresh && stats.shots === 0) later(() => toast?.show(T.aimHelp, 3200), 700);
   },

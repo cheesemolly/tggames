@@ -7,6 +7,7 @@ import { createToast } from '../shared/toast.js';
 import { games } from './registry.js';
 import { currentRoute, onRouteChange, goToMenu } from './router.js';
 import { renderMenu } from './menu.js';
+import { migrateStats } from './stats.js';
 import { openGame } from './game-host.js';
 import { createSync } from './sync.js';
 import { openAuth, guestChosen, rememberGuest, forgetGuest } from './auth.js';
@@ -65,6 +66,9 @@ async function openAccountScreen() {
   }
   redraw();
 }
+
+// Смысл рекорда у части игр изменился — старые числа чистятся один раз (shell/stats.js).
+await migrateStats();
 
 platform.backButton.onClick(goToMenu);
 onRouteChange(show);

@@ -12,6 +12,7 @@ import { createStorage } from '../platform/storage.js';
 import { recordResult } from './stats.js';
 import { LOCALES, shellText } from './i18n.js';
 import { saves } from './saves.js';
+import { progress } from './progress.js';
 
 const OUTCOMES = ['win', 'lose', 'draw', 'quit'];
 
@@ -67,6 +68,10 @@ export function openGame(container, entry, { platform, onExit }) {
       savedState: save?.state ?? null,
       finish: (result) => {
         if (thisRun === run) onFinish(result).catch(showError);
+      },
+      // Короткая строка для меню («Уровень 14») — у игр с уровнями партии и победы ничего не говорят.
+      progress: (text) => {
+        if (thisRun === run) progress.set(entry.id, text);
       },
     });
   }

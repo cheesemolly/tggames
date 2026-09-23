@@ -96,7 +96,7 @@ export function newGame(size, rng = Math.random) {
   let grid = Array(size * size).fill(0);
   grid = spawn(grid, rng).grid;
   grid = spawn(grid, rng).grid;
-  return { size, grid, score: 0, moves: 0, won: false, keepPlaying: false, undo: null, undoLeft: UNDO_PER_GAME };
+  return { size, grid, moves: 0, won: false, keepPlaying: false, undo: null, undoLeft: UNDO_PER_GAME };
 }
 
 /**
@@ -106,10 +106,9 @@ export function newGame(size, rng = Math.random) {
 export function play(state, dir, rng = Math.random) {
   const result = move(state.grid, state.size, dir);
   if (!result.moved) return { moved: false };
-  state.undo = { grid: [...state.grid], score: state.score };
+  state.undo = { grid: [...state.grid] };
   const spawned = spawn(result.grid, rng);
   state.grid = spawned ? spawned.grid : result.grid;
-  state.score += result.gain;
   state.moves += 1;
   const won = !state.won && maxTile(state.grid) >= WIN_VALUE;
   if (won) state.won = true;
@@ -120,7 +119,6 @@ export function play(state, dir, rng = Math.random) {
 export function undo(state) {
   if (!state.undo || state.undoLeft <= 0) return false;
   state.grid = state.undo.grid;
-  state.score = state.undo.score;
   state.undo = null;
   state.undoLeft -= 1;
   return true;
@@ -132,26 +130,26 @@ export function isValidState(s) {
   return Boolean(s)
     && SIZES.includes(s.size)
     && grid(s.grid)
-    && (s.undo === null || (s.undo && grid(s.undo.grid) && Number.isFinite(s.undo.score)))
-    && [s.score, s.moves, s.undoLeft].every((n) => Number.isFinite(n) && n >= 0)
+    && (s.undo === null || (s.undo && grid(s.undo.grid)))
+    && [s.moves, s.undoLeft].every((n) => Number.isFinite(n) && n >= 0)
     && typeof s.won === 'boolean' && typeof s.keepPlaying === 'boolean';
 }
 
 // ---------- статистика по размеру поля ----------
 
+// Очков в игре нет (решение владельца): рекорд — самая большая собранная плитка.
 export function emptyStats() {
-  return { played: 0, best: 0, bestTile: 0, wins: 0 };
+  return { played: 0, bestTile: 0, wins: 0 };
 }
 
 export function recordGame(stats, state) {
   return {
     played: stats.played + 1,
-    best: Math.max(stats.best, state.score),
     bestTile: Math.max(stats.bestTile, maxTile(state.grid)),
     wins: stats.wins + (state.won ? 1 : 0),
   };
 }
 
 export function isValidStats(s) {
-  return Boolean(s) && ['played', 'best', 'bestTile', 'wins'].every((k) => Number.isFinite(s[k]) && s[k] >= 0);
+  return Boolean(s) && ['played', 'bestTile', 'wins'].every((k) => Number.isFinite(s[k]) && s[k] >= 0);
 }

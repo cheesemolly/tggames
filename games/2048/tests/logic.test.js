@@ -87,19 +87,18 @@ test('конец игры: нет пустых клеток и соседних 
   assert.equal(canMove([2, 4, 2, 4, 4, 2, 4, 2, 2, 4, 2, 4, 4, 2, 4, 0], 4), true);
 });
 
-test('партия: ход добавляет плитку, счёт, победа на 2048 один раз, отмена', () => {
+test('партия: ход добавляет плитку, победа на 2048 один раз, отмена', () => {
   const rng = seeded(9);
   const s = newGame(4, rng);
   assert.equal(s.grid.filter(Boolean).length, 2);
   s.grid = row([1024, 1024, 0, 0]);
   const r = play(s, 'left', rng);
   assert.ok(r.moved && r.won);
-  assert.equal(s.score, 2048);
   assert.equal(maxTile(s.grid), WIN_VALUE);
   assert.equal(s.grid.filter(Boolean).length, 2, 'после хода появилась новая плитка');
   assert.ok(undo(s));
   assert.deepEqual(s.grid, row([1024, 1024, 0, 0]));
-  assert.equal(s.score, 0);
+  assert.equal(s.score, undefined, 'очков в игре нет');
   assert.equal(s.undoLeft, UNDO_PER_GAME - 1);
   assert.equal(undo(s), false, 'отменить можно только последний ход');
   const again = play(s, 'left', rng);
@@ -125,8 +124,8 @@ test('сохранение и статистика', () => {
   assert.equal(isValidState({ ...s, grid: [...s.grid.slice(1), 3] }), false, '3 — не степень двойки');
   assert.equal(isValidState({ ...s, size: 7 }), false);
   let st = emptyStats();
-  st = recordGame(st, { ...s, score: 5000, won: true, grid: row([2048, 4, 0, 0]) });
-  st = recordGame(st, { ...s, score: 100, won: false, grid: row([64, 0, 0, 0]) });
-  assert.deepEqual(st, { played: 2, best: 5000, bestTile: 2048, wins: 1 });
+  st = recordGame(st, { ...s, won: true, grid: row([2048, 4, 0, 0]) });
+  st = recordGame(st, { ...s, won: false, grid: row([64, 0, 0, 0]) });
+  assert.deepEqual(st, { played: 2, bestTile: 2048, wins: 1 }, 'рекорд — лучшая плитка, а не очки');
   assert.ok(isValidStats(st));
 });

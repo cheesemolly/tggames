@@ -1,6 +1,12 @@
 // Реестр игр — единственное место, где оболочка узнаёт об играх.
 // Модуль игры грузится лениво, только при открытии; title здесь — для меню без загрузки модуля.
 // css (необязательно) — подключается оболочкой на время игры.
+//
+// menu (необязательно) — что писать в меню под названием (shell/menu-line.js):
+//   played/wins/best — показывать ли «Сыграно», «Побед», «Рекорд» (по умолчанию все);
+//   bestLabel — подпись рекорда, bestValue — как показать его значение («Уровень 7»);
+//   progress: 'replace' — вместо статистики строка от самой игры (api.progress), 'append' — в конец.
+// Побед нет у бесконечных игр, а у уровневых важен уровень, а не число партий.
 
 export const games = [
   {
@@ -8,6 +14,7 @@ export const games = [
     title: 'Слова из слова',
     load: () => import('../games/words/index.js'),
     css: new URL('../games/words/game.css', import.meta.url),
+    menu: { progress: 'replace' },                       // «Уровень 14»
   },
   {
     id: 'flags',
@@ -26,30 +33,35 @@ export const games = [
     title: 'Flappy Burger',
     load: () => import('../games/flappy-burger/index.js'),
     css: new URL('../games/flappy-burger/game.css', import.meta.url),
+    menu: { wins: false },                               // бесконечный забег, победить нельзя
   },
   {
     id: 'brick-blast',
     title: 'Brick Blast',
     load: () => import('../games/brick-blast/index.js'),
     css: new URL('../games/brick-blast/game.css', import.meta.url),
+    menu: { progress: 'replace' },                       // «Уровень 11»
   },
   {
     id: 'loop',
     title: 'Петля',
     load: () => import('../games/loop/index.js'),
     css: new URL('../games/loop/game.css', import.meta.url),
+    menu: { progress: 'replace' },                       // «Уровень 3»
   },
   {
     id: 'connect-dots',
     title: 'Соедини точки',
     load: () => import('../games/connect-dots/index.js'),
     css: new URL('../games/connect-dots/game.css', import.meta.url),
+    menu: { wins: false, bestValue: (n) => `Уровень ${n}` },   // рекорд — как далеко зашёл
   },
   {
     id: 'mahjong',
     title: 'Маджонг',
     load: () => import('../games/mahjong/index.js'),
     css: new URL('../games/mahjong/game.css', import.meta.url),
+    menu: { wins: false, best: false },                  // проиграть нельзя — только число партий
   },
   {
     id: '2048',
@@ -62,12 +74,14 @@ export const games = [
     title: 'Филворд',
     load: () => import('../games/boggle/index.js'),
     css: new URL('../games/boggle/game.css', import.meta.url),
+    menu: { progress: 'replace' },                       // «Уровень 4 · Рекорд за уровень: 780»
   },
   {
     id: 'block-blast',
     title: 'Block Blast',
     load: () => import('../games/block-blast/index.js'),
     css: new URL('../games/block-blast/game.css', import.meta.url),
+    menu: { wins: false },                               // бесконечная, победы не бывает
   },
   {
     id: 'sudoku',
@@ -80,22 +94,6 @@ export const games = [
     title: 'Wordle',
     load: () => import('../games/wordle/index.js'),
     css: new URL('../games/wordle/game.css', import.meta.url),
-  },
-  {
-    id: 'guess-number',
-    title: 'Угадай число',
-    load: () => import('../games/guess-number/index.js'),
-    css: new URL('../games/guess-number/game.css', import.meta.url),
-  },
-  {
-    id: '_stub-a',
-    title: 'Заглушка A · кликер',
-    load: () => import('../games/_stub-a/index.js'),
-    css: new URL('../games/_stub-a/game.css', import.meta.url),
-  },
-  {
-    id: '_stub-b',
-    title: 'Заглушка B · таймер',
-    load: () => import('../games/_stub-b/index.js'),
+    menu: { best: false, progress: 'append' },           // вместо рекорда — серия побед
   },
 ];

@@ -286,14 +286,7 @@ export function emptyPaths(level) {
 
 export function newGame(bank, rng = Math.random) {
   const level = pickLevel(bank, 1, rng);
-  return { v: STATE_VERSION, round: 1, score: 0, hintsLeft: HINTS_PER_GAME, level, paths: emptyPaths(level), timeLeftMs: null };
-}
-
-/** Очки за раунд: по числу мест (клетки, тоннель — дважды) + бонус за оставшееся время (если таймер включён). */
-export function roundPoints(level, timeLeftMs = null) {
-  const base = (level.size * level.size - level.walls.length + level.tunnels.length) * 5;
-  const bonus = timeLeftMs === null ? 0 : Math.round(timeLeftMs / 1000) * 5;
-  return base + bonus;
+  return { v: STATE_VERSION, round: 1, hintsLeft: HINTS_PER_GAME, level, paths: emptyPaths(level), timeLeftMs: null };
 }
 
 export function nextRound(state, bank, rng = Math.random) {
@@ -336,25 +329,25 @@ export function isValidState(s) {
     && Array.isArray(lv.solution) && lv.solution.length === lv.dots.length
     && lv.solution.every((p) => Array.isArray(p) && p.every(cellOk))
     && Array.isArray(s.paths) && s.paths.length === lv.dots.length && s.paths.every((p) => Array.isArray(p) && p.every(cellOk))
-    && [s.round, s.score, s.hintsLeft].every((v) => Number.isInteger(v) && v >= 0)
+    && [s.round, s.hintsLeft].every((v) => Number.isInteger(v) && v >= 0)
     && (s.timeLeftMs === null || (Number.isFinite(s.timeLeftMs) && s.timeLeftMs >= 0));
 }
 
 // ---------- статистика ----------
 
+// Очков в игре нет (решение владельца): успех — насколько далеко удалось зайти.
 export function emptyStats() {
-  return { played: 0, bestRound: 0, bestScore: 0, rounds: 0 };
+  return { played: 0, bestRound: 0, rounds: 0 };
 }
 
-export function recordGame(stats, state, roundsCleared) {
+export function recordGame(stats, roundsCleared) {
   return {
     played: stats.played + 1,
     bestRound: Math.max(stats.bestRound, roundsCleared),
-    bestScore: Math.max(stats.bestScore, state.score),
     rounds: stats.rounds + roundsCleared,
   };
 }
 
 export function isValidStats(s) {
-  return Boolean(s) && ['played', 'bestRound', 'bestScore', 'rounds'].every((k) => Number.isInteger(s[k]) && s[k] >= 0);
+  return Boolean(s) && ['played', 'bestRound', 'rounds'].every((k) => Number.isInteger(s[k]) && s[k] >= 0);
 }

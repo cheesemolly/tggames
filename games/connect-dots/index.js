@@ -1,5 +1,6 @@
 // «Соедини точки» по видео My Talking Tom Connect: соединяй пары точек одного цвета линиями по клеткам,
-// линии не пересекаются (кроме тоннелей — там крест-накрест), заполнять всё поле не нужно.
+// линии не пересекаются (кроме тоннелей — там крест-накрест), заполнить нужно все клетки.
+// Очков нет: успех измеряется тем, до какого раунда дошёл.
 // Бесконечные раунды: поле растёт до 8×8, с 7-го раунда — стены, с 12-го — тоннели.
 // Таймер на раунд (в настройках отключается); время вышло — игра окончена.
 // Партия, статистика и настройки — в api.storage игры.
@@ -10,7 +11,7 @@ import { createToast } from '../../shared/toast.js';
 import { createFx } from '../../shared/fx.js';
 import {
   levelParams, checkPaths, startAt, stepTo, emptyPaths, newGame, nextRound, applyHint,
-  roundPoints, isValidState, emptyStats, isValidStats, isAdjacent, axisOf,
+  isValidState, emptyStats, isValidStats, isAdjacent, axisOf,
 } from './logic.js';
 
 const SKINS = ['telegram', 'classic', 'neon', 'paper', 'candy', 'space'];
@@ -19,8 +20,8 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 const T = {
   title: 'Соедини точки',
   round: (n) => `Раунд ${n}`,
-  score: 'Очки',
   best: 'Рекорд',
+  bestRound: (n) => (n > 0 ? `Уровень ${n}` : '—'),
   tools: { reset: 'Сбросить', hint: 'Подсказка' },
   noHints: 'Подсказки закончились',
   cleared: (n) => `Раунд ${n} пройден!`,
@@ -37,7 +38,7 @@ const T = {
   restartQuestion: 'Начать заново с первого раунда?',
   restart: 'Начать заново',
   cancel: 'Отмена',
-  stats: { open: 'Статистика', title: 'Статистика', played: 'Игр', bestRound: 'Лучший раунд', bestScore: 'Рекорд', rounds: 'Раундов пройдено', close: 'Закрыть' },
+  stats: { open: 'Статистика', title: 'Статистика', played: 'Игр', bestRound: 'Лучший раунд', rounds: 'Раундов пройдено', close: 'Закрыть' },
   settings: { open: 'Настройки', title: 'Настройки', timer: 'Таймер', timerDesc: 'Время на раунд. Выключи — играй без спешки, игра не кончится.', skin: 'Оформление', close: 'Закрыть' },
   skins: { telegram: 'Как в Telegram', classic: 'Классика', neon: 'Неон', paper: 'Бумага', candy: 'Конфета', space: 'Космос' },
 };
@@ -241,8 +242,7 @@ function renderBoard() {
 
 function renderInfo() {
   ui.sub.textContent = T.round(game.round);
-  ui.score.textContent = game.score;
-  ui.best.textContent = Math.max(stats.bestScore, game.score);
+  ui.best.textContent = T.bestRound(Math.max(stats.bestRound, game.round - 1));
   ui.hintBadge.textContent = game.hintsLeft;
   ui.hintButton.disabled = over || game.hintsLeft <= 0;
 }
@@ -334,16 +334,12 @@ function onPointerUp(e) {
 function roundCleared() {
   busy = true;
   stopClock();
-  const left = settings.timer ? timeLeft() : null;
-  const points = roundPoints(game.level, left);
-  game.score += points;
   stats.bestRound = Math.max(stats.bestRound, game.round);
-  stats.bestScore = Math.max(stats.bestScore, game.score);
   stats.rounds += 1;
   api.storage.set('stats', stats);
   api.platform.haptic.notification('success');
   renderInfo();
-  pop(ui.score, { from: 0.8 });
+  pop(ui.best, { from: 0.8 });
 
   // искры из каждой точки, надпись «Раунд пройден»
   const board = ui.svg.getBoundingClientRect();
@@ -355,7 +351,7 @@ function roundCleared() {
       cssVar(`--cd-c${(color % COLORS) + 1}`), 8, { speed: 240, size: 6 });
   }));
   ui.board.classList.add('cd-glow');
-  floatText(T.cleared(game.round), `+${points}`);
+  floatText(T.cleared(game.round));
 
   later(() => {
     if (!ui) return;
@@ -408,9 +404,10 @@ function timeUp() {
   shake(ui.board, { distance: 8, duration: 450 });
   ui.board.classList.add('cd-over');
   renderInfo();
-  const { score, round } = game;
+  // Счёт — пройденные раунды: рекорд в меню и есть «как далеко зашёл».
+  const cleared = game.round - 1;
   later(() => api.finish({
-    outcome: 'lose', title: T.resultTitle, score, locale: 'ru', message: T.result(round - 1),
+    outcome: 'lose', title: T.resultTitle, score: cleared, locale: 'ru', message: T.result(cleared),
   }), reducedMotion() ? 0 : 1400);
 }
 
@@ -478,8 +475,8 @@ function card(title, ...children) {
 function showStats() {
   const item = (value, label) => el('div', { class: 'cd-stat' }, el('div', { class: 'cd-stat-value' }, value), el('div', { class: 'cd-stat-label' }, label));
   openModal(card(T.stats.title, el('div', { class: 'cd-stats-grid' },
-    item(stats.bestRound, T.stats.bestRound), item(stats.bestScore, T.stats.bestScore),
-    item(stats.rounds, T.stats.rounds), item(stats.played, T.stats.played),
+    item(stats.bestRound, T.stats.bestRound), item(stats.rounds, T.stats.rounds),
+    item(stats.played, T.stats.played),
   )));
 }
 
@@ -590,7 +587,6 @@ export default {
 
     ui = {
       sub: el('div', { class: 'cd-sub' }),
-      score: el('b', {}),
       best: el('b', {}),
       fill: el('b', {}),
       svg: svgEl('svg', { class: 'cd-svg' }),
@@ -619,7 +615,7 @@ export default {
         ),
       ),
       el('div', { class: 'cd-info' },
-        el('span', {}, `${T.score}: `, ui.score), el('span', {}, `${T.filled}: `, ui.fill), el('span', {}, `${T.best}: `, ui.best)),
+        el('span', {}, `${T.filled}: `, ui.fill), el('span', {}, `${T.best}: `, ui.best)),
       ui.wrap,
       ui.timer,
       el('div', { class: 'cd-tools' }, toolButton(ICONS.reset, T.tools.reset, onReset), ui.hintButton),
