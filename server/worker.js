@@ -21,7 +21,7 @@
 // Бот: POST /bot — вебхук Telegram, проверяется заголовком X-Telegram-Bot-Api-Secret-Token.
 
 import {
-  checkInitData, validateState, parseAdminIds, isAdmin, displayName,
+  checkInitData, diagnoseInitData, validateState, parseAdminIds, isAdmin, displayName,
 } from './lib.js';
 
 // Кто может обращаться к обработчику. Свой домен — чтобы чужой сайт не ходил в него от имени игрока.
@@ -66,6 +66,12 @@ export default {
       // Диагностика: какому боту принадлежит токен в настройках. Сам токен не раскрывается —
       // видно только имя бота. Нужна, когда мини-апп открыт одним ботом, а токен лежит от другого.
       if (path === '/whoami') return await whoami(env, origin);
+      // Диагностика входа: почему не сошлась подпись. Данные игрока наружу не отдаёт.
+      if (path === '/debug/initdata') {
+        const header = request.headers.get('Authorization') ?? '';
+        const initData = header.startsWith('tma ') ? header.slice(4).trim() : '';
+        return json(await diagnoseInitData(initData, env.BOT_TOKEN), 200, origin);
+      }
 
       // Всё остальное — только для игрока, подтверждённого подписью Telegram.
       const auth = await authorize(request, env);

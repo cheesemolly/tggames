@@ -104,6 +104,19 @@ if (account.enabled) {
     const res = await account.signIn();
     if (!res.ok) {
       if (res.error !== 'network') toast.show(message(res.error), 3000);
+      // Подпись не сошлась при заведомо верном токене — редкий случай, сразу показываем причину,
+      // иначе её не видно без отладчика внутри Telegram.
+      if (res.error === 'bad_signature' || res.error === 'bad_init_data') {
+        const d = await account.diagnose();
+        const info = d.ok ? d.data : { error: d.error };
+        console.warn('Диагностика входа:', info);
+        const variant = Object.entries(info.matches ?? {}).find(([, match]) => match)?.[0];
+        toast.show(variant
+          ? `Подпись считается иначе: подходит вариант «${variant}»`
+          : `Подпись не от этого бота. Полей: ${info.fields?.length ?? '?'}`
+            + `${info.hasSignature ? ', есть signature' : ''}`
+            + `${info.ageSec != null ? `, возраст ${info.ageSec} с` : ''}`, 8000);
+      }
       return;
     }
     await sync.pull();

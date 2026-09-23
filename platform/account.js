@@ -62,6 +62,11 @@ export const account = {
     return res;
   },
 
+  /** Почему не сошлась подпись: сервер перебирает способы подсчёта и говорит, какой подходит. */
+  diagnose() {
+    return this.request('/debug/initdata');
+  },
+
   fetchState() {
     return this.request('/state');
   },
