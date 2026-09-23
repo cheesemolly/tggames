@@ -5,8 +5,9 @@ import { account } from '../platform/account.js';
 import { el } from '../shared/dom.js';
 import { createToast } from '../shared/toast.js';
 import { games } from './registry.js';
-import { currentRoute, onRouteChange, goToMenu } from './router.js';
-import { renderMenu } from './menu.js';
+import { currentRoute, onRouteChange, goToMenu, goToFolder } from './router.js';
+import { renderMenu, renderFolder } from './menu.js';
+import { findCategory, categoryOfGame } from './categories.js';
 import { migrateStats } from './stats.js';
 import { openGame } from './game-host.js';
 import { createSync } from './sync.js';
@@ -41,13 +42,37 @@ function show(route) {
       return;
     }
     platform.backButton.show();
-    session = openGame(screen, entry, { platform, onExit: goToMenu });
+    // «Назад» из игры возвращает в её папку, а не на главную.
+    session = openGame(screen, entry, { platform, onExit: () => backFrom(route) });
+    return;
+  }
+
+  if (route.name === 'folder') {
+    const category = findCategory(route.id);
+    if (!category) {
+      goToMenu();
+      return;
+    }
+    platform.backButton.show();
+    renderFolder(screen, { category, games, onBack: goToMenu }).catch((err) => console.error(err));
     return;
   }
 
   platform.backButton.hide();
-  renderMenu(screen, { games, platform, account, onAccount: openAccountScreen })
+  renderMenu(screen, { games, account, onAccount: openAccountScreen })
     .catch((err) => console.error(err));
+}
+
+/** Куда ведёт «Назад»: из игры — в её папку, из папки — на главную. */
+function backFrom(route = currentRoute()) {
+  if (route.name === 'game') {
+    const category = categoryOfGame(route.id);
+    if (category) {
+      goToFolder(category.id);
+      return;
+    }
+  }
+  goToMenu();
 }
 
 const redraw = () => show(currentRoute());
@@ -74,7 +99,7 @@ async function openAccountScreen() {
 // Смысл рекорда у части игр изменился — старые числа чистятся один раз (shell/stats.js).
 await migrateStats();
 
-platform.backButton.onClick(goToMenu);
+platform.backButton.onClick(() => backFrom());
 onRouteChange(show);
 show(currentRoute());
 
