@@ -48,6 +48,7 @@ export async function renderMenu(container, { games, account = null, onAccount =
 
   container.replaceChildren(el('div', { class: 'scroll' },
     el('h1', {}, 'Игры'),
+    el('div', { class: 'title-rule' }),
     el('p', { class: 'hint' }, 'Выбери игру ниже.'),
     accountRow(account, onAccount),
     el('div', { class: 'folder-grid' }, cards),
@@ -63,6 +64,7 @@ export async function renderFolder(container, { category, games, onBack }) {
       el('button', { class: 'back-chip', onclick: onBack, 'aria-label': 'Ко всем играм' }, '‹ Все игры'),
       el('div', { class: 'folder-head-text' },
         el('h1', {}, category.title),
+        el('div', { class: 'title-rule' }),
         el('p', { class: 'hint' }, category.hint),
       ),
     ),
