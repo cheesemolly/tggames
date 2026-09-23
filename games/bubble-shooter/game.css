@@ -1,0 +1,208 @@
+/*
+ * «Шарики». Цвета — переменные --bs-*: шесть цветов шаров, фон поля и цвет линий.
+ * Скин «telegram» (по умолчанию) берёт фон и текст из темы Telegram, остальные — свои палитры,
+ * заданные и для светлой, и для тёмной темы (правило из CLAUDE.md).
+ */
+
+[data-game="bubble-shooter"], [data-game="bubble-shooter"] [data-skin="telegram"] {
+  --bs-bg: var(--tg-theme-bg-color);
+  --bs-surface: var(--tg-theme-secondary-bg-color);
+  --bs-text: var(--tg-theme-text-color);
+  --bs-hint: var(--tg-theme-hint-color);
+  --bs-field: color-mix(in srgb, var(--tg-theme-button-color) 14%, #0b1220);
+  --bs-line: #ffffff;
+  --bs-c1: #e24b4b;
+  --bs-c2: #2f9bf0;
+  --bs-c3: #3fbf6f;
+  --bs-c4: #f2b134;
+  --bs-c5: #a061e8;
+  --bs-c6: #35c9c2;
+}
+[data-game="bubble-shooter"][data-skin="classic"], [data-game="bubble-shooter"] [data-skin="classic"] {
+  --bs-bg: #2a7fd4;                 /* синее небо, как в видео */
+  --bs-surface: #1f66ad;
+  --bs-text: #ffffff;
+  --bs-hint: #cfe4fa;
+  --bs-field: #4ea3ea;
+  --bs-line: #ffffff;
+  --bs-c1: #e33b3b;
+  --bs-c2: #2f6fe0;
+  --bs-c3: #37b24d;
+  --bs-c4: #f4b400;
+  --bs-c5: #7a4fd6;
+  --bs-c6: #3ad1d1;
+}
+[data-game="bubble-shooter"][data-skin="neon"], [data-game="bubble-shooter"] [data-skin="neon"] {
+  --bs-bg: #0a0a18;
+  --bs-surface: #16163a;
+  --bs-text: #e8e8ff;
+  --bs-hint: #8b8bc7;
+  --bs-field: #12122e;
+  --bs-line: #7cf9ff;
+  --bs-c1: #ff2d87;
+  --bs-c2: #2de2ff;
+  --bs-c3: #55ff9f;
+  --bs-c4: #ffd23f;
+  --bs-c5: #b46bff;
+  --bs-c6: #ff8a3d;
+}
+[data-game="bubble-shooter"][data-skin="candy"], [data-game="bubble-shooter"] [data-skin="candy"] {
+  --bs-bg: #fff4fa;
+  --bs-surface: #ffe3f1;
+  --bs-text: #6b2748;
+  --bs-hint: #b9789a;
+  --bs-field: #ffd9ec;
+  --bs-line: #8a3b64;
+  --bs-c1: #ff6b8b;
+  --bs-c2: #5bc8f5;
+  --bs-c3: #7ed957;
+  --bs-c4: #ffc75f;
+  --bs-c5: #c08cff;
+  --bs-c6: #4fd6c0;
+}
+:root[data-theme="dark"] [data-game="bubble-shooter"][data-skin="candy"] {
+  --bs-bg: #2a1622;
+  --bs-surface: #3d1f31;
+  --bs-text: #ffe4f1;
+  --bs-hint: #d69bb9;
+  --bs-field: #3a1e2f;
+  --bs-line: #ffd9ec;
+}
+
+.game-root[data-game="bubble-shooter"] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+  background: var(--bs-bg);
+  color: var(--bs-text);
+  transition: background-color 0.3s ease, color 0.3s ease;
+  user-select: none;
+  -webkit-user-select: none;
+}
+[data-game="bubble-shooter"] .btn { background: var(--tg-theme-button-color); color: var(--tg-theme-button-text-color); }
+[data-game="bubble-shooter"] .btn-secondary { background: var(--bs-surface); color: var(--bs-text); }
+
+[data-game="bubble-shooter"] .bs { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+[data-game="bubble-shooter"] .bs-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 4px; }
+[data-game="bubble-shooter"] .bs-title { font-size: 20px; font-weight: 700; line-height: 1.2; }
+[data-game="bubble-shooter"] .bs-sub { font-size: 13px; color: var(--bs-hint); }
+[data-game="bubble-shooter"] .bs-actions { display: flex; gap: 6px; }
+[data-game="bubble-shooter"] .bs-icon-btn {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: var(--bs-surface);
+  color: var(--bs-text);
+  font: inherit;
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+[data-game="bubble-shooter"] .bs-icon-btn:active { transform: scale(0.92); }
+
+[data-game="bubble-shooter"] .bs-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 6px;
+  font-size: 14px;
+  color: var(--bs-hint);
+}
+[data-game="bubble-shooter"] .bs-info b { color: var(--bs-text); }
+
+/* следующий шар: тап меняет его с текущим */
+[data-game="bubble-shooter"] .bs-next {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 8px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--bs-surface);
+  color: var(--bs-hint);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+[data-game="bubble-shooter"] .bs-next:active { transform: scale(0.95); }
+[data-game="bubble-shooter"] .bs-next-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  box-shadow: inset 0 -2px 4px rgb(0 0 0 / 0.35), inset 0 2px 3px rgb(255 255 255 / 0.5);
+}
+
+[data-game="bubble-shooter"] .bs-wrap { position: relative; flex: 1; min-height: 0; display: grid; place-items: center; }
+[data-game="bubble-shooter"] .bs-canvas { display: block; touch-action: none; }
+[data-game="bubble-shooter"] .bs-fx { position: absolute; inset: 0; pointer-events: none; }
+
+[data-game="bubble-shooter"] .bs-combo {
+  position: absolute;
+  left: 50%;
+  top: 12%;
+  transform: translateX(-50%);
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--bs-surface);
+  color: var(--bs-text);
+  font-weight: 800;
+  pointer-events: none;
+}
+
+/* окна */
+[data-game="bubble-shooter"] .bs-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgb(0 0 0 / 0.45);
+}
+[data-game="bubble-shooter"] .bs-card {
+  width: 100%;
+  max-width: 320px;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--bs-bg);
+  color: var(--bs-text);
+  box-shadow: 0 18px 40px rgb(0 0 0 / 0.35);
+}
+[data-game="bubble-shooter"] .bs-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+[data-game="bubble-shooter"] .bs-card-title { margin: 0; font-size: 18px; }
+[data-game="bubble-shooter"] .bs-card-actions { display: grid; gap: 8px; margin-top: 12px; }
+[data-game="bubble-shooter"] .bs-note { margin: 0 0 8px; font-size: 14px; color: var(--bs-hint); }
+
+[data-game="bubble-shooter"] .bs-stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+[data-game="bubble-shooter"] .bs-stat { padding: 10px; border-radius: 12px; background: var(--bs-surface); text-align: center; }
+[data-game="bubble-shooter"] .bs-stat-value { font-size: 20px; font-weight: 800; }
+[data-game="bubble-shooter"] .bs-stat-label { font-size: 12px; color: var(--bs-hint); }
+
+[data-game="bubble-shooter"] .bs-skins { display: grid; gap: 8px; }
+[data-game="bubble-shooter"] .bs-skin {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  background: var(--bs-surface);
+  color: var(--bs-text);
+  font: inherit;
+  cursor: pointer;
+}
+[data-game="bubble-shooter"] .bs-skin-on { border-color: var(--tg-theme-button-color); }
+[data-game="bubble-shooter"] .bs-skin-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--bs-c1) 0 33%, var(--bs-c3) 33% 66%, var(--bs-c2) 66%);
+}
+
+/* невидимый элемент: через него Canvas узнаёт цвета скина */
+[data-game="bubble-shooter"] .bs-probe { position: absolute; width: 0; height: 0; opacity: 0; pointer-events: none; }

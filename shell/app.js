@@ -26,6 +26,9 @@ const sync = createSync({
   afterRestore: migrateStats,      // серверный прогресс может быть ещё со старыми рекордами
 });
 
+/** Игры, которые видит этот игрок: помеченные admin — только владельцу. */
+const visibleGames = () => games.filter((g) => !g.admin || account.isAdmin);
+
 function show(route) {
   session?.close();
   session = null;
@@ -39,6 +42,10 @@ function show(route) {
     const entry = games.find((g) => g.id === route.id);
     if (!entry) {
       console.warn(`Неизвестная игра "${route.id}", возвращаюсь в меню`);
+      goToMenu();
+      return;
+    }
+    if (entry.admin && !account.isAdmin) {          // чужая ссылка на игру в обкатке
       goToMenu();
       return;
     }
@@ -65,12 +72,12 @@ function show(route) {
       return;
     }
     platform.backButton.show();
-    renderFolder(screen, { category, games, onBack: goToMenu }).catch((err) => console.error(err));
+    renderFolder(screen, { category, games: visibleGames(), onBack: goToMenu }).catch((err) => console.error(err));
     return;
   }
 
   platform.backButton.hide();
-  renderMenu(screen, { games, account }).catch((err) => console.error(err));
+  renderMenu(screen, { games: visibleGames(), account }).catch((err) => console.error(err));
 }
 
 /** Куда ведёт «Назад»: из игры — в её папку, из папки — на главную. */
