@@ -46,6 +46,14 @@ function createTelegramPlatform(tg) {
   syncScheme();
   tg.onEvent('themeChanged', syncScheme);
 
+  // В полноэкранном режиме Telegram убирает свою шапку, но рисует поверх страницы кнопки «закрыть»
+  // и «меню», а сверху ещё часы и вырез устройства. По этому признаку вёрстка добавляет отступы
+  // (styles/app.css), иначе заголовок уезжает под статус-бар.
+  const syncFullscreen = () => { root.dataset.fullscreen = tg.isFullscreen ? 'on' : 'off'; };
+  syncFullscreen();
+  tg.onEvent?.('fullscreenChanged', syncFullscreen);
+  tg.onEvent?.('fullscreenFailed', syncFullscreen);
+
   return {
     isTelegram: true,
     user: tg.initDataUnsafe?.user ?? null,
@@ -90,6 +98,17 @@ function createTelegramPlatform(tg) {
       onChange(cb) {
         tg.onEvent?.('fullscreenChanged', cb);
         tg.onEvent?.('fullscreenFailed', cb);
+      },
+      /** Позвать один раз при старте: на клиентах без поддержки просто ничего не произойдёт. */
+      tryEnable() {
+        if (typeof tg.requestFullscreen !== 'function') return false;
+        try {
+          tg.requestFullscreen();
+          return true;
+        } catch (err) {
+          console.warn('полноэкранный режим недоступен', err);
+          return false;
+        }
       },
     },
 
@@ -177,6 +196,7 @@ function createBrowserPlatform() {
       request: () => log('fullscreen.request()'),
       exit: () => log('fullscreen.exit()'),
       onChange: () => {},
+      tryEnable: () => false,
     },
 
     mainButton: {
