@@ -17,9 +17,12 @@ async function hmac(keyBytes, message) {
 }
 
 /** initData, какую кладёт Telegram: поля + hash, подписанный ключом от токена бота. */
-export async function makeInitData(token, user, { authDate = Date.now(), queryId = 'AAA' } = {}) {
+export async function makeInitData(token, user, { authDate = Date.now(), queryId = 'AAA', signature = null } = {}) {
   const fields = { auth_date: String(Math.floor(authDate / 1000)), query_id: queryId };
   if (user) fields.user = JSON.stringify(user);
+  // Новые клиенты добавляют signature (для сторонней проверки по Ed25519). В подписываемую строку
+  // оно входит наравне с остальными полями — проверяем, что мы это учитываем.
+  if (signature) fields.signature = signature;
 
   const check = Object.entries(fields).map(([k, v]) => `${k}=${v}`).sort().join('\n');
   const secret = await hmac(enc.encode('WebAppData'), token);

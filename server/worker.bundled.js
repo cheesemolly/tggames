@@ -33,12 +33,16 @@ function timingSafeEqual(a, b) {
 }
 
 /**
- * Строка, которую Telegram подписывает: все поля, кроме hash и signature, в виде key=value,
+ * Строка, которую Telegram подписывает: все поля **кроме hash**, в виде key=value,
  * отсортированные по имени и склеенные переводом строки.
+ *
+ * Важно: поле `signature` (есть у новых клиентов, нужно для сторонней проверки по Ed25519)
+ * в эту строку ВХОДИТ. Если его исключить, подпись не сойдётся — на Telegram Desktop вход
+ * падал именно из-за этого (найдено диагностикой /debug/initdata, 2026-09-23).
  */
 function dataCheckString(params) {
   return [...params.entries()]
-    .filter(([key]) => key !== 'hash' && key !== 'signature')
+    .filter(([key]) => key !== 'hash')
     .map(([key, value]) => `${key}=${value}`)
     .sort()
     .join('\n');
@@ -117,10 +121,10 @@ async function diagnoseInitData(initData, botToken) {
 
   const secret = await hmac(enc.encode('WebAppData'), botToken);
   const variants = {
-    decoded: build([...params.entries()], ['hash', 'signature']),
-    raw: build(rawPairs, ['hash', 'signature']),
-    decodedWithSignature: build([...params.entries()], ['hash']),
-    rawWithSignature: build(rawPairs, ['hash']),
+    standard: build([...params.entries()], ['hash']),                     // так считаем мы
+    withoutSignature: build([...params.entries()], ['hash', 'signature']),
+    raw: build(rawPairs, ['hash']),
+    rawWithoutSignature: build(rawPairs, ['hash', 'signature']),
   };
   for (const [name, text] of Object.entries(variants)) {
     out.matches[name] = timingSafeEqual(toHex(await hmac(secret, text)), hash);
