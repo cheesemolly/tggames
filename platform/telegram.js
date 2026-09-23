@@ -3,7 +3,7 @@
 // она рисует фейковую шапку (кнопка «Назад», переключатель темы) и фейковую MainButton.
 //
 // Интерфейс platform:
-//   isTelegram, user, colorScheme
+//   isTelegram, user, initData (подписанная строка для сервера; вне Telegram — пустая), colorScheme
 //   ready(), expand()
 //   mainButton: show(), hide(), setText(text), onClick(cb), offClick(cb)
 //   backButton: show(), hide(), onClick(cb), offClick(cb)
@@ -47,6 +47,8 @@ function createTelegramPlatform(tg) {
   return {
     isTelegram: true,
     user: tg.initDataUnsafe?.user ?? null,
+    // Сырая строка с подписью: сервер по ней узнаёт игрока. Читается каждый раз — Telegram её обновляет.
+    get initData() { return tg.initData; },
     get colorScheme() { return tg.colorScheme; },
 
     ready: () => tg.ready(),
@@ -123,6 +125,7 @@ function createBrowserPlatform() {
 
   return {
     isTelegram: false,
+    initData: '',                    // вне Telegram подписывать нечего — аккаунтов тут нет
     user: FAKE_USER,
     get colorScheme() { return scheme; },
 

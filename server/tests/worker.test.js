@@ -1,187 +1,251 @@
-// Проверка обработчика целиком: настоящий worker.js поверх локальной SQLite вместо Cloudflare D1.
-// Запросов по сети нет — worker.fetch() вызывается напрямую, как это делает Cloudflare.
+// Проверка обработчика целиком: настоящий worker.js поверх SQLite вместо Cloudflare D1
+// и подменённого fetch вместо Bot API. Запросов по сети нет.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { DatabaseSync } from 'node:sqlite';
 
 import worker from '../worker.js';
-import { ATTEMPT_LIMIT } from '../lib.js';
+import { makeInitData, createEnv, captureTelegram, TOKEN, USER, ADMIN } from './helpers.js';
 
-const SCHEMA = readFileSync(new URL('../schema.sql', import.meta.url), 'utf8');
 const ORIGIN = 'https://cheesemolly.github.io';
 
-/** Обёртка над SQLite с интерфейсом D1 (prepare → bind → first/run). */
-function createEnv() {
-  const db = new DatabaseSync(':memory:');
-  db.exec(SCHEMA);
-  const wrap = (stmt, args) => ({
-    first: () => stmt.get(...args) ?? null,
-    run: () => stmt.run(...args),
-    all: () => ({ results: stmt.all(...args) }),
-  });
-  return {
-    DB: {
-      prepare(sql) {
-        const stmt = db.prepare(sql);
-        return { bind: (...args) => wrap(stmt, args), ...wrap(stmt, []) };
-      },
-    },
-  };
+async function call(env, path, { method = 'GET', payload, initData, headers = {} } = {}) {
+  const head = { Origin: ORIGIN, ...headers };
+  if (payload !== undefined) head['Content-Type'] = 'application/json';
+  if (initData) head.Authorization = `tma ${initData}`;
+  const res = await worker.fetch(new Request(`https://api.test${path}`, {
+    method, headers: head, body: payload === undefined ? undefined : JSON.stringify(payload),
+  }), env);
+  const text = await res.text();
+  let data = {};
+  try {
+    data = JSON.parse(text);
+  } catch {
+    data = { raw: text };
+  }
+  return { status: res.status, data };
 }
 
-async function call(env, path, { method = 'GET', payload, token } = {}) {
-  const headers = { Origin: ORIGIN };
-  if (payload !== undefined) headers['Content-Type'] = 'application/json';
-  if (token) headers.Authorization = `Bearer ${token}`;
-  const response = await worker.fetch(
-    new Request(`https://api.test${path}`, {
-      method,
-      headers,
-      body: payload === undefined ? undefined : JSON.stringify(payload),
-    }),
-    env,
-  );
-  const data = await response.json();
-  return { status: response.status, data, cors: response.headers.get('Access-Control-Allow-Origin') };
-}
+const asUser = (user) => makeInitData(TOKEN, user);
 
-const register = (env, name, password, state) => call(env, '/register', { method: 'POST', payload: { name, password, state } });
-const login = (env, name, password) => call(env, '/login', { method: 'POST', payload: { name, password } });
-
-test('регистрация выдаёт токен, повторное имя — отказ', async () => {
+test('первый заход заводит игрока, следующий — обновляет имя', async () => {
   const env = createEnv();
-  const first = await register(env, 'Маша', 'секрет123');
+  const first = await call(env, '/me', { initData: await asUser(USER) });
   assert.equal(first.status, 200);
-  assert.ok(first.data.token);
+  assert.equal(first.data.tgId, USER.id);
   assert.equal(first.data.name, 'Маша');
-  assert.equal(first.cors, ORIGIN, 'свой домен разрешён');
+  assert.equal(first.data.isAdmin, false);
 
-  const again = await register(env, 'маша', 'другой-пароль');
-  assert.equal(again.status, 409);
-  assert.equal(again.data.error, 'name_taken', 'регистр не создаёт второго игрока с тем же именем');
-
-  const short = await register(env, 'Петя', '123');
-  assert.equal(short.data.error, 'password_short');
+  const renamed = await call(env, '/me', { initData: await asUser({ ...USER, first_name: 'Мария' }) });
+  assert.equal(renamed.data.id, first.data.id, 'тот же игрок, а не новый');
+  assert.equal(renamed.data.name, 'Мария');
 });
 
-test('вход: верный пароль пускает, неверный — нет', async () => {
+test('без подписи Telegram внутрь не пускают', async () => {
   const env = createEnv();
-  await register(env, 'Петя', 'пароль-раз');
-
-  const ok = await login(env, 'ПЕТЯ', 'пароль-раз');
-  assert.equal(ok.status, 200);
-  assert.ok(ok.data.token);
-  assert.equal(ok.data.name, 'Петя', 'имя отдаётся так, как его записали при регистрации');
-
-  const bad = await login(env, 'Петя', 'пароль-два');
-  assert.equal(bad.status, 401);
-  assert.equal(bad.data.error, 'bad_credentials');
-
-  const nobody = await login(env, 'Вася', 'какой-нибудь');
-  assert.equal(nobody.status, 401);
-  assert.equal(nobody.data.error, 'bad_credentials', 'по ответу не видно, есть ли такой игрок');
+  assert.equal((await call(env, '/me')).status, 401);
+  assert.equal((await call(env, '/state', { initData: 'poddelka' })).status, 401);
+  const alien = await makeInitData('999:another-token', USER);
+  assert.equal((await call(env, '/me', { initData: alien })).data.error, 'bad_signature');
 });
 
-test('после лимита неудачных попыток имя блокируется', async () => {
+test('прогресс: сохраняется, читается и не виден чужим', async () => {
   const env = createEnv();
-  await register(env, 'Жертва', 'правильный-пароль');
-  for (let i = 0; i < ATTEMPT_LIMIT; i += 1) await login(env, 'Жертва', `перебор-${i}`);
+  const masha = await asUser(USER);
+  const petya = await asUser({ id: 43, first_name: 'Петя' });
+  await call(env, '/me', { initData: masha });
+  await call(env, '/me', { initData: petya });
 
-  const blocked = await login(env, 'Жертва', 'правильный-пароль');
-  assert.equal(blocked.status, 429);
-  assert.equal(blocked.data.error, 'too_many', 'даже верный пароль не проходит, пока идёт блокировка');
-});
-
-test('прогресс сохраняется и возвращается только владельцу', async () => {
-  const env = createEnv();
-  const created = (await register(env, 'Маша', 'секрет123')).data;
-  const masha = created.token;
-  const petya = (await register(env, 'Петя', 'секрет123')).data.token;
-
-  const state = JSON.stringify({ 'game:words:progress': { current: 7 } });
-  // base — отметка, которую клиент получил при регистрации или последнем обмене с сервером.
-  const put = await call(env, '/state', { method: 'PUT', token: masha, payload: { data: state, base: created.updatedAt } });
+  const state = JSON.stringify({ 'shell:progress:words': 'Уровень 14' });
+  const put = await call(env, '/state', { method: 'PUT', initData: masha, payload: { data: state, base: 0 } });
   assert.equal(put.status, 200);
 
-  const mine = await call(env, '/state', { token: masha });
-  assert.equal(mine.data.data, state);
-
-  const other = await call(env, '/state', { token: petya });
-  assert.equal(other.data.data, '{}', 'чужой прогресс не виден');
-
-  const anon = await call(env, '/state');
-  assert.equal(anon.status, 401);
-  const fake = await call(env, '/state', { token: 'ne-nastoyaschiy-token' });
-  assert.equal(fake.status, 401);
-});
-
-test('гостевой прогресс переносится в аккаунт при регистрации', async () => {
-  const env = createEnv();
-  const guest = JSON.stringify({ 'shell:stats:2048': { played: 3, wins: 1, best: 900 } });
-  const { data } = await register(env, 'Гость', 'секрет123', guest);
-  const state = await call(env, '/state', { token: data.token });
-  assert.equal(state.data.data, guest);
+  assert.equal((await call(env, '/state', { initData: masha })).data.data, state);
+  assert.equal((await call(env, '/state', { initData: petya })).data.data, '{}', 'чужой прогресс не виден');
 });
 
 test('сохранение с другого устройства не затирается', async () => {
   const env = createEnv();
-  const created = (await register(env, 'Маша', 'секрет123')).data;
-  const token = created.token;
+  const masha = await asUser(USER);
+  await call(env, '/me', { initData: masha });
 
-  // Телефон сохранил.
-  const phone = await call(env, '/state', {
-    method: 'PUT', token, payload: { data: '{"a":1}', base: created.updatedAt },
-  });
+  const phone = await call(env, '/state', { method: 'PUT', initData: masha, payload: { data: '{"a":1}', base: 0 } });
   assert.equal(phone.status, 200);
 
-  // Компьютер играл от старой отметки — сервер отвечает конфликтом и присылает свежие данные.
-  const desktop = await call(env, '/state', {
-    method: 'PUT', token, payload: { data: '{"b":2}', base: created.updatedAt },
-  });
+  const desktop = await call(env, '/state', { method: 'PUT', initData: masha, payload: { data: '{"b":2}', base: 0 } });
   assert.equal(desktop.status, 409);
-  assert.equal(desktop.data.conflict, true);
   assert.equal(desktop.data.data, '{"a":1}');
 
-  // Повтор с правильной отметкой проходит.
   const retry = await call(env, '/state', {
-    method: 'PUT', token, payload: { data: '{"b":2}', base: desktop.data.updatedAt },
+    method: 'PUT', initData: masha, payload: { data: '{"b":2}', base: desktop.data.updatedAt },
   });
   assert.equal(retry.status, 200);
-  assert.equal((await call(env, '/state', { token })).data.data, '{"b":2}');
 });
 
-test('выход убивает сессию', async () => {
+test('панель: только для владельца', async () => {
   const env = createEnv();
-  const token = (await register(env, 'Маша', 'секрет123')).data.token;
-  assert.equal((await call(env, '/me', { token })).data.name, 'Маша');
+  const masha = await asUser(USER);
+  await call(env, '/me', { initData: masha });
 
-  await call(env, '/logout', { method: 'POST', token });
-  assert.equal((await call(env, '/me', { token })).status, 401, 'старый токен больше не работает');
+  assert.equal((await call(env, '/admin/players', { initData: masha })).status, 403);
+
+  const owner = await asUser(ADMIN);
+  const me = await call(env, '/me', { initData: owner });
+  assert.equal(me.data.isAdmin, true);
+  const list = await call(env, '/admin/players', { initData: owner });
+  assert.equal(list.status, 200);
+  assert.equal(list.data.total, 2);
+  assert.ok(list.data.players.some((p) => p.tgId === USER.id));
 });
 
-test('слишком большой прогресс не принимается', async () => {
+test('панель: поиск, правка прогресса, блокировка, удаление', async () => {
   const env = createEnv();
-  const token = (await register(env, 'Маша', 'секрет123')).data.token;
-  const huge = JSON.stringify({ big: 'x'.repeat(500 * 1024) });
-  const res = await call(env, '/state', { method: 'PUT', token, payload: { data: huge, base: 0 } });
-  assert.equal(res.status, 400);
-  assert.equal(res.data.error, 'state_big');
+  const masha = await asUser(USER);
+  const owner = await asUser(ADMIN);
+  await call(env, '/me', { initData: masha });
+  await call(env, '/me', { initData: owner });
+  await call(env, '/state', { method: 'PUT', initData: masha, payload: { data: '{"x":1}', base: 0 } });
+
+  const found = await call(env, '/admin/players?q=masha', { initData: owner });
+  assert.equal(found.data.players.length, 1);
+  const id = found.data.players[0].id;
+
+  const card = await call(env, `/admin/player/${id}`, { initData: owner });
+  assert.equal(card.data.data, '{"x":1}');
+
+  // откат игрока на 14-й уровень «Слов»
+  const fixed = JSON.stringify({ 'shell:progress:words': 'Уровень 14' });
+  const saved = await call(env, `/admin/player/${id}/state`, { method: 'PUT', initData: owner, payload: { data: fixed } });
+  assert.equal(saved.status, 200);
+  assert.equal((await call(env, `/admin/player/${id}`, { initData: owner })).data.data, fixed);
+  assert.ok(saved.data.updatedAt > Date.now(), 'отметка заведомо новее — устройство игрока применит правку');
+
+  // блокировка закрывает вход, разблокировка возвращает
+  await call(env, `/admin/player/${id}/ban`, { method: 'POST', initData: owner, payload: { banned: true } });
+  const blocked = await call(env, '/state', { initData: masha });
+  assert.equal(blocked.status, 403);
+  assert.equal(blocked.data.error, 'banned');
+  await call(env, `/admin/player/${id}/ban`, { method: 'POST', initData: owner, payload: { banned: false } });
+  assert.equal((await call(env, '/state', { initData: masha })).status, 200);
+
+  // удаление
+  assert.equal((await call(env, `/admin/player/${id}`, { method: 'DELETE', initData: owner })).status, 200);
+  assert.equal((await call(env, `/admin/player/${id}`, { initData: owner })).status, 404);
+  assert.equal((await call(env, '/admin/players', { initData: owner })).data.total, 1);
 });
 
-test('неизвестный путь и проверка живости', async () => {
+test('панель не принимает мусор вместо прогресса', async () => {
+  const env = createEnv();
+  const owner = await asUser(ADMIN);
+  const me = await call(env, '/me', { initData: owner });
+  const bad = await call(env, `/admin/player/${me.data.id}/state`, {
+    method: 'PUT', initData: owner, payload: { data: 'не json' },
+  });
+  assert.equal(bad.status, 400);
+  assert.equal(bad.data.error, 'state_json');
+});
+
+test('бот: /start и подсказка отвечают кнопкой «Играть»', async () => {
+  const env = createEnv();
+  const tg = captureTelegram();
+  try {
+    const update = (text) => call(env, '/bot', {
+      method: 'POST',
+      headers: { 'X-Telegram-Bot-Api-Secret-Token': env.WEBHOOK_SECRET },
+      payload: { message: { chat: { id: 500 }, from: { id: USER.id }, text } },
+    });
+
+    await update('/start');
+    const start = tg.calls.at(-1);
+    assert.equal(start.method, 'sendMessage');
+    assert.equal(start.payload.chat_id, 500);
+    assert.equal(start.payload.reply_markup.inline_keyboard[0][0].web_app.url, env.APP_URL);
+
+    await update('привет');
+    assert.match(tg.calls.at(-1).payload.text, /\/me/, 'непонятный текст — показываем команды');
+  } finally {
+    tg.restore();
+  }
+});
+
+test('бот: /me рассказывает прогресс', async () => {
+  const env = createEnv();
+  const masha = await asUser(USER);
+  await call(env, '/me', { initData: masha });
+  await call(env, '/state', {
+    method: 'PUT',
+    initData: masha,
+    payload: {
+      data: JSON.stringify({
+        'shell:progress:words': 'Уровень 14',
+        'shell:stats:2048': { played: 5, wins: 1, best: 512 },
+        'shell:stats:2048:4': { played: 5, wins: 1, best: 512 },
+      }),
+      base: 0,
+    },
+  });
+
+  const tg = captureTelegram();
+  try {
+    await call(env, '/bot', {
+      method: 'POST',
+      headers: { 'X-Telegram-Bot-Api-Secret-Token': env.WEBHOOK_SECRET },
+      payload: { message: { chat: { id: 1 }, from: { id: USER.id }, text: '/me' } },
+    });
+    const text = tg.calls.at(-1).payload.text;
+    assert.match(text, /words: Уровень 14/);
+    assert.match(text, /2048: сыграно 5, рекорд 512/);
+    assert.doesNotMatch(text, /2048:4/, 'варианты игры не перечисляем');
+  } finally {
+    tg.restore();
+  }
+});
+
+test('рассылка: только владельцу, уходит всем игрокам', async () => {
+  const env = createEnv();
+  await call(env, '/me', { initData: await asUser(USER) });
+  await call(env, '/me', { initData: await asUser({ id: 43, first_name: 'Петя' }) });
+  await call(env, '/me', { initData: await asUser(ADMIN) });
+
+  const tg = captureTelegram();
+  try {
+    const send = (from, text) => call(env, '/bot', {
+      method: 'POST',
+      headers: { 'X-Telegram-Bot-Api-Secret-Token': env.WEBHOOK_SECRET },
+      payload: { message: { chat: { id: from }, from: { id: from }, text } },
+    });
+
+    await send(USER.id, '/broadcast всем привет');
+    assert.equal(tg.calls.length, 1);
+    assert.match(tg.calls[0].payload.text, /только для владельца/);
+
+    tg.calls.length = 0;
+    await send(ADMIN.id, '/broadcast Добавил новую игру!');
+    const sent = tg.calls.filter((c) => c.payload.text === 'Добавил новую игру!');
+    assert.equal(sent.length, 3, 'сообщение ушло всем троим');
+    assert.match(tg.calls.at(-1).payload.text, /Разослано: 3 из 3/);
+  } finally {
+    tg.restore();
+  }
+});
+
+test('вебхук без секретного заголовка не принимается', async () => {
+  const env = createEnv();
+  const tg = captureTelegram();
+  try {
+    const res = await call(env, '/bot', {
+      method: 'POST',
+      payload: { message: { chat: { id: 1 }, from: { id: USER.id }, text: '/start' } },
+    });
+    assert.equal(res.status, 403);
+    assert.equal(tg.calls.length, 0, 'чужой запрос ничего не отправляет');
+  } finally {
+    tg.restore();
+  }
+});
+
+test('проверка живости и неизвестный путь', async () => {
   const env = createEnv();
   assert.equal((await call(env, '/')).data.ok, true);
-  assert.equal((await call(env, '/нет-такого')).status, 404);
-});
-
-test('схему можно вставить в консоль D1 одной строкой', () => {
-  // Консоль Cloudflare склеивает вставленный текст в одну строку. С комментариями «--» всё после
-  // первого из них стало бы комментарием, и запрос не выполнился бы (так и случилось при первой попытке).
-  assert.ok(!/(^|[^-])--(?!>)/.test(SCHEMA), 'в schema.sql только блочные комментарии /* */');
-  const db = new DatabaseSync(':memory:');
-  db.exec(SCHEMA.replace(/\s+/g, ' ').trim());
-  const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map((r) => r.name);
-  for (const table of ['users', 'sessions', 'states', 'attempts']) assert.ok(tables.includes(table), table);
+  assert.equal((await call(env, '/нет-такого', { initData: await asUser(USER) })).status, 404);
 });

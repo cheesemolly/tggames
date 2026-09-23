@@ -1,69 +1,38 @@
-// Аккаунт игрока: регистрация, вход, выход и обмен прогрессом с сервером (server/worker.js).
-// Токен хранится вне пространства `tggames:` — он не часть прогресса и не уезжает на сервер.
+// Аккаунт игрока: внутри Telegram он появляется сам, без регистраций и паролей.
 //
-// Если адрес сервера не задан (shell/config.js), аккаунтов нет вовсе: игра работает как раньше,
-// полностью локально. Так сайт не ломается, пока обработчик не выложен.
+// Мини-приложение получает от Telegram строку initData с подписью; она уходит серверу в заголовке
+// `Authorization: tma <initData>`, сервер проверяет подпись токеном бота и узнаёт игрока.
+// Вне Telegram (обычный браузер) аккаунтов нет вовсе: игра работает как гостевая, прогресс в браузере.
 
 import { API_URL } from '../shell/config.js';
+import { platform } from './telegram.js';
+export { ERRORS, message } from './errors.js';
 
-const TOKEN_KEY = 'tggames-account';
-
-// Понятные игроку тексты вместо кодов ошибок сервера.
-export const ERRORS = {
-  name_empty: 'Введи имя',
-  name_bad: 'Имя: 3–20 букв, цифр, дефис или подчёркивание',
-  name_taken: 'Такое имя уже занято',
-  password_short: 'Пароль — не меньше 6 символов',
-  password_long: 'Слишком длинный пароль',
-  bad_credentials: 'Неверное имя или пароль',
-  too_many: 'Слишком много попыток. Попробуй через 15 минут',
-  unauthorized: 'Нужно войти заново',
-  state_big: 'Прогресс слишком большой для сохранения',
-  network: 'Сервер не отвечает. Прогресс сохранён на этом устройстве',
-  server: 'Ошибка на сервере. Попробуй позже',
-};
-
-export const message = (code) => ERRORS[code] ?? ERRORS.server;
-
-function read() {
-  try {
-    const raw = localStorage.getItem(TOKEN_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
-
-function write(value) {
-  try {
-    if (value) localStorage.setItem(TOKEN_KEY, JSON.stringify(value));
-    else localStorage.removeItem(TOKEN_KEY);
-  } catch {
-    // приватный режим: аккаунт будет забыт после перезагрузки, играть это не мешает
-  }
-}
+let me = null;              // { id, tgId, name, username, isAdmin, banned } или null
 
 export const account = {
-  /** Настроен ли сервер аккаунтов вообще. */
+  /** Аккаунты работают, только если выложен сервер и игра открыта внутри Telegram. */
   get enabled() {
-    return Boolean(API_URL);
+    return Boolean(API_URL) && platform.isTelegram;
   },
 
-  /** { name, token } вошедшего игрока или null. */
+  /** Данные игрока после успешного входа. */
   get current() {
-    return read();
+    return me;
   },
 
   get name() {
-    return read()?.name ?? null;
+    return me?.name ?? null;
   },
 
-  async request(path, { method = 'GET', payload = null, auth = true } = {}) {
-    if (!API_URL) return { ok: false, error: 'server' };
-    const headers = {};
+  get isAdmin() {
+    return Boolean(me?.isAdmin);
+  },
+
+  async request(path, { method = 'GET', payload = null } = {}) {
+    if (!this.enabled) return { ok: false, error: 'no_init_data' };
+    const headers = { Authorization: `tma ${platform.initData}` };
     if (payload) headers['Content-Type'] = 'application/json';
-    const token = auth ? read()?.token : null;
-    if (token) headers.Authorization = `Bearer ${token}`;
 
     let response;
     try {
@@ -82,32 +51,15 @@ export const account = {
     } catch {
       // сервер ответил не JSON — ниже это станет ошибкой по коду ответа
     }
-    if (response.status === 401 && auth && token) this.forget();
     if (!response.ok) return { ok: false, error: data.error ?? 'server', status: response.status, data };
     return { ok: true, data };
   },
 
-  async register(name, password, state) {
-    const res = await this.request('/register', { method: 'POST', auth: false, payload: { name, password, state } });
-    if (res.ok) write({ name: res.data.name, token: res.data.token });
+  /** Вход: подпись проверяет сервер, он же заводит игрока при первом заходе. */
+  async signIn() {
+    const res = await this.request('/me');
+    me = res.ok ? res.data : null;
     return res;
-  },
-
-  async login(name, password) {
-    const res = await this.request('/login', { method: 'POST', auth: false, payload: { name, password } });
-    if (res.ok) write({ name: res.data.name, token: res.data.token });
-    return res;
-  },
-
-  async logout() {
-    const res = await this.request('/logout', { method: 'POST' });
-    this.forget();
-    return res;
-  },
-
-  /** Забыть аккаунт на этом устройстве (выход, истёкший токен). */
-  forget() {
-    write(null);
   },
 
   fetchState() {
@@ -116,5 +68,33 @@ export const account = {
 
   saveState(data, base) {
     return this.request('/state', { method: 'PUT', payload: { data, base } });
+  },
+
+  // ---------- панель владельца ----------
+
+  players(query = '', { limit = 50, offset = 0 } = {}) {
+    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    if (query) params.set('q', query);
+    return this.request(`/admin/players?${params}`);
+  },
+
+  player(id) {
+    return this.request(`/admin/player/${id}`);
+  },
+
+  savePlayerState(id, data) {
+    return this.request(`/admin/player/${id}/state`, { method: 'PUT', payload: { data } });
+  },
+
+  banPlayer(id, banned) {
+    return this.request(`/admin/player/${id}/ban`, { method: 'POST', payload: { banned } });
+  },
+
+  deletePlayer(id) {
+    return this.request(`/admin/player/${id}`, { method: 'DELETE' });
+  },
+
+  broadcast(text) {
+    return this.request('/admin/broadcast', { method: 'POST', payload: { text } });
   },
 };

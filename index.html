@@ -6,8 +6,9 @@
   <title>Игры</title>
   <link rel="icon" href="data:,">  <!-- пустая иконка: без неё браузер шумит 404 на /favicon.ico -->
 
-  <!-- При переносе в Telegram раскомментировать. Адаптер работает и с ним, и без него. -->
-  <!-- <script src="https://telegram.org/js/telegram-web-app.js"></script> -->
+  <!-- Внутри Telegram даёт window.Telegram.WebApp (тема, кнопка «Назад», initData с подписью).
+       В обычном браузере скрипт тоже грузится, но initData пустая — адаптер включает заглушку. -->
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link rel="stylesheet" href="styles/theme.css">
   <link rel="stylesheet" href="styles/app.css">
   <script type="module" src="shell/app.js"></script>

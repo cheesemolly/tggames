@@ -2,6 +2,7 @@
 
 import { platform } from '../platform/telegram.js';
 import { account } from '../platform/account.js';
+import { message } from '../platform/errors.js';
 import { el } from '../shared/dom.js';
 import { createToast } from '../shared/toast.js';
 import { games } from './registry.js';
@@ -11,7 +12,7 @@ import { findCategory, categoryOfGame } from './categories.js';
 import { migrateStats } from './stats.js';
 import { openGame } from './game-host.js';
 import { createSync } from './sync.js';
-import { openAuth, guestChosen, rememberGuest, forgetGuest } from './auth.js';
+import { renderAdmin } from './admin.js';
 
 const root = document.getElementById('app');
 let session = null;
@@ -47,6 +48,16 @@ function show(route) {
     return;
   }
 
+  if (route.name === 'admin') {
+    if (!account.isAdmin) {
+      goToMenu();
+      return;
+    }
+    platform.backButton.show();
+    renderAdmin(screen, { onBack: goToMenu, toast });
+    return;
+  }
+
   if (route.name === 'folder') {
     const category = findCategory(route.id);
     if (!category) {
@@ -59,8 +70,7 @@ function show(route) {
   }
 
   platform.backButton.hide();
-  renderMenu(screen, { games, account, onAccount: openAccountScreen })
-    .catch((err) => console.error(err));
+  renderMenu(screen, { games, account }).catch((err) => console.error(err));
 }
 
 /** Куда ведёт «Назад»: из игры — в её папку, из папки — на главную. */
@@ -77,25 +87,6 @@ function backFrom(route = currentRoute()) {
 
 const redraw = () => show(currentRoute());
 
-/** Экран входа из меню: после входа прогресс приезжает с сервера, меню перерисовывается. */
-async function openAccountScreen() {
-  if (account.name) {                       // вошедший игрок — это выход из аккаунта
-    await sync.push();                      // не теряем несохранённое
-    await account.logout();
-    sync.reset();
-    rememberGuest();
-    toast.show('Вы вышли. Прогресс остался на этом устройстве');
-    redraw();
-    return;
-  }
-  const result = await openAuth({ canCancel: true });
-  if (result === 'account') {
-    await sync.pull({ afterLogin: true });
-    toast.show(`Привет, ${account.name}!`);
-  }
-  redraw();
-}
-
 // Смысл рекорда у части игр изменился — старые числа чистятся один раз (shell/stats.js).
 await migrateStats();
 
@@ -106,22 +97,16 @@ show(currentRoute());
 platform.ready();
 platform.expand();
 
-// Аккаунты работают, только если выложен обработчик (shell/config.js). Без него — как раньше,
-// весь прогресс живёт в браузере, и никаких экранов входа не появляется.
+// Внутри Telegram вход происходит сам: подпись initData проверяет сервер (platform/account.js).
+// В обычном браузере аккаунтов нет — игра остаётся гостевой, прогресс живёт в браузере.
 if (account.enabled) {
   (async () => {
-    if (account.current) {
-      await sync.pull();
-      redraw();
+    const res = await account.signIn();
+    if (!res.ok) {
+      if (res.error !== 'network') toast.show(message(res.error), 3000);
       return;
     }
-    if (guestChosen()) return;
-    const result = await openAuth();
-    if (result === 'account') {
-      forgetGuest();
-      await sync.pull({ afterLogin: true });
-      toast.show(`Привет, ${account.name}!`);
-    }
+    await sync.pull();
     redraw();
   })().catch((err) => console.error(err));
 }
