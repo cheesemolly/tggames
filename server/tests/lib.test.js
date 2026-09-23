@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  checkInitData, dataCheckString, validateState, parseAdminIds, isAdmin, displayName,
+  checkInitData, diagnoseInitData, dataCheckString, validateState, parseAdminIds, isAdmin, displayName,
   timingSafeEqual, MAX_STATE_BYTES, INIT_DATA_MAX_AGE_MS,
 } from '../lib.js';
 import { makeInitData, TOKEN, USER } from './helpers.js';
@@ -80,4 +80,19 @@ test('имя игрока для списков', () => {
   assert.equal(displayName({ first_name: 'Маша', username: 'masha' }), 'Маша (@masha)');
   assert.equal(displayName({ first_name: 'Маша', last_name: 'Иванова' }), 'Маша Иванова');
   assert.equal(displayName({}), 'Без имени');
+});
+
+test('диагностика подписи говорит, какой способ подсчёта подходит', async () => {
+  const initData = await makeInitData(TOKEN, USER);
+  const good = await diagnoseInitData(initData, TOKEN);
+  assert.equal(good.ok, true);
+  assert.equal(good.matches.decoded, true, 'наш способ — значения после декодирования');
+  assert.equal(good.matches.raw, false);
+  assert.ok(good.fields.includes('user') && good.fields.includes('hash'));
+  assert.ok(good.ageSec >= 0);
+
+  const alien = await diagnoseInitData(initData, '999:another-token');
+  assert.equal(alien.ok, false, 'чужой токен — не подходит ни один способ');
+  assert.equal(Object.values(alien.matches).some(Boolean), false);
+  assert.doesNotMatch(JSON.stringify(alien), /Маша/, 'данные игрока наружу не отдаются');
 });

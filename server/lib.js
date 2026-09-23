@@ -80,6 +80,51 @@ export async function checkInitData(initData, botToken, { now = Date.now(), maxA
   return { ok: true, user, authDate, startParam: params.get('start_param') ?? null };
 }
 
+/**
+ * Диагностика подписи: считает hash несколькими способами и говорит, какой сошёлся.
+ * Нужна, когда вход не проходит, а токен заведомо правильный: сразу видно, дело в способе
+ * подсчёта (кодирование значений, лишнее поле signature) или подпись вообще не от этого бота.
+ * Наружу отдаёт только имена полей и признаки — ни самих данных, ни токена.
+ */
+export async function diagnoseInitData(initData, botToken) {
+  const out = { ok: false, fields: [], hasSignature: false, hasHash: false, ageSec: null, matches: {} };
+  if (typeof initData !== 'string' || !initData) return { ...out, error: 'no_init_data' };
+  if (!botToken) return { ...out, error: 'no_bot_token' };
+
+  const params = new URLSearchParams(initData);
+  const hash = params.get('hash') ?? '';
+  out.fields = [...params.keys()].sort();
+  out.hasSignature = params.has('signature');
+  out.hasHash = Boolean(hash);
+  const authDate = Number(params.get('auth_date')) * 1000;
+  if (Number.isFinite(authDate) && authDate > 0) out.ageSec = Math.round((Date.now() - authDate) / 1000);
+  if (!hash) return { ...out, error: 'bad_init_data' };
+
+  // Те же пары, но без декодирования — на случай, если значения надо брать «как в строке».
+  const rawPairs = initData.split('&').map((part) => {
+    const at = part.indexOf('=');
+    return [part.slice(0, at), part.slice(at + 1)];
+  });
+  const build = (pairs, skip) => pairs
+    .filter(([key]) => !skip.includes(key))
+    .map(([key, value]) => `${key}=${value}`)
+    .sort()
+    .join('\n');
+
+  const secret = await hmac(enc.encode('WebAppData'), botToken);
+  const variants = {
+    decoded: build([...params.entries()], ['hash', 'signature']),
+    raw: build(rawPairs, ['hash', 'signature']),
+    decodedWithSignature: build([...params.entries()], ['hash']),
+    rawWithSignature: build(rawPairs, ['hash']),
+  };
+  for (const [name, text] of Object.entries(variants)) {
+    out.matches[name] = timingSafeEqual(toHex(await hmac(secret, text)), hash);
+  }
+  out.ok = Object.values(out.matches).some(Boolean);
+  return out;
+}
+
 /** Прогресс приходит строкой JSON: проверяем размер и то, что это вообще объект. */
 export function validateState(data) {
   if (typeof data !== 'string') return 'state_type';
