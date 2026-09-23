@@ -94,7 +94,8 @@ h1, h2 { margin: 0 0 8px; line-height: 1.2; }
   width: 40px;
   height: 40px;
   border-radius: 12px;
-  background: color-mix(in srgb, var(--cat, var(--tg-theme-button-color)) 16%, transparent);
+  background: color-mix(in srgb, var(--cat, var(--tg-theme-button-color)) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--cat, var(--tg-theme-button-color)) 22%, transparent);
   color: var(--cat, var(--tg-theme-button-color));
 }
 .tile svg { width: 24px; height: 24px; }
@@ -114,26 +115,18 @@ h1, h2 { margin: 0 0 8px; line-height: 1.2; }
   gap: 2px;
   padding: 14px;
   border-radius: 18px;
-  background: var(--tg-theme-secondary-bg-color);
+  /* карточка — фон темы с еле заметным оттенком категории и обводкой в её цвете
+     (засветы в углу владельцу не понравились, 2026-09-23) */
+  background: color-mix(in srgb, var(--cat) 5%, var(--tg-theme-secondary-bg-color));
+  border: 1px solid color-mix(in srgb, var(--cat) 26%, transparent);
   color: var(--tg-theme-text-color);
   text-decoration: none;
-  overflow: hidden;
-  isolation: isolate;
-  transition: transform 0.12s ease, background-color 0.2s ease;
+  transition: transform 0.12s ease, border-color 0.2s ease, background-color 0.2s ease;
 }
-/* мягкое пятно акцентного цвета в углу — карточки не выглядят серыми коробками */
-.folder-card::after, .game-tile::after {
-  content: '';
-  position: absolute;
-  inset: auto -30% -45% auto;
-  width: 120px;
-  height: 120px;
-  border-radius: 50%;
-  background: radial-gradient(circle, color-mix(in srgb, var(--cat) 26%, transparent), transparent 70%);
-  pointer-events: none;
-  z-index: -1;
+.folder-card:active, .game-tile:active {
+  transform: scale(0.97);
+  border-color: color-mix(in srgb, var(--cat) 45%, transparent);
 }
-.folder-card:active, .game-tile:active { transform: scale(0.97); }
 
 .folder-card .tile, .game-tile .tile { margin-bottom: 8px; }
 .folder-title, .game-tile-title { font-weight: 650; line-height: 1.25; }
@@ -155,18 +148,28 @@ h1, h2 { margin: 0 0 8px; line-height: 1.2; }
   background: var(--cat);
 }
 
+/* Полоска под заголовком: на главной — из цветов всех категорий, в папке — её цвета */
+.title-rule {
+  width: 72px;
+  height: 4px;
+  margin: 0 0 14px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--cat-words), var(--cat-puzzles), var(--cat-arcade), var(--cat-board), var(--cat-quiz));
+}
+.folder-head .title-rule { width: 48px; background: var(--cat); }
+
 /* Экран папки */
 .folder-head { margin-bottom: 14px; }
 .folder-head h1 { margin-bottom: 2px; }
 .folder-head .hint { margin: 0; font-size: 14px; }
 .back-chip {
   display: inline-block;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
   padding: 6px 12px;
-  border: 0;
+  border: 1px solid color-mix(in srgb, var(--cat) 30%, transparent);
   border-radius: 999px;
-  background: var(--tg-theme-secondary-bg-color);
-  color: var(--tg-theme-hint-color);
+  background: transparent;
+  color: var(--cat);
   font: inherit;
   font-size: 14px;
   cursor: pointer;
@@ -322,10 +325,11 @@ h1, h2 { margin: 0 0 8px; line-height: 1.2; }
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin: 0 0 14px;
+  margin: 0 0 16px;
   padding: 10px 12px;
-  border-radius: 12px;
+  border-radius: 14px;
   background: var(--tg-theme-secondary-bg-color);
+  border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 18%, transparent);
 }
 .account-name { min-width: 0; font-size: 14px; color: var(--tg-theme-hint-color); overflow-wrap: anywhere; }
 .account-btn {
