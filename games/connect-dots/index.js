@@ -1,8 +1,8 @@
 // «Соедини точки» по видео My Talking Tom Connect: соединяй пары точек одного цвета линиями по клеткам,
 // линии не пересекаются (кроме тоннелей — там крест-накрест), заполнить нужно все клетки.
-// Очков нет: успех измеряется тем, до какого раунда дошёл.
-// Бесконечные раунды: поле растёт до 8×8, с 7-го раунда — стены, с 12-го — тоннели.
-// Таймер на раунд (в настройках отключается); время вышло — игра окончена.
+// Очков нет: успех измеряется тем, до какого уровня дошёл (в коде они называются round).
+// Уровни бесконечные: поле растёт до 8×8, с 6-го уровня — стены, с 10-го — тоннели.
+// Таймер на уровень (в настройках отключается); время вышло — игра окончена.
 // Партия, статистика и настройки — в api.storage игры.
 
 import { el } from '../../shared/dom.js';
@@ -19,13 +19,13 @@ const COLORS = 10;
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const T = {
   title: 'Соедини точки',
-  round: (n) => `Раунд ${n}`,
+  round: (n) => `Уровень ${n}`,
   best: 'Рекорд',
   bestRound: (n) => (n > 0 ? `Уровень ${n}` : '—'),
   tools: { reset: 'Сбросить', hint: 'Подсказка' },
   noHints: 'Подсказки закончились',
-  cleared: (n) => `Раунд ${n} пройден!`,
-  newRound: (n) => `Раунд ${n}`,
+  cleared: (n) => `Уровень ${n} пройден!`,
+  newRound: (n) => `Уровень ${n}`,
   rules: 'Соедини пары точек и заполни линиями все клетки',
   fillAll: 'Пары соединены — теперь заполни все клетки',
   walls: 'Новое: стены — через них не пройти',
@@ -33,13 +33,13 @@ const T = {
   filled: 'Заполнено',
   timeUp: 'Время вышло!',
   resultTitle: 'Время вышло',
-  result: (rounds) => `Пройдено раундов: ${rounds}`,
+  result: (rounds) => `Пройдено уровней: ${rounds}`,
   newGame: 'Новая игра',
-  restartQuestion: 'Начать заново с первого раунда?',
+  restartQuestion: 'Начать заново с первого уровня?',
   restart: 'Начать заново',
   cancel: 'Отмена',
-  stats: { open: 'Статистика', title: 'Статистика', played: 'Игр', bestRound: 'Лучший раунд', rounds: 'Раундов пройдено', close: 'Закрыть' },
-  settings: { open: 'Настройки', title: 'Настройки', timer: 'Таймер', timerDesc: 'Время на раунд. Выключи — играй без спешки, игра не кончится.', skin: 'Оформление', close: 'Закрыть' },
+  stats: { open: 'Статистика', title: 'Статистика', played: 'Игр', bestRound: 'Лучший уровень', rounds: 'Уровней пройдено', close: 'Закрыть' },
+  settings: { open: 'Настройки', title: 'Настройки', timer: 'Таймер', timerDesc: 'Время на уровень. Выключи — играй без спешки, игра не кончится.', skin: 'Оформление', close: 'Закрыть' },
   skins: { telegram: 'Как в Telegram', classic: 'Классика', neon: 'Неон', paper: 'Бумага', candy: 'Конфета', space: 'Космос' },
 };
 
@@ -65,7 +65,7 @@ let bank = null;                // банк уровней levels.json (груз
 let stats = emptyStats();
 let settings = { timer: true, skin: 'telegram' };
 let drawing = null;             // { color, pointerId }
-let busy = false;               // анимация перехода между раундами
+let busy = false;               // анимация перехода между уровнями
 let over = false;
 let runningSince = null;
 let modalActive = false;
@@ -329,7 +329,7 @@ function onPointerUp(e) {
   }
 }
 
-// ---------- раунды ----------
+// ---------- уровни ----------
 
 function roundCleared() {
   busy = true;
@@ -375,7 +375,7 @@ function roundCleared() {
   }, reducedMotion() ? 0 : 1100);
 }
 
-/** Новый раунд: поле впрыгивает, точки появляются по очереди. */
+/** Новый уровень: поле впрыгивает, точки появляются по очереди. */
 function introRound() {
   animate(ui.svg, [{ transform: 'scale(0.9)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 260, easing: EASE_OUT });
   [...ui.svg.querySelectorAll('.cd-dot')].forEach((dot, k) => animate(dot, [
@@ -404,7 +404,7 @@ function timeUp() {
   shake(ui.board, { distance: 8, duration: 450 });
   ui.board.classList.add('cd-over');
   renderInfo();
-  // Счёт — пройденные раунды: рекорд в меню и есть «как далеко зашёл».
+  // Счёт — пройденные уровни: рекорд в меню и есть «как далеко зашёл».
   const cleared = game.round - 1;
   later(() => api.finish({
     outcome: 'lose', title: T.resultTitle, score: cleared, locale: 'ru', message: T.result(cleared),
@@ -527,7 +527,7 @@ function askRestart() {
 }
 
 function startGame(saved = null) {
-  // брошенная посреди игра (раунд пройден хотя бы один) засчитывается как сыгранная
+  // брошенная посреди игра (пройден хотя бы один уровень) засчитывается как сыгранная
   if (!saved && game && !over && game.round > 1) {
     stats.played += 1;
     api.storage.set('stats', stats);
