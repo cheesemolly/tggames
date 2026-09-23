@@ -5,6 +5,7 @@ import {
   validateName, validatePassword, validateState, normalizeName,
   hashPassword, verifyPassword, timingSafeEqual, randomToken, sha256hex,
   isLockedOut, nextAttempt, ATTEMPT_LIMIT, ATTEMPT_WINDOW_MS, MAX_STATE_BYTES,
+  PBKDF2_ITERATIONS, PBKDF2_MAX,
 } from '../lib.js';
 
 test('имя игрока: что принимаем и что нет', () => {
@@ -98,4 +99,11 @@ test('перебор пароля блокируется после лимита
   const later = now + ATTEMPT_WINDOW_MS + 1;
   assert.equal(isLockedOut(row, later), false);
   assert.deepEqual(nextAttempt(row, later), { count: 1, reset_at: later + ATTEMPT_WINDOW_MS });
+});
+
+test('число итераций PBKDF2 не выше того, что разрешает Cloudflare', () => {
+  // Workers отказываются считать больше 100 000 итераций: «iteration counts above 100000 are not
+  // supported». С 120 000 регистрация падала на живом сервере с 500-й ошибкой.
+  assert.ok(PBKDF2_ITERATIONS <= PBKDF2_MAX, `${PBKDF2_ITERATIONS} > ${PBKDF2_MAX}`);
+  assert.ok(PBKDF2_ITERATIONS >= 50_000, 'и не слишком мало — иначе пароли подбираются быстрее');
 });
