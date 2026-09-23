@@ -457,6 +457,26 @@ h1, h2 { margin: 0 0 8px; line-height: 1.2; }
 .adm-broadcast { min-height: 110px; font: inherit; font-size: 16px; }
 .adm-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
 
+/* Кнопка «Во весь экран»: появляется, только если Telegram не включил полноэкранный режим сам */
+.fs-offer {
+  position: fixed;
+  left: 50%;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 150;
+  padding: 10px 18px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--tg-theme-button-color);
+  color: var(--tg-theme-button-text-color);
+  font: inherit;
+  font-weight: 600;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.35);
+  cursor: pointer;
+  animation: rise-in 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.fs-offer:active { transform: translateX(-50%) scale(0.96); }
+
 /* Системная настройка «уменьшить движение» — без анимаций */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
