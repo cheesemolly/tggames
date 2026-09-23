@@ -96,6 +96,8 @@ show(currentRoute());
 
 platform.ready();
 platform.expand();
+// Иначе Telegram сворачивает мини-апп свайпом вниз прямо во время хода (2048, «Соедини точки»).
+platform.lockSwipes();
 
 // Внутри Telegram вход происходит сам: подпись initData проверяет сервер (platform/account.js).
 // В обычном браузере аккаунтов нет — игра остаётся гостевой, прогресс живёт в браузере.

@@ -5,6 +5,8 @@
 // Интерфейс platform:
 //   isTelegram, user, initData (подписанная строка для сервера; вне Telegram — пустая), colorScheme
 //   ready(), expand()
+//   lockSwipes()  — запретить Telegram сворачивать мини-апп свайпом (в играх свайп — это ход)
+//   fullscreen: supported, isActive, request(), exit(), onChange(cb)
 //   mainButton: show(), hide(), setText(text), onClick(cb), offClick(cb)
 //   backButton: show(), hide(), onClick(cb), offClick(cb)
 //   haptic: impact(style), notification(type), selection()
@@ -53,6 +55,43 @@ function createTelegramPlatform(tg) {
 
     ready: () => tg.ready(),
     expand: () => tg.expand(),
+
+    /**
+     * Свайп вниз сворачивает мини-апп, а в 2048 и «Соедини точки» свайп — это ход:
+     * Telegram забирал жест себе (замечание владельца). disableVerticalSwipes появился в Bot API 7.7,
+     * на старых клиентах метода просто нет — тогда ничего не делаем.
+     */
+    lockSwipes() {
+      try {
+        tg.disableVerticalSwipes?.();
+      } catch (err) {
+        console.warn('не удалось запретить свайпы', err);
+      }
+    },
+
+    // Полноэкранный режим (Bot API 8.0): приложение занимает весь экран, шапка Telegram убирается.
+    fullscreen: {
+      get supported() { return typeof tg.requestFullscreen === 'function' && tg.isVersionAtLeast?.('8.0'); },
+      get isActive() { return Boolean(tg.isFullscreen); },
+      request() {
+        try {
+          tg.requestFullscreen?.();
+        } catch (err) {
+          console.warn('не удалось открыть во весь экран', err);
+        }
+      },
+      exit() {
+        try {
+          tg.exitFullscreen?.();
+        } catch (err) {
+          console.warn('не удалось выйти из полноэкранного режима', err);
+        }
+      },
+      onChange(cb) {
+        tg.onEvent?.('fullscreenChanged', cb);
+        tg.onEvent?.('fullscreenFailed', cb);
+      },
+    },
 
     mainButton: {
       show: () => tg.MainButton.show(),
@@ -131,6 +170,14 @@ function createBrowserPlatform() {
 
     ready: () => log('ready()'),
     expand: () => log('expand()'),
+    lockSwipes: () => log('lockSwipes()'),
+    fullscreen: {
+      supported: false,
+      isActive: false,
+      request: () => log('fullscreen.request()'),
+      exit: () => log('fullscreen.exit()'),
+      onChange: () => {},
+    },
 
     mainButton: {
       show: () => { mainEl.hidden = false; },
