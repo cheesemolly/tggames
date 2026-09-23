@@ -77,7 +77,12 @@ function later(fn, ms) {
   return id;
 }
 
-const save = () => api?.storage.set('progress', progress);
+// Меню показывает у этой игры не партии, а уровень — он уходит оболочке при каждом сохранении.
+const report = () => api?.progress(`Уровень ${progress.current + 1}`);
+const save = () => {
+  report();
+  return api?.storage.set('progress', progress);
+};
 const cur = () => levels[progress.current];
 const st = () => levelState(progress, progress.current);
 
@@ -407,6 +412,7 @@ export default {
     progress = isValidProgress(savedProgress, levels) ? savedProgress : newProgress();
     settings = { skin: SKINS.includes(savedSettings?.skin) ? savedSettings.skin : 'telegram' };
     host.dataset.skin = settings.skin;
+    report();                      // уровень в меню — сразу, не дожидаясь первого слова
 
     ui = {
       sub: el('div', { class: 'wd-sub' }),

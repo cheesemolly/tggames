@@ -20,7 +20,7 @@ const KEYS = {
 const T = {
   title: '2048',
   sub: (n) => `Поле ${n}×${n}`,
-  score: 'Счёт',
+  tile: 'Клетка',            // очков в игре нет — показываем наибольшую плитку
   best: 'Рекорд',
   undo: 'Отменить ход',
   noUndo: 'Отмены закончились',
@@ -34,7 +34,7 @@ const T = {
   restartQuestion: 'Начать заново? Текущая партия будет потеряна.',
   restart: 'Начать заново',
   cancel: 'Отмена',
-  stats: { open: 'Статистика', title: 'Статистика', played: 'Сыграно', best: 'Рекорд', bestTile: 'Лучшая плитка', wins: 'Собрано 2048', close: 'Закрыть' },
+  stats: { open: 'Статистика', title: 'Статистика', played: 'Сыграно', bestTile: 'Лучшая плитка', wins: 'Собрано 2048', close: 'Закрыть' },
   settings: { open: 'Настройки', title: 'Настройки', size: 'Размер поля', skin: 'Оформление', nextGame: 'Новый размер — со следующей партии.' },
   skins: { telegram: 'Как в Telegram', classic: 'Классика', dark: 'Графит', ocean: 'Океан', neon: 'Неон', candy: 'Конфета' },
 };
@@ -119,17 +119,12 @@ function buildBoard() {
 }
 
 function renderInfo() {
+  const top = maxTile(game.grid);
   ui.sub.textContent = T.sub(game.size);
-  ui.score.textContent = game.score;
-  ui.best.textContent = Math.max(stats[game.size].best, game.score);
+  ui.score.textContent = top || '—';
+  ui.best.textContent = Math.max(stats[game.size].bestTile, top) || '—';
   ui.undoBadge.textContent = game.undoLeft;
   ui.undoButton.disabled = finished || game.undoLeft <= 0;
-}
-
-function floatScore(gain) {
-  const node = el('div', { class: 'tt-gain' }, `+${gain}`);
-  ui.scoreBox.append(node);
-  later(() => node.remove(), 800);
 }
 
 // ---------- ход ----------
@@ -174,10 +169,7 @@ function doMove(dir) {
     if (!ui) return;
     renderTiles({ merged: new Set(result.merges.map((m) => m.at)), spawned: result.spawned?.at });
     renderInfo();
-    if (result.gain) {
-      floatScore(result.gain);
-      pop(ui.score, { from: 0.85, duration: 200 });
-    }
+    if (result.merges.length) pop(ui.score, { from: 0.85, duration: 200 });
     save();
     if (result.won && !game.keepPlaying) later(showWin, 350);
     else if (!canMove(game.grid, n)) gameOver();
@@ -271,12 +263,12 @@ function endGame(delay = 0) {
   stats[game.size] = recordGame(stats[game.size], game);
   api.storage.set('stats', stats);
   renderInfo();
-  const { size, score, won, moves } = game;
+  const { size, won, moves } = game;
   const best = maxTile(game.grid);
   later(() => api.finish({
     outcome: won ? 'win' : 'lose',
     title: won ? T.win.title : T.resultTitle,
-    score,
+    score: best,                                   // рекорд — самая большая плитка, а не очки
     variant: String(size),
     locale: 'ru',
     message: T.result(best, moves),
@@ -321,8 +313,8 @@ function showStats(initial = game.size) {
         class: 'tt-tab', role: 'tab', 'aria-selected': String(n === size), onclick: () => render(n),
       }, `${n}×${n}`))),
       el('div', { class: 'tt-stats-grid' },
-        item(s.played, T.stats.played), item(s.best, T.stats.best),
-        item(s.bestTile || '—', T.stats.bestTile), item(s.wins, T.stats.wins),
+        item(s.played, T.stats.played), item(s.bestTile || '—', T.stats.bestTile),
+        item(s.wins, T.stats.wins),
       ),
     ));
   };
@@ -423,7 +415,7 @@ export default {
       tiles: el('div', { class: 'tt-tiles' }),
       modal: el('div', { class: 'tt-modal', hidden: true }),
     };
-    ui.scoreBox = el('div', { class: 'tt-box' }, el('div', { class: 'tt-box-label' }, T.score), ui.score);
+    ui.scoreBox = el('div', { class: 'tt-box' }, el('div', { class: 'tt-box-label' }, T.tile), ui.score);
     ui.undoButton = iconButton(ICONS.undo, T.undo, onUndo, ui.undoBadge);
     ui.undoButton.classList.add('tt-undo');
     ui.board.append(ui.cells, ui.tiles);

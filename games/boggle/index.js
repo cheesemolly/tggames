@@ -1,7 +1,9 @@
 // Филворд («слова на сетке»): на поле спрятаны слова банка (список внизу). Выделяешь пальцем прямую —
 // горизонталь, вертикаль или диагональ, без поворотов. Слово банка остаётся на поле цветной капсулой,
-// любое другое слово словаря — бонус (очки + список по кнопке «Бонус»). Времени нет; партия кончается,
-// когда найдены все слова банка. Партия, статистика (по размеру поля) и настройки — в api.storage игры.
+// любое другое слово словаря — бонус (очки + список по кнопке «Бонус»). Времени нет.
+// Уровни бесконечные, как в «Петле»: все слова найдены — сразу следующее поле, экрана результата нет.
+// Очки считаются за уровень, рекорд — лучший уровень по очкам. Партия, статистика (по размеру поля)
+// и настройки — в api.storage игры.
 
 import { el } from '../../shared/dom.js';
 import { animate, showLayer, hideLayer, pop, shake, reducedMotion, EASE_OUT } from '../../shared/motion.js';
@@ -16,7 +18,9 @@ const SKINS = ['telegram', 'classic', 'night', 'paper', 'neon', 'mint'];
 const CAPSULE_COLORS = 8;
 const T = {
   title: 'Филворд',
-  sub: (size) => `Поле ${size}×${size}`,
+  sub: (level, size) => `Уровень ${level} · ${size}×${size}`,
+  cleared: (n) => `Уровень ${n} пройден!`,
+  menu: (level, best) => `Уровень ${level} · Рекорд за уровень: ${best}`,
   info: { found: 'Слова', bonus: 'Бонус', score: 'Очки' },
   loading: 'Загрузка словаря…',
   loadFailed: 'Не удалось загрузить словарь',
@@ -33,10 +37,10 @@ const T = {
     empty: 'Пока нет. Бонус — любое слово, которого нет в списке внизу, но оно есть в словаре.',
     left: (n) => (n > 0 ? `На поле ещё ${n} бонусных слов.` : 'Все бонусные слова найдены!'),
   },
-  resultTitle: 'Все слова найдены!',
-  result: (n, bonus, total) => `Слов: ${n} · бонусных: ${bonus} из ${total}`,
+
   stats: {
-    open: 'Статистика', title: 'Статистика', played: 'Сыграно', best: 'Рекорд', bonus: 'Бонусных слов', close: 'Закрыть',
+    open: 'Статистика', title: 'Статистика', played: 'Уровней пройдено', best: 'Рекорд за уровень',
+    bonus: 'Бонусных слов', close: 'Закрыть',
   },
   settings: {
     open: 'Настройки', title: 'Настройки', size: 'Размер поля', skin: 'Оформление', close: 'Закрыть',
@@ -102,7 +106,7 @@ function save() {
 // ---------- отрисовка ----------
 
 function renderInfo() {
-  ui.sub.textContent = T.sub(game?.size ?? settings.size);
+  ui.sub.textContent = T.sub(game?.level ?? 1, game?.size ?? settings.size);
   ui.found.textContent = game ? `${game.found.length}/${game.bank.length}` : '—';
   ui.bonusCount.textContent = game ? game.bonus.length : '—';
   ui.score.textContent = game ? game.score : '—';
@@ -324,14 +328,14 @@ function bonusBanner(word, points) {
   }, letters.length * 90 + 900);
 }
 
-// ---------- конец партии ----------
+// ---------- конец уровня ----------
 
 function complete() {
-  finished = true;
-  api.storage.remove('current');
+  finished = true;                       // на время победной волны поле не принимает ввод
   stats[game.size] = recordGame(stats[game.size], game);
   api.storage.set('stats', stats);
-  // победная волна по буквам, капсулы пульсируют — потом экран результата
+  report();
+  // победная волна по буквам, капсулы пульсируют — потом сразу следующий уровень
   if (!reducedMotion()) {
     const n = game.size;
     ui.cells.forEach((cell, i) => animate(cell, [{ transform: 'scale(1)' }, { transform: 'scale(1.18)' }, { transform: 'scale(1)' }],
@@ -339,15 +343,32 @@ function complete() {
     [...ui.capsules.children].forEach((line, k) => animate(line, [{ opacity: 1 }, { opacity: 0.3 }, { opacity: 1 }],
       { duration: 500, delay: k * 40 }));
   }
-  const { size, score, bank, bonus, bonusTotal } = game;
-  later(() => api.finish({
-    outcome: 'win',
-    title: T.resultTitle,
-    score,
-    variant: String(size),
-    locale: 'ru',
-    message: T.result(bank.length, bonus.length, bonusTotal),
-  }), reducedMotion() ? 0 : 1600);
+  const cleared = game.level;
+  later(() => {
+    if (!ui) return;
+    startLevel(cleared + 1);
+    toast.show(T.cleared(cleared), 2200);
+  }, reducedMotion() ? 0 : 1600);
+}
+
+/** Следующий уровень: то же поле по размеру, новые слова. */
+function startLevel(level) {
+  game = newGame(settings.size, generatePuzzle(settings.size, dict), level);
+  finished = false;
+  selection = [];
+  buildBoard();
+  renderCapsules();
+  renderSelection([]);
+  renderBank();
+  renderInfo();
+  save();
+  report();
+}
+
+/** Строка для меню: уровень и рекорд очков за уровень. */
+function report() {
+  if (!game) return;
+  api?.progress(T.menu(game.level, stats[game.size]?.best ?? 0));
 }
 
 // ---------- новая партия ----------
@@ -363,6 +384,7 @@ async function startGame(saved = null) {
   }
   if (!api) return;
   game = saved ?? newGame(settings.size, generatePuzzle(settings.size, dict));
+  if (!game.level) game.level = 1;              // сохранения до уровней — это первый уровень
   finished = false;
   selection = [];
   buildBoard();
@@ -371,6 +393,7 @@ async function startGame(saved = null) {
   renderBank();
   renderInfo();
   save();
+  report();
 }
 
 function askRestart() {

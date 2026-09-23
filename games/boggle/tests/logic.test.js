@@ -123,6 +123,11 @@ test('сохранение и статистика', () => {
   assert.ok(isValidState(JSON.parse(JSON.stringify(s))));
   assert.equal(isValidState({ ...s, size: 12 }), false, 'большие поля убраны');
   assert.equal(isValidState({ ...s, grid: s.grid.slice(1) }), false);
+  // уровни бесконечные: у новой партии это 1, у сохранений до этой правки уровня нет — это тоже первый
+  assert.equal(s.level, 1);
+  assert.equal(newGame(8, generatePuzzle(8, dict, seeded(3)), 7).level, 7);
+  assert.ok(isValidState({ ...s, level: undefined }), 'старое сохранение остаётся годным');
+  assert.equal(isValidState({ ...s, level: 0 }), false);
   let st = emptyStats();
   st = recordGame(st, { ...s, score: 300, bonus: ['кот', 'дом'] });
   st = recordGame(st, { ...s, score: 100, bonus: [] });

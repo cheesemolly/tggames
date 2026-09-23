@@ -219,8 +219,9 @@ export function applyWord(state, verdict, word, cells) {
 
 export const isComplete = (state) => state.found.length === state.bank.length;
 
-export function newGame(size, puzzle) {
-  return { size, grid: puzzle.grid, bank: puzzle.bank, bonusTotal: puzzle.bonusTotal, found: [], bonus: [], score: 0 };
+/** level — номер уровня: как в «Петле», они идут бесконечно (решение владельца). */
+export function newGame(size, puzzle, level = 1) {
+  return { level, size, grid: puzzle.grid, bank: puzzle.bank, bonusTotal: puzzle.bonusTotal, found: [], bonus: [], score: 0 };
 }
 
 export function isValidState(s) {
@@ -231,7 +232,8 @@ export function isValidState(s) {
     && Array.isArray(s.bank) && s.bank.every((b) => typeof b.word === 'string' && cellsOk(b.cells))
     && Array.isArray(s.found) && s.found.every((f) => typeof f.word === 'string' && cellsOk(f.cells))
     && Array.isArray(s.bonus) && s.bonus.every((w) => typeof w === 'string')
-    && [s.score, s.bonusTotal].every((n) => Number.isFinite(n) && n >= 0);
+    && [s.score, s.bonusTotal].every((n) => Number.isFinite(n) && n >= 0)
+    && (s.level === undefined || (Number.isInteger(s.level) && s.level >= 1));   // старые сохранения — уровень 1
 }
 
 // ---------- статистика по размеру поля ----------
@@ -240,6 +242,7 @@ export function emptyStats() {
   return { played: 0, best: 0, bonus: 0 };
 }
 
+// best — рекорд очков за один уровень (уровни бесконечные, общего счёта нет).
 export function recordGame(stats, state) {
   return { played: stats.played + 1, best: Math.max(stats.best, state.score), bonus: stats.bonus + state.bonus.length };
 }
