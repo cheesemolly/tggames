@@ -42,7 +42,12 @@ function writeBase(value) {
   }
 }
 
-export function createSync({ account, onMessage = () => {}, delay = SYNC_DELAY }) {
+/**
+ * afterRestore — вызывается каждый раз, когда серверный прогресс заменил локальный.
+ * Оболочка чистит там устаревшие рекорды (migrateStats): иначе сервер возвращал бы
+ * старые значения уже после чистки, и в меню снова появлялось бы «Рекорд: Уровень 640».
+ */
+export function createSync({ account, onMessage = () => {}, delay = SYNC_DELAY, afterRestore = () => {} }) {
   let timer = null;
   let applying = false;      // мы сами пишем в хранилище — это не повод слать его обратно
   let pushing = null;        // текущая отправка, чтобы не слать две сразу
@@ -77,6 +82,7 @@ export function createSync({ account, onMessage = () => {}, delay = SYNC_DELAY }
             applying = false;
           }
           writeBase(res.data.updatedAt);
+          await afterRestore();
           onMessage('Прогресс обновлён с другого устройства');
           return;
         }
@@ -128,6 +134,7 @@ export function createSync({ account, onMessage = () => {}, delay = SYNC_DELAY }
       applying = false;
     }
     writeBase(res.data.updatedAt);
+    await afterRestore();
   }
 
   const unsubscribe = onStorageChange(() => {

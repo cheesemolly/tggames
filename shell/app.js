@@ -18,7 +18,11 @@ let session = null;
 const toast = createToast();
 document.body.appendChild(toast.el);
 
-const sync = createSync({ account, onMessage: (text) => toast.show(text, 2600) });
+const sync = createSync({
+  account,
+  onMessage: (text) => toast.show(text, 2600),
+  afterRestore: migrateStats,      // серверный прогресс может быть ещё со старыми рекордами
+});
 
 function show(route) {
   session?.close();

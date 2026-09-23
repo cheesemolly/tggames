@@ -13,7 +13,7 @@ export const MAX_SIZE = 8;
 export const HINTS_PER_GAME = 3;
 export const STATE_VERSION = 2;
 
-// ---------- раунды ----------
+// ---------- уровни ----------
 
 /** Раунды 1–20 по порядку (размер, стены, тоннели), дальше — по кругу варианты 8×8. */
 const ROUNDS = [
@@ -27,10 +27,10 @@ export const PAIRS = { 3: [2, 3], 4: [3, 4], 5: [4, 5], 6: [5, 6], 7: [5, 7], 8:
 
 export const tierKey = (size, walls, tunnels) => `${size}:${walls}:${tunnels}`;
 
-/** Все варианты поля, которые встречаются в раундах (для генератора банка). */
+/** Все варианты поля, которые встречаются на уровнях (для генератора банка). */
 export const ALL_TIERS = [...new Map([...ROUNDS, ...LOOP].map((t) => [tierKey(...t), t])).values()];
 
-/** Размер, стены, тоннели, ключ банка и время на раунд (с) — по номеру раунда (с 1). */
+/** Размер, стены, тоннели, ключ банка и время на уровень (с) — по номеру уровня (с 1). */
 export function levelParams(round) {
   const r = Math.max(1, round);
   const [size, walls, tunnels] = r <= ROUNDS.length ? ROUNDS[r - 1] : LOOP[(r - ROUNDS.length - 1) % LOOP.length];
@@ -130,7 +130,7 @@ function shuffle(arr, rng) {
   return arr;
 }
 
-/** Уровень раунда из банка ({ tiers: { key: [строки] } }) — случайный, повёрнутый и перекрашенный. */
+/** Поле уровня из банка ({ tiers: { key: [строки] } }) — случайный, повёрнутый и перекрашенный. */
 export function pickLevel(bank, round, rng = Math.random) {
   const { key } = levelParams(round);
   const list = bank.tiers[key];
