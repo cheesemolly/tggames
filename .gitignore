@@ -3,3 +3,6 @@ example/
 
 # личные заметки и инструкции — только локально
 CLAUDE.md
+
+# локальная база сервера аккаунтов (server/dev-server.js)
+server/dev.sqlite
