@@ -63,6 +63,9 @@ export default {
     try {
       if (path === '/bot' && request.method === 'POST') return await botWebhook(request, env);
       if (path === '/') return json({ ok: true, service: 'tggames' }, 200, origin);
+      // Диагностика: какому боту принадлежит токен в настройках. Сам токен не раскрывается —
+      // видно только имя бота. Нужна, когда мини-апп открыт одним ботом, а токен лежит от другого.
+      if (path === '/whoami') return await whoami(env, origin);
 
       // Всё остальное — только для игрока, подтверждённого подписью Telegram.
       const auth = await authorize(request, env);
@@ -239,6 +242,25 @@ const playerRow = (p) => ({
   banned: Boolean(p.banned),
   stateAt: p.state_at ?? null,
 });
+
+/** Спрашивает у Telegram, чей это токен: сверить с тем ботом, который открывает мини-апп. */
+async function whoami(env, origin) {
+  if (!env.BOT_TOKEN) return json({ ok: false, error: 'no_bot_token' }, 200, origin);
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${env.BOT_TOKEN}/getMe`);
+    const data = await res.json();
+    if (!data.ok) return json({ ok: false, error: data.description ?? 'bad_token' }, 200, origin);
+    return json({
+      ok: true,
+      bot: data.result.username ? `@${data.result.username}` : data.result.first_name,
+      tokenLength: env.BOT_TOKEN.length,
+      tokenTrimmed: env.BOT_TOKEN === env.BOT_TOKEN.trim(),   // лишние пробелы при вставке ломают подпись
+      admins: parseAdminIds(env.ADMIN_IDS).length,
+    }, 200, origin);
+  } catch {
+    return json({ ok: false, error: 'telegram_unreachable' }, 200, origin);
+  }
+}
 
 // ---------- бот ----------
 

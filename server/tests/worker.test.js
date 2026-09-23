@@ -249,3 +249,22 @@ test('проверка живости и неизвестный путь', async
   assert.equal((await call(env, '/')).data.ok, true);
   assert.equal((await call(env, '/нет-такого', { initData: await asUser(USER) })).status, 404);
 });
+
+test('диагностика токена не раскрывает сам токен', async () => {
+  const env = createEnv();
+  const tg = captureTelegram();
+  globalThis.fetch = async () => new Response(
+    JSON.stringify({ ok: true, result: { username: 'anygametg_bot', first_name: 'AnyGame' } }),
+    { status: 200, headers: { 'Content-Type': 'application/json' } },
+  );
+  try {
+    const res = await call(env, '/whoami');
+    assert.equal(res.status, 200);
+    assert.equal(res.data.bot, '@anygametg_bot');
+    assert.equal(res.data.tokenTrimmed, true);
+    assert.equal(res.data.admins, 1);
+    assert.doesNotMatch(JSON.stringify(res.data), /TEST-TOKEN/, 'сам токен наружу не уходит');
+  } finally {
+    tg.restore();
+  }
+});
