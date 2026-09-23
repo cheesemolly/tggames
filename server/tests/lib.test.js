@@ -29,6 +29,16 @@ test('подменить данные в initData нельзя', async () => {
   assert.equal(res.error, 'bad_signature');
 });
 
+test('поле signature от новых клиентов входит в подпись', async () => {
+  // На Telegram Desktop вход падал, пока signature исключалось из подписываемой строки.
+  const initData = await makeInitData(TOKEN, USER, { signature: 'abcDEF-123_xyz' });
+  assert.match(initData, /signature=/);
+  assert.equal((await checkInitData(initData, TOKEN)).ok, true, 'строка с signature проходит проверку');
+
+  const tampered = initData.replace('signature=abcDEF-123_xyz', 'signature=podmena');
+  assert.equal((await checkInitData(tampered, TOKEN)).error, 'bad_signature', 'подменить signature нельзя');
+});
+
 test('старая подпись не принимается', async () => {
   const old = Date.now() - INIT_DATA_MAX_AGE_MS - 1000;
   const initData = await makeInitData(TOKEN, USER, { authDate: old });
@@ -47,9 +57,9 @@ test('пустые и битые данные', async () => {
   assert.equal((await checkInitData(noUser, TOKEN)).error, 'bad_user');
 });
 
-test('подписываемая строка: без hash, по алфавиту', () => {
+test('подписываемая строка: без hash, но с signature, по алфавиту', () => {
   const params = new URLSearchParams('hash=zzz&user=%7B%7D&auth_date=5&query_id=q&signature=s');
-  assert.equal(dataCheckString(params), 'auth_date=5\nquery_id=q\nuser={}');
+  assert.equal(dataCheckString(params), 'auth_date=5\nquery_id=q\nsignature=s\nuser={}');
 });
 
 test('сравнение за постоянное время', () => {
@@ -86,7 +96,7 @@ test('диагностика подписи говорит, какой спос�
   const initData = await makeInitData(TOKEN, USER);
   const good = await diagnoseInitData(initData, TOKEN);
   assert.equal(good.ok, true);
-  assert.equal(good.matches.decoded, true, 'наш способ — значения после декодирования');
+  assert.equal(good.matches.standard, true, 'наш способ: декодированные значения, исключается только hash');
   assert.equal(good.matches.raw, false);
   assert.ok(good.fields.includes('user') && good.fields.includes('hash'));
   assert.ok(good.ageSec >= 0);
