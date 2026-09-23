@@ -42,15 +42,15 @@ test('склонение «игра»', () => {
   assert.equal(gameWord(21), 'игра');
 });
 
-test('игра в обкатке видна только владельцу', () => {
-  const bubble = games.find((g) => g.id === 'bubble-shooter');
-  assert.ok(bubble, 'игра есть в реестре');
-  assert.equal(bubble.admin, true, 'помечена как admin — обычный игрок её не увидит');
-  assert.equal(categoryOfGame('bubble-shooter')?.id, 'arcade');
+test('игры в обкатке (admin: true) видны только владельцу', () => {
+  // так оболочка отбирает список (shell/app.js, visibleGames)
+  const list = [{ id: 'a' }, { id: 'b', admin: true }];
+  const visible = (isAdmin) => list.filter((g) => !g.admin || isAdmin).map((g) => g.id);
+  assert.deepEqual(visible(false), ['a'], 'игроку — без игры в обкатке');
+  assert.deepEqual(visible(true), ['a', 'b'], 'владельцу — все');
 
-  // так её отбирает оболочка (shell/app.js)
-  const visible = (isAdmin) => games.filter((g) => !g.admin || isAdmin).map((g) => g.id);
-  assert.ok(!visible(false).includes('bubble-shooter'), 'игроку не показывается');
-  assert.ok(visible(true).includes('bubble-shooter'), 'владельцу показывается');
-  assert.ok(visible(false).includes('brick-blast'), 'остальные игры на месте');
+  // «Шарики» вышли из обкатки (решение владельца) — видны всем
+  const bubble = games.find((g) => g.id === 'bubble-shooter');
+  assert.ok(bubble && !bubble.admin, '«Шарики» открыты для всех');
+  assert.equal(categoryOfGame('bubble-shooter')?.id, 'arcade');
 });

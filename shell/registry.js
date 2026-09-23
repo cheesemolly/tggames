@@ -44,7 +44,6 @@ export const games = [
     load: () => import('../games/bubble-shooter/index.js'),
     css: new URL('../games/bubble-shooter/game.css', import.meta.url),
     menu: { progress: 'replace' },                       // «Уровень 3»
-    admin: true,                                         // пока только для владельца (на время обкатки)
   },
   {
     id: 'brick-blast',
