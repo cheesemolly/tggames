@@ -103,8 +103,39 @@ platform.lockSwipes();
 platform.fullscreen.tryEnable((problem) => {
   console.warn('полноэкранный режим:', problem);
   if (problem.error === 'ALREADY_FULLSCREEN') return;
-  toast.show(`Полный экран недоступен: ${problem.error} · Telegram ${problem.version ?? '?'}`, 6000);
+  offerFullscreen(`не вышло: ${problem.error}`);
 });
+
+/**
+ * Запрос при старте срабатывает не всегда (клиент может его проглотить). Тогда показываем кнопку:
+ * по явному нажатию Telegram открывает полный экран надёжнее, и заодно человек сам решает.
+ * Кнопка исчезает, как только режим включился, и сама убирается через 12 секунд.
+ */
+function offerFullscreen(reason = '') {
+  if (!platform.isTelegram || platform.fullscreen.isActive) return;
+  if (document.querySelector('.fs-offer')) return;
+  console.info('предлагаю полный экран', reason);
+
+  const button = el('button', {
+    class: 'fs-offer',
+    onclick: () => {
+      platform.fullscreen.request();
+      setTimeout(() => {
+        if (platform.fullscreen.isActive) button.remove();
+        else toast.show(`Telegram не даёт полный экран · версия ${platform.fullscreen.version}`, 5000);
+      }, 400);
+    },
+  }, '⛶ Во весь экран');
+
+  document.body.appendChild(button);
+  platform.fullscreen.onChange(() => {
+    if (platform.fullscreen.isActive) button.remove();
+  });
+  setTimeout(() => button.remove(), 12000);
+}
+
+// Если через полторы секунды шапка Telegram всё ещё на месте — предлагаем кнопку.
+setTimeout(() => offerFullscreen('запрос при старте не сработал'), 1500);
 
 // Внутри Telegram вход происходит сам: подпись initData проверяет сервер (platform/account.js).
 // В обычном браузере аккаунтов нет — игра остаётся гостевой, прогресс живёт в браузере.
