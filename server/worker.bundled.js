@@ -10,7 +10,10 @@ const NAME_RE = /^[A-Za-zА-Яа-яЁё0-9_-]{3,20}$/;
 const MIN_PASSWORD = 6;
 const MAX_PASSWORD = 200;
 const MAX_STATE_BYTES = 400 * 1024;   // прогресс одного игрока; замер: 100 уровней «Слов» ≈ 64 КБ
-const PBKDF2_ITERATIONS = 120_000;
+// Максимум, который разрешает Cloudflare Workers: при 120 000 он отвечал
+// «NotSupportedError: Pbkdf2 failed: iteration counts above 100000 are not supported».
+const PBKDF2_ITERATIONS = 100_000;
+const PBKDF2_MAX = 100_000;
 
 // Неудачные попытки входа: больше ATTEMPT_LIMIT за ATTEMPT_WINDOW_MS — имя временно блокируется.
 const ATTEMPT_LIMIT = 10;
