@@ -100,7 +100,11 @@ platform.expand();
 platform.lockSwipes();
 // Полноэкранный режим: жесты сворачивания клиенту больше не отдаются, игра занимает весь экран.
 // На клиентах без поддержки (старее Bot API 8.0) ничего не меняется.
-platform.fullscreen.tryEnable();
+platform.fullscreen.tryEnable((problem) => {
+  console.warn('полноэкранный режим:', problem);
+  if (problem.error === 'ALREADY_FULLSCREEN') return;
+  toast.show(`Полный экран недоступен: ${problem.error} · Telegram ${problem.version ?? '?'}`, 6000);
+});
 
 // Внутри Telegram вход происходит сам: подпись initData проверяет сервер (platform/account.js).
 // В обычном браузере аккаунтов нет — игра остаётся гостевой, прогресс живёт в браузере.

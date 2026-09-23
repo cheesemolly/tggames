@@ -99,16 +99,36 @@ function createTelegramPlatform(tg) {
         tg.onEvent?.('fullscreenChanged', cb);
         tg.onEvent?.('fullscreenFailed', cb);
       },
-      /** Позвать один раз при старте: на клиентах без поддержки просто ничего не произойдёт. */
-      tryEnable() {
-        if (typeof tg.requestFullscreen !== 'function') return false;
-        try {
-          tg.requestFullscreen();
-          return true;
-        } catch (err) {
-          console.warn('полноэкранный режим недоступен', err);
+      get version() { return tg.version ?? '?'; },
+
+      /**
+       * Позвать один раз при старте. onProblem получает причину отказа: старый клиент, отказ
+       * Telegram (`fullscreenFailed`) или исключение. Без этого непонятно, почему шапка осталась
+       * на месте — отладчика внутри Telegram нет.
+       */
+      tryEnable(onProblem = () => {}) {
+        if (typeof tg.requestFullscreen !== 'function') {
+          onProblem({ error: 'СТАРЫЙ_КЛИЕНТ', version: tg.version });
           return false;
         }
+        tg.onEvent?.('fullscreenFailed', (event) => onProblem({ error: event?.error ?? 'ОТКАЗ', version: tg.version }));
+        try {
+          tg.requestFullscreen();
+        } catch (err) {
+          onProblem({ error: String(err?.message ?? err), version: tg.version });
+          return false;
+        }
+        // Часть клиентов принимает запрос только после того, как окно устоялось.
+        setTimeout(() => {
+          if (!tg.isFullscreen) {
+            try {
+              tg.requestFullscreen();
+            } catch {
+              // вторая попытка молча: о первой уже сообщили
+            }
+          }
+        }, 800);
+        return true;
       },
     },
 
@@ -196,6 +216,7 @@ function createBrowserPlatform() {
       request: () => log('fullscreen.request()'),
       exit: () => log('fullscreen.exit()'),
       onChange: () => {},
+      version: 'браузер',
       tryEnable: () => false,
     },
 
