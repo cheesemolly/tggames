@@ -24,7 +24,7 @@ async function gameInfo(game) {
   return { game, line: menuLine(stats, { menu: game.menu, progress: line }), hasSave: save != null };
 }
 
-export async function renderMenu(container, { games, account = null, onAccount = null }) {
+export async function renderMenu(container, { games, account = null }) {
   // Незаконченные партии считаем заранее — по ним на папке загорается точка «есть что продолжить».
   const savedIds = new Set(
     (await Promise.all(games.map(async (g) => ((await saves.get(g.id)) != null ? g.id : null)))).filter(Boolean),
@@ -50,7 +50,7 @@ export async function renderMenu(container, { games, account = null, onAccount =
     el('h1', {}, 'Игры'),
     el('div', { class: 'title-rule' }),
     el('p', { class: 'hint' }, 'Выбери игру ниже.'),
-    accountRow(account, onAccount),
+    accountRow(account),
     el('div', { class: 'folder-grid' }, cards),
   ));
 }
@@ -81,12 +81,18 @@ export async function renderFolder(container, { category, games, onBack }) {
   ));
 }
 
-function accountRow(account, onAccount) {
-  if (!account?.enabled || !onAccount) return null;
-  const player = account.name;
+/**
+ * Внутри Telegram — имя игрока (вход происходит сам) и кнопка панели у владельца.
+ * В обычном браузере аккаунтов нет: честно пишем, что прогресс живёт только здесь.
+ */
+function accountRow(account) {
+  if (!account?.enabled) {
+    return el('div', { class: 'account-row' },
+      el('span', { class: 'account-name' }, 'Прогресс хранится только в этом браузере'));
+  }
+  if (!account.current) return null;          // вход ещё идёт — не мигаем пустой строкой
   return el('div', { class: 'account-row' },
-    el('span', { class: 'account-name' },
-      player ? `Аккаунт: ${player}` : 'Прогресс хранится только в этом браузере'),
-    el('button', { class: 'account-btn', onclick: onAccount }, player ? 'Выйти' : 'Войти'),
+    el('span', { class: 'account-name' }, `Аккаунт Telegram: ${account.name}`),
+    account.isAdmin && el('a', { class: 'account-btn', href: '#/admin' }, 'Панель'),
   );
 }

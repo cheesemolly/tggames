@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { isEmpty, pickOnLogin } from '../sync.js';
-import { message, ERRORS } from '../../platform/account.js';
+import { message, ERRORS } from '../../platform/errors.js';
 
 test('пустой прогресс', () => {
   assert.equal(isEmpty(null), true);
@@ -14,7 +14,7 @@ test('вход: серверный прогресс побеждает, кром
   const local = { 'game:words:progress': { current: 5 } };
   const server = { 'game:words:progress': { current: 40 } };
 
-  // Играл гостем, аккаунт новый — гостевое уезжает в аккаунт.
+  // Играл в браузере до Telegram, на сервере пусто — локальное уезжает в аккаунт.
   assert.equal(pickOnLogin({}, local), 'local');
 
   // На сервере уже есть прогресс — он и берётся, иначе игра на другом устройстве была бы затёрта.
@@ -24,8 +24,8 @@ test('вход: серверный прогресс побеждает, кром
 });
 
 test('ошибки сервера показываются по-русски', () => {
-  assert.equal(message('name_taken'), ERRORS.name_taken);
-  assert.equal(message('bad_credentials'), 'Неверное имя или пароль');
+  assert.equal(message('banned'), ERRORS.banned);
+  assert.equal(message('bad_signature'), ERRORS.bad_signature);
   assert.equal(message('что-то новое'), ERRORS.server, 'незнакомый код — общее сообщение');
   for (const text of Object.values(ERRORS)) assert.ok(text.length > 0);
 });

@@ -2,11 +2,13 @@
 //   #/              — главная: сетка папок
 //   #/folder/<id>   — папка: сетка игр внутри неё
 //   #/game/<id>     — игра
+//   #/admin         — панель владельца (сервер пускает только ADMIN_IDS)
 
 export function currentRoute() {
   const [section, id] = location.hash.replace(/^#\/?/, '').split('/');
   if (section === 'game' && id) return { name: 'game', id: decodeURIComponent(id) };
   if (section === 'folder' && id) return { name: 'folder', id: decodeURIComponent(id) };
+  if (section === 'admin') return { name: 'admin' };
   return { name: 'menu' };
 }
 

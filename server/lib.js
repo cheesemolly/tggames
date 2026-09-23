@@ -1,74 +1,23 @@
-// Общие части серверного обработчика: проверка данных, пароли, токены, ответы.
+// Общие части серверного обработчика: проверка подписи Telegram, разбор данных, лимиты.
 // Здесь нет ничего, что есть только в Cloudflare Workers (используется Web Crypto, он есть и в node),
 // поэтому этот файл целиком покрывается тестами `node --test`.
 
-export const NAME_RE = /^[A-Za-zА-Яа-яЁё0-9_-]{3,20}$/;
-export const MIN_PASSWORD = 6;
-export const MAX_PASSWORD = 200;
 export const MAX_STATE_BYTES = 400 * 1024;   // прогресс одного игрока; замер: 100 уровней «Слов» ≈ 64 КБ
-// Максимум, который разрешает Cloudflare Workers: при 120 000 он отвечал
-// «NotSupportedError: Pbkdf2 failed: iteration counts above 100000 are not supported».
-export const PBKDF2_ITERATIONS = 100_000;
-export const PBKDF2_MAX = 100_000;
 
-// Неудачные попытки входа: больше ATTEMPT_LIMIT за ATTEMPT_WINDOW_MS — имя временно блокируется.
-export const ATTEMPT_LIMIT = 10;
-export const ATTEMPT_WINDOW_MS = 15 * 60 * 1000;
-
-export const SESSION_TTL_MS = 180 * 24 * 60 * 60 * 1000;   // полгода: игрок не должен входить каждую неделю
-
-/** Ключ уникальности имени: регистр и ё/е не различаем, иначе «Маша» и «маша» — разные игроки. */
-export function normalizeName(name) {
-  return String(name ?? '').trim().toLowerCase().replace(/ё/g, 'е');
-}
-
-/** null — имя годится, иначе код ошибки для клиента. */
-export function validateName(name) {
-  const value = String(name ?? '').trim();
-  if (!value) return 'name_empty';
-  if (!NAME_RE.test(value)) return 'name_bad';
-  return null;
-}
-
-export function validatePassword(password) {
-  const value = String(password ?? '');
-  if (value.length < MIN_PASSWORD) return 'password_short';
-  if (value.length > MAX_PASSWORD) return 'password_long';
-  return null;
-}
+// initData живёт сутки: Telegram кладёт в неё auth_date, и старую подпись мы не принимаем —
+// чтобы перехваченная строка не работала вечно.
+export const INIT_DATA_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 const enc = new TextEncoder();
 
-function b64encode(bytes) {
-  let s = '';
-  for (const b of bytes) s += String.fromCharCode(b);
-  return btoa(s);
+async function hmac(keyBytes, message) {
+  const key = await crypto.subtle.importKey('raw', keyBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  return new Uint8Array(await crypto.subtle.sign('HMAC', key, enc.encode(message)));
 }
 
-function b64decode(text) {
-  const s = atob(text);
-  const out = new Uint8Array(s.length);
-  for (let i = 0; i < s.length; i += 1) out[i] = s.charCodeAt(i);
-  return out;
-}
+const toHex = (bytes) => [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
 
-/** PBKDF2-SHA256. Соль новая, если не передана (регистрация); при проверке передаётся сохранённая. */
-export async function hashPassword(password, saltB64 = null) {
-  const salt = saltB64 ? b64decode(saltB64) : crypto.getRandomValues(new Uint8Array(16));
-  const key = await crypto.subtle.importKey('raw', enc.encode(String(password)), 'PBKDF2', false, ['deriveBits']);
-  const bits = await crypto.subtle.deriveBits(
-    { name: 'PBKDF2', salt, iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' }, key, 256,
-  );
-  return { salt: b64encode(salt), hash: b64encode(new Uint8Array(bits)) };
-}
-
-export async function verifyPassword(password, saltB64, hashB64) {
-  if (!saltB64 || !hashB64) return false;
-  const { hash } = await hashPassword(password, saltB64);
-  return timingSafeEqual(hash, hashB64);
-}
-
-/** Сравнение за одинаковое время: по времени ответа нельзя угадывать хэш посимвольно. */
+/** Сравнение за одинаковое время: по времени ответа нельзя подбирать подпись посимвольно. */
 export function timingSafeEqual(a, b) {
   const x = String(a);
   const y = String(b);
@@ -79,15 +28,56 @@ export function timingSafeEqual(a, b) {
   return diff === 0;
 }
 
-/** Токен сессии: 32 случайных байта. Клиенту отдаётся он, в базе лежит только его хэш. */
-export function randomToken() {
-  const bytes = crypto.getRandomValues(new Uint8Array(32));
-  return b64encode(bytes).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+/**
+ * Строка, которую Telegram подписывает: все поля, кроме hash и signature, в виде key=value,
+ * отсортированные по имени и склеенные переводом строки.
+ */
+export function dataCheckString(params) {
+  return [...params.entries()]
+    .filter(([key]) => key !== 'hash' && key !== 'signature')
+    .map(([key, value]) => `${key}=${value}`)
+    .sort()
+    .join('\n');
 }
 
-export async function sha256hex(text) {
-  const digest = await crypto.subtle.digest('SHA-256', enc.encode(String(text)));
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+/**
+ * Проверка initData мини-приложения.
+ * Ключ подписи — HMAC-SHA256 от токена бота с ключом «WebAppData»; этим ключом подписана
+ * dataCheckString. Токен есть только у сервера, поэтому подделать initData на клиенте нельзя.
+ *
+ * Возвращает { ok: true, user, authDate } или { ok: false, error }.
+ */
+export async function checkInitData(initData, botToken, { now = Date.now(), maxAgeMs = INIT_DATA_MAX_AGE_MS } = {}) {
+  if (typeof initData !== 'string' || !initData) return { ok: false, error: 'no_init_data' };
+  if (!botToken) return { ok: false, error: 'no_bot_token' };
+
+  let params;
+  try {
+    params = new URLSearchParams(initData);
+  } catch {
+    return { ok: false, error: 'bad_init_data' };
+  }
+
+  const hash = params.get('hash');
+  if (!hash) return { ok: false, error: 'bad_init_data' };
+
+  const secret = await hmac(enc.encode('WebAppData'), botToken);
+  const expected = toHex(await hmac(secret, dataCheckString(params)));
+  if (!timingSafeEqual(expected, hash)) return { ok: false, error: 'bad_signature' };
+
+  const authDate = Number(params.get('auth_date')) * 1000;
+  if (!Number.isFinite(authDate) || authDate <= 0) return { ok: false, error: 'bad_init_data' };
+  if (now - authDate > maxAgeMs) return { ok: false, error: 'expired' };
+
+  let user;
+  try {
+    user = JSON.parse(params.get('user') ?? 'null');
+  } catch {
+    return { ok: false, error: 'bad_user' };
+  }
+  if (!user || !Number.isFinite(user.id)) return { ok: false, error: 'bad_user' };
+
+  return { ok: true, user, authDate, startParam: params.get('start_param') ?? null };
 }
 
 /** Прогресс приходит строкой JSON: проверяем размер и то, что это вообще объект. */
@@ -104,14 +94,18 @@ export function validateState(data) {
   return null;
 }
 
-/** Заблокировано ли имя после неудачных входов. row — строка таблицы attempts или null. */
-export function isLockedOut(row, now) {
-  if (!row) return false;
-  if (now >= row.reset_at) return false;
-  return row.count >= ATTEMPT_LIMIT;
+/** Админы — список Telegram-id в переменной ADMIN_IDS («123,456»). В коде их нет. */
+export function parseAdminIds(value) {
+  return String(value ?? '')
+    .split(/[,\s]+/)
+    .map((part) => Number(part))
+    .filter((id) => Number.isFinite(id) && id > 0);
 }
 
-export function nextAttempt(row, now) {
-  if (!row || now >= row.reset_at) return { count: 1, reset_at: now + ATTEMPT_WINDOW_MS };
-  return { count: row.count + 1, reset_at: row.reset_at };
+export const isAdmin = (tgId, adminIds) => adminIds.includes(Number(tgId));
+
+/** Имя игрока для списков: «Маша (@masha)» или просто имя. */
+export function displayName(user) {
+  const name = [user?.first_name, user?.last_name].filter(Boolean).join(' ').trim() || 'Без имени';
+  return user?.username ? `${name} (@${user.username})` : name;
 }
