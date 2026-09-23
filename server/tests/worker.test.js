@@ -175,3 +175,13 @@ test('неизвестный путь и проверка живости', async
   assert.equal((await call(env, '/')).data.ok, true);
   assert.equal((await call(env, '/нет-такого')).status, 404);
 });
+
+test('схему можно вставить в консоль D1 одной строкой', () => {
+  // Консоль Cloudflare склеивает вставленный текст в одну строку. С комментариями «--» всё после
+  // первого из них стало бы комментарием, и запрос не выполнился бы (так и случилось при первой попытке).
+  assert.ok(!/(^|[^-])--(?!>)/.test(SCHEMA), 'в schema.sql только блочные комментарии /* */');
+  const db = new DatabaseSync(':memory:');
+  db.exec(SCHEMA.replace(/\s+/g, ' ').trim());
+  const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map((r) => r.name);
+  for (const table of ['users', 'sessions', 'states', 'attempts']) assert.ok(tables.includes(table), table);
+});

@@ -27,7 +27,9 @@
 2. **База.** Слева **Storage & Databases → D1 SQL Database → Create database**.
    Имя: `tggames`. Создать.
    Внутри базы — вкладка **Console**: вставить целиком содержимое `schema.sql` и выполнить.
-   Должны появиться таблицы `users`, `sessions`, `states`, `attempts` (вкладка **Tables**).
+   Консоль склеивает вставленное в одну строку, поэтому в `schema.sql` только блочные комментарии
+   `/* */`; однострочные `--` съели бы всё остальное («Requests without any query are not supported»).
+   Проверка: вкладка **Tables** — должны появиться `users`, `sessions`, `states`, `attempts`.
 
 3. **Обработчик.** Слева **Compute (Workers) → Create → Start with Hello World → Deploy**.
    Имя: `tggames-api`. После создания — **Edit code**: удалить всё, что там есть, и вставить
