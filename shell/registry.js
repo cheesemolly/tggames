@@ -112,6 +112,5 @@ export const games = [
     load: () => import('../games/bongo-cat/index.js'),
     css: new URL('../games/bongo-cat/game.css', import.meta.url),
     menu: { progress: 'replace' },                       // «Ударов: 1 234» — партий и побед нет
-    admin: true,                                         // в обкатке: видит только владелец
   },
 ];
