@@ -14,7 +14,8 @@ import {
 } from './logic.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
-const PAW_MIN_MS = 90;               // короткий тап всё равно виден: лапа внизу хотя бы столько
+const PAW_MIN_MS = 90;
+const PAW_LIFT_MS = 60;           // на столько лапа поднимается перед повторным ударом, пока держится прежний               // короткий тап всё равно виден: лапа внизу хотя бы столько
 
 const svgIcon = (body) => `<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" `
   + `stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
@@ -37,6 +38,7 @@ let modalActive = false;
 let saveTimer = 0;
 let beta = false;                // обновление в обкатке — только у владельца (api.beta)
 const pawDown = { left: 0, right: 0, mouth: 0 };
+const lifting = { left: 0, right: 0, mouth: 0 };   // таймер «подъёма» лапы перед повторным ударом
 const pointers = new Map();      // pointerId → { instrument, pad, at }
 const keysHeld = new Map();      // code → { instrument, pad, at }
 const timers = new Set();
@@ -92,9 +94,28 @@ function showInstrument(id) {
   for (const node of ui.scene.querySelectorAll('.bc-inst')) node.classList.toggle('on', node.dataset.inst === id);
 }
 
+/**
+ * Лапа внизу, пока держится хоть одна её клавиша. Обкатка: новая клавиша той же лапы, пока прежняя ещё
+ * зажата (держишь 1 — жмёшь 2), — лапа на миг поднимается и бьёт снова; раньше второй удар был не виден.
+ */
 function setPaw(paw, delta) {
+  const cls = `bc-${paw}-down`;
+  const wasDown = pawDown[paw] > 0;
   pawDown[paw] = Math.max(0, pawDown[paw] + delta);
-  host.classList.toggle(`bc-${paw}-down`, pawDown[paw] > 0);
+  if (beta && delta > 0 && wasDown) {
+    host.classList.remove(cls);
+    if (lifting[paw]) {
+      clearTimeout(lifting[paw]);
+      timers.delete(lifting[paw]);
+    }
+    lifting[paw] = later(() => {
+      lifting[paw] = 0;
+      host?.classList.toggle(cls, pawDown[paw] > 0);
+    }, PAW_LIFT_MS);
+    return;
+  }
+  if (lifting[paw]) return;                     // лапа как раз поднимается для удара — решит таймер
+  host.classList.toggle(cls, pawDown[paw] > 0);
 }
 
 /** Нотка вылетает из места удара. */
@@ -523,6 +544,9 @@ export default {
     pawDown.left = 0;
     pawDown.right = 0;
     pawDown.mouth = 0;
+    lifting.left = 0;
+    lifting.right = 0;
+    lifting.mouth = 0;
     song = null;
     modalActive = false;
     toast?.el.remove();
