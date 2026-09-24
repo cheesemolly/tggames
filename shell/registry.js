@@ -107,6 +107,14 @@ export const games = [
     menu: { best: false, progress: 'append' },           // вместо рекорда — серия побед
   },
   {
+    id: 'memory',
+    title: 'Мемори',
+    load: () => import('../games/memory/index.js'),
+    css: new URL('../games/memory/game.css', import.meta.url),
+    menu: { progress: 'replace' },                       // «Уровень 7»
+    admin: true,                                         // в обкатке: видит только владелец
+  },
+  {
     id: 'bongo-cat',
     title: 'Bongo Cat',
     load: () => import('../games/bongo-cat/index.js'),
