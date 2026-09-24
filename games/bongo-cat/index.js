@@ -155,9 +155,14 @@ function press(instrument, pad, { background = false } = {}) {
     if (instrument !== current) selectInstrument(instrument, { quiet: true });
     showInstrument(instrument);
   }
-  setPaw(pad.paw, 1);
-  if (!background) shakeInstrument(instrument, pad);        // фоном: на столе другой инструмент, лапа бьёт по нему
-  spawnNote(pad.paw);
+  // Фоном лапа не бьёт: на столе другой инструмент, удар по нему выглядел бы «фантомным».
+  // «Мяу» — не инструмент на столе, рот открывается и фоном.
+  const paw = !background || pad.paw === 'mouth' ? pad.paw : null;
+  if (paw) {
+    setPaw(paw, 1);
+    spawnNote(paw);
+  }
+  if (!background) shakeInstrument(instrument, pad);
   api.platform.haptic.impact(instrument === 'meow' ? 'soft' : 'light');
 
   stats = recordHit(stats, instrument);
@@ -165,14 +170,14 @@ function press(instrument, pad, { background = false } = {}) {
   scheduleSave();
 
   if (song && (instrument === 'keyboard' || instrument === 'marimba')) advanceSong(pad.note);
-  return performance.now();
+  return { at: performance.now(), paw };
 }
 
 function release(held) {
   const wait = Math.max(0, PAW_MIN_MS - (performance.now() - held.at));
   const up = () => {
     if (!ui) return;
-    setPaw(held.pad.paw, -1);
+    if (held.paw) setPaw(held.paw, -1);
     releaseKeyVisual(held.instrument, held.pad);
   };
   if (wait) later(up, wait);
@@ -193,8 +198,8 @@ function onPadDown(e) {
   if (!pad) return;
   try { padEl.setPointerCapture(e.pointerId); } catch { /* синтетические указатели не захватываются */ }
   markPad(padEl, true);
-  const at = press(instrument.id, pad);
-  pointers.set(e.pointerId, { instrument: instrument.id, pad, at, padEl });
+  const { at, paw } = press(instrument.id, pad);
+  pointers.set(e.pointerId, { instrument: instrument.id, pad, at, paw, padEl });
 }
 
 function onPadUp(e) {
@@ -213,10 +218,10 @@ function onKeyDown(e) {
   if (e.repeat || keysHeld.has(e.code)) return;             // зажатая клавиша не «строчит», как и на bongo.cat
   // обкатка: клавиша чужого инструмента (и «мяу») звучит фоном, выбранный инструмент остаётся
   const background = beta && hit.instrument !== current;
-  const at = press(hit.instrument, hit.pad, { background });
+  const { at, paw } = press(hit.instrument, hit.pad, { background });
   const padEl = ui.pads.querySelector(`.bc-pad[data-inst="${hit.instrument}"][data-pad="${hit.pad.id}"]`);
   markPad(padEl, true);
-  keysHeld.set(e.code, { ...hit, at, padEl });
+  keysHeld.set(e.code, { ...hit, at, paw, padEl });
 }
 
 function onKeyUp(e) {
