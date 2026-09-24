@@ -218,6 +218,25 @@ test('замедление, ×2 очки, магнит', () => {
 
 // ---------- режимы классики ----------
 
+test('магнит тянет еду плавно: доли клетки за шаг, пока не съедена', () => {
+  const m = classic();
+  m.started = true;
+  m.effects.magnet = POWER_TIME.magnet;
+  m.snake = [idx(m, 3, 8), idx(m, 2, 8), idx(m, 1, 8)];
+  m.dir = 'D';
+  m.freeze = 1e9;                                  // змейка стоит — смотрим только на еду
+  m.foods = [{ kind: 'apple', fruit: 'orange', idx: idx(m, 8, 8) }];
+  const f = m.foods[0];
+  let eaten = false;
+  for (let k = 0; k < 40 && !eaten; k++) {
+    const before = f.fx != null ? { x: f.fx, y: f.fy } : xy(m, f.idx);
+    eaten = step(m).some((e) => e.type === 'eat');
+    if (eaten) break;
+    assert.ok(Math.hypot(f.fx - before.x, f.fy - before.y) <= 0.31, 'за шаг — не больше трети клетки');
+  }
+  assert.ok(eaten, 'еда доползла до головы и съедена');
+});
+
 test('«Стены»: каждое яблоко ставит кирпич, в кирпич врезаются', () => {
   const s = classic({ modes: ['walls'] });
   s.started = true;

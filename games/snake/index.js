@@ -58,6 +58,7 @@ const ICONS = {
   levels: svgIcon('<path d="M5 21V4"/><path d="M5 4h11l-2 4 2 4H5"/>'),
   classic: svgIcon('<path d="M4 17c3 0 3-4 6-4s3 4 6 4 2-6 4-6"/><circle cx="20" cy="9" r="1.5" fill="currentColor"/>'),
   up: svgIcon('<path d="M12 5l-7 8h14z" fill="currentColor"/>'),
+  help: svgIcon('<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14"/><path d="M12 17.5h.01"/>'),
 };
 
 let api = null;
@@ -70,7 +71,7 @@ let game = null;
 let mode = 'classic';
 let level = 1;
 let bestLevel = 0;
-let settings = { speed: 'snake', size: 'medium', modes: [], skin: 'telegram', arrows: false };
+let settings = { speed: 'snake', size: 'medium', modes: [], skin: 'telegram', arrows: false, view: '3d' };
 let stats = emptyStats();
 let pal = null;
 let prevSnake = null;
@@ -559,6 +560,14 @@ function openSettings() {
       applyChange();
       redraw();
     }, (o) => [el('b', {}, o.title), el('small', {}, o.text)]),
+    el('div', { class: 'sn-section' }, 'Вид'),
+    options([{ id: '3d', title: '3D', text: 'стол под наклоном' }, { id: '2d', title: '2D', text: 'строго сверху' }], settings.view, (id) => {
+      settings = { ...settings, view: id };
+      saveSettings();
+      renderer.setView(id);
+      draw(performance.now());
+      redraw();
+    }, (o) => [el('b', {}, o.title), el('small', {}, o.text)]),
     el('div', { class: 'sn-section' }, 'Оформление'),
     el('div', { class: 'sn-skins' }, SKINS.map((s) => el('button', {
       class: `sn-skin ${s.id === settings.skin ? 'on' : ''}`.trim(),
@@ -634,6 +643,44 @@ function openStats() {
   ]);
 }
 
+/** «?» — что есть в игре: бонусы, усилители, еда, препятствия, режимы. */
+function openHelp() {
+  if (game?.started && !game.dead) setPaused(true);
+  const row = (icon, title, text) => el('div', { class: 'sn-help-row' },
+    el('span', { class: 'sn-help-icon', style: `--c:${icon.color}` }, icon.sign), el('span', {}, el('b', {}, title), ` — ${text}`));
+  openModal([
+    el('h2', {}, 'Что есть в игре'),
+    el('p', { class: 'sn-muted' }, 'Свайпай в любом месте поля — змейка поворачивает сразу, пока палец движется. Можно вести палец «змейкой», '
+      + 'не отрывая. На компьютере — стрелки или WASD, пробел — пауза. Нельзя врезаться в стены и в себя.'),
+    el('div', { class: 'sn-section' }, 'Еда'),
+    el('div', { class: 'sn-help' },
+      row({ color: '#ef4444', sign: '●' }, 'Фрукты', 'яблоко, груша, апельсин, банан, виноград, клубника, арбуз: +1 к длине, очки по скорости'),
+      row({ color: '#c98b3c', sign: '●' }, 'Бургер', 'редкий и сытный: очки ×2, змейка растёт на 2'),
+      row({ color: '#ffd23f', sign: '★' }, 'Бонусная еда', 'звезда, вишня или кристалл после каждых 5 съеденных. Лежит недолго (кольцо '
+        + 'вокруг — оставшееся время): чем быстрее съешь, тем больше очков. Змейка от неё не растёт'),
+      row({ color: '#8b5cf6', sign: '●' }, 'Ядовитый гриб', 'в режиме «Яд»: змейка короче на 3, минус 20 очков'),
+    ),
+    el('div', { class: 'sn-section' }, 'Усилители'),
+    el('p', { class: 'sn-muted sn-small' }, 'Иногда появляются шарики-усилители. Полоска под названием вверху — сколько ему осталось.'),
+    el('div', { class: 'sn-help' },
+      row({ color: '#ef4444', sign: 'U' }, 'Магнит', 'еда рядом сама плавно ползёт к голове'),
+      row({ color: '#38bdf8', sign: '◷' }, 'Замедление', 'змейка ползёт медленнее — проще проскочить'),
+      row({ color: '#22c55e', sign: '⛨' }, 'Щит', 'один удар простится: змейка остановится на пару шагов — успей повернуть'),
+      row({ color: '#f59e0b', sign: '×2' }, '×2', 'очки за еду удваиваются'),
+    ),
+    el('div', { class: 'sn-section' }, 'Препятствия на уровнях'),
+    el('div', { class: 'sn-help' },
+      row({ color: '#64748b', sign: '■' }, 'Стены', 'врезаться нельзя'),
+      row({ color: '#22d3ee', sign: '◎' }, 'Порталы', 'вполз в один — выполз из такого же цвета'),
+      row({ color: '#9ca3af', sign: '▲' }, 'Шипы', 'то поднимаются, то прячутся; перед подъёмом мигают. Опасны только поднятые'),
+      row({ color: '#dc2626', sign: '■' }, 'Патруль', 'блок с глазами ходит туда-обратно. В змейку он не въедет — не въезжай в него сам'),
+    ),
+    el('div', { class: 'sn-section' }, 'Режимы классики'),
+    el('div', { class: 'sn-help' }, MODES.map((id) => row({ color: 'var(--tg-theme-button-color)', sign: '•' }, MODE_INFO[id].title, MODE_INFO[id].text.toLowerCase()))),
+    el('button', { class: 'sn-btn', onclick: closeModal }, 'Понятно'),
+  ]);
+}
+
 function switchMode() {
   if (mode === 'classic') {
     openLevels();
@@ -665,6 +712,7 @@ export default {
     if (!Array.isArray(settings.modes)) settings.modes = [];
     settings.modes = settings.modes.filter((m) => MODES.includes(m));
     if (!SKINS.some((s) => s.id === settings.skin)) settings.skin = 'telegram';
+    if (!['3d', '2d'].includes(settings.view)) settings.view = '3d';
     stats = isValidStats(loaded.stats) ? loaded.stats : emptyStats();
     level = Number.isInteger(loaded.levels?.level) && loaded.levels.level >= 1 ? loaded.levels.level : 1;
     bestLevel = Number.isInteger(loaded.levels?.best) ? loaded.levels.best : 0;
@@ -714,6 +762,7 @@ export default {
           ui.modeBtn,
           iconBtn(ICONS.stats, 'Статистика', openStats),
           iconBtn(ICONS.gear, 'Настройки', openSettings),
+          iconBtn(ICONS.help, 'Что есть в игре', openHelp),
           ui.pauseBtn,
         ),
       ),
@@ -727,6 +776,7 @@ export default {
     ), toast.el);
 
     renderer = createRenderer(ui.canvas);
+    renderer.setView(settings.view);
     fx = createFx(ui.stage, 'sn-fx');
     ui.stage.append(fx.canvas);
     ui.stage.addEventListener('pointerdown', onPointerDown);

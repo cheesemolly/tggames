@@ -1,5 +1,5 @@
 // Отрисовка «Змейки» «типа 3D» (не настоящее): стол под наклоном с перспективой. Дальний край стола уже
-// ближнего (масштаб ряда растёт от BACK у дальнего края до 1 у ближнего), ряды к дальнему краю ниже. У предметов
+// ближнего (масштаб ряда растёт от back у дальнего края до 1 у ближнего), ряды к дальнему краю ниже. У предметов
 // видна верхняя грань, передняя стенка и боковая, повёрнутая к центру (как если смотреть сверху-спереди).
 // Направления на экране совпадают с полем: свайп вверх — змейка вверх.
 //
@@ -12,12 +12,14 @@
 
 import { xy, spikeUp, spikeSoon, moverCell, BONUS_TTL } from './logic.js';
 
-const ROW = 0.8;             // высота ряда у ближнего края относительно ширины клетки
-const BACK = 0.8;            // масштаб дальнего края стола (1 — без перспективы)
+// Два вида (настройка): '3d' — стол с перспективой, '2d' — строго сверху (плоско, без граней и высоты).
+const VIEWS = {
+  '3d': { row: 0.8, back: 0.8, plinth: 0.45, z: 1 },
+  '2d': { row: 1, back: 1, plinth: 0, z: 0 },
+};
 const WALL_H = 0.5;          // высота стен (в ширинах клетки)
 const SNAKE_H = 0.36;
 const RIM = 0.26;            // бортик
-const PLINTH = 0.45;         // толщина стола спереди
 
 const PORTAL_COLORS = { a: '#22d3ee', b: '#e879f9', c: '#fb923c' };
 
@@ -29,6 +31,14 @@ export function createRenderer(canvas) {
   let L = null;
   let floorCache = null;
   let floorKey = '';
+  let V = VIEWS['3d'];         // row — высота ряда у ближнего края, back — масштаб дальнего края,
+                               // plinth — толщина стола спереди, z — множитель высоты (0 — плоско)
+
+  function setView(view) {
+    V = VIEWS[view] ?? VIEWS['3d'];
+    floorKey = '';
+  }
+  const flat = () => V.z === 0;
 
   function resize(width, height) {
     dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -45,21 +55,22 @@ export function createRenderer(canvas) {
 
   function layout(cols, rows) {
     // высота стола в клетках: ряды с перспективой + стены у дальнего края + бортик и толщина спереди
-    const depthCells = ROW * rows * (1 + BACK) / 2;
-    const c = Math.min(W / (cols + RIM * 2 + 0.4), H / (depthCells + WALL_H * BACK + RIM * 2 + PLINTH + 0.3));
-    const rh = c * ROW;
-    const total = (depthCells + WALL_H * BACK + RIM * 2 + PLINTH) * c;
-    const oy = (H - total) / 2 + (WALL_H * BACK + RIM) * c;
+    const depthCells = V.row * rows * (1 + V.back) / 2;
+    const lift = WALL_H * V.back * V.z;
+    const c = Math.min(W / (cols + RIM * 2 + 0.4), H / (depthCells + lift + RIM * 2 + V.plinth + 0.3));
+    const rh = c * V.row;
+    const total = (depthCells + lift + RIM * 2 + V.plinth) * c;
+    const oy = (H - total) / 2 + (lift + RIM) * c;
     return { c, rh, cx: W / 2, oy, cols, rows };
   }
 
-  const sc = (y) => BACK + (1 - BACK) * (y / L.rows);
-  const rowY = (y) => L.oy + L.rh * (BACK * y + ((1 - BACK) * y * y) / (2 * L.rows));
+  const sc = (y) => V.back + (1 - V.back) * (y / L.rows);
+  const rowY = (y) => L.oy + L.rh * (V.back * y + ((1 - V.back) * y * y) / (2 * L.rows));
 
   /** Точка поля (x, y в клетках, z — высота в ширинах клетки) на экране. */
   function P(x, y, z = 0) {
     const k = sc(y);
-    return { x: L.cx + (x - L.cols / 2) * L.c * k, y: rowY(y) - z * L.c * k };
+    return { x: L.cx + (x - L.cols / 2) * L.c * k, y: rowY(y) - z * V.z * L.c * k };
   }
 
   /** Центр клетки (экранные координаты) — для частиц и надписей. */
@@ -113,6 +124,15 @@ export function createRenderer(canvas) {
     else if (x0 > mid + 0.01) poly([A, D, F, P(x0, y0, 0)], side, r);       // левая
     poly([D, C, E, F], front, r);
     poly([A, B, C, D], top, r);
+    if (flat()) {
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = Math.max(1.5, k * 0.06);
+      ctx.strokeStyle = front;
+      ctx.beginPath();
+      [A, B, C, D].forEach((q, i) => (i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)));
+      ctx.closePath();
+      ctx.stroke();
+    }
   }
 
   function shadow(x, y, rx, ry, alpha = 0.25) {
@@ -120,7 +140,7 @@ export function createRenderer(canvas) {
     const u = unit(y + 0.5);
     ctx.fillStyle = `rgba(0,0,0,${alpha})`;
     ctx.beginPath();
-    ctx.ellipse(p.x, p.y, rx * u, ry * u * ROW, 0, 0, Math.PI * 2);
+    ctx.ellipse(p.x, p.y, rx * u, ry * u * V.row, 0, 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -167,17 +187,17 @@ export function createRenderer(canvas) {
       f.beginPath();
       const s1 = g(-rim, rows + rim);
       const s2 = g(cols + rim, rows + rim);
-      f.ellipse((s1.x + s2.x) / 2, s1.y + PLINTH * L.c + 6, (s2.x - s1.x) / 2 + 8, L.c * 0.5, 0, 0, Math.PI * 2);
+      f.ellipse((s1.x + s2.x) / 2, s1.y + V.plinth * L.c + 6, (s2.x - s1.x) / 2 + 8, L.c * 0.5, 0, 0, Math.PI * 2);
       f.fill();
       // толщина стола спереди
       const fl = g(-rim, rows + rim);
       const fr = g(cols + rim, rows + rim);
-      polyOn(f, [fl, fr, { x: fr.x, y: fr.y + PLINTH * L.c }, { x: fl.x, y: fl.y + PLINTH * L.c }], pal.edge);
+      polyOn(f, [fl, fr, { x: fr.x, y: fr.y + V.plinth * L.c }, { x: fl.x, y: fl.y + V.plinth * L.c }], pal.edge);
       // боковины стола (видны из-за перспективы)
       const bl = g(-rim, -rim);
       const br = g(cols + rim, -rim);
-      polyOn(f, [bl, fl, { x: fl.x, y: fl.y + PLINTH * L.c }, { x: bl.x, y: bl.y + PLINTH * L.c * BACK }], shade(pal.edge, -0.15));
-      polyOn(f, [br, fr, { x: fr.x, y: fr.y + PLINTH * L.c }, { x: br.x, y: br.y + PLINTH * L.c * BACK }], shade(pal.edge, -0.15));
+      polyOn(f, [bl, fl, { x: fl.x, y: fl.y + V.plinth * L.c }, { x: bl.x, y: bl.y + V.plinth * L.c * V.back }], shade(pal.edge, -0.15));
+      polyOn(f, [br, fr, { x: fr.x, y: fr.y + V.plinth * L.c }, { x: br.x, y: br.y + V.plinth * L.c * V.back }], shade(pal.edge, -0.15));
       // бортик
       polyOn(f, [bl, br, fr, fl], pal.rimTop);
       // клетки
@@ -228,7 +248,7 @@ export function createRenderer(canvas) {
       const u = unit(y + 0.5);
       const color = PORTAL_COLORS[p.id] ?? '#22d3ee';
       const rx = u * 0.42;
-      const ry = u * ROW * 0.42;
+      const ry = u * V.row * 0.42;
       const g = ctx.createRadialGradient(q.x, q.y, 1, q.x, q.y, rx);
       g.addColorStop(0, '#0b1020');
       g.addColorStop(0.7, shade(color, -0.4));
@@ -267,7 +287,7 @@ export function createRenderer(canvas) {
     const u = unit(y + 0.5);
     for (const [dx, dy] of SPIKE_SPOTS) {
       const b = P(x + dx, y + dy);
-      const tip = P(x + dx, y + dy, 0.45 * rise);
+      const tip = flat() ? P(x + dx, y + dy - 0.26 * rise) : P(x + dx, y + dy, 0.45 * rise);
       const w = u * 0.13;
       ctx.fillStyle = pal.spikeSide;
       ctx.beginPath();
@@ -298,7 +318,7 @@ export function createRenderer(canvas) {
     const ex = horiz ? look * u * 0.06 : 0;
     const ey = horiz ? 0 : look * u * 0.05;
     for (const side of [-1, 1]) {
-      const c = P(cur.x + 0.5 + side * 0.17, cur.y + 0.92, 0.3 + bob);
+      const c = flat() ? P(cur.x + 0.5 + side * 0.17, cur.y + 0.45) : P(cur.x + 0.5 + side * 0.17, cur.y + 0.92, 0.3 + bob);
       ctx.fillStyle = '#fff';
       ctx.beginPath();
       ctx.arc(c.x, c.y, u * 0.1, 0, Math.PI * 2);
@@ -348,7 +368,7 @@ export function createRenderer(canvas) {
       ctx.strokeStyle = 'rgba(255,215,64,0.9)';
       ctx.lineWidth = Math.max(2, u * 0.07);
       ctx.beginPath();
-      ctx.ellipse(q.x, q.y + u * 0.05, u * 0.44, u * ROW * 0.4, 0, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (f.ttl / BONUS_TTL));
+      ctx.ellipse(q.x, q.y + u * 0.05, u * 0.44, u * V.row * 0.4, 0, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (f.ttl / BONUS_TTL));
       ctx.stroke();
       if (f.ttl < 10 && Math.floor(time * 8) % 2 === 0) return;
       const p = cellCenter(x, y, bob + 0.08);
@@ -744,7 +764,7 @@ export function createRenderer(canvas) {
     }
     if (extra.dead) {
       // звёздочки кружат над головой
-      const c = cellCenter(h.x, h.y, SNAKE_H + 0.85);
+      const c = flat() ? cellCenter(h.x, h.y - 0.75) : cellCenter(h.x, h.y, SNAKE_H + 0.85);
       for (let k = 0; k < 3; k++) {
         const ang = extra.time * 3.2 + (k * Math.PI * 2) / 3;
         const sx = c.x + Math.cos(ang) * u * 0.5;
@@ -786,7 +806,7 @@ export function createRenderer(canvas) {
       ctx.setLineDash([u * 0.2, u * 0.15]);
       ctx.lineDashOffset = time * u;
       ctx.beginPath();
-      ctx.ellipse(c.x, c.y, u * 6, u * 6 * ROW, 0, 0, Math.PI * 2);
+      ctx.ellipse(c.x, c.y, u * 6, u * 6 * V.row, 0, 0, Math.PI * 2);
       ctx.stroke();
       ctx.setLineDash([]);
     }
@@ -868,7 +888,7 @@ export function createRenderer(canvas) {
     ctx.stroke();
   }
 
-  return { resize, draw, cellCenter };
+  return { resize, draw, cellCenter, setView };
 }
 
 // ---------- цвета ----------
