@@ -316,24 +316,29 @@ export function createRenderer(canvas) {
     }
   }
 
-  function drawFood(f, s, pal, time) {
-    const { x, y } = xy(s, f.idx);
+  /** Где еда сейчас (в клетках, левый верхний угол): у летающей — между прошлой и нынешней точкой. */
+  function foodPos(f, s, t) {
+    if (f.fx != null) {
+      const px = f.px ?? f.fx;
+      const py = f.py ?? f.fy;
+      return { x: px + (f.fx - px) * t, y: py + (f.fy - py) * t };
+    }
+    return xy(s, f.idx);
+  }
+
+  function drawFood(f, s, pal, time, t) {
+    const { x, y } = foodPos(f, s, t);
     const u = unit(y + 0.5);
     const bob = 0.24 + Math.sin(time * 4 + f.idx) * 0.05;
     shadow(x, y, 0.26, 0.22, 0.22);
     if (f.kind === 'apple') {
-      const p = sphere(x, y, bob, 0.3, pal.apple);
-      ctx.fillStyle = '#5a3a1a';
-      ctx.fillRect(p.x - u * 0.025, p.y - p.R - u * 0.08, u * 0.05, u * 0.12);
-      ctx.fillStyle = '#3fae4a';
-      ctx.beginPath();
-      ctx.ellipse(p.x + u * 0.09, p.y - p.R - u * 0.02, u * 0.1, u * 0.05, -0.5, 0, Math.PI * 2);
-      ctx.fill();
+      drawFruit(f.fruit ?? 'apple', x, y, bob, u, pal, time);
       if (f.pair) {
+        const c = cellCenter(x, y, bob);
         ctx.strokeStyle = PORTAL_COLORS.a;
         ctx.lineWidth = Math.max(1.5, u * 0.05);
         ctx.beginPath();
-        ctx.arc(p.x, p.y, p.R * 1.3, 0, Math.PI * 2);
+        ctx.arc(c.x, c.y, u * 0.42, 0, Math.PI * 2);
         ctx.stroke();
       }
       return;
@@ -388,6 +393,172 @@ export function createRenderer(canvas) {
         ctx.fill();
       }
     }
+  }
+
+  /** Фрукты и бургер: все — одно и то же «яблоко» по правилам (бургер — ×2 очки и +2 длины). */
+  function drawFruit(kind, x, y, bob, u, pal, time) {
+    if (kind === 'apple') {
+      const p = sphere(x, y, bob, 0.3, pal.apple);
+      stem(p.x, p.y - p.R, u, 0.5);
+      return;
+    }
+    if (kind === 'pear') {
+      sphere(x, y + 0.06, bob - 0.02, 0.28, '#a3c94a');
+      const top = sphere(x, y - 0.1, bob + 0.2, 0.18, '#b8d65a');
+      stem(top.x, top.y - top.R, u, -0.3);
+      return;
+    }
+    if (kind === 'orange') {
+      const p = sphere(x, y, bob, 0.3, '#fb923c', 'rgba(255,240,210,0.8)');
+      ctx.fillStyle = 'rgba(160,70,0,0.35)';
+      for (const [dx, dy] of [[-0.12, 0.05], [0.1, 0.12], [0.02, -0.08], [-0.05, 0.16], [0.14, -0.02]]) {
+        ctx.beginPath();
+        ctx.arc(p.x + dx * u, p.y + dy * u, u * 0.018, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = '#3fae4a';
+      ctx.beginPath();
+      ctx.ellipse(p.x + u * 0.06, p.y - p.R + u * 0.02, u * 0.09, u * 0.04, -0.4, 0, Math.PI * 2);
+      ctx.fill();
+      return;
+    }
+    if (kind === 'banana') {
+      const c = cellCenter(x, y, bob);
+      ctx.save();
+      ctx.translate(c.x, c.y);
+      ctx.rotate(-0.35 + Math.sin(time * 2) * 0.08);
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = '#d9a400';
+      ctx.lineWidth = u * 0.2;
+      ctx.beginPath();
+      ctx.arc(0, -u * 0.32, u * 0.36, Math.PI * 0.2, Math.PI * 0.8);
+      ctx.stroke();
+      ctx.strokeStyle = '#fde047';
+      ctx.lineWidth = u * 0.13;
+      ctx.beginPath();
+      ctx.arc(0, -u * 0.34, u * 0.36, Math.PI * 0.22, Math.PI * 0.78);
+      ctx.stroke();
+      ctx.fillStyle = '#5a3a1a';
+      const end = { x: Math.cos(Math.PI * 0.2) * u * 0.36, y: -u * 0.32 + Math.sin(Math.PI * 0.2) * u * 0.36 };
+      ctx.beginPath();
+      ctx.arc(end.x, end.y, u * 0.045, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      return;
+    }
+    if (kind === 'grapes') {
+      const spots = [[-0.12, -0.12], [0, -0.14], [0.12, -0.12], [-0.06, 0], [0.06, 0], [0, 0.12]];
+      for (const [dx, dy] of spots) sphere(x + dx, y + dy * 0.6, bob - dy * 0.5, 0.1, '#8b5cf6', 'rgba(230,220,255,0.8)');
+      const top = cellCenter(x, y - 0.1, bob + 0.3);
+      ctx.fillStyle = '#3fae4a';
+      ctx.beginPath();
+      ctx.ellipse(top.x + u * 0.08, top.y, u * 0.1, u * 0.05, -0.3, 0, Math.PI * 2);
+      ctx.fill();
+      return;
+    }
+    if (kind === 'strawberry') {
+      const c = cellCenter(x, y, bob);
+      const r = u * 0.28;
+      const g = ctx.createRadialGradient(c.x - r * 0.3, c.y - r * 0.4, 1, c.x, c.y, r * 1.2);
+      g.addColorStop(0, '#ff8a8a');
+      g.addColorStop(0.35, '#ef233c');
+      g.addColorStop(1, '#9b1024');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.moveTo(c.x - r, c.y - r * 0.4);
+      ctx.quadraticCurveTo(c.x, c.y - r * 1.05, c.x + r, c.y - r * 0.4);
+      ctx.quadraticCurveTo(c.x + r * 0.8, c.y + r * 0.6, c.x, c.y + r * 1.1);
+      ctx.quadraticCurveTo(c.x - r * 0.8, c.y + r * 0.6, c.x - r, c.y - r * 0.4);
+      ctx.fill();
+      ctx.fillStyle = '#fde68a';
+      for (const [dx, dy] of [[-0.4, -0.1], [0, -0.2], [0.4, -0.1], [-0.2, 0.25], [0.2, 0.25], [0, 0.6]]) {
+        ctx.beginPath();
+        ctx.ellipse(c.x + dx * r, c.y + dy * r, r * 0.05, r * 0.08, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = '#22a34a';
+      ctx.beginPath();
+      for (let k = 0; k < 5; k++) {
+        const ang = Math.PI + (k / 4) * Math.PI;
+        ctx.lineTo(c.x + Math.cos(ang) * r * 0.55, c.y - r * 0.55 + Math.sin(ang) * r * 0.3);
+        ctx.lineTo(c.x + Math.cos(ang + 0.3) * r * 0.2, c.y - r * 0.5);
+      }
+      ctx.fill();
+      return;
+    }
+    if (kind === 'watermelon') {
+      const c = cellCenter(x, y, bob);
+      const r = u * 0.34;
+      ctx.save();
+      ctx.translate(c.x, c.y + r * 0.3);
+      ctx.fillStyle = '#15803d';
+      ctx.beginPath();
+      ctx.arc(0, -r * 0.3, r, 0, Math.PI);
+      ctx.fill();
+      ctx.fillStyle = '#bbf7d0';
+      ctx.beginPath();
+      ctx.arc(0, -r * 0.3, r * 0.86, 0, Math.PI);
+      ctx.fill();
+      ctx.fillStyle = '#f43f5e';
+      ctx.beginPath();
+      ctx.arc(0, -r * 0.3, r * 0.78, 0, Math.PI);
+      ctx.fill();
+      ctx.fillStyle = '#1f2937';
+      for (const [dx, dy] of [[-0.4, 0.05], [0, 0.2], [0.4, 0.05], [-0.18, 0.02], [0.2, 0.02]]) {
+        ctx.beginPath();
+        ctx.ellipse(dx * r, -r * 0.3 + dy * r + r * 0.1, r * 0.04, r * 0.07, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+      return;
+    }
+    // бургер
+    const c = cellCenter(x, y, bob);
+    const w = u * 0.36;
+    const layer = (dy, h, color, round = h / 2) => {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.roundRect(c.x - w, c.y + dy, w * 2, h, round);
+      ctx.fill();
+    };
+    layer(u * 0.1, u * 0.1, '#c98b3c', u * 0.05);            // нижняя булка
+    layer(u * 0.02, u * 0.1, '#6b3a1e', u * 0.05);           // котлета
+    ctx.fillStyle = '#facc15';                               // сыр
+    ctx.beginPath();
+    ctx.moveTo(c.x - w * 0.9, c.y + u * 0.01);
+    ctx.lineTo(c.x + w * 0.9, c.y + u * 0.01);
+    ctx.lineTo(c.x + w * 0.1, c.y + u * 0.09);
+    ctx.fill();
+    ctx.strokeStyle = '#4ade80';                             // салат волной
+    ctx.lineWidth = u * 0.05;
+    ctx.beginPath();
+    for (let k = 0; k <= 8; k++) {
+      const px = c.x - w + (k / 8) * w * 2;
+      ctx.lineTo(px, c.y - u * 0.01 + (k % 2 ? u * 0.025 : -u * 0.01));
+    }
+    ctx.stroke();
+    const dome = ctx.createLinearGradient(0, c.y - u * 0.26, 0, c.y);
+    dome.addColorStop(0, '#f0b35a');
+    dome.addColorStop(1, '#c47b2c');
+    ctx.fillStyle = dome;                                    // верхняя булка
+    ctx.beginPath();
+    ctx.ellipse(c.x, c.y - u * 0.02, w * 1.02, u * 0.24, 0, Math.PI, 0);
+    ctx.fill();
+    ctx.fillStyle = '#fff7e0';                               // кунжут
+    for (const [dx, dy] of [[-0.45, -0.1], [-0.1, -0.18], [0.25, -0.12], [0.05, -0.06], [0.5, -0.05], [-0.3, -0.03]]) {
+      ctx.beginPath();
+      ctx.ellipse(c.x + dx * w, c.y + dy * u, u * 0.025, u * 0.015, 0.3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  function stem(x, y, u, tilt) {
+    ctx.fillStyle = '#5a3a1a';
+    ctx.fillRect(x - u * 0.025, y - u * 0.08, u * 0.05, u * 0.12);
+    ctx.fillStyle = '#3fae4a';
+    ctx.beginPath();
+    ctx.ellipse(x + u * 0.09, y - u * 0.04, u * 0.1, u * 0.05, tilt, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   function starShape(x, y, R, r, fill, edge, time) {
@@ -478,7 +649,7 @@ export function createRenderer(canvas) {
     });
   }
 
-  function snakePieces(s, body, prevBody, t, colors, dir, extra) {
+  function snakePieces(s, body, prevBody, t, colors, dir, extra, heads) {
     const seg = segments(s, body, prevBody, t);
     const pieces = [];
     const n = seg.length;
@@ -504,10 +675,9 @@ export function createRenderer(canvas) {
         }
       }
     }
-    // глаза и язык — после перемычки к первому сегменту (иначе она их закрывает)
+    // глаза, язык, звёздочки — отдельно: рисуются последними, поверх всего
     const h = seg[0];
-    const behind = seg[1] && !seg[1].jump ? Math.max(h.y, seg[1].y) : h.y;
-    pieces.push({ depth: depthKey(h.x, behind) + 0.002, draw: () => drawHead(h, dir, extra) });
+    heads.push(() => drawHead(h, dir, extra));
     return pieces;
   }
 
@@ -519,6 +689,20 @@ export function createRenderer(canvas) {
     const py = dx;
     for (const side of [-1, 1]) {
       const e = P(h.x + 0.5 + px * side * 0.2 + dx * 0.12, h.y + 0.5 + py * side * 0.2 + dy * 0.12, SNAKE_H + 0.02);
+      if (extra.dead) {
+        // глаза крестиком
+        ctx.strokeStyle = '#111';
+        ctx.lineWidth = Math.max(1.5, u * 0.05);
+        ctx.lineCap = 'round';
+        const r = u * 0.08;
+        ctx.beginPath();
+        ctx.moveTo(e.x - r, e.y - r);
+        ctx.lineTo(e.x + r, e.y + r);
+        ctx.moveTo(e.x + r, e.y - r);
+        ctx.lineTo(e.x - r, e.y + r);
+        ctx.stroke();
+        continue;
+      }
       ctx.fillStyle = '#fff';
       ctx.beginPath();
       ctx.ellipse(e.x, e.y, u * 0.11, u * 0.1, 0, 0, Math.PI * 2);
@@ -549,6 +733,16 @@ export function createRenderer(canvas) {
       ctx.moveTo(tip.x, tip.y);
       ctx.lineTo(f2.x, f2.y);
       ctx.stroke();
+    }
+    if (extra.dead) {
+      // звёздочки кружат над головой
+      const c = cellCenter(h.x, h.y, SNAKE_H + 0.85);
+      for (let k = 0; k < 3; k++) {
+        const ang = extra.time * 3.2 + (k * Math.PI * 2) / 3;
+        const sx = c.x + Math.cos(ang) * u * 0.5;
+        const sy = c.y + Math.sin(ang) * u * 0.17;
+        starShape(sx, sy, u * 0.16, u * 0.07, '#ffd23f', '#d69e00', 0);
+      }
     }
     if (extra.shield) {
       const c = cellCenter(h.x, h.y, SNAKE_H * 0.5);
@@ -610,20 +804,29 @@ export function createRenderer(canvas) {
       const { x, y } = xy(s, moverCell(m));
       items.push({ depth: depthKey(x, y), draw: () => drawMover(m, s, pal, time) });
     }
+    const ft = frame.foodT ?? t;
     for (const f of s.foods) {
-      const { x, y } = xy(s, f.idx);
-      items.push({ depth: depthKey(x, y) + 0.005, draw: () => drawFood(f, s, pal, time) });
+      const { x, y } = foodPos(f, s, ft);
+      items.push({ depth: depthKey(x, y) + 0.005, draw: () => drawFood(f, s, pal, time, ft) });
     }
     const hidden = frame.blink && Math.floor(time * 10) % 2 === 0;
+    const heads = [];
     if (!hidden) {
-      const extra = { tongue: Math.sin(time * 2.2) > 0.85 && frame.dying == null, shield: s.effects.shield > 0, look: frame.look };
-      items.push(...snakePieces(s, s.snake, frame.prevSnake, t, { head: pal.snakeHead, tail: pal.snakeTail }, s.dir, extra));
-      if (s.twin) items.push(...snakePieces(s, s.twin.snake, frame.prevTwin, t, { head: pal.twinHead, tail: pal.twinTail }, s.twin.dir, {}));
+      const dead = frame.dying != null;
+      const who = frame.deadWho;
+      const extra = {
+        tongue: Math.sin(time * 2.2) > 0.85 && !dead, shield: s.effects.shield > 0, look: frame.look, time,
+        dead: dead && who !== 'twin',
+      };
+      items.push(...snakePieces(s, s.snake, frame.prevSnake, t, { head: pal.snakeHead, tail: pal.snakeTail }, s.dir, extra, heads));
+      if (s.twin) {
+        items.push(...snakePieces(s, s.twin.snake, frame.prevTwin, t, { head: pal.twinHead, tail: pal.twinTail }, s.twin.dir,
+          { time, dead: dead && who !== 'main' }, heads));
+      }
     }
     items.sort((a, b) => a.depth - b.depth);
-    if (frame.dying != null) ctx.globalAlpha = 1 - frame.dying * 0.35;
     for (const it of items) it.draw();
-    ctx.globalAlpha = 1;
+    for (const draw of heads) draw();
 
     // передний бортик — поверх нижнего ряда
     const fl = P(-RIM, s.rows);
