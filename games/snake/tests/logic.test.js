@@ -47,6 +47,25 @@ test('поворот: назад и в ту же сторону нельзя, о
   assert.equal(s.dead, false, 'в шею не врезались');
 });
 
+test('на поле сразу несколько еды: по размеру поля, в уровнях — 3, в «Порталах» — пары', () => {
+  for (const [size, info] of Object.entries(SIZES)) {
+    const s = newGame({ mode: 'classic', speed: 'snake', size }, seeded(2));
+    assert.equal(s.foods.filter((f) => f.kind === 'apple').length, info.food, size);
+    const cells = s.foods.map((f) => f.idx);
+    assert.equal(new Set(cells).size, cells.length, 'не в одной клетке');
+  }
+  const lv = newGame({ mode: 'levels', speed: 'snake', level: 1, map: levelMap(1) }, seeded(2));
+  assert.equal(lv.foods.filter((f) => f.kind === 'apple').length, 3);
+  const big = newGame({ mode: 'classic', speed: 'snake', size: 'large', modes: ['portal'] }, seeded(2));
+  const pairs = new Map();
+  for (const f of big.foods.filter((o) => o.kind === 'apple')) pairs.set(f.pair, [...(pairs.get(f.pair) ?? []), f]);
+  assert.equal(pairs.size, 2, 'на большом поле — две пары порталов');
+  for (const list of pairs.values()) {
+    assert.equal(list.length, 2);
+    assert.equal(list[0].fruit, list[1].fruit, 'в паре одинаковые фрукты');
+  }
+});
+
 test('до первого свайпа змейка стоит', () => {
   const s = classic();
   const before = s.snake.slice();
@@ -67,7 +86,7 @@ test('ест яблоко — растёт на 1 и получает очки �
     assert.equal(s.snake.length, START_LEN, 'рост — на следующем шаге');
     step(s);
     assert.equal(s.snake.length, START_LEN + 1);
-    assert.equal(s.foods.filter((f) => f.kind === 'apple').length, 1);
+    assert.equal(s.foods.filter((f) => f.kind === 'apple').length, SIZES.medium.food, 'еда добирается до нужного числа');
   }
 });
 
