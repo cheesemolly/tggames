@@ -26,6 +26,8 @@ export const GAME_ICONS = {
     + '<path d="M5.5 9v4.5a2.5 2.5 0 0 0 2.5 2.5h8"/>'),
   mahjong: svg('<rect x="2.5" y="7" width="9" height="13.5" rx="2"/><rect x="12.5" y="3.5" width="9" height="13.5" rx="2"/>'
     + '<path d="M6 11.5h2.5M6 15h2.5M16 8h2.5M16 11.5h2.5" opacity="0.7"/>'),
+  memory: svg('<rect x="3" y="4" width="8" height="10" rx="1.8"/><rect x="13" y="10" width="8" height="10" rx="1.8"/>'
+    + '<path d="M5.5 7.5l3 3M8.5 7.5l-3 3" opacity="0.55"/><circle cx="17" cy="15" r="2.2" fill="currentColor" stroke="none"/>'),
   2048: svg('<rect x="3" y="3" width="18" height="18" rx="3"/>'
     + '<path d="M9.2 9.6a2.8 2.8 0 0 1 5.6.2c0 2.4-5.6 3.6-5.6 6.2h5.8"/>'),
 
