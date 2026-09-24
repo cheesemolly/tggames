@@ -51,7 +51,6 @@ export const games = [
     load: () => import('../games/snake/index.js'),
     css: new URL('../games/snake/game.css', import.meta.url),
     menu: { wins: false, progress: 'append' },           // «Сыграно · Рекорд» классики + «Уровень N»
-    admin: true,                                         // в обкатке: видит только владелец
   },
   {
     id: 'brick-blast',

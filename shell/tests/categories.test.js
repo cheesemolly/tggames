@@ -73,3 +73,9 @@ test('Мемори открыта для всех, лежит в «Голово�
   assert.ok(memory && !memory.admin, 'Мемори вышла из обкатки (решение владельца)');
   assert.equal(categoryOfGame('memory')?.id, 'puzzles');
 });
+
+test('Змейка открыта для всех, лежит в «Аркадах»', () => {
+  const snake = games.find((g) => g.id === 'snake');
+  assert.ok(snake && !snake.admin, 'Змейка вышла из обкатки (решение владельца)');
+  assert.equal(categoryOfGame('snake')?.id, 'arcade');
+});
