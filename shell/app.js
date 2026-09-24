@@ -8,7 +8,7 @@ import { createToast } from '../shared/toast.js';
 import { games } from './registry.js';
 import { currentRoute, onRouteChange, goToMenu, goToFolder } from './router.js';
 import { renderMenu, renderFolder } from './menu.js';
-import { findCategory, categoryOfGame } from './categories.js';
+import { findCategory, categoryOfGame, gamesOf } from './categories.js';
 import { migrateStats } from './stats.js';
 import { openGame } from './game-host.js';
 import { createSync } from './sync.js';
@@ -67,7 +67,7 @@ function show(route) {
 
   if (route.name === 'folder') {
     const category = findCategory(route.id);
-    if (!category) {
+    if (!category || gamesOf(category, visibleGames()).length === 0) {
       goToMenu();
       return;
     }

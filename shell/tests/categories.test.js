@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { categories, findCategory, categoryOfGame, gamesOf, gameWord } from '../categories.js';
+import { categories, findCategory, categoryOfGame, gamesOf, gameWord, visibleCategories } from '../categories.js';
 import { games } from '../registry.js';
 import { GAME_ICONS, CATEGORY_ICONS } from '../icons.js';
 
@@ -53,4 +53,16 @@ test('игры в обкатке (admin: true) видны только влад�
   const bubble = games.find((g) => g.id === 'bubble-shooter');
   assert.ok(bubble && !bubble.admin, '«Шарики» открыты для всех');
   assert.equal(categoryOfGame('bubble-shooter')?.id, 'arcade');
+});
+
+test('Bongo Cat в обкатке: видит только владелец, папка «Музыка» у остальных пропадает', () => {
+  const bongo = games.find((g) => g.id === 'bongo-cat');
+  assert.ok(bongo?.admin, 'Bongo Cat пока только для владельца');
+  assert.equal(categoryOfGame('bongo-cat')?.id, 'music');
+
+  const forPlayer = games.filter((g) => !g.admin);
+  const ids = (list) => visibleCategories(list).map((c) => c.id);
+  assert.ok(!ids(forPlayer).includes('music'), 'пустая для игрока папка не показывается');
+  assert.ok(ids(games).includes('music'), 'владелец папку видит');
+  assert.equal(ids(forPlayer).length, categories.length - 1, 'остальные папки на месте');
 });

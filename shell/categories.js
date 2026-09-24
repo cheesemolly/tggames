@@ -40,6 +40,13 @@ export const categories = [
     color: '--cat-quiz',
     games: ['flags'],
   },
+  {
+    id: 'music',
+    title: 'Музыка',
+    hint: 'Поиграть на инструментах',
+    color: '--cat-music',
+    games: ['bongo-cat'],
+  },
 ];
 
 export const findCategory = (id) => categories.find((c) => c.id === id) ?? null;
@@ -51,6 +58,12 @@ export const categoryOfGame = (gameId) => categories.find((c) => c.games.include
 export function gamesOf(category, games) {
   return category.games.map((id) => games.find((g) => g.id === id)).filter(Boolean);
 }
+
+/**
+ * Папки, в которых игроку есть что открыть. Игры в обкатке (admin) видны только владельцу —
+ * папка из одних таких у остальных пропадает, а не показывает «0 игр».
+ */
+export const visibleCategories = (games) => categories.filter((c) => gamesOf(c, games).length > 0);
 
 export const gameWord = (n) => {
   const last = n % 10;

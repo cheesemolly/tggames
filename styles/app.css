@@ -90,6 +90,7 @@ h1, h2 { margin: 0 0 8px; line-height: 1.2; }
   --cat-arcade: #e0473c;
   --cat-board: #0284c7;
   --cat-quiz: #0d9488;
+  --cat-music: #db2777;
 }
 :root[data-theme="dark"] {
   --cat-words: #fbbf24;
@@ -97,6 +98,7 @@ h1, h2 { margin: 0 0 8px; line-height: 1.2; }
   --cat-arcade: #f87171;
   --cat-quiz: #2dd4bf;
   --cat-board: #38bdf8;
+  --cat-music: #f472b6;
 }
 
 /* Плитка с иконкой */
@@ -166,7 +168,7 @@ h1, h2 { margin: 0 0 8px; line-height: 1.2; }
   height: 4px;
   margin: 0 0 14px;
   border-radius: 4px;
-  background: linear-gradient(90deg, var(--cat-words), var(--cat-puzzles), var(--cat-arcade), var(--cat-board), var(--cat-quiz));
+  background: linear-gradient(90deg, var(--cat-words), var(--cat-puzzles), var(--cat-arcade), var(--cat-board), var(--cat-quiz), var(--cat-music));
 }
 .folder-head .title-rule { width: 48px; background: var(--cat); }
 

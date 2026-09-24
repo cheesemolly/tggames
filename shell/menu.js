@@ -7,7 +7,7 @@ import { getStats } from './stats.js';
 import { saves } from './saves.js';
 import { progress } from './progress.js';
 import { menuLine } from './menu-line.js';
-import { categories, gamesOf, gameWord } from './categories.js';
+import { visibleCategories, gamesOf, gameWord } from './categories.js';
 import { GAME_ICONS, CATEGORY_ICONS } from './icons.js';
 
 /** Иконка в цветной плитке: цвет берётся из переменной папки. */
@@ -30,7 +30,7 @@ export async function renderMenu(container, { games, account = null }) {
     (await Promise.all(games.map(async (g) => ((await saves.get(g.id)) != null ? g.id : null)))).filter(Boolean),
   );
 
-  const cards = categories.map((category, index) => {
+  const cards = visibleCategories(games).map((category, index) => {
     const list = gamesOf(category, games);
     const card = el('a', {
       class: 'folder-card',

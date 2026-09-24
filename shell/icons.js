@@ -47,6 +47,11 @@ export const GAME_ICONS = {
     + '<rect x="3" y="13" width="8" height="8" rx="1.8"/>'
     + '<rect x="13" y="13" width="8" height="8" rx="1.8" fill="currentColor" stroke="none"/>'),
 
+  // Музыка
+  'bongo-cat': svg('<path d="M4.5 13.5V6l3.2 2.6h8.6L19.5 6v7.5"/><circle cx="9.2" cy="11.2" r="0.9" fill="currentColor" stroke="none"/>'
+    + '<circle cx="14.8" cy="11.2" r="0.9" fill="currentColor" stroke="none"/><path d="M2.5 16.5 21.5 14"/>'
+    + '<path d="M6 19.5c0-1.6 1-2.6 2.4-2.6s2.4 1 2.4 2.6M13.4 19c0-1.4.9-2.3 2.1-2.3s2.1.9 2.1 2.3"/>'),
+
   // Викторина
   flags: svg('<path d="M6 3.5v17"/><path d="M6 5h11l-2.6 4L17 13H6z" fill="currentColor" fill-opacity="0.18"/>'),
 };
@@ -60,5 +65,6 @@ export const CATEGORY_ICONS = {
   arcade: svg('<rect x="2.5" y="7.5" width="19" height="11" rx="5"/><path d="M7 11.2v3.6M5.2 13h3.6"/>'
     + '<circle cx="16.2" cy="12.2" r="1.3" fill="currentColor" stroke="none"/>'
     + '<circle cx="18.6" cy="14.6" r="1.3" fill="currentColor" stroke="none"/>'),
+  music: svg('<path d="M9 18V5.5l11-2V16"/><circle cx="6.5" cy="18" r="2.6"/><circle cx="17.5" cy="16" r="2.6"/>'),
   quiz: svg('<circle cx="12" cy="12" r="9"/><path d="M3.2 12h17.6"/><path d="M12 3c2.8 3 2.8 15 0 18M12 3c-2.8 3-2.8 15 0 18"/>'),
 };
