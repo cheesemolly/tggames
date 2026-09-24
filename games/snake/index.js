@@ -410,6 +410,7 @@ function onDeath(reason, who = 'main') {
 
 function onWin() {
   winning = true;
+  renderHud();                                     // иначе на экране остаётся «11/12»: счётчик не успел обновиться
   api.platform.haptic.notification('success');
   stats = recordRun(stats, game);
   api.storage.set('stats', stats);

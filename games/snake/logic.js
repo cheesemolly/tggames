@@ -30,10 +30,11 @@ export const SPEEDS = {
   rabbit: { title: 'Кролик', ms: 92, mult: 3 },
 };
 export const SIZES = {
-  small: { title: 'Маленькое', cols: 11, rows: 14 },
-  medium: { title: 'Среднее', cols: 13, rows: 17 },
-  large: { title: 'Большое', cols: 15, rows: 20 },
+  small: { title: 'Маленькое', cols: 11, rows: 14, food: 2 },
+  medium: { title: 'Среднее', cols: 13, rows: 17, food: 3 },
+  large: { title: 'Большое', cols: 15, rows: 20, food: 4 },
 };
+export const LEVEL_FOOD = 3;           // сколько еды сразу лежит на поле в уровнях
 export const MODES = ['walls', 'portal', 'winged', 'poison', 'twin'];
 export const POWERS = ['magnet', 'slow', 'shield', 'double'];
 
@@ -158,6 +159,8 @@ export function newGame(cfg, rng = Math.random) {
     steps: 0,
     freeze: 0,
     goal: map?.goal ?? 0,
+    foodCount: map ? LEVEL_FOOD : size.food,      // сколько еды одновременно на поле
+    pairSeq: 0,
     pace: map?.pace ?? 1,
     started: false,
     dead: false,
@@ -210,18 +213,32 @@ function spawnFood(s, food, rng, opts) {
 }
 
 /** Обычные яблоки: одно (или пара в режиме «Порталы»). Нет места — поле заполнено, победа. */
+/**
+ * Добирает еду до foodCount штук (в «Порталах» — пар: половина от числа, хотя бы одна).
+ * Места не осталось и еды на поле нет — поле заполнено, победа.
+ */
 function spawnApples(s, rng) {
-  if (s.foods.some((f) => f.kind === 'apple')) return;
+  const target = s.foodCount ?? 1;
+  const apples = () => s.foods.filter((f) => f.kind === 'apple');
   if (s.modes.includes('portal')) {
-    const a = spawnFood(s, { kind: 'apple', pair: 1 }, rng);
-    const b = a && spawnFood(s, { kind: 'apple', pair: 1 }, rng, { awayFromHead: 4 });
-    if (!b) {
-      s.foods = s.foods.filter((f) => f.kind !== 'apple');
-      if (!spawnFood(s, { kind: 'apple' }, rng, { awayFromHead: 0 })) s.won = true;
+    const pairs = Math.max(1, Math.floor(target / 2));
+    let guard = 0;
+    while (new Set(apples().map((f) => f.pair)).size < pairs && guard++ < pairs * 2) {
+      s.pairSeq = (s.pairSeq ?? 1) + 1;
+      const a = spawnFood(s, { kind: 'apple', pair: s.pairSeq }, rng);
+      const b = a && spawnFood(s, { kind: 'apple', pair: s.pairSeq, fruit: a.fruit }, rng, { awayFromHead: 4 });
+      if (!b) {
+        if (a) s.foods.splice(s.foods.indexOf(a), 1);
+        if (!apples().length) spawnFood(s, { kind: 'apple' }, rng, { awayFromHead: 0 });
+        break;
+      }
     }
-    return;
+  } else {
+    while (apples().length < target) {
+      if (!spawnFood(s, { kind: 'apple' }, rng) && !spawnFood(s, { kind: 'apple' }, rng, { awayFromHead: 0 })) break;
+    }
   }
-  if (!spawnFood(s, { kind: 'apple' }, rng) && !spawnFood(s, { kind: 'apple' }, rng, { awayFromHead: 0 })) s.won = true;
+  if (!apples().length) s.won = true;
 }
 
 // ---------- управление ----------
@@ -479,10 +496,12 @@ function moveFoods(s, rng) {
       f.px = f.fx;
       f.py = f.fy;
       const d = Math.hypot(hx - f.fx - 0.5, hy - f.fy - 0.5);
-      if (s.effects.magnet > 0 && d <= 6 && d > 0.3) {
-        // магнит тянет плавно
-        f.fx += ((hx - f.fx - 0.5) / d) * 0.3;
-        f.fy += ((hy - f.fy - 0.5) / d) * 0.3;
+      const mx = ((hx - f.fx - 0.5) / (d || 1)) * 0.3;
+      const my = ((hy - f.fy - 0.5) / (d || 1)) * 0.3;
+      if (s.effects.magnet > 0 && d <= 6 && d > 0.3 && !flightBlocked(s, f.fx + 0.5 + mx, f.fy + 0.5 + my)) {
+        // магнит тянет плавно (но не сквозь тело)
+        f.fx += mx;
+        f.fy += my;
       } else {
         // по каждой оси отдельно: край фрукта упёрся в край поля или стену — скорость по оси меняет знак
         if (flightBlocked(s, f.fx + 0.5 + f.vx + Math.sign(f.vx) * FRUIT_R, f.fy + 0.5)) f.vx = -f.vx;
@@ -510,10 +529,15 @@ function moveFoods(s, rng) {
   void rng;
 }
 
-/** Точка (в клетках) — за краем поля или в стене/кирпиче: от неё летающая еда отскакивает. */
+/**
+ * Точка (в клетках) — за краем поля, в стене/кирпиче или в теле змейки (кроме головы — голова ест):
+ * от неё летающая еда отскакивает. Фрукт парит невысоко — сквозь тело он бы визуально проходил.
+ */
 export function flightBlocked(s, x, y) {
   if (x < 0 || y < 0 || x >= s.cols || y >= s.rows) return true;
-  return s.cells[idx(s, Math.floor(x), Math.floor(y))] !== 0;
+  const c = idx(s, Math.floor(x), Math.floor(y));
+  if (s.cells[c] !== 0) return true;
+  return s.snake.indexOf(c) > 0 || (s.twin?.snake.indexOf(c) ?? -1) > 0;
 }
 
 const canHoldFood = (s, c) => !blocked(s, c, { forFood: true }) && !occupiedBySnake(s, c) && foodAt(s, c) < 0;
