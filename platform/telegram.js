@@ -4,6 +4,7 @@
 //
 // Интерфейс platform:
 //   isTelegram, user, initData (подписанная строка для сервера; вне Telegram — пустая), colorScheme
+//   isDesktop — открыто на компьютере (Telegram Desktop, macOS, веб-версия): там полный экран не нужен
 //   ready(), expand()
 //   lockSwipes()  — запретить Telegram сворачивать мини-апп свайпом (в играх свайп — это ход)
 //   fullscreen: supported, isActive, request(), exit(), onChange(cb)
@@ -13,6 +14,7 @@
 //   share(text) → Promise<'shared' | 'copied' | 'cancelled' | 'failed'>
 
 import { el, loadCss } from '../shared/dom.js';
+import { isMobilePlatform } from './device.js';
 
 const FAKE_USER = { id: 1, first_name: 'Тестер', username: 'tester', language_code: 'ru' };
 
@@ -76,6 +78,8 @@ function createTelegramPlatform(tg) {
         console.warn('не удалось запретить свайпы', err);
       }
     },
+
+    isDesktop: !isMobilePlatform(tg.platform),
 
     // Полноэкранный режим (Bot API 8.0): приложение занимает весь экран, шапка Telegram убирается.
     fullscreen: {
@@ -203,6 +207,7 @@ function createBrowserPlatform() {
 
   return {
     isTelegram: false,
+    isDesktop: false,                // заглушка изображает телефон (разработка в мобильном режиме)
     initData: '',                    // вне Telegram подписывать нечего — аккаунтов тут нет
     user: FAKE_USER,
     get colorScheme() { return scheme; },

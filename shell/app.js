@@ -105,13 +105,19 @@ platform.ready();
 platform.expand();
 // Иначе Telegram сворачивает мини-апп свайпом вниз прямо во время хода (2048, «Соедини точки»).
 platform.lockSwipes();
-// Полноэкранный режим: жесты сворачивания клиенту больше не отдаются, игра занимает весь экран.
+// Полноэкранный режим — только на телефоне: жесты сворачивания клиенту больше не отдаются, игра занимает весь
+// экран. На компьютере (Telegram Desktop, macOS, веб) он не нужен — там обычное окно (просьба владельца);
+// если окно всё же развёрнуто (осталось с прошлого раза), возвращаем обычное.
 // На клиентах без поддержки (старее Bot API 8.0) ничего не меняется.
-platform.fullscreen.tryEnable((problem) => {
-  console.warn('полноэкранный режим:', problem);
-  if (problem.error === 'ALREADY_FULLSCREEN') return;
-  offerFullscreen(`не вышло: ${problem.error}`);
-});
+if (platform.isDesktop) {
+  if (platform.fullscreen.isActive) platform.fullscreen.exit();
+} else {
+  platform.fullscreen.tryEnable((problem) => {
+    console.warn('полноэкранный режим:', problem);
+    if (problem.error === 'ALREADY_FULLSCREEN') return;
+    offerFullscreen(`не вышло: ${problem.error}`);
+  });
+}
 
 /**
  * Запрос при старте срабатывает не всегда (клиент может его проглотить). Тогда показываем кнопку:
@@ -141,8 +147,8 @@ function offerFullscreen(reason = '') {
   setTimeout(() => button.remove(), 12000);
 }
 
-// Если через полторы секунды шапка Telegram всё ещё на месте — предлагаем кнопку.
-setTimeout(() => offerFullscreen('запрос при старте не сработал'), 1500);
+// Если через полторы секунды шапка Telegram всё ещё на месте — предлагаем кнопку (только на телефоне).
+if (!platform.isDesktop) setTimeout(() => offerFullscreen('запрос при старте не сработал'), 1500);
 
 // Внутри Telegram вход происходит сам: подпись initData проверяет сервер (platform/account.js).
 // В обычном браузере аккаунтов нет — игра остаётся гостевой, прогресс живёт в браузере.
