@@ -58,9 +58,9 @@ for (const instrument of INSTRUMENTS) {
 
 /**
  * Клавиша физической клавиатуры → { instrument, pad } или null.
- * withAlt — учитывать запасные клавиши (цифры цифрового блока у пианино; пока только в обкатке у владельца).
+ * Запасные клавиши тоже считаются: цифры цифрового блока (Numpad) играют пианино.
  */
-export const padForCode = (code, { withAlt = false } = {}) => BY_CODE.get(code) ?? (withAlt ? BY_ALT.get(code) : null) ?? null;
+export const padForCode = (code) => BY_CODE.get(code) ?? BY_ALT.get(code) ?? null;
 
 /** Частота ноты: 0 — до первой октавы (C4), дальше по полутонам. */
 export const noteFreq = (semitone, octave = 0) => 261.6256 * 2 ** (semitone / 12 + octave);

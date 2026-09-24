@@ -36,7 +36,6 @@ let audio = null;                // { ctx, synth } — создаётся по �
 let song = null;                 // { song, pos } — разучивание мелодии
 let modalActive = false;
 let saveTimer = 0;
-let beta = false;                // обновление в обкатке — только у владельца (api.beta)
 const pawDown = { left: 0, right: 0, mouth: 0 };
 const lifting = { left: 0, right: 0, mouth: 0 };   // таймер «подъёма» лапы перед повторным ударом
 const pointers = new Map();      // pointerId → { instrument, pad, at }
@@ -95,14 +94,14 @@ function showInstrument(id) {
 }
 
 /**
- * Лапа внизу, пока держится хоть одна её клавиша. Обкатка: новая клавиша той же лапы, пока прежняя ещё
- * зажата (держишь 1 — жмёшь 2), — лапа на миг поднимается и бьёт снова; раньше второй удар был не виден.
+ * Лапа внизу, пока держится хоть одна её клавиша. Новая клавиша той же лапы, пока прежняя ещё
+ * зажата (держишь 1 — жмёшь 2), — лапа на миг поднимается и бьёт снова, иначе второй удар не виден.
  */
 function setPaw(paw, delta) {
   const cls = `bc-${paw}-down`;
   const wasDown = pawDown[paw] > 0;
   pawDown[paw] = Math.max(0, pawDown[paw] + delta);
-  if (beta && delta > 0 && wasDown) {
+  if (delta > 0 && wasDown) {
     host.classList.remove(cls);
     if (lifting[paw]) {
       clearTimeout(lifting[paw]);
@@ -165,9 +164,9 @@ function releaseKeyVisual(instrument, pad) {
 // ---------- удар ----------
 
 /**
- * Удар. background — клавиша чужого инструмента с клавиатуры в режиме обкатки: звучит тот инструмент,
- * но выбранный остаётся (на столе и внизу — прежний, лапа бьёт по нему). Без обкатки — как на bongo.cat:
- * инструмент переключается.
+ * Удар. background — клавиша чужого инструмента с клавиатуры: звучит тот инструмент, но выбранный
+ * остаётся (на столе и внизу — прежний), лапа не бьёт — удар по инструменту на столе был бы «фантомным».
+ * На bongo.cat в этом случае инструмент переключается — мы отказались (решение владельца, 2026-09-24).
  */
 function press(instrument, pad, { background = false } = {}) {
   const a = ensureAudio();
@@ -233,12 +232,12 @@ function onPadUp(e) {
 
 function onKeyDown(e) {
   if (!ui || modalActive || e.ctrlKey || e.metaKey || e.altKey) return;
-  const hit = padForCode(e.code, { withAlt: beta });
+  const hit = padForCode(e.code);
   if (!hit) return;
   e.preventDefault();
   if (e.repeat || keysHeld.has(e.code)) return;             // зажатая клавиша не «строчит», как и на bongo.cat
-  // обкатка: клавиша чужого инструмента (и «мяу») звучит фоном, выбранный инструмент остаётся
-  const background = beta && hit.instrument !== current;
+  // клавиша чужого инструмента (и «мяу») звучит фоном, выбранный инструмент остаётся
+  const background = hit.instrument !== current;
   const { at, paw } = press(hit.instrument, hit.pad, { background });
   const padEl = ui.pads.querySelector(`.bc-pad[data-inst="${hit.instrument}"][data-pad="${hit.pad.id}"]`);
   markPad(padEl, true);
@@ -463,7 +462,6 @@ export default {
 
   async init(container, gameApi) {
     api = gameApi;
-    beta = Boolean(gameApi.beta);
     host = container;
     toast = createToast();
 
@@ -557,6 +555,5 @@ export default {
     stats = emptyStats();
     current = 'bongo';
     shown = 'bongo';
-    beta = false;
   },
 };

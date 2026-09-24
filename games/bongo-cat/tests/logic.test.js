@@ -20,14 +20,13 @@ test('клавиши — как на bongo.cat', () => {
   assert.equal(padForCode('KeyT').pad.note, 4, 'T — пятая нота маримбы');
 });
 
-test('цифровой блок играет пианино — только в обкатке (withAlt)', () => {
-  assert.equal(padForCode('Numpad5'), null, 'у игроков пока как на bongo.cat');
+test('цифровой блок играет пианино', () => {
   for (let d = 0; d <= 9; d++) {
-    const hit = padForCode(`Numpad${d}`, { withAlt: true });
+    const hit = padForCode(`Numpad${d}`);
     assert.equal(hit?.instrument, 'keyboard');
     assert.equal(hit.pad, padForCode(`Digit${d}`).pad, `Numpad${d} — та же нота, что ${d}`);
   }
-  assert.equal(padForCode('KeyA', { withAlt: true })?.instrument, 'bongo', 'основные клавиши не мешают');
+  assert.equal(padForCode('KeyA')?.instrument, 'bongo', 'основные клавиши не мешают');
 });
 
 test('у каждой клавиши своя кнопка, лапа и подпись', () => {
