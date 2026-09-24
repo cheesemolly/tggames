@@ -24,7 +24,7 @@ export const categories = [
     title: 'Аркады',
     hint: 'На реакцию и меткость',
     color: '--cat-arcade',
-    games: ['flappy-burger', 'brick-blast', 'block-blast', 'bubble-shooter'],
+    games: ['snake', 'flappy-burger', 'brick-blast', 'block-blast', 'bubble-shooter'],
   },
   {
     id: 'board',
