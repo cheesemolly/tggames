@@ -46,6 +46,14 @@ export const games = [
     menu: { progress: 'replace' },                       // «Уровень 3»
   },
   {
+    id: 'snake',
+    title: 'Змейка',
+    load: () => import('../games/snake/index.js'),
+    css: new URL('../games/snake/game.css', import.meta.url),
+    menu: { wins: false, progress: 'append' },           // «Сыграно · Рекорд» классики + «Уровень N»
+    admin: true,                                         // в обкатке: видит только владелец
+  },
+  {
     id: 'brick-blast',
     title: 'Brick Blast',
     load: () => import('../games/brick-blast/index.js'),
