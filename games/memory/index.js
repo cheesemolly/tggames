@@ -10,7 +10,7 @@ import { createToast } from '../../shared/toast.js';
 import { createFx } from '../../shared/fx.js';
 import {
   SIZES, findSize, fits, newGame, newLevel, flip, closeOpen, canFlip, magnet, tick, starsFor, levelParams,
-  isValidState, emptyStats, isValidStats, recordGame, LIVES, WORDS_MAX_COLS,
+  isValidState, emptyStats, isValidStats, recordGame, WORDS_MAX_COLS,
 } from './logic.js';
 import { SETS, findSet, SOUNDS } from './sets.js';
 import { monsterSvg, patternSvg, specialSvg, speakerSvg, SPECIAL_INFO, DEFS } from './art.js';
@@ -26,7 +26,7 @@ const SKINS = [
 ];
 const PRESSURE_INFO = {
   calm: { title: 'Спокойно', text: 'Без времени и без поражений' },
-  lives: { title: 'Три ошибки', text: 'Ошибся трижды — уровень заново' },
+  lives: { title: 'Жизни', text: 'Каждый промах — минус жизнь' },
   time: { title: 'На время', text: 'Успей, пока не кончилось время' },
 };
 const MISS_DELAY = 750;
@@ -179,7 +179,7 @@ function renderHud() {
   ];
   if (g.lives != null) {
     items.push(el('div', { class: 'mm-stat mm-lives' },
-      el('span', { class: 'mm-stat-v' }, Array.from({ length: Math.max(LIVES, g.lives) }, (_, k) => el('span', { class: `mm-heart ${k < g.lives ? 'on' : ''}` }, '♥'))),
+      el('span', { class: 'mm-stat-v' }, el('span', { class: 'mm-heart on' }, '♥'), ` ${g.lives}`),
       el('span', { class: 'mm-stat-k' }, 'Жизни')));
   } else {
     items.push(el('div', { class: 'mm-stat mm-mistakes' }, el('span', { class: 'mm-stat-v' }, String(g.mistakes)), el('span', { class: 'mm-stat-k' }, 'Ошибок')));
@@ -340,9 +340,10 @@ function onMiss(ev) {
   const cards = ev.cards.slice();
   renderHud();
   if (ev.mistake) {
-    bump(game.lives != null ? '.mm-lives' : '.mm-mistakes', 'bad');
+    if (game.lives == null) bump('.mm-mistakes', 'bad');
     api.platform.haptic.notification('error');
   }
+  if (game.lives != null) bump('.mm-lives', 'bad');
   later(() => {
     if (deal !== myDeal || !ui) return;
     cards.forEach((k) => cardEls[k] && shake(cardEls[k], { distance: 5, duration: 300 }));
@@ -589,10 +590,10 @@ function onFail(reason) {
     else startFree();
   };
   later(() => ui && openModal([
-    el('h2', {}, reason === 'time' ? 'Время вышло' : 'Ошибки кончились'),
+    el('h2', {}, reason === 'time' ? 'Время вышло' : 'Жизни кончились'),
     el('p', { class: 'mm-muted' }, reason === 'time'
       ? 'Не успел найти все пары. Попробуй ещё раз — карточки разложатся по-новому.'
-      : 'Три раза открыл то, что уже видел. Попробуй ещё раз — карточки разложатся по-новому.'),
+      : 'Слишком много промахов. Попробуй ещё раз — карточки разложатся по-новому.'),
     el('p', { class: 'mm-muted mm-small' }, 'Совсем без давления — в настройках «Спокойно».'),
     el('button', { class: 'mm-btn', onclick: again }, 'Ещё раз'),
   ], { dismissible: false }), 500);
@@ -784,8 +785,10 @@ function openHelp() {
     el('h2', {}, 'Как играть'),
     el('p', { class: 'mm-muted' }, 'Открывай по две карточки и ищи одинаковые. Не совпали — закроются, запоминай, где что лежит. '
       + 'В «Тройках» ищешь по три. В «Слове и картинке» пара — это картинка и её название.'),
-    el('p', { class: 'mm-muted' }, 'Ошибка — когда открыл то, что уже видел, или не открыл пару, которую уже видел. '
-      + 'Промах вслепую ошибкой не считается. Звёзды — за мало ошибок.'),
+    el('p', { class: 'mm-muted' }, 'Звёзды — за мало ошибок. Ошибка — когда открыл то, что уже видел, или не открыл пару, '
+      + 'которую уже видел; промах вслепую ошибкой не считается.'),
+    el('p', { class: 'mm-muted' }, 'В режиме «Жизни» любой промах — минус жизнь. Жизней тем больше, чем больше поле. '
+      + 'В режиме «На время» надо успеть до конца отсчёта.'),
     el('div', { class: 'mm-section' }, 'Бонусные карточки'),
     el('div', { class: 'mm-legend' }, specials.map((k) => {
       const icon = el('span', { class: 'mm-legend-icon' });

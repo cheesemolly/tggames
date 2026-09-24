@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   SIZES, findSize, fits, newGame, flip, closeOpen, canFlip, magnet, tick, starsFor, levelParams, newLevel, seeded,
-  isValidState, emptyStats, isValidStats, recordGame, timeLimit, LIVES, MAX_LIVES, CLOCK_BONUS_MS,
+  isValidState, emptyStats, isValidStats, recordGame, timeLimit, livesFor, EXTRA_LIVES, CLOCK_BONUS_MS,
 } from '../logic.js';
 import { SETS, makeFaces, maxKeys, faceId, EMOJI_THEMES, WORDS, SOUNDS } from '../sets.js';
 import { createSounds } from '../sounds.js';
@@ -105,8 +105,8 @@ test('пара: совпала — уходит, не совпала — зак�
   assert.equal(closeOpen(s).length, 0, 'закрывать нечего');
 });
 
-test('ошибка — только промах, которого можно было избежать; жизни кончаются', () => {
-  const s = newGame(base({ pressure: 'lives' }), seeded(8));
+test('ошибка — только промах, которого можно было избежать (для звёзд)', () => {
+  const s = newGame(base(), seeded(8));
   const [a1, a2] = idxOfKey(s, 0);
   const [b1, b2] = idxOfKey(s, 1);
   const [c1] = idxOfKey(s, 2);
@@ -115,17 +115,35 @@ test('ошибка — только промах, которого можно б
   closeOpen(s);
   flip(s, a2);                                         // пара a1 видна — надо было открыть a1
   assert.equal(flip(s, c1).mistake, true);
-  assert.equal(s.lives, LIVES - 1);
   closeOpen(s);
   flip(s, b2);
   assert.equal(flip(s, c1).mistake, true, 'c1 уже видели — открывать её незачем');
-  closeOpen(s);
-  flip(s, a1);
-  const last = flip(s, b1);
-  assert.equal(last.mistake, true);
-  assert.equal(last.fail, true);
+  assert.equal(s.mistakes, 2);
+  assert.equal(s.misses, 3);
+});
+
+test('«Жизни»: минус жизнь за любой промах, жизней — по размеру поля', () => {
+  assert.equal(livesFor(12, 2), 7);
+  assert.equal(livesFor(16, 2), 8);
+  assert.equal(livesFor(36, 2), 16);
+  assert.equal(livesFor(36, 3), 18);
+  assert.equal(livesFor(36, 2, true), 23, '«вихрь» стирает память — жизней больше');
+  assert.equal(newGame(base({ pressure: 'lives', specials: ['vortex'] }), seeded(1)).lives, livesFor(16, 2, true));
+  const s = newGame(base({ pressure: 'lives' }), seeded(8));
+  const start = livesFor(16, 2);
+  assert.equal(s.lives, start);
+  const [a1] = idxOfKey(s, 0);
+  const [b1] = idxOfKey(s, 1);
+  let ev;
+  for (let k = 0; k < start; k++) {
+    closeOpen(s);
+    flip(s, a1);
+    ev = flip(s, b1);
+    assert.equal(s.lives, start - k - 1, 'промах вслепую тоже стоит жизни');
+  }
+  assert.equal(ev.fail, true);
   assert.ok(s.failed);
-  assert.equal(flip(s, a2), null, 'после поражения ходить нельзя');
+  assert.equal(flip(s, a1), null, 'после поражения ходить нельзя');
 });
 
 test('тройки: две одинаковые — ждём третью, третья чужая — промах', () => {
@@ -182,11 +200,12 @@ test('бонусы: золото ×3, часы +10 с, сердце +1 (не б�
   assert.equal(timed.timeLeft, timeLimit(16, 2) - 5000 + CLOCK_BONUS_MS);
 
   const lives = newGame(base({ specials: ['bonus'], pressure: 'lives' }), seeded(3));
-  lives.lives = MAX_LIVES;
   const h = idxOfKind(lives, 'heart');
   flip(lives, h[0]);
   flip(lives, h[1]);
-  assert.equal(lives.lives, MAX_LIVES);
+  assert.equal(lives.lives, livesFor(16, 2) + 1);
+  lives.lives = lives.maxLives;
+  assert.equal(lives.maxLives, livesFor(16, 2) + EXTRA_LIVES);
 
   const eye = newGame(base({ specials: ['eye'] }), seeded(4));
   const e = idxOfKind(eye, 'eye');

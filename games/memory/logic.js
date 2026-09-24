@@ -7,13 +7,16 @@
 //   eye    — «глаз»: на мгновение показывает все закрытые карточки;
 //   vortex — «вихрь»: оставшиеся закрытые карточки перемешиваются (что запомнил — забудь);
 //   clock  — «часы»: +10 секунд (только в режиме «На время»);
-//   heart  — «сердце»: +1 жизнь (только в режиме «Три ошибки»);
+//   heart  — «сердце»: +1 жизнь (только в режиме «Жизни»);
 //   joker  — джокер (2 шт.): подходит к любой карточке — открыл джокер и любую, и вся её группа уходит.
 // «bonus» в описании уровня — часы, сердце или золото, смотря по режиму.
 //
 // Ошибка — не любой промах, а промах, которого можно было избежать: вторая карточка уже была видна,
 // или пара первой уже была видна (надо было открыть её). Промах вслепую (обе новые) ошибкой не считается.
-// По ошибкам — звёзды и жизни. Так честно: везение в первых открытиях не наказывает.
+// По ошибкам — звёзды: везение в первых открытиях не наказывает.
+//
+// Жизни (режим «Жизни», решение владельца 2026-09-24): минус жизнь за **любой** промах — так понятнее.
+// Поэтому жизней столько, сколько промахов неизбежно даже при идеальной памяти, с запасом (livesFor).
 
 import { makeFaces, findSet, maxKeys, shuffle } from './sets.js';
 
@@ -29,8 +32,19 @@ export const findSize = (id) => SIZES.find((s) => s.id === id) ?? null;
 
 export const SPECIALS = ['gold', 'eye', 'vortex', 'clock', 'heart', 'joker'];
 export const PRESSURES = ['calm', 'lives', 'time'];
-export const LIVES = 3;
-export const MAX_LIVES = 5;
+export const EXTRA_LIVES = 3;     // сверх начальных — столько можно набрать «сердцами»
+
+/**
+ * Жизни на поле. Промахов при идеальной памяти (перебором, 2000 партий на поле): пары — медиана ≈ 0,6 × групп,
+ * худший 1% — ≈ 0,72 (6×6: 11 и 13); тройки — ≈ 1,1 и 1,25 × групп. «Вихрь» стирает запомненное — ещё ≈ 0,4 × групп.
+ * Жизней = промахов идеального игрока в худшем 1% партий + 2: идеальная память не проигрывает, а забывчивость — да.
+ * Проверка перебором (200 уровней × 20 партий): идеальный бот не проигрывает ни разу.
+ */
+export function livesFor(total, group, vortex = false) {
+  const groups = total / group;
+  const perfect = groups * ((group === 3 ? 1.3 : 0.75) + (vortex ? 0.4 : 0));
+  return Math.ceil(perfect) + 2;
+}
 export const CLOCK_BONUS_MS = 10000;
 export const MAX_COMBO = 5;
 export const WORDS_MAX_COLS = 4;
@@ -109,7 +123,8 @@ export function newGame(cfg, rng = Math.random) {
     combo: 0,
     bestCombo: 0,
     score: 0,
-    lives: pressure === 'lives' ? LIVES : null,
+    lives: pressure === 'lives' ? livesFor(total, group, specials.includes('vortex')) : null,
+    maxLives: pressure === 'lives' ? livesFor(total, group, specials.includes('vortex')) + EXTRA_LIVES : null,
     timeLeft: pressure === 'time' ? timeLimit(total, group) : null,
     timeTotal: pressure === 'time' ? timeLimit(total, group) : null,
     done: false,
@@ -178,14 +193,12 @@ function miss(s, last, closed) {
   s.combo = 0;
   s.closePending = true;
   let fail = false;
-  if (mistake) {
-    s.mistakes++;
-    if (s.lives != null) {
-      s.lives--;
-      if (s.lives <= 0) {
-        s.failed = true;
-        fail = true;
-      }
+  if (mistake) s.mistakes++;
+  if (s.lives != null) {                         // жизнь — за любой промах
+    s.lives--;
+    if (s.lives <= 0) {
+      s.failed = true;
+      fail = true;
     }
   }
   return { type: 'miss', cards: s.open.slice(), mistake, fail, closed };
@@ -216,7 +229,7 @@ function match(s, key, closed, { booster = false } = {}) {
 
   const event = { type: 'match', cards: opened, extra, kinds: [...kinds], gained, combo: s.combo, closed, booster };
   if (kinds.has('clock') && s.timeLeft != null) s.timeLeft += CLOCK_BONUS_MS;
-  if (kinds.has('heart') && s.lives != null) s.lives = Math.min(MAX_LIVES, s.lives + 1);
+  if (kinds.has('heart') && s.lives != null) s.lives = Math.min(s.maxLives ?? s.lives + 1, s.lives + 1);
   if (kinds.has('eye')) event.peek = true;
   if (kinds.has('vortex')) event.shuffle = vortex(s);
 
