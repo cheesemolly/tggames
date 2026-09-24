@@ -25,9 +25,9 @@ const SKINS = [
   { id: 'snow', title: 'Снег' },
 ];
 const MODE_INFO = {
-  walls: { title: 'Стены', text: 'Каждое яблоко ставит кирпич' },
-  portal: { title: 'Порталы', text: 'Съел яблоко — вынырнул у второго' },
-  winged: { title: 'Летающая еда', text: 'Яблоки летают и отскакивают' },
+  walls: { title: 'Стены', text: 'Каждая еда ставит кирпич' },
+  portal: { title: 'Порталы', text: 'Съел одну еду — вынырнул у второй' },
+  winged: { title: 'Летающая еда', text: 'Еда летает и отскакивает' },
   poison: { title: 'Яд', text: 'Ядовитый гриб укорачивает змейку' },
   twin: { title: 'Инь-ян', text: 'Вторая змейка повторяет ходы зеркально' },
 };
@@ -185,7 +185,7 @@ function renderHud() {
   const best = mode === 'classic' ? stats.best[bestKey(g)] ?? 0 : null;
   const items = [
     stat('Очки', g.score),
-    mode === 'levels' ? stat('Яблоки', `${Math.min(g.eaten, g.goal)}/${g.goal}`) : stat('Длина', g.snake.length),
+    mode === 'levels' ? stat('Еда', `${Math.min(g.eaten, g.goal)}/${g.goal}`) : stat('Длина', g.snake.length),
     mode === 'classic' ? stat('Рекорд', Math.max(best, g.score)) : stat('Лучший', `ур. ${Math.max(bestLevel, 0)}`),
   ];
   ui.hud.replaceChildren(...items);
@@ -264,8 +264,16 @@ function draw(now) {
     pal,
     dying: dying ? Math.min(1, (now - dying.at) / 700) : null,
     deadWho: dying?.who,
+    bump: dying ? scaleBump(dying.bump, Math.min(1, (now - dying.at) / 140)) : null,
     blink: game.freeze > 0,
   });
+}
+
+/** Толчок при смерти набирается за 140 мс. */
+function scaleBump(bump, p) {
+  const e = p < 1 ? 1 - (1 - p) ** 3 : 1;
+  const f = (b) => (b ? { ...b, k: b.k * e } : null);
+  return { main: f(bump.main), twin: f(bump.twin) };
 }
 
 function doStep() {
@@ -343,9 +351,31 @@ function floatAt(i, text, big = false, bad = false) {
 
 // ---------- конец ----------
 
+/**
+ * Куда «доезжает» голова при смерти: партия заканчивается ДО шага в препятствие, и без этого змейки
+ * «умирали, не коснувшись» (замечание владельца). Лоб в лоб в одну клетку — обе головы до середины
+ * (касаются), в стену или тело — голова упирается в них.
+ */
+function deathBump(who) {
+  const D = { U: [0, -1], D: [0, 1], L: [-1, 0], R: [1, 0] };
+  const MIRROR = { U: 'U', D: 'D', L: 'R', R: 'L' };
+  const target = (body, dir) => {
+    const h = xy(game, body[0]);
+    return { x: h.x + D[dir][0], y: h.y + D[dir][1] };
+  };
+  const main = target(game.snake, game.dir);
+  const twin = game.twin ? target(game.twin.snake, MIRROR[game.dir]) : null;
+  const sameCell = twin && main.x === twin.x && main.y === twin.y;
+  const k = sameCell ? 0.5 : 0.18;
+  return {
+    main: who !== 'twin' || sameCell ? { ...main, k } : null,
+    twin: twin && (who !== 'main' || sameCell) ? { ...twin, k } : null,
+  };
+}
+
 function onDeath(reason, who = 'main') {
   // кто разбился — главная, близнец или обе: у них глаза крестиком и звёздочки
-  dying = { at: performance.now(), reason, who };
+  dying = { at: performance.now(), reason, who, bump: deathBump(who) };
   host.classList.add('sn-dead');
   api.platform.haptic.notification('error');
   shake(ui.stage, { distance: 8, duration: 420 });
@@ -559,7 +589,7 @@ function openLevels() {
   const count = Math.max(MAP_COUNT, open);
   openModal([
     el('h2', {}, 'Уровни'),
-    el('p', { class: 'sn-muted' }, 'Съешь нужное число яблок — и дальше. После 12-го карты идут по кругу, но быстрее.'),
+    el('p', { class: 'sn-muted' }, 'Съешь нужное количество еды — и дальше. После 12-го карты идут по кругу, но быстрее.'),
     el('div', { class: 'sn-levels' }, Array.from({ length: count }, (_, k) => {
       const n = k + 1;
       const locked = n > open;

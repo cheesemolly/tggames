@@ -637,7 +637,15 @@ export function createRenderer(canvas) {
   // ---------- змейка ----------
 
   /** Положение сегментов с учётом плавности: от прошлой клетки к нынешней. */
-  function segments(s, body, prevBody, t) {
+  function segments(s, body, prevBody, t, bump) {
+    if (bump) {
+      // смерть: голова «доезжает» до препятствия на долю bump.k, тело — следом за ней
+      return body.map((cell, k) => {
+        const cur = xy(s, cell);
+        const to = k === 0 ? bump : xy(s, body[k - 1]);
+        return { x: cur.x + (to.x - cur.x) * bump.k, y: cur.y + (to.y - cur.y) * bump.k, jump: false };
+      });
+    }
     return body.map((cell, k) => {
       const cur = xy(s, cell);
       const prevCell = prevBody?.[k];
@@ -649,8 +657,8 @@ export function createRenderer(canvas) {
     });
   }
 
-  function snakePieces(s, body, prevBody, t, colors, dir, extra, heads) {
-    const seg = segments(s, body, prevBody, t);
+  function snakePieces(s, body, prevBody, t, colors, dir, extra, heads, bump) {
+    const seg = segments(s, body, prevBody, t, bump);
     const pieces = [];
     const n = seg.length;
     const inset = (k) => 0.08 + Math.min(0.08, (k / Math.max(1, n)) * 0.1);
@@ -818,10 +826,10 @@ export function createRenderer(canvas) {
         tongue: Math.sin(time * 2.2) > 0.85 && !dead, shield: s.effects.shield > 0, look: frame.look, time,
         dead: dead && who !== 'twin',
       };
-      items.push(...snakePieces(s, s.snake, frame.prevSnake, t, { head: pal.snakeHead, tail: pal.snakeTail }, s.dir, extra, heads));
+      items.push(...snakePieces(s, s.snake, frame.prevSnake, t, { head: pal.snakeHead, tail: pal.snakeTail }, s.dir, extra, heads, frame.bump?.main));
       if (s.twin) {
         items.push(...snakePieces(s, s.twin.snake, frame.prevTwin, t, { head: pal.twinHead, tail: pal.twinTail }, s.twin.dir,
-          { time, dead: dead && who !== 'main' }, heads));
+          { time, dead: dead && who !== 'main' }, heads, frame.bump?.twin));
       }
     }
     items.sort((a, b) => a.depth - b.depth);
