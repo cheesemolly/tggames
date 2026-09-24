@@ -1,0 +1,374 @@
+/*
+ * Bongo Cat. Кот — линии цвета текста темы на фоне темы (как у bongo.cat: чёрное на белом, белое на чёрном).
+ * Игровые цвета — подушечки лап, «звёздочка» удара, дерево, кожа барабанов, латунь — переменные --bc-*,
+ * заданы для светлой и тёмной темы. Клавиши внизу — цвета темы Telegram.
+ */
+
+[data-game="bongo-cat"] {
+  --bc-line: var(--tg-theme-text-color);
+  --bc-bg: var(--tg-theme-bg-color);
+  --bc-surface: var(--tg-theme-secondary-bg-color);
+  --bc-accent: var(--tg-theme-button-color);
+  --bc-accent-text: var(--tg-theme-button-text-color);
+  --bc-hint: var(--tg-theme-hint-color);
+  --bc-pad-pink: #f7a1a8;
+  --bc-impact: #d9483b;
+  --bc-wood: #d9a15c;
+  --bc-wood-dark: #8c5a2b;
+  --bc-grain: #b77c3a;
+  --bc-skin: #f4e6c8;
+  --bc-rim: #2f241c;
+  --bc-brass: #e3b84f;
+  --bc-brass-ring: #c4952c;
+  --bc-metal: #9ea8b3;
+  --bc-metal-hi: #d6dde4;
+  --bc-case: #f3f4f6;
+  --bc-case-line: #c9ced6;
+  --bc-white-key: #ffffff;
+  --bc-black-key: #22252b;
+  --bc-key-down: #9cc3ef;
+  --bc-key-text: #1f2328;
+  --bc-key-hint: #6b7280;
+  --bc-bar: #b9673c;
+  --bc-bar-far: #a4552f;
+  --bc-bar-hit: #f0925a;
+  --bc-tube: #b8c0c9;
+  --bc-screen: #3b82f6;
+  --toast-top: 80px;
+}
+:root[data-theme="dark"] [data-game="bongo-cat"] {
+  --bc-pad-pink: #f08d96;
+  --bc-impact: #ff6b5e;
+  --bc-wood: #c48d4c;
+  --bc-wood-dark: #6d4420;
+  --bc-grain: #9d6a30;
+  --bc-skin: #e6d6b4;
+  --bc-rim: #120d09;
+  --bc-brass: #d2a83f;
+  --bc-brass-ring: #a97f22;
+  --bc-metal: #8c96a1;
+  --bc-metal-hi: #c3cad2;
+  --bc-case: #d8dce2;
+  --bc-case-line: #9aa1ab;
+  --bc-white-key: #f2f3f5;
+  --bc-black-key: #15171b;
+  --bc-key-down: #6aa6e6;
+  --bc-key-text: #1f2328;
+  --bc-key-hint: #5b626d;
+  --bc-bar: #a95b33;
+  --bc-bar-far: #924a27;
+  --bc-bar-hit: #e0824c;
+  --bc-tube: #8e979f;
+  --bc-screen: #60a5fa;
+}
+
+.game-root[data-game="bongo-cat"] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 8px 10px calc(10px + env(safe-area-inset-bottom));
+  background: var(--bc-bg);
+  color: var(--bc-line);
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+[data-game="bongo-cat"] .bc { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+
+/* ---------- шапка ---------- */
+[data-game="bongo-cat"] .bc-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 2px; }
+[data-game="bongo-cat"] .bc-title { font-size: 20px; font-weight: 700; line-height: 1.2; }
+[data-game="bongo-cat"] .bc-sub { font-size: 13px; color: var(--bc-hint); font-variant-numeric: tabular-nums; }
+[data-game="bongo-cat"] .bc-actions { display: flex; gap: 6px; }
+[data-game="bongo-cat"] .bc-icon-btn {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: var(--bc-surface);
+  color: var(--bc-line);
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+[data-game="bongo-cat"] .bc-icon-btn:active { transform: scale(0.92); }
+
+/* ---------- сцена ---------- */
+[data-game="bongo-cat"] .bc-stage {
+  flex: 1 1 200px;
+  min-height: 150px;
+  max-height: 46vh;
+  display: flex;
+  /* стол уходит за края экрана — как у bongo.cat */
+  margin: 0 -10px;
+  overflow: hidden;
+}
+[data-game="bongo-cat"] .bc-scene { width: 100%; height: 100%; overflow: visible; }
+
+[data-game="bongo-cat"] .bc-table { stroke: var(--bc-line); stroke-width: 5; }
+[data-game="bongo-cat"] .bc-stroke {
+  fill: none;
+  stroke: var(--bc-line);
+  stroke-width: 5.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+[data-game="bongo-cat"] .bc-stroke.bc-thin { stroke-width: 4; }
+[data-game="bongo-cat"] .bc-stroke.bc-fill { fill: var(--bc-bg); }
+[data-game="bongo-cat"] .bc-ink { fill: var(--bc-line); }
+[data-game="bongo-cat"] .bc-pads { fill: var(--bc-pad-pink); }
+[data-game="bongo-cat"] .bc-impact path { stroke: var(--bc-impact); stroke-width: 4; stroke-linecap: round; fill: none; }
+
+/* лапа: поднята или бьёт; рот: закрыт или «мяу» */
+[data-game="bongo-cat"] .bc-down,
+[data-game="bongo-cat"] .bc-mouth-open { display: none; }
+[data-game="bongo-cat"].bc-left-down .bc-paw-left .bc-down,
+[data-game="bongo-cat"].bc-right-down .bc-paw-right .bc-down,
+[data-game="bongo-cat"].bc-mouth-down .bc-mouth-open { display: inline; }
+[data-game="bongo-cat"].bc-left-down .bc-paw-left .bc-up,
+[data-game="bongo-cat"].bc-right-down .bc-paw-right .bc-up,
+[data-game="bongo-cat"].bc-mouth-down .bc-mouth-closed { display: none; }
+
+[data-game="bongo-cat"] .bc-note {
+  fill: var(--bc-accent);
+  font-size: 30px;
+  font-weight: 700;
+  text-anchor: middle;
+  transform-box: fill-box;
+  transform-origin: center;
+  pointer-events: none;
+}
+
+/* инструменты: на столе виден один */
+[data-game="bongo-cat"] .bc-inst { display: none; }
+[data-game="bongo-cat"] .bc-inst.on { display: inline; }
+[data-game="bongo-cat"] .bc-drum,
+[data-game="bongo-cat"] .bc-swing { transform-box: fill-box; transform-origin: 50% 20%; }
+
+[data-game="bongo-cat"] .bc-inst :is(path, ellipse, rect) { stroke: var(--bc-rim); stroke-width: 3; stroke-linejoin: round; }
+[data-game="bongo-cat"] .bc-wood { fill: var(--bc-wood); }
+[data-game="bongo-cat"] .bc-wood-dark { fill: var(--bc-wood-dark); }
+[data-game="bongo-cat"] .bc-inst .bc-grain { fill: none; stroke: var(--bc-grain); stroke-width: 2; opacity: 0.6; }
+[data-game="bongo-cat"] .bc-rim { fill: var(--bc-rim); }
+[data-game="bongo-cat"] .bc-skin { fill: var(--bc-skin); }
+
+[data-game="bongo-cat"] .bc-case { fill: var(--bc-case); }
+[data-game="bongo-cat"] .bc-inst .bc-panel { fill: var(--bc-case-line); stroke: none; }
+[data-game="bongo-cat"] .bc-knob { fill: var(--bc-rim); }
+[data-game="bongo-cat"] .bc-inst .bc-screen { fill: var(--bc-screen); stroke: none; }
+[data-game="bongo-cat"] .bc-white { fill: var(--bc-white-key); }
+[data-game="bongo-cat"] .bc-black { fill: var(--bc-black-key); }
+[data-game="bongo-cat"] .bc-key { transition: fill 0.08s ease; }
+[data-game="bongo-cat"] .bc-key.down { fill: var(--bc-key-down); }
+
+[data-game="bongo-cat"] .bc-inst .bc-frame { fill: none; stroke: var(--bc-wood-dark); stroke-width: 8; stroke-linecap: round; }
+[data-game="bongo-cat"] .bc-bar { fill: var(--bc-bar); }
+[data-game="bongo-cat"] .bc-bar-far { fill: var(--bc-bar-far); }
+[data-game="bongo-cat"] .bc-bar.down { fill: var(--bc-bar-hit); }
+[data-game="bongo-cat"] .bc-tube { fill: var(--bc-tube); }
+
+[data-game="bongo-cat"] .bc-inst .bc-stand { fill: none; stroke: var(--bc-metal); stroke-width: 6; stroke-linecap: round; }
+[data-game="bongo-cat"] .bc-brass { fill: var(--bc-brass); }
+[data-game="bongo-cat"] .bc-inst .bc-brass-ring { fill: none; stroke: var(--bc-brass-ring); stroke-width: 2; }
+[data-game="bongo-cat"] .bc-bell { fill: var(--bc-brass-ring); }
+[data-game="bongo-cat"] .bc-rimwood { fill: var(--bc-wood); }
+[data-game="bongo-cat"] .bc-slot { fill: var(--bc-wood-dark); }
+[data-game="bongo-cat"] .bc-jingle { fill: var(--bc-metal-hi); }
+[data-game="bongo-cat"] .bc-metal { fill: var(--bc-metal); }
+[data-game="bongo-cat"] .bc-inst .bc-metal-hi { fill: var(--bc-metal-hi); stroke: none; }
+[data-game="bongo-cat"] .bc-mouth { fill: var(--bc-rim); }
+
+/* ---------- выбор инструмента ---------- */
+[data-game="bongo-cat"] .bc-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 5px;
+  flex: none;
+}
+[data-game="bongo-cat"] .bc-chip {
+  flex: none;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--bc-surface);
+  color: var(--bc-line);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease, transform 0.1s ease;
+}
+[data-game="bongo-cat"] .bc-chip.on { background: var(--bc-accent); color: var(--bc-accent-text); }
+[data-game="bongo-cat"] .bc-chip:active { transform: scale(0.95); }
+
+/* ---------- разучивание мелодии ---------- */
+[data-game="bongo-cat"] .bc-songbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bc-accent) 14%, var(--bc-bg));
+  flex: none;
+}
+[data-game="bongo-cat"] .bc-songbar[hidden] { display: none; }
+[data-game="bongo-cat"] .bc-song-text { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+[data-game="bongo-cat"] .bc-song-title { font-weight: 700; font-size: 14px; overflow-wrap: anywhere; }
+[data-game="bongo-cat"] .bc-song-count { flex: none; font-size: 12px; color: var(--bc-hint); font-variant-numeric: tabular-nums; }
+[data-game="bongo-cat"] .bc-song-next { grid-column: 1; display: flex; flex-wrap: wrap; gap: 2px 8px; font-size: 17px; font-weight: 700; color: var(--bc-hint); }
+[data-game="bongo-cat"] .bc-song-next .now { color: var(--bc-accent); }
+[data-game="bongo-cat"] .bc-song-close { grid-column: 2; grid-row: 1 / span 2; width: 30px; height: 30px; border: 0; border-radius: 8px; background: var(--bc-surface); color: var(--bc-line); font: inherit; cursor: pointer; }
+
+/* ---------- клавиши ---------- */
+[data-game="bongo-cat"] .bc-pads { flex: 1 1 170px; min-height: 150px; max-height: 300px; display: flex; touch-action: none; }
+[data-game="bongo-cat"] .bc-pad {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 4px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--bc-surface);
+  color: var(--bc-line);
+  font: inherit;
+  cursor: pointer;
+  touch-action: none;
+  box-shadow: inset 0 -4px 0 color-mix(in srgb, var(--bc-line) 10%, transparent);
+  transition: transform 0.12s ease, background-color 0.15s ease, box-shadow 0.12s ease;
+}
+[data-game="bongo-cat"] .bc-pad.pressed {
+  transform: scale(0.96);
+  background: color-mix(in srgb, var(--bc-accent) 30%, var(--bc-surface));
+  box-shadow: inset 0 0 0 color-mix(in srgb, var(--bc-line) 10%, transparent);
+  transition: none;
+}
+[data-game="bongo-cat"] .bc-pad.next { box-shadow: inset 0 0 0 3px var(--bc-accent); animation: bc-glow 0.9s ease-in-out infinite alternate; }
+@keyframes bc-glow { to { background: color-mix(in srgb, var(--bc-accent) 22%, var(--bc-surface)); } }
+[data-game="bongo-cat"] .bc-pad-name { font-size: 15px; font-weight: 700; pointer-events: none; }
+[data-game="bongo-cat"] .bc-pad-key {
+  min-width: 26px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  border: 1.5px solid color-mix(in srgb, var(--bc-line) 25%, transparent);
+  font-size: 12px;
+  color: var(--bc-hint);
+  pointer-events: none;
+}
+
+[data-game="bongo-cat"] .bc-big { flex: 1; display: grid; gap: 8px; }
+[data-game="bongo-cat"] .bc-big-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+[data-game="bongo-cat"] .bc-pad-big .bc-pad-name { font-size: 20px; }
+
+/* пианино и маримба: 6 белых во всю высоту, 4 чёрных сверху между ними */
+[data-game="bongo-cat"] .bc-piano { position: relative; flex: 1; }
+[data-game="bongo-cat"] .bc-piano-whites { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 5px; }
+[data-game="bongo-cat"] .bc-piano-blacks { position: absolute; inset: 0 0 auto; height: 55%; pointer-events: none; }
+[data-game="bongo-cat"] .bc-pad-white {
+  justify-content: flex-end;
+  padding-bottom: 10px;
+  border-radius: 8px 8px 14px 14px;
+  background: var(--bc-white-key);
+  color: var(--bc-key-text);
+  box-shadow: inset 0 0 0 1.5px var(--bc-case-line), inset 0 -5px 0 var(--bc-case-line);
+}
+[data-game="bongo-cat"] .bc-pad-white .bc-pad-key { color: var(--bc-key-hint); border-color: var(--bc-case-line); }
+[data-game="bongo-cat"] .bc-pad-white.pressed { background: var(--bc-key-down); box-shadow: inset 0 0 0 1.5px var(--bc-case-line); }
+[data-game="bongo-cat"] .bc-pad-black {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: calc((100% - 25px) / 6 * 0.62);
+  left: calc((100% + 5px) / 6 * var(--at) - (100% - 25px) / 6 * 0.31 - 2.5px);
+  pointer-events: auto;
+  justify-content: flex-end;
+  padding-bottom: 8px;
+  border-radius: 0 0 10px 10px;
+  background: var(--bc-black-key);
+  color: var(--bc-white-key);
+  box-shadow: inset 0 -5px 0 rgb(255 255 255 / 0.12);
+  z-index: 1;
+}
+[data-game="bongo-cat"] .bc-pad-black .bc-pad-key { color: color-mix(in srgb, var(--bc-white-key) 75%, transparent); border-color: color-mix(in srgb, var(--bc-white-key) 35%, transparent); }
+[data-game="bongo-cat"] .bc-pad-black.pressed { background: color-mix(in srgb, var(--bc-key-down) 55%, var(--bc-black-key)); }
+[data-game="bongo-cat"] .bc-pad-black .bc-pad-name { font-size: 11px; }
+[data-game="bongo-cat"] .bc-pad-white .bc-pad-name { font-size: 13px; }
+[data-game="bongo-cat"] .bc-piano-marimba .bc-pad-white:not(.pressed) { background: color-mix(in srgb, var(--bc-bar) 20%, var(--bc-white-key)); }
+[data-game="bongo-cat"] .bc-piano-marimba .bc-pad-black:not(.pressed) { background: color-mix(in srgb, var(--bc-bar) 35%, var(--bc-black-key)); }
+
+/* ---------- окна ---------- */
+[data-game="bongo-cat"] .bc-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--bc-bg) 80%, transparent);
+}
+[data-game="bongo-cat"] .bc-modal[hidden] { display: none; }
+[data-game="bongo-cat"] .bc-card {
+  width: 100%;
+  max-width: 380px;
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--bc-surface);
+  box-shadow: 0 6px 24px rgb(0 0 0 / 0.18);
+}
+[data-game="bongo-cat"] .bc-card h2 { margin: 0 0 8px; font-size: 18px; }
+[data-game="bongo-cat"] .bc-muted { margin: 0 0 10px; font-size: 14px; color: var(--bc-hint); }
+[data-game="bongo-cat"] .bc-small { font-size: 12px; }
+[data-game="bongo-cat"] .bc-btn {
+  width: 100%;
+  margin-top: 6px;
+  padding: 12px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--bc-accent);
+  color: var(--bc-accent-text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+[data-game="bongo-cat"] .bc-songs { display: grid; gap: 8px; margin-bottom: 8px; }
+[data-game="bongo-cat"] .bc-song {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--bc-bg);
+  color: var(--bc-line);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+[data-game="bongo-cat"] .bc-song-name { font-weight: 700; }
+[data-game="bongo-cat"] .bc-song-notes { display: grid; font-size: 13px; color: var(--bc-hint); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+[data-game="bongo-cat"] .bc-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 8px; }
+[data-game="bongo-cat"] .bc-stat { display: grid; padding: 10px; border-radius: 12px; background: var(--bc-bg); text-align: center; }
+[data-game="bongo-cat"] .bc-stat-v { font-size: 20px; font-weight: 800; overflow-wrap: anywhere; }
+[data-game="bongo-cat"] .bc-stat-k { font-size: 12px; color: var(--bc-hint); }
+[data-game="bongo-cat"] .bc-help { display: grid; gap: 6px; margin-bottom: 10px; }
+[data-game="bongo-cat"] .bc-help-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 14px; }
+[data-game="bongo-cat"] .bc-help-keys { display: flex; gap: 4px; align-items: center; }
+[data-game="bongo-cat"] kbd {
+  min-width: 22px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  border: 1.5px solid color-mix(in srgb, var(--bc-line) 25%, transparent);
+  box-shadow: inset -2px -2px 0 color-mix(in srgb, var(--bc-line) 12%, transparent);
+  background: var(--bc-bg);
+  font: inherit;
+  font-size: 12px;
+  text-align: center;
+}

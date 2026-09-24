@@ -106,4 +106,12 @@ export const games = [
     css: new URL('../games/wordle/game.css', import.meta.url),
     menu: { best: false, progress: 'append' },           // вместо рекорда — серия побед
   },
+  {
+    id: 'bongo-cat',
+    title: 'Bongo Cat',
+    load: () => import('../games/bongo-cat/index.js'),
+    css: new URL('../games/bongo-cat/game.css', import.meta.url),
+    menu: { progress: 'replace' },                       // «Ударов: 1 234» — партий и побед нет
+    admin: true,                                         // в обкатке: видит только владелец
+  },
 ];
