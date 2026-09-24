@@ -46,6 +46,8 @@ export const POWER_TTL = 60;           // шагов лежит усилител
 export const POWER_TIME = { magnet: 80, slow: 60, double: 80 };
 export const SHIELD_FREEZE = 3;        // шагов стоим после удара со щитом — успеть повернуть
 export const FLY_SPEED = [0.21, 0.16];  // летающая еда: клеток за шаг по x и y (не 45° — траектория интереснее)
+export const MAGNET_RADIUS = 6;        // магнит тянет еду в этом радиусе (клеток)
+export const MAGNET_PULL = 0.3;         // …на столько клеток за шаг — плавно
 export const FRUIT_R = 0.3;             // радиус фрукта в клетках (так он и нарисован)
 export const EAT_REACH = 0.8;           // летающий фрукт съеден, если его центр ближе к центру головы (по x и по y)
 export const FRUITS = ['apple', 'pear', 'orange', 'banana', 'grapes', 'strawberry', 'watermelon'];
@@ -492,39 +494,29 @@ function moveFoods(s, rng) {
   const hy = head.y + 0.5;
   for (const f of s.foods) {
     if (f.kind !== 'apple' && f.kind !== 'bonus') continue;
-    if (f.fx != null) {
-      f.px = f.fx;
-      f.py = f.fy;
-      const d = Math.hypot(hx - f.fx - 0.5, hy - f.fy - 0.5);
-      const mx = ((hx - f.fx - 0.5) / (d || 1)) * 0.3;
-      const my = ((hy - f.fy - 0.5) / (d || 1)) * 0.3;
-      if (s.effects.magnet > 0 && d <= 6 && d > 0.3 && !flightBlocked(s, f.fx + 0.5 + mx, f.fy + 0.5 + my)) {
-        // магнит тянет плавно (но не сквозь тело)
-        f.fx += mx;
-        f.fy += my;
-      } else {
-        // по каждой оси отдельно: край фрукта упёрся в край поля или стену — скорость по оси меняет знак
-        if (flightBlocked(s, f.fx + 0.5 + f.vx + Math.sign(f.vx) * FRUIT_R, f.fy + 0.5)) f.vx = -f.vx;
-        else f.fx += f.vx;
-        if (flightBlocked(s, f.fx + 0.5, f.fy + 0.5 + f.vy + Math.sign(f.vy) * FRUIT_R)) f.vy = -f.vy;
-        else f.fy += f.vy;
-      }
-      f.idx = idx(s, Math.min(s.cols - 1, Math.max(0, Math.floor(f.fx + 0.5))), Math.min(s.rows - 1, Math.max(0, Math.floor(f.fy + 0.5))));
-      continue;
-    }
-    if (s.effects.magnet > 0 && s.steps % 2 === 0) {
+    // магнит: еда в радиусе переходит на дробные координаты и подтягивается плавно (без прыжков по клеткам)
+    if (f.fx == null && s.effects.magnet > 0) {
       const p = xy(s, f.idx);
-      const dist = Math.abs(p.x - head.x) + Math.abs(p.y - head.y);
-      if (dist > 1 && dist <= 6) {
-        const dx = Math.sign(head.x - p.x);
-        const dy = Math.sign(head.y - p.y);
-        const opts = [];
-        if (dx) opts.push(idx(s, p.x + dx, p.y));
-        if (dy) opts.push(idx(s, p.x, p.y + dy));
-        const target = opts.find((c) => canHoldFood(s, c));
-        if (target != null) f.idx = target;
-      }
+      const d0 = Math.hypot(hx - p.x - 0.5, hy - p.y - 0.5);
+      if (d0 <= MAGNET_RADIUS && d0 > 0.3) Object.assign(f, { fx: p.x, fy: p.y, vx: 0, vy: 0 });
     }
+    if (f.fx == null) continue;
+    f.px = f.fx;
+    f.py = f.fy;
+    const d = Math.hypot(hx - f.fx - 0.5, hy - f.fy - 0.5);
+    const mx = ((hx - f.fx - 0.5) / (d || 1)) * MAGNET_PULL;
+    const my = ((hy - f.fy - 0.5) / (d || 1)) * MAGNET_PULL;
+    if (s.effects.magnet > 0 && d <= MAGNET_RADIUS && d > 0.3 && !flightBlocked(s, f.fx + 0.5 + mx, f.fy + 0.5 + my)) {
+      f.fx += mx;
+      f.fy += my;
+    } else if (f.vx || f.vy) {
+      // полёт: по каждой оси отдельно — край фрукта упёрся в край поля, стену или тело → скорость меняет знак
+      if (flightBlocked(s, f.fx + 0.5 + f.vx + Math.sign(f.vx) * FRUIT_R, f.fy + 0.5)) f.vx = -f.vx;
+      else f.fx += f.vx;
+      if (flightBlocked(s, f.fx + 0.5, f.fy + 0.5 + f.vy + Math.sign(f.vy) * FRUIT_R)) f.vy = -f.vy;
+      else f.fy += f.vy;
+    }
+    f.idx = idx(s, Math.min(s.cols - 1, Math.max(0, Math.floor(f.fx + 0.5))), Math.min(s.rows - 1, Math.max(0, Math.floor(f.fy + 0.5))));
   }
   void rng;
 }
@@ -540,7 +532,6 @@ export function flightBlocked(s, x, y) {
   return s.snake.indexOf(c) > 0 || (s.twin?.snake.indexOf(c) ?? -1) > 0;
 }
 
-const canHoldFood = (s, c) => !blocked(s, c, { forFood: true }) && !occupiedBySnake(s, c) && foodAt(s, c) < 0;
 
 function tickTimers(s, rng, events) {
   for (const k of ['magnet', 'slow', 'double']) if (s.effects[k] > 0) s.effects[k]--;

@@ -90,14 +90,14 @@
 /* ---------- шапка ---------- */
 [data-game="snake"] .sn-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 2px; }
 [data-game="snake"] .sn-head-text { min-width: 0; }
-[data-game="snake"] .sn-title { font-size: 20px; font-weight: 700; line-height: 1.2; }
+[data-game="snake"] .sn-title { font-size: 19px; font-weight: 700; line-height: 1.2; white-space: nowrap; }
 [data-game="snake"] .sn-sub { font-size: 12px; line-height: 1.25; color: var(--sn-hint); }
-[data-game="snake"] .sn-actions { display: flex; gap: 6px; flex: none; }
+[data-game="snake"] .sn-actions { display: flex; gap: 5px; flex: none; }
 [data-game="snake"] .sn-icon-btn {
   display: grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
   padding: 0;
   border: 0;
   border-radius: 10px;
@@ -335,3 +335,18 @@
 [data-game="snake"] .sn-res-k { font-size: 12px; color: var(--tg-theme-hint-color); text-align: center; }
 [data-game="snake"] .sn-bests { display: grid; gap: 4px; font-size: 13px; }
 [data-game="snake"] .sn-best-row { display: flex; justify-content: space-between; gap: 8px; }
+[data-game="snake"] .sn-help { display: grid; gap: 6px; }
+[data-game="snake"] .sn-help-row { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; line-height: 1.35; }
+[data-game="snake"] .sn-help-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--c);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+}
+[data-game="snake"] .sn-small { font-size: 12px; }
