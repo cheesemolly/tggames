@@ -35,6 +35,7 @@ let audio = null;                // { ctx, synth } — создаётся по �
 let song = null;                 // { song, pos } — разучивание мелодии
 let modalActive = false;
 let saveTimer = 0;
+let beta = false;                // обновление в обкатке — только у владельца (api.beta)
 const pawDown = { left: 0, right: 0, mouth: 0 };
 const pointers = new Map();      // pointerId → { instrument, pad, at }
 const keysHeld = new Map();      // code → { instrument, pad, at }
@@ -142,13 +143,20 @@ function releaseKeyVisual(instrument, pad) {
 
 // ---------- удар ----------
 
-function press(instrument, pad) {
+/**
+ * Удар. background — клавиша чужого инструмента с клавиатуры в режиме обкатки: звучит тот инструмент,
+ * но выбранный остаётся (на столе и внизу — прежний, лапа бьёт по нему). Без обкатки — как на bongo.cat:
+ * инструмент переключается.
+ */
+function press(instrument, pad, { background = false } = {}) {
   const a = ensureAudio();
   a?.synth.play(instrument, pad.note);
-  if (instrument !== current) selectInstrument(instrument, { quiet: true });
-  showInstrument(instrument);
+  if (!background) {
+    if (instrument !== current) selectInstrument(instrument, { quiet: true });
+    showInstrument(instrument);
+  }
   setPaw(pad.paw, 1);
-  shakeInstrument(instrument, pad);
+  if (!background) shakeInstrument(instrument, pad);        // фоном: на столе другой инструмент, лапа бьёт по нему
   spawnNote(pad.paw);
   api.platform.haptic.impact(instrument === 'meow' ? 'soft' : 'light');
 
@@ -199,11 +207,13 @@ function onPadUp(e) {
 
 function onKeyDown(e) {
   if (!ui || modalActive || e.ctrlKey || e.metaKey || e.altKey) return;
-  const hit = padForCode(e.code);
+  const hit = padForCode(e.code, { withAlt: beta });
   if (!hit) return;
   e.preventDefault();
   if (e.repeat || keysHeld.has(e.code)) return;             // зажатая клавиша не «строчит», как и на bongo.cat
-  const at = press(hit.instrument, hit.pad);
+  // обкатка: клавиша чужого инструмента (и «мяу») звучит фоном, выбранный инструмент остаётся
+  const background = beta && hit.instrument !== current;
+  const at = press(hit.instrument, hit.pad, { background });
   const padEl = ui.pads.querySelector(`.bc-pad[data-inst="${hit.instrument}"][data-pad="${hit.pad.id}"]`);
   markPad(padEl, true);
   keysHeld.set(e.code, { ...hit, at, padEl });
@@ -427,6 +437,7 @@ export default {
 
   async init(container, gameApi) {
     api = gameApi;
+    beta = Boolean(gameApi.beta);
     host = container;
     toast = createToast();
 
@@ -517,5 +528,6 @@ export default {
     stats = emptyStats();
     current = 'bongo';
     shown = 'bongo';
+    beta = false;
   },
 };

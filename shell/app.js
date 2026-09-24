@@ -51,7 +51,7 @@ function show(route) {
     }
     platform.backButton.show();
     // «Назад» из игры возвращает в её папку, а не на главную.
-    session = openGame(screen, entry, { platform, onExit: () => backFrom(route) });
+    session = openGame(screen, entry, { platform, beta: account.isAdmin, onExit: () => backFrom(route) });
     return;
   }
 
