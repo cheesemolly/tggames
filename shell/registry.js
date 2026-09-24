@@ -112,7 +112,6 @@ export const games = [
     load: () => import('../games/memory/index.js'),
     css: new URL('../games/memory/game.css', import.meta.url),
     menu: { progress: 'replace' },                       // «Уровень 7»
-    admin: true,                                         // в обкатке: видит только владелец
   },
   {
     id: 'bongo-cat',

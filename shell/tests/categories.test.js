@@ -67,3 +67,9 @@ test('Bongo Cat открыт для всех; папка из одних игр 
   assert.ok(!ids(forPlayer).includes('music'));
   assert.equal(ids(forPlayer).length, categories.length - 1, 'остальные папки на месте');
 });
+
+test('Мемори открыта для всех, лежит в «Головоломках»', () => {
+  const memory = games.find((g) => g.id === 'memory');
+  assert.ok(memory && !memory.admin, 'Мемори вышла из обкатки (решение владельца)');
+  assert.equal(categoryOfGame('memory')?.id, 'puzzles');
+});
