@@ -55,14 +55,15 @@ test('игры в обкатке (admin: true) видны только влад�
   assert.equal(categoryOfGame('bubble-shooter')?.id, 'arcade');
 });
 
-test('Bongo Cat в обкатке: видит только владелец, папка «Музыка» у остальных пропадает', () => {
+test('Bongo Cat открыт для всех; папка из одних игр в обкатке у игрока пропадает', () => {
   const bongo = games.find((g) => g.id === 'bongo-cat');
-  assert.ok(bongo?.admin, 'Bongo Cat пока только для владельца');
+  assert.ok(bongo && !bongo.admin, 'Bongo Cat открыт для всех (решение владельца)');
   assert.equal(categoryOfGame('bongo-cat')?.id, 'music');
-
-  const forPlayer = games.filter((g) => !g.admin);
   const ids = (list) => visibleCategories(list).map((c) => c.id);
-  assert.ok(!ids(forPlayer).includes('music'), 'пустая для игрока папка не показывается');
-  assert.ok(ids(games).includes('music'), 'владелец папку видит');
+  assert.deepEqual(ids(games), categories.map((c) => c.id), 'игроку видны все папки');
+
+  // если единственная игра папки уйдёт в обкатку, папка у игрока пропадёт, а не покажет «0 игр»
+  const forPlayer = games.filter((g) => g.id !== 'bongo-cat');
+  assert.ok(!ids(forPlayer).includes('music'));
   assert.equal(ids(forPlayer).length, categories.length - 1, 'остальные папки на месте');
 });
