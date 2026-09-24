@@ -44,7 +44,11 @@ export const POWER_EVERY = 7;          // яблок до возможного �
 export const POWER_TTL = 60;           // шагов лежит усилитель
 export const POWER_TIME = { magnet: 80, slow: 60, double: 80 };
 export const SHIELD_FREEZE = 3;        // шагов стоим после удара со щитом — успеть повернуть
-export const WINGED_EVERY = 3;         // яблоко-летун двигается раз в столько шагов
+export const FLY_SPEED = [0.21, 0.16];  // летающая еда: клеток за шаг по x и y (не 45° — траектория интереснее)
+export const FRUIT_R = 0.3;             // радиус фрукта в клетках (так он и нарисован)
+export const EAT_REACH = 0.8;           // летающий фрукт съеден, если его центр ближе к центру головы (по x и по y)
+export const FRUITS = ['apple', 'pear', 'orange', 'banana', 'grapes', 'strawberry', 'watermelon'];
+export const BURGER_CHANCE = 0.1;       // бургер: очки ×2, змейка растёт на 2
 export const POISON_MOVE = 60;         // гриб перебирается на новое место
 export const START_LEN = 4;
 
@@ -79,6 +83,22 @@ function blocked(s, i, { forFood = false } = {}) {
 const occupiedBySnake = (s, i) => s.snake.includes(i) || Boolean(s.twin?.snake.includes(i));
 const foodAt = (s, i) => s.foods.findIndex((f) => f.idx === i);
 
+/** Центр еды в клетках (у летающей — дробный). */
+export const foodCenter = (s, f) => (f.fx != null
+  ? { x: f.fx + 0.5, y: f.fy + 0.5 }
+  : { x: (f.idx % s.cols) + 0.5, y: Math.floor(f.idx / s.cols) + 0.5 });
+
+/** Достаёт ли голова в клетке cell до еды: обычная — та же клетка, летающая — по хитбоксу. */
+export function reaches(s, f, cell) {
+  if (f.fx == null) return f.idx === cell;
+  const c = foodCenter(s, f);
+  const hx = (cell % s.cols) + 0.5;
+  const hy = Math.floor(cell / s.cols) + 0.5;
+  return Math.abs(c.x - hx) < EAT_REACH && Math.abs(c.y - hy) < EAT_REACH;
+}
+
+const foodFor = (s, cell) => s.foods.findIndex((f) => reaches(s, f, cell));
+
 /** Свободные клетки для еды и кирпичей: не стена, не шипы, не путь патруля, не змейка, не еда, не у самой головы. */
 export function freeCells(s, { awayFromHead = 2 } = {}) {
   const head = xy(s, s.snake[0]);
@@ -87,6 +107,8 @@ export function freeCells(s, { awayFromHead = 2 } = {}) {
     if (blocked(s, i, { forFood: true }) || occupiedBySnake(s, i) || foodAt(s, i) >= 0) continue;
     const p = xy(s, i);
     if (Math.abs(p.x - head.x) + Math.abs(p.y - head.y) <= awayFromHead) continue;
+    // «Инь-ян»: в центральный столбец зеркальные головы приходят одновременно — еду туда не кладём
+    if (s.twin && s.cols % 2 === 1 && p.x === (s.cols - 1) / 2) continue;
     out.push(i);
   }
   return out;
@@ -175,7 +197,14 @@ function spawnFood(s, food, rng, opts) {
   const free = freeCells(s, opts);
   if (!free.length) return null;
   const f = { ...food, idx: pick(free, rng) };
-  if (f.kind === 'apple' && s.modes.includes('winged')) f.wing = pick([[1, 1], [1, -1], [-1, 1], [-1, -1]], rng);
+  if (f.kind === 'apple' && !f.fruit) f.fruit = rng() < BURGER_CHANCE ? 'burger' : pick(FRUITS, rng);
+  if (f.kind === 'apple' && s.modes.includes('winged')) {
+    const { x, y } = xy(s, f.idx);
+    f.fx = x;
+    f.fy = y;
+    f.vx = FLY_SPEED[0] * (rng() < 0.5 ? -1 : 1);
+    f.vy = FLY_SPEED[1] * (rng() < 0.5 ? -1 : 1);
+  }
   s.foods.push(f);
   return f;
 }
@@ -244,9 +273,19 @@ function collision(s, cell, body, tailFree) {
   if (s.movers.some((m) => moverCell(m) === cell)) return 'mover';
   const own = tailFree ? body.slice(0, -1) : body;
   if (own.includes(cell)) return 'self';
-  const other = body === s.snake ? s.twin?.snake : s.snake;
-  if (other?.includes(cell)) return 'twin';
   return null;
+}
+
+/**
+ * Близнецы задевают друг друга только по-настоящему: голова одной — в тело другой ПОСЛЕ её хода (хвост,
+ * который уходит, не считается), головы в одну клетку, или головы меняются местами (проходят сквозь).
+ */
+function twinClash(s, main, mainGrows, twinCell, twinGrows) {
+  const mainNext = [main, ...(mainGrows ? s.snake : s.snake.slice(0, -1))];
+  const twinNext = [twinCell, ...(twinGrows ? s.twin.snake : s.twin.snake.slice(0, -1))];
+  if (main === twinCell) return true;
+  if (twinNext.includes(main) || mainNext.includes(twinCell)) return true;
+  return main === s.twin.snake[0] && twinCell === s.snake[0];
 }
 
 /**
@@ -263,7 +302,13 @@ export function step(s, rng = Math.random) {
     // после удара со щитом змейка стоит, но повороты уже принимаются
     s.freeze--;
     if (s.queue.length) s.dir = s.queue.shift();
+    // остальной мир не замирает: патрули ходят, еда летает (и может сама влететь в голову)
+    moveMovers(s);
+    moveFoods(s, rng);
+    eatAt(s, s.snake[0], 'main', rng, events);
+    if (s.twin) eatAt(s, s.twin.snake[0], 'twin', rng, events);
     tickTimers(s, rng, events);
+    spawnApples(s, rng);
     s.steps++;
     return events;
   }
@@ -275,12 +320,21 @@ export function step(s, rng = Math.random) {
   const main = nextCell(s, s.snake[0], s.dir);
   const grows = s.grow > 0 || foodGrows(s, main.cell);
   let hit = collision(s, main.cell, s.snake, !grows);
+  let who = hit ? 'main' : null;                   // кто разбился: main, twin или both
   let twinMove = null;
   if (s.twin) {
     twinMove = nextCell(s, s.twin.snake[0], twinDir);
     const tGrows = s.twin.grow > 0 || foodGrows(s, twinMove.cell);
-    const tHit = collision(s, twinMove.cell, s.twin.snake, !tGrows) ?? (twinMove.cell === main.cell ? 'twin' : null);
-    if (!hit && tHit) hit = `twin-${tHit}`;
+    const tHit = collision(s, twinMove.cell, s.twin.snake, !tGrows);
+    if (hit && tHit) who = 'both';
+    if (!hit && tHit) {
+      hit = `twin-${tHit}`;
+      who = 'twin';
+    }
+    if (!hit && main.cell >= 0 && twinMove.cell >= 0 && twinClash(s, main.cell, grows, twinMove.cell, tGrows)) {
+      hit = 'twin';
+      who = 'both';
+    }
   }
 
   if (hit) {
@@ -293,7 +347,7 @@ export function step(s, rng = Math.random) {
       return events;
     }
     s.dead = true;
-    events.push({ type: 'die', reason: hit, idx: main.cell });
+    events.push({ type: 'die', reason: hit, idx: main.cell, who });
     return events;
   }
 
@@ -308,6 +362,9 @@ export function step(s, rng = Math.random) {
 
   moveMovers(s);
   moveFoods(s, rng);
+  // летающий фрукт мог сам влететь в голову
+  eatAt(s, s.snake[0], 'main', rng, events);
+  if (s.twin) eatAt(s, s.twin.snake[0], 'twin', rng, events);
   tickTimers(s, rng, events);
   spawnApples(s, rng);
   if (s.mode === 'levels' && s.eaten >= s.goal) s.won = true;
@@ -316,7 +373,7 @@ export function step(s, rng = Math.random) {
   return events;
 }
 
-const foodGrows = (s, cell) => s.foods.some((f) => f.idx === cell && f.kind === 'apple');
+const foodGrows = (s, cell) => cell >= 0 && s.foods.some((f) => f.kind === 'apple' && reaches(s, f, cell));
 
 function moveBody(s, body, cell, key, owner) {
   body.unshift(cell);
@@ -325,7 +382,7 @@ function moveBody(s, body, cell, key, owner) {
 }
 
 function eatAt(s, cell, who, rng, events) {
-  const k = foodAt(s, cell);
+  const k = foodFor(s, cell);
   if (k < 0) return;
   const f = s.foods[k];
   s.foods.splice(k, 1);
@@ -333,13 +390,14 @@ function eatAt(s, cell, who, rng, events) {
   const mult = scoreMult(s);
 
   if (f.kind === 'apple') {
-    owner.grow += 1;
+    const burger = f.fruit === 'burger';
+    owner.grow += burger ? 2 : 1;
     s.eaten++;
     s.bonusCount++;
     s.powerCount++;
-    const points = 10 * mult;
+    const points = 10 * mult * (burger ? 2 : 1);
     s.score += points;
-    events.push({ type: 'eat', kind: 'apple', idx: cell, points, who });
+    events.push({ type: 'eat', kind: 'apple', fruit: f.fruit, idx: cell, points, who });
     if (f.pair) {
       // «Порталы»: голова выныривает у парного яблока, оно тоже съедено
       const j = s.foods.findIndex((o) => o.pair === f.pair && o.kind === 'apple');
@@ -410,12 +468,31 @@ function moveMovers(s) {
   }
 }
 
-/** Летающие яблоки и магнит. */
+/** Летающая еда (как логотип DVD: плавно, с отскоком от краёв и стен) и магнит. */
 function moveFoods(s, rng) {
   const head = xy(s, s.snake[0]);
+  const hx = head.x + 0.5;
+  const hy = head.y + 0.5;
   for (const f of s.foods) {
     if (f.kind !== 'apple' && f.kind !== 'bonus') continue;
-    let target = null;
+    if (f.fx != null) {
+      f.px = f.fx;
+      f.py = f.fy;
+      const d = Math.hypot(hx - f.fx - 0.5, hy - f.fy - 0.5);
+      if (s.effects.magnet > 0 && d <= 6 && d > 0.3) {
+        // магнит тянет плавно
+        f.fx += ((hx - f.fx - 0.5) / d) * 0.3;
+        f.fy += ((hy - f.fy - 0.5) / d) * 0.3;
+      } else {
+        // по каждой оси отдельно: край фрукта упёрся в край поля или стену — скорость по оси меняет знак
+        if (flightBlocked(s, f.fx + 0.5 + f.vx + Math.sign(f.vx) * FRUIT_R, f.fy + 0.5)) f.vx = -f.vx;
+        else f.fx += f.vx;
+        if (flightBlocked(s, f.fx + 0.5, f.fy + 0.5 + f.vy + Math.sign(f.vy) * FRUIT_R)) f.vy = -f.vy;
+        else f.fy += f.vy;
+      }
+      f.idx = idx(s, Math.min(s.cols - 1, Math.max(0, Math.floor(f.fx + 0.5))), Math.min(s.rows - 1, Math.max(0, Math.floor(f.fy + 0.5))));
+      continue;
+    }
     if (s.effects.magnet > 0 && s.steps % 2 === 0) {
       const p = xy(s, f.idx);
       const dist = Math.abs(p.x - head.x) + Math.abs(p.y - head.y);
@@ -425,20 +502,18 @@ function moveFoods(s, rng) {
         const opts = [];
         if (dx) opts.push(idx(s, p.x + dx, p.y));
         if (dy) opts.push(idx(s, p.x, p.y + dy));
-        target = opts.find((c) => canHoldFood(s, c)) ?? null;
-      }
-    } else if (f.wing && s.steps % WINGED_EVERY === 0) {
-      const p = xy(s, f.idx);
-      for (let tries = 0; tries < 4 && !target; tries++) {
-        const nx = p.x + f.wing[0];
-        const ny = p.y + f.wing[1];
-        if (inside(s, nx, ny) && canHoldFood(s, idx(s, nx, ny))) target = idx(s, nx, ny);
-        else f.wing = tries % 2 === 0 ? [-f.wing[0], f.wing[1]] : [f.wing[0], -f.wing[1]];
+        const target = opts.find((c) => canHoldFood(s, c));
+        if (target != null) f.idx = target;
       }
     }
-    if (target != null) f.idx = target;
   }
   void rng;
+}
+
+/** Точка (в клетках) — за краем поля или в стене/кирпиче: от неё летающая еда отскакивает. */
+export function flightBlocked(s, x, y) {
+  if (x < 0 || y < 0 || x >= s.cols || y >= s.rows) return true;
+  return s.cells[idx(s, Math.floor(x), Math.floor(y))] !== 0;
 }
 
 const canHoldFood = (s, c) => !blocked(s, c, { forFood: true }) && !occupiedBySnake(s, c) && foodAt(s, c) < 0;

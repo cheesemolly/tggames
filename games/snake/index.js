@@ -44,6 +44,9 @@ const DEATH_TEXT = {
 const PALETTE_KEYS = ['floor1', 'floor2', 'edge', 'rimTop', 'wallTop', 'wallSide', 'brick', 'snakeHead', 'snakeTail',
   'twinHead', 'twinTail', 'apple', 'mover', 'spike', 'spikeSide'];
 const SWIPE = 18;
+const FRUIT_COLORS = {
+  apple: '#ef4444', pear: '#a3c94a', orange: '#fb923c', banana: '#fde047', grapes: '#8b5cf6', strawberry: '#ef233c', watermelon: '#f43f5e',
+};
 
 const svgIcon = (body) => `<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" `
   + `stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
@@ -249,15 +252,19 @@ function draw(now) {
   if (!game || !pal) return;
   const ms = tickMs(game);
   const t = game.started && !game.dead && game.freeze === 0 ? Math.min(1, acc / ms) : 1;
+  // еда летает и когда змейка стоит (после щита)
+  const foodT = game.started && !game.dead ? Math.min(1, acc / ms) : 1;
   renderer.draw({
     s: game,
     prevSnake,
     prevTwin,
     t,
+    foodT,
     time: now / 1000,
     pal,
     dying: dying ? Math.min(1, (now - dying.at) / 700) : null,
-    blink: game.freeze > 0 || (dying && Math.floor((now - dying.at) / 90) % 2 === 0),
+    deadWho: dying?.who,
+    blink: game.freeze > 0,
   });
 }
 
@@ -269,8 +276,9 @@ function doStep() {
   for (const ev of events) {
     if (ev.type === 'eat') {
       hudDirty = true;
-      burstAt(ev.idx, ev.kind === 'bonus' ? '#ffd23f' : pal.apple, ev.kind === 'bonus' ? 18 : 10);
-      floatAt(ev.idx, `+${ev.points}`, ev.kind === 'bonus');
+      const burger = ev.fruit === 'burger';
+      burstAt(ev.idx, ev.kind === 'bonus' || burger ? '#ffd23f' : FRUIT_COLORS[ev.fruit] ?? pal.apple, ev.kind === 'bonus' || burger ? 18 : 10);
+      floatAt(ev.idx, burger ? `Бургер! +${ev.points}` : `+${ev.points}`, ev.kind === 'bonus' || burger);
       api.platform.haptic.impact(ev.kind === 'bonus' ? 'medium' : 'light');
     } else if (ev.type === 'power') {
       hudDirty = true;
@@ -300,7 +308,7 @@ function doStep() {
     } else if (ev.type === 'spawn' && ev.kind === 'bonus') {
       api.platform.haptic.selection();
     } else if (ev.type === 'die') {
-      onDeath(ev.reason);
+      onDeath(ev.reason, ev.who);
       return;
     } else if (ev.type === 'win') {
       onWin();
@@ -335,8 +343,9 @@ function floatAt(i, text, big = false, bad = false) {
 
 // ---------- конец ----------
 
-function onDeath(reason) {
-  dying = { at: performance.now(), reason };
+function onDeath(reason, who = 'main') {
+  // кто разбился — главная, близнец или обе: у них глаза крестиком и звёздочки
+  dying = { at: performance.now(), reason, who };
   host.classList.add('sn-dead');
   api.platform.haptic.notification('error');
   shake(ui.stage, { distance: 8, duration: 420 });
@@ -366,7 +375,7 @@ function onDeath(reason) {
           el('button', { class: 'sn-btn sn-btn-2', onclick: openLevels }, 'Уровни')),
       ], { dismissible: false });
     }
-  }, reducedMotion() ? 200 : 900);
+  }, reducedMotion() ? 300 : 1400);                // успеть увидеть крестики и звёздочки
 }
 
 function onWin() {
