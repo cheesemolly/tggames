@@ -13,12 +13,13 @@ const NOTE_NAMES = ['до', 'до♯', 'ре', 'ре♯', 'ми', 'фа', 'фа�
 const DIGITS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'];
 const LETTERS = ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'];
 
-/** Десять клавиш-нот: нижняя половина — левой лапой, верхняя — правой. */
-function notePads(labels, codes) {
+/** Десять клавиш-нот: нижняя половина — левой лапой, верхняя — правой. extra — запасные клавиши. */
+function notePads(labels, codes, extra = []) {
   return labels.map((label, i) => ({
     id: `n${i}`,
     label,
     code: codes[i],
+    ...(extra[i] ? { alt: extra[i] } : {}),
     note: i,
     name: NOTE_NAMES[i],
     black: BLACK.has(i),
@@ -35,7 +36,7 @@ export const INSTRUMENTS = [
       { id: 'high', label: 'D', code: 'KeyD', note: 1, name: 'Правый', paw: 'right' },
     ],
   },
-  { id: 'keyboard', title: 'Пианино', pads: notePads(DIGITS, DIGITS.map((d) => `Digit${d}`)) },
+  { id: 'keyboard', title: 'Пианино', pads: notePads(DIGITS, DIGITS.map((d) => `Digit${d}`), DIGITS.map((d) => `Numpad${d}`)) },
   { id: 'marimba', title: 'Маримба', pads: notePads(LETTERS, LETTERS.map((l) => `Key${l}`)) },
   { id: 'cymbal', title: 'Тарелка', pads: [{ id: 'hit', label: 'C', code: 'KeyC', note: 0, name: 'Тарелка', paw: 'right' }] },
   { id: 'tambourine', title: 'Бубен', pads: [{ id: 'hit', label: 'B', code: 'KeyB', note: 0, name: 'Бубен', paw: 'right' }] },
@@ -47,12 +48,19 @@ export const INSTRUMENTS = [
 export const findInstrument = (id) => INSTRUMENTS.find((i) => i.id === id) ?? null;
 
 const BY_CODE = new Map();
+const BY_ALT = new Map();
 for (const instrument of INSTRUMENTS) {
-  for (const pad of instrument.pads) BY_CODE.set(pad.code, { instrument: instrument.id, pad });
+  for (const pad of instrument.pads) {
+    BY_CODE.set(pad.code, { instrument: instrument.id, pad });
+    if (pad.alt) BY_ALT.set(pad.alt, { instrument: instrument.id, pad });
+  }
 }
 
-/** Клавиша физической клавиатуры → { instrument, pad } или null. */
-export const padForCode = (code) => BY_CODE.get(code) ?? null;
+/**
+ * Клавиша физической клавиатуры → { instrument, pad } или null.
+ * withAlt — учитывать запасные клавиши (цифры цифрового блока у пианино; пока только в обкатке у владельца).
+ */
+export const padForCode = (code, { withAlt = false } = {}) => BY_CODE.get(code) ?? (withAlt ? BY_ALT.get(code) : null) ?? null;
 
 /** Частота ноты: 0 — до первой октавы (C4), дальше по полутонам. */
 export const noteFreq = (semitone, octave = 0) => 261.6256 * 2 ** (semitone / 12 + octave);

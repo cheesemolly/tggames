@@ -20,13 +20,25 @@ test('клавиши — как на bongo.cat', () => {
   assert.equal(padForCode('KeyT').pad.note, 4, 'T — пятая нота маримбы');
 });
 
+test('цифровой блок играет пианино — только в обкатке (withAlt)', () => {
+  assert.equal(padForCode('Numpad5'), null, 'у игроков пока как на bongo.cat');
+  for (let d = 0; d <= 9; d++) {
+    const hit = padForCode(`Numpad${d}`, { withAlt: true });
+    assert.equal(hit?.instrument, 'keyboard');
+    assert.equal(hit.pad, padForCode(`Digit${d}`).pad, `Numpad${d} — та же нота, что ${d}`);
+  }
+  assert.equal(padForCode('KeyA', { withAlt: true })?.instrument, 'bongo', 'основные клавиши не мешают');
+});
+
 test('у каждой клавиши своя кнопка, лапа и подпись', () => {
   const codes = new Set();
   for (const inst of INSTRUMENTS) {
     assert.ok(inst.title && inst.pads.length > 0, inst.id);
     for (const pad of inst.pads) {
-      assert.ok(!codes.has(pad.code), `клавиша ${pad.code} занята дважды`);
-      codes.add(pad.code);
+      for (const code of [pad.code, pad.alt].filter(Boolean)) {
+        assert.ok(!codes.has(code), `клавиша ${code} занята дважды`);
+        codes.add(code);
+      }
       assert.ok(['left', 'right', 'mouth'].includes(pad.paw), `${inst.id}/${pad.id}: лапа`);
       assert.ok(pad.label && pad.name, `${inst.id}/${pad.id}: подпись`);
     }
