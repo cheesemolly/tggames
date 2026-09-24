@@ -201,29 +201,134 @@ test('бот: /me рассказывает прогресс', async () => {
   }
 });
 
-test('рассылка: только владельцу, уходит всем игрокам', async () => {
-  const env = createEnv();
+// ---------- рассылка и личные сообщения через черновик ----------
+
+async function botEnv() {
+  const env = createEnv({ ALBUM_WAIT_MS: '0' });
   await call(env, '/me', { initData: await asUser(USER) });
   await call(env, '/me', { initData: await asUser({ id: 43, first_name: 'Петя' }) });
   await call(env, '/me', { initData: await asUser(ADMIN) });
+  const post = (payload) => call(env, '/bot', {
+    method: 'POST', headers: { 'X-Telegram-Bot-Api-Secret-Token': env.WEBHOOK_SECRET }, payload,
+  });
+  let messageId = 100;
+  const say = (from, fields) => post({ message: { message_id: ++messageId, chat: { id: from }, from: { id: from }, ...fields } });
+  const press = (from, data) => post({ callback_query: { id: 'q1', from: { id: from }, data, message: { chat: { id: from }, message_id: 999 } } });
+  return { env, say, press };
+}
 
+/** Кнопка под предпросмотром (callback_data), которую бот прислал последней. */
+const lastButtons = (tg) => tg.calls.findLast((c) => c.payload.reply_markup?.inline_keyboard?.[0]?.[0]?.callback_data)
+  ?.payload.reply_markup.inline_keyboard[0].map((b) => b.callback_data);
+
+test('рассылка: только владельцу; сначала предпросмотр, всем — только по кнопке', async () => {
+  const { say, press } = await botEnv();
   const tg = captureTelegram();
   try {
-    const send = (from, text) => call(env, '/bot', {
-      method: 'POST',
-      headers: { 'X-Telegram-Bot-Api-Secret-Token': env.WEBHOOK_SECRET },
-      payload: { message: { chat: { id: from }, from: { id: from }, text } },
-    });
-
-    await send(USER.id, '/broadcast всем привет');
+    await say(USER.id, { text: '/broadcast всем привет' });
     assert.equal(tg.calls.length, 1);
     assert.match(tg.calls[0].payload.text, /только для владельца/);
 
     tg.calls.length = 0;
-    await send(ADMIN.id, '/broadcast Добавил новую игру!');
-    const sent = tg.calls.filter((c) => c.payload.text === 'Добавил новую игру!');
-    assert.equal(sent.length, 3, 'сообщение ушло всем троим');
-    assert.match(tg.calls.at(-1).payload.text, /Разослано: 3 из 3/);
+    await say(ADMIN.id, { text: '/broadcast Добавил новую игру!' });
+    const shown = tg.calls.filter((c) => c.payload.text === 'Добавил новую игру!');
+    assert.equal(shown.length, 1, 'пока только предпросмотр владельцу');
+    assert.equal(shown[0].payload.chat_id, ADMIN.id);
+    const [send, cancel] = lastButtons(tg);
+    assert.match(send, /^d:send:\d+$/);
+    assert.match(cancel, /^d:cancel:\d+$/);
+
+    await press(USER.id, send);
+    assert.match(tg.calls.at(-1).payload.text, /только для владельца/, 'чужой не может нажать');
+
+    tg.calls.length = 0;
+    await press(ADMIN.id, send);
+    const sent = tg.calls.filter((c) => c.method === 'sendMessage' && c.payload.text === 'Добавил новую игру!');
+    assert.equal(sent.length, 3, 'ушло всем троим');
+    assert.ok(sent.every((c) => c.payload.reply_markup.inline_keyboard[0][0].web_app), 'с кнопкой «Играть»');
+    assert.match(tg.calls.find((c) => c.method === 'editMessageText').payload.text, /Разослано: 3 из 3/);
+
+    tg.calls.length = 0;
+    await press(ADMIN.id, send);
+    assert.equal(tg.calls.filter((c) => c.method === 'sendMessage').length, 0, 'второе нажатие ничего не шлёт');
+    assert.match(tg.calls.find((c) => c.method === 'answerCallbackQuery').payload.text, /Уже отправлено/);
+  } finally {
+    tg.restore();
+  }
+});
+
+test('рассылка: «Отмена» — никому не уходит', async () => {
+  const { say, press } = await botEnv();
+  const tg = captureTelegram();
+  try {
+    await say(ADMIN.id, { text: '/broadcast не надо' });
+    const [send, cancel] = lastButtons(tg);
+    tg.calls.length = 0;
+    await press(ADMIN.id, cancel);
+    assert.match(tg.calls.find((c) => c.method === 'editMessageText').payload.text, /Отменено/);
+    tg.calls.length = 0;
+    await press(ADMIN.id, send);
+    assert.equal(tg.calls.filter((c) => c.method === 'sendMessage').length, 0, 'после отмены отправить нельзя');
+  } finally {
+    tg.restore();
+  }
+});
+
+test('рассылка с альбомом: две картинки (подпись у одной) — одним альбомом, подпись у первой', async () => {
+  const { say, press } = await botEnv();
+  const tg = captureTelegram();
+  try {
+    const photo = (id) => [{ file_id: `${id}-small` }, { file_id: id }];
+    await say(ADMIN.id, { media_group_id: 'A1', photo: photo('pic1') });
+    assert.equal(tg.calls.length, 1, 'альбом без команды пока — подсказка, как подписать');
+    tg.calls.length = 0;
+    await say(ADMIN.id, { media_group_id: 'A1', photo: photo('pic2'), caption: '/broadcast Смотрите, новая игра!' });
+    const album = tg.calls.find((c) => c.method === 'sendMediaGroup');
+    assert.ok(album, 'предпросмотр — альбомом');
+    assert.deepEqual(album.payload.media.map((m) => m.media), ['pic1', 'pic2'], 'по порядку, самый большой размер');
+    assert.equal(album.payload.media[0].caption, 'Смотрите, новая игра!');
+    assert.equal(album.payload.media[1].caption, undefined);
+
+    const [send] = lastButtons(tg);
+    tg.calls.length = 0;
+    await press(ADMIN.id, send);
+    const albums = tg.calls.filter((c) => c.method === 'sendMediaGroup');
+    assert.equal(albums.length, 3, 'альбом ушёл всем троим');
+  } finally {
+    tg.restore();
+  }
+});
+
+test('/message @ник: одно фото с подписью — только этому игроку', async () => {
+  const { say, press } = await botEnv();
+  const tg = captureTelegram();
+  try {
+    await say(ADMIN.id, { photo: [{ file_id: 'shot' }], caption: '/message @MASHA Привет от бота!' });
+    const preview = tg.calls.find((c) => c.method === 'sendPhoto');
+    assert.equal(preview.payload.chat_id, ADMIN.id, 'сначала — владельцу');
+    assert.equal(preview.payload.photo, 'shot');
+    assert.equal(preview.payload.caption, 'Привет от бота!');
+    assert.match(tg.calls.at(-1).payload.text, /Отправить @masha/);
+
+    const [send] = lastButtons(tg);
+    tg.calls.length = 0;
+    await press(ADMIN.id, send);
+    const sent = tg.calls.filter((c) => c.method === 'sendPhoto');
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].payload.chat_id, USER.id);
+    assert.match(tg.calls.find((c) => c.method === 'editMessageText').payload.text, /Отправлено @masha/);
+
+    tg.calls.length = 0;
+    await say(ADMIN.id, { text: '/message 43 Петя, привет' });
+    assert.match(tg.calls.at(-1).payload.text, /Отправить Петя/, 'можно по id');
+
+    tg.calls.length = 0;
+    await say(ADMIN.id, { text: '/message @nobody привет' });
+    assert.match(tg.calls.at(-1).payload.text, /не найден/);
+
+    tg.calls.length = 0;
+    await say(USER.id, { text: '/message @masha привет' });
+    assert.match(tg.calls.at(-1).payload.text, /только для владельца/);
   } finally {
     tg.restore();
   }

@@ -41,7 +41,11 @@ export function createEnv(extra = {}) {
   db.exec(SCHEMA);
   const wrap = (stmt, args) => ({
     first: () => stmt.get(...args) ?? null,
-    run: () => stmt.run(...args),
+    // как D1: результат run() — { success, meta: { changes, last_row_id } }
+    run: () => {
+      const r = stmt.run(...args);
+      return { success: true, meta: { changes: Number(r.changes), last_row_id: Number(r.lastInsertRowid) } };
+    },
     all: () => ({ results: stmt.all(...args) }),
   });
   return {

@@ -19,6 +19,8 @@
 //   DELETE /admin/player/<id>
 //   POST   /admin/broadcast          { text }
 // Бот: POST /bot — вебхук Telegram, проверяется заголовком X-Telegram-Bot-Api-Secret-Token.
+//   /start, /me — всем; /broadcast и /message @ник — владельцу, через черновик: бот показывает, как
+//   сообщение увидят игроки, и отправляет только по кнопке «Разослать/Отправить» (можно с фото и альбомом).
 
 import {
   checkInitData, diagnoseInitData, validateState, parseAdminIds, isAdmin, displayName,
@@ -33,6 +35,9 @@ const ALLOWED_ORIGINS = [
 
 const DEFAULT_APP_URL = 'https://cheesemolly.github.io/tggames/';
 const BROADCAST_LIMIT = 2000;          // предохранитель: больше за один раз не рассылаем
+const ALBUM_WAIT_MS = 1500;            // картинки альбома приходят по одной: ждём, пока придут все
+const CAPTION_LIMIT = 1024;            // подпись к фото в Telegram
+const TEXT_LIMIT = 4096;               // обычное сообщение
 
 function corsHeaders(origin) {
   const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
@@ -53,7 +58,7 @@ const json = (body, status, origin) => new Response(JSON.stringify(body), {
 const fail = (error, status, origin) => json({ error }, status, origin);
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const origin = request.headers.get('Origin') ?? '';
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders(origin) });
 
@@ -61,7 +66,7 @@ export default {
     const path = url.pathname.replace(/\/+$/, '') || '/';
 
     try {
-      if (path === '/bot' && request.method === 'POST') return await botWebhook(request, env);
+      if (path === '/bot' && request.method === 'POST') return await botWebhook(request, env, ctx);
       if (path === '/') return json({ ok: true, service: 'tggames' }, 200, origin);
       // Диагностика: какому боту принадлежит токен в настройках. Сам токен не раскрывается —
       // видно только имя бота. Нужна, когда мини-апп открыт одним ботом, а токен лежит от другого.
@@ -284,20 +289,25 @@ const playButton = (env) => ({
   inline_keyboard: [[{ text: '🎮 Играть', web_app: { url: appUrl(env) } }]],
 });
 
-async function botWebhook(request, env) {
+async function botWebhook(request, env, ctx) {
   // Telegram шлёт этот заголовок, если вебхук поставлен с secret_token. Так чужой запрос не пройдёт.
   if (env.WEBHOOK_SECRET && request.headers.get('X-Telegram-Bot-Api-Secret-Token') !== env.WEBHOOK_SECRET) {
     return new Response('forbidden', { status: 403 });
   }
   const update = await body(request);
+  if (update.callback_query) {
+    await onButton(update.callback_query, env, ctx);
+    return new Response('ok');
+  }
   const message = update.message ?? update.edited_message;
   const chatId = message?.chat?.id;
   const tgId = message?.from?.id;
-  if (!chatId || !message?.text) return new Response('ok');
+  const text = (message?.text ?? message?.caption ?? '').trim();
+  const media = mediaOf(message);
+  if (!chatId || (!text && !media.length)) return new Response('ok');
 
-  const text = message.text.trim();
-  const command = text.split(/\s+/)[0].split('@')[0].toLowerCase();
-  const rest = text.slice(command.length).trim();
+  const command = text.startsWith('/') ? text.split(/\s+/)[0].split('@')[0].toLowerCase() : '';
+  const rest = command ? text.slice(text.split(/\s+/)[0].length).trim() : text;
   const admin = isAdmin(tgId, parseAdminIds(env.ADMIN_IDS));
 
   if (command === '/start') {
@@ -315,30 +325,238 @@ async function botWebhook(request, env) {
     return new Response('ok');
   }
 
-  if (command === '/broadcast') {
+  if (command === '/broadcast' || command === '/message') {
     if (!admin) {
       await api(env, 'sendMessage', { chat_id: chatId, text: 'Эта команда только для владельца.' });
       return new Response('ok');
     }
-    if (!rest) {
-      await api(env, 'sendMessage', { chat_id: chatId, text: 'Напиши так: /broadcast текст сообщения' });
-      return new Response('ok');
-    }
-    const result = await broadcast(env, rest);
-    await api(env, 'sendMessage', {
-      chat_id: chatId,
-      text: `Разослано: ${result.sent} из ${result.total}.`
-        + (result.failed ? ` Не доставлено: ${result.failed} (заблокировали бота).` : ''),
-    });
+    await collectDraft(env, ctx, message, { command, rest, media });
+    return new Response('ok');
+  }
+
+  // картинки альбома без подписи — часть черновика владельца (подпись с командой у одной из них)
+  if (admin && media.length && message.media_group_id) {
+    await collectDraft(env, ctx, message, { command: '', rest: '', media });
     return new Response('ok');
   }
 
   await api(env, 'sendMessage', {
     chat_id: chatId,
-    text: 'Команды: /start — открыть игры, /me — мой прогресс.',
+    text: admin ? ADMIN_HELP : 'Команды: /start — открыть игры, /me — мой прогресс.',
     reply_markup: playButton(env),
   });
   return new Response('ok');
+}
+
+const ADMIN_HELP = 'Команды: /start — открыть игры, /me — мой прогресс.\n\n'
+  + 'Для владельца:\n'
+  + '/broadcast текст — всем игрокам;\n'
+  + '/message @ник текст — одному игроку (можно id вместо ника).\n'
+  + 'Можно с фото или альбомом: прикрепи картинки и напиши команду в подписи. '
+  + 'Сначала бот покажет, как это увидят, и отправит только по кнопке.';
+
+// ---------- черновики рассылки и личных сообщений ----------
+// Картинки альбома Telegram присылает отдельными сообщениями, подпись — только у одной. Поэтому каждая
+// часть пишется в черновик (картинки — отдельными строками, без гонок при одновременной записи), а
+// предпросмотр показывает тот запрос, после которого за ALBUM_WAIT_MS ничего нового не пришло.
+
+/** Картинки/видео сообщения: [{ type, id }] (у фото берём самый большой размер). */
+function mediaOf(message) {
+  if (message?.photo?.length) return [{ type: 'photo', id: message.photo[message.photo.length - 1].file_id }];
+  if (message?.video) return [{ type: 'video', id: message.video.file_id }];
+  return [];
+}
+
+async function ensureDraftTables(env) {
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS drafts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, admin_id INTEGER NOT NULL, chat_id INTEGER NOT NULL,
+    group_key TEXT NOT NULL, kind TEXT, target INTEGER, target_name TEXT, text TEXT,
+    stamp TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'new', created_at INTEGER NOT NULL,
+    UNIQUE (admin_id, group_key))`).run();
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS draft_media (
+    admin_id INTEGER NOT NULL, group_key TEXT NOT NULL, message_id INTEGER NOT NULL,
+    type TEXT NOT NULL, file_id TEXT NOT NULL, PRIMARY KEY (admin_id, group_key, message_id))`).run();
+}
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function collectDraft(env, ctx, message, { command, rest, media }) {
+  await ensureDraftTables(env);
+  const adminId = message.from.id;
+  const chatId = message.chat.id;
+  const key = message.media_group_id ? `g${message.media_group_id}` : `m${message.message_id}`;
+
+  // что написано в команде
+  let kind = null;
+  let target = null;
+  let targetName = null;
+  let text = null;
+  if (command === '/broadcast') {
+    kind = 'broadcast';
+    text = rest;
+  } else if (command === '/message') {
+    const [who, ...words] = rest.split(/\s+/);
+    const player = who ? await findPlayer(env, who) : null;
+    if (!player) {
+      await api(env, 'sendMessage', {
+        chat_id: chatId,
+        text: who
+          ? `Игрок ${who} не найден — он ещё не открывал игры или сменил ник.`
+          : 'Напиши так: /message @ник текст (можно id вместо ника).',
+      });
+      return;
+    }
+    kind = 'message';
+    target = player.tg_id;
+    targetName = player.username ? `@${player.username}` : player.name;
+    text = rest.slice(who.length).trim();
+    void words;
+  }
+
+  const stamp = crypto.randomUUID();
+  await env.DB.prepare(`INSERT INTO drafts (admin_id, chat_id, group_key, kind, target, target_name, text, stamp, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT (admin_id, group_key) DO UPDATE SET
+        kind = COALESCE(excluded.kind, drafts.kind), target = COALESCE(excluded.target, drafts.target),
+        target_name = COALESCE(excluded.target_name, drafts.target_name), text = COALESCE(excluded.text, drafts.text),
+        stamp = excluded.stamp`)
+    .bind(adminId, chatId, key, kind, target, targetName, text, stamp, Date.now()).run();
+  for (const m of media) {
+    await env.DB.prepare('INSERT OR IGNORE INTO draft_media (admin_id, group_key, message_id, type, file_id) VALUES (?, ?, ?, ?, ?)')
+      .bind(adminId, key, message.message_id, m.type, m.id).run();
+  }
+
+  const wait = message.media_group_id ? Number(env.ALBUM_WAIT_MS ?? ALBUM_WAIT_MS) : 0;
+  const finish = async () => {
+    if (wait) await sleep(wait);
+    await previewDraft(env, adminId, key, stamp);
+  };
+  if (wait && ctx?.waitUntil) ctx.waitUntil(finish());
+  else await finish();
+}
+
+async function findPlayer(env, who) {
+  if (/^\d+$/.test(who)) return env.DB.prepare('SELECT tg_id, name, username FROM users WHERE tg_id = ?').bind(Number(who)).first();
+  return env.DB.prepare('SELECT tg_id, name, username FROM users WHERE lower(username) = lower(?)')
+    .bind(who.replace(/^@/, '')).first();
+}
+
+async function loadDraft(env, where, ...args) {
+  const draft = await env.DB.prepare(`SELECT * FROM drafts WHERE ${where}`).bind(...args).first();
+  if (!draft) return null;
+  const rows = await env.DB.prepare('SELECT type, file_id FROM draft_media WHERE admin_id = ? AND group_key = ? ORDER BY message_id')
+    .bind(draft.admin_id, draft.group_key).all();
+  return { ...draft, media: (rows.results ?? []).map((r) => ({ type: r.type, id: r.file_id })) };
+}
+
+/** Предпросмотр: владелец видит ровно то, что получат игроки, и кнопки «Отправить» / «Отмена». */
+async function previewDraft(env, adminId, key, stamp) {
+  const draft = await loadDraft(env, 'admin_id = ? AND group_key = ?', adminId, key);
+  if (!draft || draft.stamp !== stamp || draft.state !== 'new') return;     // пришла ещё часть альбома — покажет она
+  const say = (text) => api(env, 'sendMessage', { chat_id: draft.chat_id, text });
+  if (!draft.kind) {
+    await say('Чтобы разослать картинки, напиши в подписи /broadcast текст или /message @ник текст.');
+    return;
+  }
+  if (!draft.text && !draft.media.length) {
+    await say(draft.kind === 'broadcast' ? 'Напиши так: /broadcast текст сообщения' : 'Напиши так: /message @ник текст');
+    return;
+  }
+  const limit = draft.media.length ? CAPTION_LIMIT : TEXT_LIMIT;
+  if ((draft.text ?? '').length > limit) {
+    await say(`Слишком длинно: ${draft.text.length} символов, можно ${limit}${draft.media.length ? ' (подпись к фото)' : ''}.`);
+    return;
+  }
+  if (draft.media.length > 10) {
+    await say('В альбоме не больше 10 картинок.');
+    return;
+  }
+
+  await env.DB.prepare("UPDATE drafts SET state = 'preview' WHERE id = ?").bind(draft.id).run();
+  await say('Так это увидят:');
+  await sendDraft(env, draft.chat_id, draft);
+  const players = draft.kind === 'broadcast'
+    ? (await env.DB.prepare('SELECT COUNT(*) AS n FROM users WHERE banned = 0').first())?.n ?? 0
+    : 1;
+  await api(env, 'sendMessage', {
+    chat_id: draft.chat_id,
+    text: draft.kind === 'broadcast' ? `Разослать всем игрокам (${players})?` : `Отправить ${draft.target_name}?`,
+    reply_markup: {
+      inline_keyboard: [[
+        { text: draft.kind === 'broadcast' ? `📣 Разослать (${players})` : '✉️ Отправить', callback_data: `d:send:${draft.id}` },
+        { text: 'Отмена', callback_data: `d:cancel:${draft.id}` },
+      ]],
+    },
+  });
+}
+
+/**
+ * Отправить черновик в чат. Текст — сообщением с кнопкой «Играть»; одна картинка — с подписью и кнопкой;
+ * альбом — группой (кнопку к альбому Telegram прикрепить не даёт, подпись — у первой картинки).
+ */
+async function sendDraft(env, chatId, draft) {
+  const text = draft.text ?? '';
+  const media = draft.media ?? [];
+  let res;
+  if (!media.length) {
+    res = await api(env, 'sendMessage', { chat_id: chatId, text, reply_markup: playButton(env) });
+  } else if (media.length === 1) {
+    const [m] = media;
+    res = await api(env, m.type === 'video' ? 'sendVideo' : 'sendPhoto', {
+      chat_id: chatId, [m.type]: m.id, ...(text ? { caption: text } : {}), reply_markup: playButton(env),
+    });
+  } else {
+    res = await api(env, 'sendMediaGroup', {
+      chat_id: chatId,
+      media: media.map((m, i) => ({ type: m.type, media: m.id, ...(i === 0 && text ? { caption: text } : {}) })),
+    });
+  }
+  return res.ok;
+}
+
+/** Кнопки под предпросмотром. Нажать может только владелец; дважды не отправится. */
+async function onButton(query, env, ctx) {
+  const answer = (text) => api(env, 'answerCallbackQuery', { callback_query_id: query.id, ...(text ? { text } : {}) });
+  const [prefix, action, rawId] = String(query.data ?? '').split(':');
+  if (prefix !== 'd' || !isAdmin(query.from?.id, parseAdminIds(env.ADMIN_IDS))) {
+    await answer('Это только для владельца.');
+    return;
+  }
+  await ensureDraftTables(env);
+  const draft = await loadDraft(env, 'id = ? AND admin_id = ?', Number(rawId), query.from.id);
+  const edit = (text) => query.message && api(env, 'editMessageText', {
+    chat_id: query.message.chat.id, message_id: query.message.message_id, text,
+  });
+  if (!draft) {
+    await answer('Черновик не найден.');
+    return;
+  }
+  if (action === 'cancel') {
+    const res = await env.DB.prepare("UPDATE drafts SET state = 'cancelled' WHERE id = ? AND state = 'preview'").bind(draft.id).run();
+    await answer();
+    if (res.meta?.changes) await edit('Отменено — никому не отправлено.');
+    return;
+  }
+  // «send»: переводим в 'sending' только из 'preview' — второе нажатие ничего не сделает
+  const res = await env.DB.prepare("UPDATE drafts SET state = 'sending' WHERE id = ? AND state = 'preview'").bind(draft.id).run();
+  if (!res.meta?.changes) {
+    await answer('Уже отправлено или отменено.');
+    return;
+  }
+  await answer(draft.kind === 'broadcast' ? 'Рассылаю…' : 'Отправляю…');
+  const job = async () => {
+    if (draft.kind === 'broadcast') {
+      const result = await broadcast(env, draft);
+      await edit(`Разослано: ${result.sent} из ${result.total}.`
+        + (result.failed ? ` Не доставлено: ${result.failed} (заблокировали бота).` : ''));
+    } else {
+      const ok = await sendDraft(env, draft.target, draft).catch(() => false);
+      await edit(ok ? `Отправлено ${draft.target_name}.` : `Не доставлено ${draft.target_name}: игрок заблокировал бота или не начинал с ним чат.`);
+    }
+    await env.DB.prepare("UPDATE drafts SET state = 'sent' WHERE id = ?").bind(draft.id).run();
+  };
+  if (ctx?.waitUntil) ctx.waitUntil(job());
+  else await job();
 }
 
 /** Текст для /me: уровни и рекорды из сохранённого прогресса. */
@@ -367,16 +585,19 @@ async function meText(env, tgId) {
   return `<b>${displayName({ first_name: player.name, username: player.username })}</b>\n${lines.join('\n')}`;
 }
 
-/** Рассылка всем, кто хоть раз открывал игры. Заблокировавшие бота просто не получат сообщение. */
-async function broadcast(env, text) {
+/**
+ * Рассылка всем, кто хоть раз открывал игры. Заблокировавшие бота просто не получат сообщение.
+ * content — строка (панель владельца) или черновик { text, media }.
+ */
+async function broadcast(env, content) {
+  const draft = typeof content === 'string' ? { text: content, media: [] } : content;
   const rows = await env.DB.prepare('SELECT tg_id FROM users WHERE banned = 0 LIMIT ?').bind(BROADCAST_LIMIT).all();
   const ids = (rows.results ?? []).map((r) => r.tg_id);
   let sent = 0;
   let failed = 0;
   for (const id of ids) {
     try {
-      const res = await api(env, 'sendMessage', { chat_id: id, text, reply_markup: playButton(env) });
-      if (res.ok) sent += 1;
+      if (await sendDraft(env, id, draft)) sent += 1;
       else failed += 1;
     } catch {
       failed += 1;
