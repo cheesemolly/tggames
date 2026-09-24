@@ -24,3 +24,29 @@ CREATE TABLE IF NOT EXISTS states (
   data       TEXT NOT NULL,               /* весь прогресс игрока одной строкой JSON */
   updated_at INTEGER NOT NULL
 );
+
+/* Черновики рассылки и личных сообщений бота (/broadcast, /message). Обработчик заводит эти таблицы
+   сам при первом использовании (CREATE TABLE IF NOT EXISTS), вручную выполнять не нужно. */
+CREATE TABLE IF NOT EXISTS drafts (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  admin_id    INTEGER NOT NULL,
+  chat_id     INTEGER NOT NULL,
+  group_key   TEXT NOT NULL,              /* g<media_group_id> для альбома, m<message_id> для одного сообщения */
+  kind        TEXT,                       /* broadcast | message */
+  target      INTEGER,                    /* кому (для message) */
+  target_name TEXT,
+  text        TEXT,
+  stamp       TEXT NOT NULL,              /* метка последней части альбома — предпросмотр показывает она */
+  state       TEXT NOT NULL DEFAULT 'new',/* new, preview, sending, sent, cancelled */
+  created_at  INTEGER NOT NULL,
+  UNIQUE (admin_id, group_key)
+);
+
+CREATE TABLE IF NOT EXISTS draft_media (
+  admin_id   INTEGER NOT NULL,
+  group_key  TEXT NOT NULL,
+  message_id INTEGER NOT NULL,
+  type       TEXT NOT NULL,               /* photo | video */
+  file_id    TEXT NOT NULL,
+  PRIMARY KEY (admin_id, group_key, message_id)
+);
