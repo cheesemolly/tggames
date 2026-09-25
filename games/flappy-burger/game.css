@@ -54,7 +54,7 @@
 [data-game="flappy-burger"] .fb-hint {
   position: absolute;
   left: 50%;
-  top: 62%;
+  top: 79%;                             /* под заставкой: у всех четырёх лого низ экрана свободен */
   transform: translateX(-50%);
   display: grid;
   justify-items: center;
