@@ -34,6 +34,7 @@ export const BLAST_POINTS = 10;                   // взорванный бом
 export const SHOT_BONUS = 50;                     // за каждый неистраченный выстрел при победе
 export const BONUS_KINDS = ['bomb', 'rainbow', 'fire'];
 export const BONUS_MAX = 3;
+export const REWARD_EVERY = 3;                    // серия попаданий подряд, за которую дарится бонус
 
 // ---------- значения клеток ----------
 
@@ -309,6 +310,7 @@ export function newLevel(level, rng = Math.random) {
     score: 0,
     combo: 0,
     target: Math.max(300, colored * POP_POINTS * 2),
+    total: colored,                               // цветных шаров в начале — для процента очистки
     current: pickColor(grid, palette, rng),
     next: pickColor(grid, palette, rng),
     bonuses: { bomb: 1, rainbow: 1, fire: 1 },
@@ -377,7 +379,7 @@ export function shoot(state, angle, rng = Math.random) {
 
   // Серия из трёх попаданий подряд — случайный бонус в копилку (не больше BONUS_MAX каждого).
   let reward = null;
-  if (state.combo > 0 && state.combo % 3 === 0) {
+  if (state.combo > 0 && state.combo % REWARD_EVERY === 0) {
     const open = BONUS_KINDS.filter((k) => state.bonuses[k] < BONUS_MAX);
     if (open.length) {
       reward = open[Math.floor(rng() * open.length)];
@@ -485,12 +487,21 @@ export function aimPath(state, angle) {
   }).path;
 }
 
-// ---------- звёзды ----------
+// ---------- прогресс ----------
 
-export function starsFor(state) {
-  const k = state.score / state.target;
-  return k >= 1 ? 3 : k >= 0.6 ? 2 : k >= 0.3 ? 1 : 0;
+/**
+ * Доля очищенного поля 0…1 (вместо звёзд — владелец: «звёзды не имеют значения», как процент в Brick Blast).
+ * Уровень пройден, когда цветных не осталось, — тогда ровно 1. У старых сохранений без total — от текущего.
+ */
+export function clearedShare(state) {
+  const left = countColored(state.grid);
+  if (!left) return 1;
+  const total = Math.max(state.total ?? left, left);
+  return 1 - left / total;
 }
+
+/** Сколько попаданий серии уже есть к следующему бонусу: 0…REWARD_EVERY-1. */
+export const rewardProgress = (state) => state.combo % REWARD_EVERY;
 
 // ---------- сохранение ----------
 

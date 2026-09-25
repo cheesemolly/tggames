@@ -8,14 +8,15 @@
 // поле плавно сползает вниз. Только после этого экран снова рисует настоящее состояние.
 
 import { el } from '../../shared/dom.js';
-import { showLayer, hideLayer, pop as popIn, reducedMotion } from '../../shared/motion.js';
+import { showLayer, hideLayer, pop as popIn, animate, reducedMotion } from '../../shared/motion.js';
 import { createToast } from '../../shared/toast.js';
 import { createFx } from '../../shared/fx.js';
 import {
-  R, ROW_H, WIDTH, VIEW_ROWS, FIELD_H, SHOOTER_DY, COLORS, STONE, SPEED, STEP, BONUS_KINDS,
-  rowCols, cellX, cellY, cloneGrid, isStone, isLocked, colorOf, snapCell,
-  newLevel, shoot, swap, arm, aimPath, angleTo, starsFor, isValidState, emptyStats, recordGame, isValidStats,
+  R, ROW_H, WIDTH, VIEW_ROWS, FIELD_H, SHOOTER_DY, COLORS, STONE, SPEED, STEP, BONUS_KINDS, REWARD_EVERY,
+  rowCols, cellX, cellY, cloneGrid, isStone, isLocked, colorOf, snapCell, countColored,
+  newLevel, shoot, swap, arm, aimPath, angleTo, clearedShare, rewardProgress, isValidState, emptyStats, recordGame, isValidStats,
 } from './logic.js';
+import { drawSpecial, createTrail } from './specials.js';
 
 const SKINS = ['classic', 'telegram', 'night', 'candy'];
 const CANVAS_H = SHOOTER_DY + 1.35;                // поле + зона стрелка, в диаметрах шара
@@ -29,6 +30,9 @@ const T = {
   level: (n) => `Уровень ${n}`,
   score: 'Очки',
   combo: (n) => `Комбо ×${n}`,
+  megaCombo: (n) => `Мега-комбо ×${n}`,
+  charge: 'до бонуса',
+  chargeHint: (n) => `Попаданий подряд до бонуса: ${n}`,
   aimHelp: 'Веди пальцем по полю — увидишь траекторию. Отпусти — выстрел.',
   swapHelp: 'Тап по маленькому шару — поменять местами',
   reward: { bomb: 'Бонус: бомба!', rainbow: 'Бонус: радуга!', fire: 'Бонус: огненный шар!' },
@@ -39,7 +43,7 @@ const T = {
     fire: 'Огонь: прожигает шары насквозь',
   },
   noBonus: 'Бонусы копятся за серии попаданий',
-  win: { title: (n) => `Уровень ${n}`, score: (s) => `Очки: ${s}`, next: 'Дальше', again: 'Ещё раз' },
+  win: { title: (n) => `Уровень ${n}`, cleared: 'Поле очищено — 100%', score: (s) => `Очки: ${s}`, next: 'Дальше', again: 'Ещё раз' },
   resultLose: 'Выстрелы кончились',
   menu: { title: 'Меню', restart: 'Начать уровень заново', stats: 'Статистика', skin: 'Оформление', close: 'Закрыть' },
   stats: { played: 'Партий', cleared: 'Уровней пройдено', bestLevel: 'Лучший уровень', bestScore: 'Рекорд очков' },
@@ -81,6 +85,9 @@ let modalActive = false;
 let finished = false;
 let pendingNext = null;         // следующий уровень: сохранён сразу при победе, по «Дальше» — он же
 const timers = new Set();
+let animT = 0;                  // время для анимаций бонусных шаров (фитиль, перелив, пламя)
+const trail = createTrail();    // след летящего бонуса: дым, радуга, пламя
+let lastFly = null;             // где был бонус в прошлом кадре — след тянется отрезками
 
 const later = (fn, ms) => {
   const id = setTimeout(() => {
@@ -334,6 +341,7 @@ function draw() {
 
   for (const p of popping) drawPop(g, p);
   for (const b of falling) drawBall(g, b.value, px(b.x), py(b.y), 1, b.alpha, b.rot);
+  trail.draw(g, (q) => px(q.x), (q) => py(q.y, q.scroll), scale);
   if (flying) drawFlying(g);
 
   drawShooter(g);
@@ -341,6 +349,13 @@ function draw() {
 }
 
 function drawBall(g, value, x, y, size = 1, alpha = 1, rot = 0) {
+  if (typeof value === 'string') {
+    // бонусные шары анимированы — рисуются каждый кадр (specials.js)
+    if (alpha !== 1) g.globalAlpha = alpha;
+    drawSpecial(g, value, x, y, scale * size * 0.5, animT);
+    if (alpha !== 1) g.globalAlpha = 1;
+    return;
+  }
   const img = sprite(value, scale * size);
   const w = img.width / dpr;
   const h = img.height / dpr;
@@ -428,22 +443,7 @@ function drawAim(g) {
 
 function drawFlying(g) {
   const p = flying.point;
-  const x = px(p.x);
-  const y = py(p.y, flying.scroll);
-  if (flying.kind === 'fire') {
-    // огненный хвост
-    const tail = flying.path.slice(Math.max(0, flying.index - 14), flying.index + 1);
-    g.save();
-    tail.forEach((q, i) => {
-      g.globalAlpha = (i / tail.length) * 0.6;
-      g.fillStyle = i % 2 ? '#ffd34d' : '#ff6a1a';
-      g.beginPath();
-      g.arc(px(q.x), py(q.y, flying.scroll), scale * (0.18 + (i / tail.length) * 0.3), 0, Math.PI * 2);
-      g.fill();
-    });
-    g.restore();
-  }
-  drawBall(g, flying.value, x, y);
+  drawBall(g, flying.value, px(p.x), py(p.y, flying.scroll));
 }
 
 function drawPop(g, p) {
@@ -585,14 +585,48 @@ function tick(ts) {
   lastTs = ts;
   step(dt);
   draw();
+  drawHotbar();
+}
+
+/** Бонусы в панели — те же живые шары: искрит фитиль, переливается радуга, горит огонь; дымок и искры. */
+function drawHotbar() {
+  if (!ui) return;
+  for (const kind of BONUS_KINDS) {
+    const h = ui.bonus[kind];
+    const g = h.ctx;
+    const size = h.size;
+    const d = h.canvas.width / size;
+    g.setTransform(d, 0, 0, d, 0, 0);
+    g.clearRect(0, 0, size, size);
+    const x = size / 2;
+    const y = size / 2 + 3;
+    const rad = size * 0.3;
+    const U = rad * 2;                           // частицы — в «диаметрах шара», как на поле
+    if (!reducedMotion() && Math.random() < 0.3) {
+      // бомба дымит из фитиля, огонь роняет искры вверх, радуга оставляет цветные блёстки
+      const sx = kind === 'bomb' ? x + rad * 0.95 : x + (Math.random() - 0.5) * rad;
+      const sy = kind === 'bomb' ? y - rad * 1.05 : y - rad * 0.9;
+      h.trail.emit(kind, sx / U, sy / U, sx / U, sy / U - 0.05, animT, { spacing: 1 });
+    }
+    h.trail.update(1 / 60);
+    h.trail.draw(g, (q) => q.x * U, (q) => q.y * U, U * 0.55);
+    drawSpecial(g, kind, x, y, rad, animT + (kind === 'fire' ? 0.37 : 0));
+  }
 }
 
 function step(dt) {
+  if (!reducedMotion()) animT += dt;
+  trail.update(dt);
   if (flying) {
     flying.progress += (dt * SPEED) / STEP;
     const index = Math.min(flying.path.length - 1, Math.floor(flying.progress));
     flying.index = index;
     flying.point = flying.path[index];
+    if (typeof flying.value === 'string' && !reducedMotion()) {
+      const from = lastFly ?? flying.point;
+      trail.emit(flying.value, from.x, from.y, flying.point.x, flying.point.y, animT, { extra: { scroll: flying.scroll } });
+      lastFly = flying.point;
+    }
     // огонь сжигает шары по мере пролёта
     while (flying.burnAt.length && flying.burnAt[0].index <= index) {
       const { r, c } = flying.burnAt.shift();
@@ -601,6 +635,7 @@ function step(dt) {
     if (index >= flying.path.length - 1) {
       const done = flying.onDone;
       flying = null;
+      lastFly = null;
       done();
     }
   }
@@ -780,7 +815,14 @@ function land(res, value) {
     if (at) floaters.push({ x: cellX(at[0], at[1]), y: cellY(at[0]), text: `+${res.gained}`, t: 0, big: res.gained >= 100 });
   }
   if (res.combo >= 2) later(() => showCombo(res.combo), 120);
-  if (res.reward) later(() => toast.show(T.reward[res.reward], 1800), afterPops + 200);
+  renderCharge();
+  if (res.reward) {
+    later(() => {
+      toast.show(T.reward[res.reward], 1800);
+      renderBonuses();
+      rewardFx(res.reward);
+    }, afterPops + 200);
+  }
 }
 
 function shockwave(r, c) {
@@ -830,12 +872,71 @@ function finishShot(res) {
   if (game.over) later(() => endGame(game.over), reducedMotion() ? 0 : 450);
 }
 
+/**
+ * «Комбо ×N» — над полем (раньше было у стрелка и закрывало запасной шар), и чем длиннее серия, тем ярче:
+ *   ×2–3  — фиолетовая плашка впрыгивает;
+ *   ×4–5  — оранжевая, крупнее, качается, искры;
+ *   ×6–8  — золотые буквы, вращающиеся лучи, поле вздрагивает, два залпа искр;
+ *   ×9+   — «Мега-комбо» радужными буквами, лучи, конфетти.
+ */
 function showCombo(n) {
-  ui.combo.textContent = T.combo(n);
+  const tier = n >= 9 ? 4 : n >= 6 ? 3 : n >= 4 ? 2 : 1;
+  ui.combo.className = `bs-combo bs-combo-t${tier}`;
+  ui.comboText.textContent = tier === 4 ? T.megaCombo(n) : T.combo(n);
   ui.combo.hidden = false;
-  popIn(ui.combo, { from: 0.6 });
+  ui.comboAnim?.cancel();
+  const life = [0, 1100, 1300, 1600, 1900][tier];
+  const frames = {
+    1: [
+      { transform: 'scale(0.5)', opacity: 0 }, { transform: 'scale(1.12)', opacity: 1, offset: 0.2 },
+      { transform: 'scale(1)', offset: 0.35 }, { transform: 'scale(1)', opacity: 1, offset: 0.8 },
+      { transform: 'translateY(-14px) scale(0.9)', opacity: 0 },
+    ],
+    2: [
+      { transform: 'scale(0.3) rotate(-14deg)', opacity: 0 }, { transform: 'scale(1.25) rotate(8deg)', opacity: 1, offset: 0.18 },
+      { transform: 'scale(0.95) rotate(-5deg)', offset: 0.3 }, { transform: 'scale(1.05) rotate(3deg)', offset: 0.42 },
+      { transform: 'scale(1) rotate(0deg)', opacity: 1, offset: 0.82 }, { transform: 'translateY(-18px) scale(0.9)', opacity: 0 },
+    ],
+    3: [
+      { transform: 'scale(2.2)', opacity: 0 }, { transform: 'scale(0.9)', opacity: 1, offset: 0.14 },
+      { transform: 'scale(1.1)', offset: 0.24 }, { transform: 'scale(1)', offset: 0.34 },
+      { transform: 'scale(1.04)', opacity: 1, offset: 0.84 }, { transform: 'translateY(-22px) scale(1.2)', opacity: 0 },
+    ],
+    4: [
+      { transform: 'scale(0.2) rotate(-200deg)', opacity: 0 }, { transform: 'scale(1.3) rotate(8deg)', opacity: 1, offset: 0.2 },
+      { transform: 'scale(1) rotate(0deg)', offset: 0.32 }, { transform: 'scale(1.08)', offset: 0.5 },
+      { transform: 'scale(1)', opacity: 1, offset: 0.86 }, { transform: 'translateY(-26px) scale(1.25)', opacity: 0 },
+    ],
+  }[tier];
+  ui.comboAnim = ui.comboText.animate?.(frames, { duration: reducedMotion() ? 1 : life, easing: 'ease-out', fill: 'forwards' });
   clearTimeout(ui.comboTimer);
-  ui.comboTimer = later(() => { if (ui) ui.combo.hidden = true; }, 1300);
+  ui.comboTimer = later(() => { if (ui) ui.combo.hidden = true; }, life);
+  if (reducedMotion()) return;
+
+  const rect = ui.comboText.getBoundingClientRect();
+  const base = root.getBoundingClientRect();
+  const cx = rect.left - base.left + rect.width / 2;
+  const cy = rect.top - base.top + rect.height / 2;
+  if (tier >= 2) fx?.burst(cx, cy, tier === 2 ? '#ffb03a' : '#ffd34d', tier === 2 ? 14 : 22, { speed: 260, size: 5 });
+  if (tier >= 3) {
+    later(() => fx?.burst(cx, cy, tier === 4 ? '#ff5bd6' : '#ff7a1a', 18, { speed: 320, size: 6 }), 180);
+    ui.wrap.classList.remove('bs-shake');
+    void ui.wrap.offsetWidth;
+    ui.wrap.classList.add('bs-shake');
+    api.platform.haptic.impact(tier === 4 ? 'heavy' : 'medium');
+  }
+  if (tier === 4) fx?.confetti(colors, 70);
+}
+
+/** Бонус за серию: кнопка бонуса впрыгивает, от неё искры, точки прогресса вспыхивают. */
+function rewardFx(kind) {
+  const b = ui?.bonus[kind];
+  if (!b) return;
+  popIn(b.btn, { from: 0.6, duration: 360 });
+  const rect = b.btn.getBoundingClientRect();
+  const base = root.getBoundingClientRect();
+  fx?.burst(rect.left - base.left + rect.width / 2, rect.top - base.top + rect.height / 2, '#ffd34d', 16, { speed: 220, size: 5 });
+  animate(ui.charge, [{ transform: 'scale(1)' }, { transform: 'scale(1.25)' }, { transform: 'scale(1)' }], { duration: 360 });
 }
 
 // ---------- шапка и бонусы ----------
@@ -843,10 +944,24 @@ function showCombo(n) {
 function renderScore() {
   if (!ui || !game) return;
   ui.score.textContent = shownScore;
-  const k = Math.min(1, game.score / game.target);
+  // процент очищенного поля (как в Brick Blast) — по настоящему полю, а не по анимации
+  const k = clearedShare(game);
   ui.barFill.style.transform = `scaleX(${k})`;
-  const stars = starsFor(game);
-  ui.stars.forEach((s, i) => s.classList.toggle('bs-star-on', stars > i));
+  const pct = k >= 1 ? 100 : Math.floor(k * 100);
+  const text = `${pct}%`;
+  if (ui.percent.textContent !== text) {
+    const tens = Math.floor(pct / 10) !== Math.floor((parseInt(ui.percent.textContent, 10) || 0) / 10);
+    ui.percent.textContent = text;
+    if (tens && pct > 0) popIn(ui.percent, { from: 0.7, duration: 260 });
+  }
+}
+
+/** Прогресс серии до следующего бонуса: точки по числу попаданий подряд. */
+function renderCharge() {
+  if (!ui || !game) return;
+  const got = rewardProgress(game);
+  ui.pips.forEach((pip, i) => pip.classList.toggle('bs-pip-on', i < got));
+  ui.charge.title = T.chargeHint(REWARD_EVERY - got);
 }
 
 function renderBonuses() {
@@ -864,6 +979,7 @@ function renderAll() {
   ui.level.textContent = T.level(game.level);
   renderScore();
   renderBonuses();
+  renderCharge();
 }
 
 function onBonus(kind) {
@@ -906,12 +1022,10 @@ function endGame(outcome) {
 }
 
 function showWin() {
-  const stars = starsFor(game);
-  const starEls = [0, 1, 2].map((i) => el('span', { class: `bs-win-star${i === 1 ? ' bs-win-star-mid' : ''}` }, '★'));
   openModal(el('div', { class: 'bs-win' },
     el('div', { class: 'bs-win-head' },
       el('div', { class: 'bs-win-title' }, T.win.title(game.level)),
-      el('div', { class: 'bs-win-stars' }, starEls),
+      el('div', { class: 'bs-win-cleared' }, T.win.cleared),
     ),
     el('div', { class: 'bs-win-body' },
       el('div', { class: 'bs-win-score' }, T.win.score(game.score)),
@@ -926,17 +1040,12 @@ function showWin() {
       }, T.win.next),
     ),
   ));
-  starEls.forEach((s, i) => later(() => {
-    if (i < stars) {
-      s.classList.add('bs-win-star-on');
-      popIn(s, { from: 0.3, duration: 320 });
-    }
-  }, 300 + i * 260));
   fx?.confetti(colors, 90);
 }
 
 function startLevel(level, saved = null, fresh = null) {
   game = saved ?? fresh ?? newLevel(level);
+  if (!Number.isInteger(game.total)) game.total = countColored(game.grid);   // сохранения до процента
   finished = false;
   view = null;
   busy = false;
@@ -949,6 +1058,8 @@ function startLevel(level, saved = null, fresh = null) {
   reload = 1;
   swapT = 1;
   shownScore = game.score;
+  trail.clear();
+  lastFly = null;
   if (ui) ui.combo.hidden = true;
   renderAll();
   save();
@@ -1019,10 +1130,12 @@ const GEAR = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"
 
 function bonusButton(kind) {
   const count = el('span', { class: 'bs-bonus-count' });
+  const size = 50;
+  const canvas = el('canvas', { class: 'bs-bonus-canvas', width: size * 2, height: size * 2 });
   const btn = el('button', {
     class: `bs-bonus bs-bonus-${kind}`, 'aria-label': T.bonus[kind], title: T.bonus[kind], onclick: () => onBonus(kind),
-  }, el('span', { class: 'bs-bonus-icon' }), count);
-  return { btn, count };
+  }, canvas, count);
+  return { btn, count, canvas, ctx: canvas.getContext('2d'), size, trail: createTrail() };
 }
 
 export default {
@@ -1050,11 +1163,14 @@ export default {
       level: el('div', { class: 'bs-level' }),
       score: el('div', { class: 'bs-score-value' }),
       barFill: el('div', { class: 'bs-bar-fill' }),
-      stars: [0.3, 0.6, 1].map((k) => el('span', { class: 'bs-star', style: `left: ${k * 100}%` }, '★')),
-      combo: el('div', { class: 'bs-combo', hidden: true }),
+      percent: el('div', { class: 'bs-percent' }, '0%'),
+      comboText: el('div', { class: 'bs-combo-text' }),
+      pips: Array.from({ length: REWARD_EVERY }, () => el('span', { class: 'bs-pip' })),
       modal: el('div', { class: 'bs-modal', hidden: true }),
       bonus: Object.fromEntries(BONUS_KINDS.map((k) => [k, bonusButton(k)])),
     };
+    ui.combo = el('div', { class: 'bs-combo', hidden: true }, el('div', { class: 'bs-combo-rays' }), ui.comboText);
+    ui.charge = el('div', { class: 'bs-charge' }, el('div', { class: 'bs-pips' }, ui.pips), el('div', { class: 'bs-charge-label' }, T.charge));
     ui.wrap = el('div', { class: 'bs-wrap' }, canvas, ui.combo);
 
     canvas.addEventListener('pointerdown', onPointerDown);
@@ -1065,12 +1181,13 @@ export default {
     root = el('div', { class: 'bs' },
       el('div', { class: 'bs-top' },
         gear,
-        el('div', { class: 'bs-bar' }, ui.barFill, ...ui.stars),
+        el('div', { class: 'bs-bar' }, ui.barFill),
+        ui.percent,
         el('div', { class: 'bs-score' }, el('div', { class: 'bs-score-label' }, T.score), ui.score),
       ),
       ui.level,
       ui.wrap,
-      el('div', { class: 'bs-bonuses' }, BONUS_KINDS.map((k) => ui.bonus[k].btn)),
+      el('div', { class: 'bs-bonuses' }, BONUS_KINDS.map((k) => ui.bonus[k].btn), ui.charge),
       ui.modal,
       toast.el,
     );
@@ -1080,6 +1197,13 @@ export default {
     document.addEventListener('keydown', onKeydown);
 
     readPalette();
+    // холсты бонусов — в плотности экрана
+    for (const kind of BONUS_KINDS) {
+      const b = ui.bonus[kind];
+      const d = Math.min(window.devicePixelRatio || 1, 2);
+      b.canvas.width = Math.round(b.size * d);
+      b.canvas.height = Math.round(b.size * d);
+    }
     const saved = isValidState(savedGame) && !savedGame.over ? savedGame : null;
     startLevel(saved?.level ?? 1, saved);
 
@@ -1095,7 +1219,7 @@ export default {
       window.__bubble = {
         get game() { return game; }, get view() { return view; }, get busy() { return busy; },
         get anim() { return { popping: popping.length, falling: falling.length, flying: Boolean(flying) }; },
-        fire, step: (dt) => { step(dt); draw(); }, setAim: (x, y) => updateAim({ x, y }),
+        fire, step: (dt) => { step(dt); draw(); }, setAim: (x, y) => updateAim({ x, y }), combo: showCombo, bonus: onBonus,
       };
     }
   },
