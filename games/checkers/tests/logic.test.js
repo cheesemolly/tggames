@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import {
   WHITE, BLACK, DRAW_PLIES, initialBoard, generateMoves, applyMove, squareName, newGame, playMove, undoMove, result,
   bestMove, evaluate, count, isValidState, emptyStats, isValidStats, migrateStats, LEVEL_IDS, MODES,
+  LEVELS,
 } from '../logic.js';
 
 function seeded(seed) {
@@ -142,11 +143,11 @@ test('партия: ход, отмена, конец игры, ничьи', () =
 test('движок: берёт бесплатную шашку, не подставляется, мастер обыгрывает случайного', () => {
   // белая дамка может взять одну шашку — возьмёт
   const b = board({ c3: 1, d4: -1, h8: -1, a7: -1 });
-  const m = bestMove(b, WHITE, { level: 'easy', noise: 0, blunder: 0 });
+  const m = bestMove(b, WHITE, { level: 'easy', noise: 0, blunder: 0, mistake: 0 });
   assert.equal(m.captures.length, 1);
   // средний уровень не отдаёт шашку даром: ход e3-f4 под чёрную g5 (бьёт на e3) — не выберет
   const safe = board({ e3: 1, a3: 1, g5: -1, h8: -1 });
-  const mv = bestMove(safe, WHITE, { level: 'medium', noise: 0 });
+  const mv = bestMove(safe, WHITE, { level: 'medium', noise: 0, mistake: 0 });
   assert.notEqual(names(mv), 'e3-f4');
   // сильный уровень против случайных ходов
   const rng = seeded(4);
@@ -156,7 +157,7 @@ test('движок: берёт бесплатную шашку, не подст�
     let res = null;
     for (let ply = 0; ply < 200 && !res; ply++) {
       const moves = generateMoves(s.board, s.turn);
-      const move = s.turn === WHITE ? bestMove(s.board, WHITE, { level: 'medium', noise: 0, timeMs: 150 }) : moves[Math.floor(rng() * moves.length)];
+      const move = s.turn === WHITE ? bestMove(s.board, WHITE, { level: 'medium', noise: 0, mistake: 0, timeMs: 150 }) : moves[Math.floor(rng() * moves.length)];
       playMove(s, move);
       res = result(s);
     }
@@ -193,12 +194,40 @@ test('поддавки: без ходов и шашек — победа; бот
   assert.ok(isValidState(JSON.parse(JSON.stringify(s))));
   // белые c3 и g3, чёрная d6: ход c3-d4 подставляет шашку под бой (чёрные обязаны бить) — в поддавках это хорошо
   const give = board({ c3: 1, g3: 1, e5: -1, h8: -1 });
-  const m = bestMove(give, WHITE, { level: 'medium', mode: 'giveaway', noise: 0 });
+  const m = bestMove(give, WHITE, { level: 'medium', mode: 'giveaway', noise: 0, mistake: 0 });
   const after = applyMove(give, m);
   const replies = generateMoves(after, BLACK);
   assert.ok(replies.length && replies[0].captures.length > 0, `ход ${names(m)} должен подставить шашку`);
   // та же позиция в классике — не подставляет
-  const cm = bestMove(give, WHITE, { level: 'medium', mode: 'classic', noise: 0 });
+  const cm = bestMove(give, WHITE, { level: 'medium', mode: 'classic', noise: 0, mistake: 0 });
   assert.ok(!generateMoves(applyMove(give, cm), BLACK)[0]?.captures.length, `классика: ${names(cm)} не подставляет`);
   assert.ok(evaluate(board({ c3: 1, h8: -1, g7: -1 }), WHITE, 'giveaway') > 0, 'меньше шашек — лучше');
+});
+
+test('уровни: лестница по силе, слабые не видят ударов за горизонтом, подсказка точная', () => {
+  const play = (a, b, seed) => {
+    const rng = seeded(seed);
+    const s = newGame(WHITE, 'medium');
+    for (let ply = 0; ply < 160; ply++) {
+      const r = result(s);
+      if (r) return r.winner ?? 0;
+      playMove(s, bestMove(s.board, s.turn, { level: s.turn === WHITE ? a : b, rng, timeMs: 1e9 }));
+    }
+    return 0;
+  };
+  // каждый следующий уровень обыгрывает предыдущий (по очкам, цветами поровну)
+  for (const [strong, weak] of [['easy', 'novice'], ['medium', 'easy'], ['hard', 'medium']]) {
+    let score = 0;
+    for (let g = 0; g < 8; g++) {
+      const r = g % 2 ? -play(weak, strong, g + 1) : play(strong, weak, g + 1);
+      score += r > 0 ? 1 : r === 0 ? 0.5 : 0;
+    }
+    assert.ok(score >= 5, `${strong} против ${weak}: ${score} из 8`);
+  }
+  // слабые уровни не досчитывают взятия за горизонтом (не находят «удары»), сильные — досчитывают
+  assert.equal(LEVELS.novice.quiesce, false);
+  assert.equal(LEVELS.easy.quiesce, false);
+  assert.notEqual(LEVELS.hard.quiesce, false);
+  const hint = bestMove(initialBoard(), WHITE, { level: 'hint' });
+  assert.ok(hint, 'подсказка считается отдельной точной настройкой');
 });
