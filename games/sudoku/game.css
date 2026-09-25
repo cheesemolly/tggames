@@ -74,6 +74,7 @@
 [data-game="sudoku"] .hint { color: var(--sd-hint); }
 
 [data-game="sudoku"] .sd {
+  container-type: inline-size;         /* 100cqw ниже — ширина игры: по ней ограничена высота доски */
   position: relative;
   flex: 1;
   min-height: 0;
@@ -131,9 +132,13 @@
   flex: 1;
   min-height: 0;
   display: flex;
-  align-items: flex-start;              /* доска сразу под строкой статуса, свободное место — ниже */
+  align-items: flex-start;              /* доска сразу под строкой статуса */
   justify-content: center;
   container-type: size;
+  /* Не выше, чем доска широка: иначе область доски забирала всё свободное место, и инструменты с цифрами
+     прижимались к самому низу экрана — тянуться неудобно (скрин владельца). Теперь они сразу под полем,
+     а свободное место — под цифрами. */
+  max-height: 100cqw;
 }
 [data-game="sudoku"] .sd-board {
   --size: min(100cqw, 100cqh);
