@@ -25,8 +25,17 @@ export const SPEED = 64;                   // px/с — скорость про�
 export const OB_W = 28;                    // обычная ширина (стена с дверью — всегда такая)
 export const FREE_MIN = 56;                // свободного места между препятствиями
 export const FREE_MAX = 88;
-export const GAP = 64;
+export const GAP = 64;                     // обычный проём (для стены перед дверью и как «средний»)
 export const DIAG_GAP = 70;                // у диагонального проём чуть выше
+// Высота проёма у каждого препятствия своя (просьба владельца: «узкость везде одинаковая»). Первые
+// препятствия — пошире, к RAMP-му проёмы могут сужаться до минимума; проходимость проверена автопилотом.
+export const GAP_MIN = 54;
+export const GAP_MAX = 78;
+export const DIAG_GAP_MIN = 68;               // диагональ уже 68 — почти непроходима (автопилот, 300 зёрен)
+export const DIAG_GAP_MAX = 82;
+export const GAP_EASY = 68;                // нижняя граница проёма в самом начале
+export const RAMP = 40;                    // препятствий до полной сложности
+export const GLIDE_STOP = 56;              // «планирование» кончается, когда до первого препятствия столько px
 export const MAX_UP = 48;                  // на 64 px свободного места следующий проём может быть выше на столько
 export const MAX_DOWN = 64;                // и ниже на столько
 export const EDGE = 26;                    // проём не ближе к потолку/полу (до края проёма)
@@ -156,6 +165,7 @@ export function newGame(rng = Math.random) {
     y: HOVER_Y, vy: 0, dist: 0, idle: 0, t: 0, score: 0, phase: 'ready', flapT: -1,
     obstacles: [], gates: [], scene: 'kitchen', sceneLeft: randInt(rng, SCENE_MIN, SCENE_MAX),
     nextX: FIRST_X, free: FREE_MAX, lastGapY: HOVER_Y + BURGER_H / 2, lastType: null, visits: { kitchen: 1, street: 0 },
+    made: 0,                               // сколько препятствий построено — для сужения проёмов
     // первый проём — прямой и ровно на высоте, где бургер «планирует»: после заставки игрок не разобьётся,
     // пока не начал нажимать (замечание владельца: не умирать на переходе от лого к игре)
     alignFirst: true,
@@ -185,7 +195,14 @@ export function fillAhead(s, rng = Math.random) {
     const type = pick(TYPES[s.scene].filter((t) => t !== s.lastType && !(s.alignFirst && DIAGONAL.has(t))), rng);
     const w = pick(WIDTHS[type], rng);
     const diag = DIAGONAL.has(type);
-    const gap = diag ? DIAG_GAP : GAP;
+    // высота проёма: случайная, в начале — только широкие; первый (после заставки) — самый широкий
+    const ramp = Math.min(1, s.made / RAMP);
+    const gapLo = Math.round(GAP_EASY + (GAP_MIN - GAP_EASY) * ramp);
+    // только чётные: половина проёма — целая, иначе хитбоксы на пиксель залезали бы в проём
+    const even = (lo, hi) => 2 * randInt(rng, Math.ceil(lo / 2), Math.floor(hi / 2));
+    const gap = s.alignFirst ? GAP_MAX
+      : diag ? even(Math.max(DIAG_GAP_MIN, gapLo + 14), DIAG_GAP_MAX)
+        : even(gapLo, GAP_MAX);
     // вход проёма — в пределах досягаемости от выхода предыдущего (пропорционально свободному месту)
     const k = s.free / 64;
     const lo0 = Math.max(EDGE + gap / 2, s.lastGapY - MAX_UP * k);
@@ -231,6 +248,7 @@ export function fillAhead(s, rng = Math.random) {
     s.lastType = ob.type;
     s.lastGapY = exitGapY(ob);
     s.lastSlope = ob.slope;
+    s.made += 1;
     s.sceneLeft -= 1;
     s.free = randInt(rng, FREE_MIN, FREE_MAX);
     // перед дверью — самое большое свободное место: нырнуть под притолоку после взмаха. С минимальным
@@ -305,9 +323,19 @@ export function step(s, dt, rng = Math.random) {
     }
     if (s.phase === 'over') break;
     if (s.phase === 'glide') {
-      // «планирование»: высота держится сама, мир едет
-      s.y = HOVER_Y + Math.sin(s.t * 5) * 3;
-      s.vy = 0;
+      // «планирование»: высота держится сама, мир едет. Перед первым препятствием управление отдаётся
+      // игроку (просьба владельца: иначе бургер сам пролетал первые препятствия) — не нажал, значит упадёт
+      const first = s.obstacles.find((o) => !o.passed);
+      if (first && first.x - s.dist - (BURGER_X + BURGER_W) <= GLIDE_STOP) {
+        s.phase = 'play';
+        s.vy = 0;
+      } else {
+        s.y = HOVER_Y + Math.sin(s.t * 5) * 3;
+        s.vy = 0;
+      }
+    }
+    if (s.phase === 'glide') {
+      // высота уже выставлена выше
     } else {
       s.vy = Math.min(MAX_FALL, s.vy + GRAVITY * h);
       s.y += s.vy * h;
