@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { menuLine, NOT_PLAYED } from '../menu-line.js';
+import { menuLine, NOT_PLAYED, IN_PROGRESS } from '../menu-line.js';
 import { games } from '../registry.js';
 
 const stats = (played = 0, wins = 0, best = null) => ({ played, wins, best });
@@ -37,6 +37,28 @@ test('Wordle: вместо рекорда — серия побед', () => {
   const menu = { best: false, progress: 'append' };
   assert.equal(menuLine(stats(12, 9, 60), { menu, progress: 'Стрик: 3' }), 'Сыграно: 12 · Побед: 9 · Стрик: 3');
   assert.equal(menuLine(stats(0, 0, null), { menu }), NOT_PLAYED);
+});
+
+test('начатая партия — не «Ещё не играли»', () => {
+  const save = { state: { difficulty: 'easy' }, elapsedMs: 1000 };
+  // Судоку, 2048, шашки: законченных партий нет, а партия идёт.
+  assert.equal(menuLine(stats(0), { save }), IN_PROGRESS);
+  assert.equal(menuLine(stats(0), { menu: { wins: false, best: false }, save }), IN_PROGRESS, 'маджонг');
+  // Сыгранные партии есть — статистика, про начатую говорит значок «продолжить».
+  assert.equal(menuLine(stats(5, 1), { save }), 'Сыграно: 5 · Побед: 1');
+  // Уровневая игра, ещё ничего не сообщившая, но с начатой партией.
+  assert.equal(menuLine(stats(0), { menu: { progress: 'replace' }, save }), IN_PROGRESS);
+  // Wordle: партия идёт, серии ещё нет.
+  assert.equal(menuLine(stats(0), { menu: { best: false, progress: 'append' }, save }), IN_PROGRESS);
+});
+
+test('«Соедини точки»: где сейчас забег', () => {
+  const menu = games.find((g) => g.id === 'connect-dots').menu;
+  const save = { state: { round: 8 } };
+  assert.equal(menuLine(stats(0), { menu, save }), 'Сейчас: уровень 8', 'без таймера забег не кончается');
+  assert.equal(menuLine(stats(2, 0, 7), { menu, save }), 'Сыграно: 2 · Рекорд: Уровень 7 · Сейчас: уровень 8');
+  assert.equal(menuLine(stats(2, 0, 7), { menu }), 'Сыграно: 2 · Рекорд: Уровень 7');
+  assert.equal(menuLine(stats(0), { menu }), NOT_PLAYED);
 });
 
 test('в реестре у каждой игры разумная настройка меню', () => {

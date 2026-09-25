@@ -29,20 +29,29 @@ export const account = {
     return Boolean(me?.isAdmin);
   },
 
-  async request(path, { method = 'GET', payload = null } = {}) {
+  async request(path, { method = 'GET', payload = null, keepalive = false } = {}) {
     if (!this.enabled) return { ok: false, error: 'no_init_data' };
     const headers = { Authorization: `tma ${platform.initData}` };
     if (payload) headers['Content-Type'] = 'application/json';
 
+    const send = (alive) => fetch(API_URL + path, {
+      method,
+      headers,
+      body: payload ? JSON.stringify(payload) : undefined,
+      keepalive: alive,   // отправка при закрытии мини-приложения: браузер доводит запрос до конца
+    });
     let response;
     try {
-      response = await fetch(API_URL + path, {
-        method,
-        headers,
-        body: payload ? JSON.stringify(payload) : undefined,
-      });
+      response = await send(keepalive);
     } catch {
-      return { ok: false, error: 'network' };
+      // Часть браузеров не пускает keepalive-запрос с предварительной CORS-проверкой (у нас заголовок
+      // Authorization) — тогда обычным запросом, как раньше.
+      try {
+        if (!keepalive) throw new Error('network');
+        response = await send(false);
+      } catch {
+        return { ok: false, error: 'network' };
+      }
     }
 
     let data = {};
@@ -71,8 +80,8 @@ export const account = {
     return this.request('/state');
   },
 
-  saveState(data, base) {
-    return this.request('/state', { method: 'PUT', payload: { data, base } });
+  saveState(data, base, { keepalive = false } = {}) {
+    return this.request('/state', { method: 'PUT', payload: { data, base }, keepalive });
   },
 
   // ---------- панель владельца ----------
