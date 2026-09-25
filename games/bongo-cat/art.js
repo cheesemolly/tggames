@@ -23,7 +23,7 @@ const cat = `
 const paws = `
 <g class="bc-paws">
   <g class="bc-paw bc-paw-left" data-paw="left">
-    <g class="bc-up">
+    <g class="bc-up" clip-path="url(#bc-above-table)">
       <path class="bc-stroke" d="M428 57 Q407 70 399 97"/>
       <path class="bc-stroke bc-fill" d="M347 131 L347 101 Q346 74 368 72 Q389 71 399 97"/>
       <g class="bc-pads"><circle cx="366" cy="88" r="4.5"/><circle cx="380" cy="92" r="4.5"/><circle cx="359" cy="99" r="3.8"/><ellipse cx="373" cy="106" rx="7" ry="8.5"/></g>
@@ -35,12 +35,16 @@ const paws = `
   </g>
 
   <g class="bc-paw bc-paw-right" data-paw="right">
-    <g class="bc-up">
+    <g class="bc-up" clip-path="url(#bc-above-table)">
       <path class="bc-stroke bc-fill" d="M566 183 L566 150 Q567 121 591 121 Q611 122 617 146"/>
       <g class="bc-pads"><circle cx="584" cy="137" r="4.5"/><circle cx="598" cy="141" r="4.5"/><circle cx="577" cy="148" r="3.8"/><ellipse cx="590" cy="155" rx="7" ry="8.5"/></g>
     </g>
     <g class="bc-down">
-      <path class="bc-stroke bc-fill" d="M562 158 Q543 176 540 196 Q540 214 566 216 Q604 214 638 196"/>
+      <!-- лапа — замкнутая форма: заливка по контуру лапы, обводка по обоим бокам (верх — внутри тела).
+           Раньше контур был открытым, и заливка замыкалась прямой к плечу — торчал чёрный клин поверх
+           пианино, тарелки и колокольчика (скрины владельца) -->
+      <path class="bc-fill-only" d="M560 150 Q543 176 540 196 Q540 214 566 216 Q598 214 613 197 Q625 180 623 160 Z"/>
+      <path class="bc-stroke" d="M560 150 Q543 176 540 196 Q540 214 566 216 Q598 214 613 197 Q625 180 623 160"/>
       <g class="bc-impact"><path d="M509 200 h13"/><path d="M513 230 l10 -8"/><path d="M544 234 l-2 12"/></g>
     </g>
   </g>
@@ -141,7 +145,8 @@ const tambourine = `
 
 const cowbell = `
 <g class="bc-inst" data-inst="cowbell">
-  <path class="bc-stand" d="M592 176 L592 150 M592 262 L592 345"/>
+  <!-- стойка только снизу: штырь над колокольчиком торчал выше стола прямо в тело кота -->
+  <path class="bc-stand" d="M592 262 L592 345"/>
   <g class="bc-swing">
     <path class="bc-metal" d="M566 176 L618 176 L644 262 L540 262 Z"/>
     <path class="bc-metal-hi" d="M574 184 L590 184 L582 254 L556 254 Z"/>
@@ -153,6 +158,12 @@ const cowbell = `
 /** Весь SVG сцены. Стол — длинная линия: при вписывании кадра в экран её видно от края до края. */
 export function sceneMarkup() {
   return `<svg class="bc-scene" viewBox="${VIEWBOX}" preserveAspectRatio="xMidYMax meet" aria-hidden="true">
+  <defs>
+    <!-- поднятые лапы кончаются ровно на линии стола: иначе «ножки» лапы торчали под столом и на пианино -->
+    <clipPath id="bc-above-table" clipPathUnits="userSpaceOnUse">
+      <polygon points="-1200,-1000 2000,-1000 2000,${tableY(2000)} -1200,${tableY(-1200)}"/>
+    </clipPath>
+  </defs>
   <line class="bc-table" x1="-1200" y1="${tableY(-1200)}" x2="2000" y2="${tableY(2000)}"/>
   ${cat}
   <g class="bc-instruments">${bongo}${keyboard}${marimba}${cymbal}${tambourine}${cowbell}</g>

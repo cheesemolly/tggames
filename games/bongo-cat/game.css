@@ -118,6 +118,7 @@
 }
 [data-game="bongo-cat"] .bc-stroke.bc-thin { stroke-width: 4; }
 [data-game="bongo-cat"] .bc-stroke.bc-fill { fill: var(--bc-bg); }
+[data-game="bongo-cat"] .bc-fill-only { fill: var(--bc-bg); stroke: none; }
 [data-game="bongo-cat"] .bc-ink { fill: var(--bc-line); }
 [data-game="bongo-cat"] .bc-pads { fill: var(--bc-pad-pink); }
 [data-game="bongo-cat"] .bc-impact path { stroke: var(--bc-impact); stroke-width: 4; stroke-linecap: round; fill: none; }
