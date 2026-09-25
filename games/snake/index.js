@@ -643,40 +643,59 @@ function openStats() {
   ]);
 }
 
+/**
+ * Картинка предмета для окна «?» — тем же рисовальщиком, что и поле, в текущем виде (3D/2D) и скине
+ * (замечание владельца: абстрактные кружки вместо предметов были непонятны).
+ */
+function itemIcon(spec, size = 34) {
+  const canvas = el('canvas', { class: 'sn-help-canvas' });
+  const r = createRenderer(canvas);
+  r.setView(settings.view);
+  r.resize(size, size);
+  r.icon(spec, pal ?? readPalette());
+  return canvas;
+}
+
 /** «?» — что есть в игре: бонусы, усилители, еда, препятствия, режимы. */
 function openHelp() {
   if (game?.started && !game.dead) setPaused(true);
+  const specs = (icon) => (Array.isArray(icon) ? icon : [icon]);
   const row = (icon, title, text) => el('div', { class: 'sn-help-row' },
-    el('span', { class: 'sn-help-icon', style: `--c:${icon.color}` }, icon.sign), el('span', {}, el('b', {}, title), ` — ${text}`));
+    el('span', { class: 'sn-help-icon' }, specs(icon).map((spec) => itemIcon(spec))),
+    el('span', {}, el('b', {}, title), ` — ${text}`));
+  const fruit = (name) => ({ food: { kind: 'apple', fruit: name } });
+  const MODE_ICONS = {
+    walls: 'brick', portal: 'portal', winged: fruit('strawberry'), poison: { food: { kind: 'poison' } }, twin: 'twin',
+  };
   openModal([
     el('h2', {}, 'Что есть в игре'),
     el('p', { class: 'sn-muted' }, 'Свайпай в любом месте поля — змейка поворачивает сразу, пока палец движется. Можно вести палец «змейкой», '
       + 'не отрывая. На компьютере — стрелки или WASD, пробел — пауза. Нельзя врезаться в стены и в себя.'),
     el('div', { class: 'sn-section' }, 'Еда'),
     el('div', { class: 'sn-help' },
-      row({ color: '#ef4444', sign: '●' }, 'Фрукты', 'яблоко, груша, апельсин, банан, виноград, клубника, арбуз: +1 к длине, очки по скорости'),
-      row({ color: '#c98b3c', sign: '●' }, 'Бургер', 'редкий и сытный: очки ×2, змейка растёт на 2'),
-      row({ color: '#ffd23f', sign: '★' }, 'Бонусная еда', 'звезда, вишня или кристалл после каждых 5 съеденных. Лежит недолго (кольцо '
+      row([fruit('apple'), fruit('banana'), fruit('grapes')], 'Фрукты', 'яблоко, груша, апельсин, банан, виноград, клубника, арбуз: +1 к длине, очки по скорости'),
+      row(fruit('burger'), 'Бургер', 'редкий и сытный: очки ×2, змейка растёт на 2'),
+      row([{ food: { kind: 'bonus', bonus: 'star' } }, { food: { kind: 'bonus', bonus: 'gem' } }], 'Бонусная еда', 'звезда, вишня или кристалл после каждых 5 съеденных. Лежит недолго (кольцо '
         + 'вокруг — оставшееся время): чем быстрее съешь, тем больше очков. Змейка от неё не растёт'),
-      row({ color: '#8b5cf6', sign: '●' }, 'Ядовитый гриб', 'в режиме «Яд»: змейка короче на 3, минус 20 очков'),
+      row({ food: { kind: 'poison' } }, 'Ядовитый гриб', 'в режиме «Яд»: змейка короче на 3, минус 20 очков'),
     ),
     el('div', { class: 'sn-section' }, 'Усилители'),
     el('p', { class: 'sn-muted sn-small' }, 'Иногда появляются шарики-усилители. Полоска под названием вверху — сколько ему осталось.'),
     el('div', { class: 'sn-help' },
-      row({ color: '#ef4444', sign: 'U' }, 'Магнит', 'еда рядом сама плавно ползёт к голове'),
-      row({ color: '#38bdf8', sign: '◷' }, 'Замедление', 'змейка ползёт медленнее — проще проскочить'),
-      row({ color: '#22c55e', sign: '⛨' }, 'Щит', 'один удар простится: змейка остановится на пару шагов — успей повернуть'),
-      row({ color: '#f59e0b', sign: '×2' }, '×2', 'очки за еду удваиваются'),
+      row({ food: { kind: 'power', power: 'magnet', ttl: 60 } }, 'Магнит', 'еда рядом сама плавно ползёт к голове'),
+      row({ food: { kind: 'power', power: 'slow', ttl: 60 } }, 'Замедление', 'змейка ползёт медленнее — проще проскочить'),
+      row({ food: { kind: 'power', power: 'shield', ttl: 60 } }, 'Щит', 'один удар простится: змейка остановится на пару шагов — успей повернуть'),
+      row({ food: { kind: 'power', power: 'double', ttl: 60 } }, '×2', 'очки за еду удваиваются'),
     ),
     el('div', { class: 'sn-section' }, 'Препятствия на уровнях'),
     el('div', { class: 'sn-help' },
-      row({ color: '#64748b', sign: '■' }, 'Стены', 'врезаться нельзя'),
-      row({ color: '#22d3ee', sign: '◎' }, 'Порталы', 'вполз в один — выполз из такого же цвета'),
-      row({ color: '#9ca3af', sign: '▲' }, 'Шипы', 'то поднимаются, то прячутся; перед подъёмом мигают. Опасны только поднятые'),
-      row({ color: '#dc2626', sign: '■' }, 'Патруль', 'блок с глазами ходит туда-обратно. В змейку он не въедет — не въезжай в него сам'),
+      row('wall', 'Стены', 'врезаться нельзя'),
+      row('portal', 'Порталы', 'вполз в один — выполз из такого же цвета'),
+      row('spikes', 'Шипы', 'то поднимаются, то прячутся; перед подъёмом мигают. Опасны только поднятые'),
+      row('mover', 'Патруль', 'блок с глазами ходит туда-обратно. В змейку он не въедет — не въезжай в него сам'),
     ),
     el('div', { class: 'sn-section' }, 'Режимы классики'),
-    el('div', { class: 'sn-help' }, MODES.map((id) => row({ color: 'var(--tg-theme-button-color)', sign: '•' }, MODE_INFO[id].title, MODE_INFO[id].text.toLowerCase()))),
+    el('div', { class: 'sn-help' }, MODES.map((id) => row(MODE_ICONS[id], MODE_INFO[id].title, MODE_INFO[id].text.toLowerCase()))),
     el('button', { class: 'sn-btn', onclick: closeModal }, 'Понятно'),
   ]);
 }

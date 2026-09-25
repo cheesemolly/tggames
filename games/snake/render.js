@@ -888,7 +888,43 @@ export function createRenderer(canvas) {
     ctx.stroke();
   }
 
-  return { resize, draw, cellCenter, setView };
+  /**
+   * Картинка одного предмета для окна «?» — теми же рисовалками, что и на поле, без стола.
+   * spec: { food } (как в s.foods: kind apple/bonus/power/poison), 'wall', 'brick', 'portal', 'spikes',
+   * 'mover', 'twin'. Холст заранее размером через resize().
+   */
+  function icon(spec, pal, time = 0.4) {
+    // предметы на поле разного размера относительно клетки — в окне все примерно в размер значка
+    const kind = spec.food?.kind;
+    const zoom = kind === 'bonus' ? 1.05 : kind ? 1.55 : spec === 'twin' ? 1.25 : spec === 'portal' ? 1.1 : spec === 'spikes' ? 1.05 : 0.7;
+    const c = W * zoom;
+    // предметы «парят» над клеткой (bob ≈ 0.24) — клетка ниже середины, чтобы сам предмет был по центру
+    const lift = kind && kind !== 'poison' ? 0.26 : spec === 'twin' ? 0.3 : 0.14;
+    L = { c, rh: c * V.row, cx: W / 2, oy: (H - c * V.row) / 2 + c * lift * Math.max(V.z, 0.6), cols: 1, rows: 1 };
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    const s = { cols: 1, rows: 1, steps: 0 };
+    if (spec.food) {
+      drawFood({ idx: 0, ttl: BONUS_TTL, ...spec.food }, s, pal, time, 1);
+    } else if (spec === 'wall' || spec === 'brick') {
+      L.oy += c * 0.12 * V.z;
+      const brick = spec === 'brick';
+      cube(0, 0, WALL_H, brick ? pal.brick : pal.wallTop, brick ? shade(pal.brick, -0.35) : pal.wallSide, { inset: 0.04 });
+      if (brick) brickLines(0, 0);
+    } else if (spec === 'portal') {
+      drawPortal({ id: 'a', a: 0, b: 0 }, s, time);
+    } else if (spec === 'spikes') {
+      drawSpikeFloor({ idx: 0 }, s);
+      drawSpikes({ idx: 0 }, s, pal, 1);
+    } else if (spec === 'mover') {
+      drawMover({ path: [0, 1], pos: 0, step: 1 }, s, pal, time);
+    } else if (spec === 'twin') {
+      sphere(-0.16, 0, 0.3, 0.3, pal.snakeHead);
+      sphere(0.16, 0, 0.3, 0.3, pal.twinHead);
+    }
+  }
+
+  return { resize, draw, cellCenter, setView, icon };
 }
 
 // ---------- цвета ----------
