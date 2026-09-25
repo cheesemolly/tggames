@@ -134,7 +134,8 @@ function renderBoard(fx = null) {
   const selValue = selected >= 0 && game ? game.values[selected] : 0;
   const peers = selected >= 0 && !hint ? new Set(PEERS[selected]) : new Set();
   const conflict = game ? conflicts(game) : new Set();
-  const h = hint?.highlight;
+  const h = hint ? hint.pages[hint.page].show : null;
+  ui.board.classList.toggle('sd-hinting', Boolean(h));
 
   ui.cells.forEach((cell, i) => {
     const value = game ? game.values[i] : 0;
@@ -145,19 +146,38 @@ function renderBoard(fx = null) {
       else if (value) cls.push('sd-user');
     }
     if (h) {
-      if (h.area.has(i)) cls.push('sd-hint-area');
-      if (h.elim.has(i)) cls.push('sd-hint-elim');
-      if (h.key.has(i)) cls.push('sd-hint-key');
-      if (h.target === i) cls.push('sd-hint-target');
+      if (h.area.has(i)) cls.push('sd-h-area');
+      if (h.elim.has(i)) cls.push('sd-h-elim');
+      if (h.key.has(i)) cls.push('sd-h-key');
+      if (h.target === i) cls.push('sd-h-target');
+      if (h.wrong === i) cls.push('sd-h-wrong');
     } else {
       if (peers.has(i)) cls.push('sd-peer');
       if (selValue && value === selValue && i !== selected) cls.push('sd-same');
       if (i === selected) cls.push('sd-selected');
     }
-    if (conflict.has(i)) cls.push('sd-conflict');   // одинаковые цифры в группе — обе красным фоном
+    if (conflict.has(i) && !h) cls.push('sd-conflict');   // одинаковые цифры в группе — обе красным фоном
     cell.className = cls.join(' ');
 
-    if (value) {
+    if (h && !value && (h.reveal && h.target === i)) {
+      // последняя страница подсказки: цифра ответа уже видна в клетке
+      cell.replaceChildren(el('span', { class: 'sd-val sd-h-reveal' }, h.reveal));
+    } else if (h && !value && (h.cands.has(i) || h.elim.has(i))) {
+      // варианты, о которых говорит подсказка: нужные — цветом, вычеркнутые — красным крестом
+      const on = h.cands.get(i) ?? [];
+      const off = h.elim.get(i) ?? [];
+      if (on.length + off.length === 1) {
+        // одна цифра — крупно по центру клетки, мелкая заметка на телефоне почти не видна
+        cell.replaceChildren(el('span', { class: `sd-h-one ${off.length ? 'sd-h-x' : 'sd-h-cand'}` }, off[0] ?? on[0]));
+        return;
+      }
+      const notes = el('div', { class: 'sd-notes' });
+      for (let d = 1; d <= 9; d++) {
+        notes.append(el('span', { class: off.includes(d) ? 'sd-h-x' : on.includes(d) ? 'sd-h-cand' : '' },
+          off.includes(d) || on.includes(d) ? d : ''));
+      }
+      cell.replaceChildren(notes);
+    } else if (value) {
       cell.replaceChildren(el('span', { class: 'sd-val' }, value));
     } else if (game && game.notes[i]) {
       const notes = el('div', { class: 'sd-notes' });
@@ -170,6 +190,8 @@ function renderBoard(fx = null) {
       cell.replaceChildren();
     }
   });
+
+  renderHintLayer(h);
 
   if (fx) {
     const cell = ui.cells[fx.cell];
@@ -385,21 +407,11 @@ function onHint() {
   const found = buildHint(game.values, game.solution);
   if (!found) return;
   game.hintsLeft--;
-  hint = found;
+  hint = { ...found, page: 0 };
   selected = found.action.cell;
   save();
 
-  ui.hintPanel.replaceChildren(el('div', { class: 'sd-hint-card', role: 'dialog', 'aria-label': t.tools.hint },
-    el('ol', { class: found.steps.length > 1 ? 'sd-hint-steps sd-hint-numbered' : 'sd-hint-steps' },
-      found.steps.map((step) => el('li', {},
-        el('div', { class: 'sd-hint-title' }, step.title),
-        el('div', { class: 'sd-hint-text' }, step.text),
-      ))),
-    el('div', { class: 'sd-hint-actions' },
-      el('button', { class: 'btn btn-secondary', onclick: closeHint }, t.hint.close),
-      el('button', { class: 'btn', onclick: applyHint }, t.hint.apply),
-    ),
-  ));
+  renderHintPanel();
   hintToken++;
   ui.hintPanel.getAnimations({ subtree: true }).forEach((a) => a.cancel());
   flipSize(ui.board, () => {
@@ -411,6 +423,58 @@ function onHint() {
     { opacity: 1, transform: 'none' },
   ], { duration: 280, easing: EASE_OUT });
   renderAll();
+}
+
+/**
+ * Панель подсказки: заголовок, текст страницы с цветными ссылками на подсветку доски, внизу —
+ * ‹ точки › (на последней странице вместо › — «Готово» / «Стереть»).
+ */
+function renderHintPanel() {
+  const { pages, page } = hint;
+  const current = pages[page];
+  const last = page === pages.length - 1;
+  const text = current.text.map((seg) => (typeof seg === 'string' ? seg : el('span', { class: `sd-mark sd-mark-${seg.m}` }, seg.t)));
+  const nav = (dir) => () => setHintPage(page + dir);
+  ui.hintPanel.replaceChildren(el('div', { class: pages.length > 1 ? 'sd-hint-card' : 'sd-hint-card sd-hint-single', role: 'dialog', 'aria-label': t.tools.hint },
+    el('div', { class: 'sd-hint-head' },
+      el('div', { class: 'sd-hint-title' }, current.title),
+      el('button', { class: 'sd-icon-btn sd-hint-close', 'aria-label': t.hint.close, title: t.hint.close, onclick: closeHint }, '✕'),
+    ),
+    el('p', { class: 'sd-hint-text' }, text),
+    el('div', { class: 'sd-hint-nav' },
+      el('button', { class: 'sd-hint-arrow', 'aria-label': t.hint.back, disabled: page === 0, onclick: nav(-1) }, '‹'),
+      el('div', { class: 'sd-hint-dots' }, pages.length > 1 && pages.map((_, n) => el('span', { class: n === page ? 'on' : '' }))),
+      last
+        ? el('button', { class: 'btn sd-hint-done', onclick: applyHint }, hint.action.kind === 'erase' ? t.hint.erase : t.hint.done)
+        : el('button', { class: 'sd-hint-arrow', 'aria-label': t.hint.next, onclick: nav(1) }, '›'),
+    ),
+  ));
+}
+
+function setHintPage(n) {
+  if (!hint || n < 0 || n >= hint.pages.length || n === hint.page) return;
+  hint.page = n;
+  renderHintPanel();
+  renderBoard();
+  api.platform.haptic.selection();
+  animate(ui.hintPanel.querySelector('.sd-hint-text'), [{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }], { duration: 200, easing: EASE_OUT });
+  const reveal = ui.board.querySelector('.sd-h-reveal');
+  if (reveal) pop(reveal);
+}
+
+/** Рамки вокруг групп (строка, столбец, блок), о которых говорит страница, — поверх доски. */
+function renderHintLayer(h) {
+  const frames = [];
+  for (const u of h?.units ?? []) {
+    const cells = UNITS[u].map((i) => ui.cells[i]);
+    const left = Math.min(...cells.map((c) => c.offsetLeft));
+    const top = Math.min(...cells.map((c) => c.offsetTop));
+    const right = Math.max(...cells.map((c) => c.offsetLeft + c.offsetWidth));
+    const bottom = Math.max(...cells.map((c) => c.offsetTop + c.offsetHeight));
+    frames.push(el('div', { class: 'sd-h-frame', style: `left:${left}px;top:${top}px;width:${right - left}px;height:${bottom - top}px` }));
+  }
+  ui.hintLayer.replaceChildren(...frames);
+  frames.forEach((f) => animate(f, [{ opacity: 0, transform: 'scale(1.04)' }, { opacity: 1, transform: 'none' }], { duration: 220, easing: EASE_OUT }));
 }
 
 /** Панель уезжает вниз, затем доска плавно возвращается к полному размеру. */
@@ -654,7 +718,12 @@ function onKeydown(e) {
   }
   if (hint) {
     if (e.key === 'Escape') closeHint();
-    else if (e.key === 'Enter') applyHint();
+    else if (e.key === 'ArrowLeft') setHintPage(hint.page - 1);
+    else if (e.key === 'ArrowRight') setHintPage(hint.page + 1);
+    else if (e.key === 'Enter') {
+      if (hint.page < hint.pages.length - 1) setHintPage(hint.page + 1);
+      else applyHint();
+    }
     e.preventDefault();
     return;
   }
@@ -730,6 +799,7 @@ export default {
       info: { difficulty: infoValue(), mistakes: infoValue(), score: infoValue(), time: infoValue() },
       pauseButton: el('button', { class: 'sd-icon-btn sd-pause-btn', onclick: () => setPaused(!paused) }),
       board: el('div', { class: 'sd-board', role: 'grid' }),
+      hintLayer: el('div', { class: 'sd-hint-layer', 'aria-hidden': 'true' }),
       cells: [],
       pauseCover: el('div', { class: 'sd-pause-cover', hidden: true },
         el('button', { class: 'btn sd-resume', onclick: () => (paused ? setPaused(false) : showPauseCover(false)) }, t.resume)),
@@ -759,7 +829,7 @@ export default {
       ].filter(Boolean);
       ui.cells.push(cell);
     }
-    ui.board.append(...ui.cells);
+    ui.board.append(...ui.cells, ui.hintLayer);
     ui.board.addEventListener('click', (e) => {
       const cell = e.target.closest('.sd-cell');
       if (cell) select(Number(cell.dataset.i));
