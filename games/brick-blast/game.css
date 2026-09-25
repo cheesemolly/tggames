@@ -106,12 +106,11 @@
 [data-game="brick-blast"] .bk-icon-btn svg { width: 20px; height: 20px; }
 
 /* прогресс уровня со звёздами (как в видео) */
-[data-game="brick-blast"] .bk-progress { position: relative; flex: none; height: 22px; margin: 0 24px; }
+/* полоса разбитого и процент справа */
+[data-game="brick-blast"] .bk-progress { flex: none; display: flex; align-items: center; gap: 10px; height: 22px; margin: 0 16px 0 24px; }
 [data-game="brick-blast"] .bk-progress-track {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 8px;
+  position: relative;
+  flex: 1;
   height: 6px;
   border-radius: 3px;
   overflow: hidden;
@@ -126,16 +125,15 @@
   transform-origin: left center;
   transition: transform 0.3s ease-out;
 }
-[data-game="brick-blast"] .bk-star {
-  position: absolute;
-  top: 0;
-  transform: translateX(-50%);
-  font-size: 20px;
-  line-height: 22px;
-  color: color-mix(in srgb, var(--bk-text) 30%, transparent);
-  transition: color 0.3s ease, text-shadow 0.3s ease;
+[data-game="brick-blast"] .bk-percent {
+  flex: none;
+  min-width: 44px;
+  text-align: right;
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--bk-text);
 }
-[data-game="brick-blast"] .bk-star-on { color: #ffc21a; text-shadow: 0 0 8px rgb(255 194 26 / 0.7); }
 
 /* поле */
 [data-game="brick-blast"] .bk-wrap { flex: 1; min-height: 0; display: grid; place-items: center; }

@@ -783,13 +783,14 @@ function renderProgress(force) {
   if (p === lastProgress) return;                 // зовётся каждый кадр полёта — трогаем DOM, только если изменилось
   lastProgress = p;
   ui.fill.style.transform = `scaleX(${p})`;
-  ui.stars.forEach((star, k) => {
-    const on = p >= [1 / 3, 2 / 3, 1][k] - 1e-9;
-    if (on && !star.classList.contains('bk-star-on')) {
-      star.classList.add('bk-star-on');
-      pop(star, { from: 0.3, duration: 360 });
-    } else if (!on) star.classList.remove('bk-star-on');
-  });
+  // процент разбитого вместо звёзд (просьба владельца: звёзды ни на что не влияли); 100% — только когда всё
+  const pct = p >= 1 - 1e-9 ? 100 : Math.floor(p * 100);
+  const text = `${pct}%`;
+  if (ui.percent.textContent !== text) {
+    const tens = Math.floor(pct / 10) !== Math.floor((parseInt(ui.percent.textContent, 10) || 0) / 10);
+    ui.percent.textContent = text;
+    if (tens && pct > 0) pop(ui.percent, { from: 0.7, duration: 260 });
+  }
 }
 
 // ---------- прицел ----------
@@ -1009,7 +1010,7 @@ export default {
       modal: el('div', { class: 'bk-modal', hidden: true }),
     };
     ui.ctx = ui.canvas.getContext('2d');
-    ui.stars = [0, 1, 2].map((k) => el('div', { class: 'bk-star', style: `left: ${[33.3, 66.6, 100][k]}%` }, '★'));
+    ui.percent = el('div', { class: 'bk-percent' }, '0%');
     ui.wrap = el('div', { class: 'bk-wrap' }, ui.canvas);
     ui.track = el('div', { class: 'bk-track' }, el('div', { class: 'bk-track-line' }), ui.knob);
     const recallButton = el('button', { class: 'bk-recall', 'aria-label': T.recall, title: T.recall, onclick: onRecall });
@@ -1041,7 +1042,7 @@ export default {
           iconButton(ICONS.gear, T.settings.open, showSettings),
         ),
       ),
-      el('div', { class: 'bk-progress' }, el('div', { class: 'bk-progress-track' }, ui.fill), ...ui.stars),
+      el('div', { class: 'bk-progress' }, el('div', { class: 'bk-progress-track' }, ui.fill), ui.percent),
       ui.wrap,
       ui.bottom,
       ui.modal,
