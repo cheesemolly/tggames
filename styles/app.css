@@ -3,9 +3,13 @@
 *, *::before, *::after { box-sizing: border-box; }
 [hidden] { display: none !important; }
 
-html, body { margin: 0; height: 100%; }
+/* Страница целиком не прокручивается и не пружинит (iOS в Telegram): прокручиваются только .scroll внутри
+   и окна. Движение пальца вне прокручиваемых мест гасит shell/no-scroll.js. */
+html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; }
 
 body {
+  position: fixed;
+  inset: 0 0 auto 0;
   display: flex;
   flex-direction: column;
   /* В Telegram переменную выставляет telegram-web-app.js; в браузере — запасной 100dvh. */

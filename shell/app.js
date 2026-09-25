@@ -13,8 +13,10 @@ import { migrateStats } from './stats.js';
 import { openGame } from './game-host.js';
 import { createSync } from './sync.js';
 import { renderAdmin } from './admin.js';
+import { lockPageScroll } from './no-scroll.js';
 
 const root = document.getElementById('app');
+lockPageScroll();
 let session = null;
 
 const toast = createToast();
