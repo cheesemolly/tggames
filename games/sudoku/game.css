@@ -23,9 +23,15 @@
   --sd-user: var(--sd-link);
   --sd-error: var(--sd-danger);
   --sd-conflict: color-mix(in srgb, var(--sd-danger) 22%, var(--sd-bg));
-  --sd-hint-area: color-mix(in srgb, var(--sd-accent) 12%, var(--sd-bg));
-  --sd-hint-key: color-mix(in srgb, var(--sd-accent) 32%, var(--sd-bg));
-  --sd-hint-elim: color-mix(in srgb, var(--sd-danger) 16%, var(--sd-bg));
+  /* Подсказка (как на sudoku.com): доска затемнена, «мешающие» цифры — зелёные, перекрытые ими строки/столбцы —
+     голубые, группа — в синей рамке, клетка ответа — светлая. Смысловые цвета одни на все скины и обе темы:
+     они смешиваются с фоном скина, поэтому читаются и на светлом, и на тёмном. */
+  --sd-h-dim: color-mix(in srgb, var(--sd-text) 28%, var(--sd-bg));        /* серая «маска»: и в светлом, и в тёмном скине */
+  --sd-h-dim-text: color-mix(in srgb, var(--sd-text) 55%, var(--sd-h-dim));
+  --sd-h-area: color-mix(in srgb, #38bdf8 42%, var(--sd-bg));
+  --sd-h-key: #22c55e;
+  --sd-h-frame: #3b82f6;
+  --sd-h-elim: #ef4444;
   --sd-flash: color-mix(in srgb, var(--sd-accent) 45%, var(--sd-bg));   /* волна заполнения */
 
   /* общая всплывашка (shared/toast.js) — под строкой статуса и в цветах скина */
@@ -175,15 +181,44 @@
 
 /* Фон — по приоритету: чем ниже правило, тем важнее */
 [data-game="sudoku"] .sd-peer { background: var(--sd-peer); }
-[data-game="sudoku"] .sd-hint-area { background: var(--sd-hint-area); }
 [data-game="sudoku"] .sd-same { background: var(--sd-same); }
-[data-game="sudoku"] .sd-hint-elim { background: var(--sd-hint-elim); }
-[data-game="sudoku"] .sd-hint-key { background: var(--sd-hint-key); }
 [data-game="sudoku"] .sd-conflict { background: var(--sd-conflict); }
 [data-game="sudoku"] .sd-selected { background: var(--sd-selected); }
-[data-game="sudoku"] .sd-hint-target {
-  background: var(--sd-selected);
-  box-shadow: inset 0 0 0 2px var(--sd-accent);
+
+/* Подсказка на доске */
+[data-game="sudoku"] .sd-board { position: relative; }
+[data-game="sudoku"] .sd-board .sd-cell { transition: background-color 0.25s ease, color 0.25s ease; }
+[data-game="sudoku"] .sd-hinting .sd-cell { background: var(--sd-h-dim); color: var(--sd-h-dim-text); }
+[data-game="sudoku"] .sd-hinting .sd-h-area { background: var(--sd-h-area); color: var(--sd-text); }
+[data-game="sudoku"] .sd-hinting .sd-h-elim { background: color-mix(in srgb, var(--sd-h-elim) 22%, var(--sd-bg)); color: var(--sd-text); }
+[data-game="sudoku"] .sd-hinting .sd-h-key { background: var(--sd-h-key); color: #fff; }
+[data-game="sudoku"] .sd-hinting .sd-h-target { background: var(--sd-bg); color: var(--sd-text); }
+[data-game="sudoku"] .sd-hinting .sd-h-wrong { background: color-mix(in srgb, var(--sd-h-elim) 30%, var(--sd-bg)); color: var(--sd-h-elim); }
+[data-game="sudoku"] .sd-h-reveal { color: var(--sd-h-frame); font-weight: 600; }
+/* варианты, о которых говорит подсказка: нужные — зелёные (на зелёной клетке — белые), вычеркнутые — красные с чертой */
+[data-game="sudoku"] .sd-notes .sd-h-cand,
+[data-game="sudoku"] .sd-notes .sd-h-x { font-size: 1.25em; font-weight: 800; }
+[data-game="sudoku"] .sd-h-one { font-size: calc(var(--size) * 0.05); font-weight: 800; }
+[data-game="sudoku"] .sd-hinting .sd-cell .sd-h-cand { color: var(--sd-h-key); }
+[data-game="sudoku"] .sd-hinting .sd-h-key .sd-h-cand { color: #fff; }
+[data-game="sudoku"] .sd-h-x { position: relative; color: var(--sd-h-elim); }
+[data-game="sudoku"] .sd-hinting .sd-h-key .sd-h-x { color: #7f1d1d; }
+[data-game="sudoku"] .sd-h-x::after {
+  content: '';
+  position: absolute;
+  left: 15%;
+  right: 15%;
+  top: 50%;
+  border-top: 2px solid var(--sd-h-elim);
+  transform: rotate(-35deg);
+}
+[data-game="sudoku"] .sd-h-one.sd-h-x::after { left: -30%; right: -30%; transform: rotate(-20deg); }
+[data-game="sudoku"] .sd-hint-layer { position: absolute; inset: 0; pointer-events: none; }
+[data-game="sudoku"] .sd-h-frame {
+  position: absolute;
+  border: 3px solid var(--sd-h-frame);
+  border-radius: 6px;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--sd-h-frame) 25%, transparent), 0 4px 14px rgb(0 0 0 / 0.25);
 }
 
 /* Заметки: сетка 3×3 мелких цифр */
@@ -211,7 +246,14 @@
 [data-game="sudoku"] .sd-resume { width: auto; padding: 14px 32px; }
 
 /* Инструменты и цифры */
-[data-game="sudoku"] .sd-controls { position: relative; flex: none; display: grid; gap: 4px; }
+/* Как в sudoku.com: под полем заметный отступ, инструменты, ещё отступ и крупные цифры; свободное место — ниже. */
+[data-game="sudoku"] .sd-controls {
+  position: relative;
+  flex: none;
+  display: grid;
+  gap: clamp(4px, 3.2vh, 30px);
+  margin-top: clamp(4px, 4vh, 38px);
+}
 
 [data-game="sudoku"] .sd-tools { display: grid; grid-template-columns: repeat(4, 1fr); }
 [data-game="sudoku"] .sd-tool {
@@ -260,20 +302,21 @@
 
 [data-game="sudoku"] .sd-pad { display: grid; grid-template-columns: repeat(9, 1fr); }
 [data-game="sudoku"] .sd-digit {
-  height: 56px;
+  height: 60px;
   padding: 0;
   border: 0;
   border-radius: 8px;
   background: none;
   color: var(--sd-user);
   font: inherit;
-  font-size: 32px;
+  font-size: 38px;
   cursor: pointer;
 }
 [data-game="sudoku"] .sd-digit:active { background: var(--sd-surface); }
 [data-game="sudoku"] .sd-pad-notes .sd-digit { color: var(--sd-hint); font-size: 26px; }
 
 /* Подсказка — на месте инструментов и цифр; доска над ней уменьшается и видна целиком */
+[data-game="sudoku"] .sd-controls.sd-hint-open { margin-top: 10px; }   /* доске нужно всё место, что осталось над панелью */
 [data-game="sudoku"] .sd-controls.sd-hint-open .sd-tools,
 [data-game="sudoku"] .sd-controls.sd-hint-open .sd-pad { display: none; }
 [data-game="sudoku"] .sd-hint-card {
@@ -284,13 +327,36 @@
   border-radius: 14px;
   background: var(--sd-surface);
 }
-[data-game="sudoku"] .sd-hint-steps { margin: 0 0 12px; padding: 0; list-style: none; display: grid; gap: 8px; }
-[data-game="sudoku"] .sd-hint-numbered { padding-left: 20px; list-style: decimal; }
-[data-game="sudoku"] .sd-hint-title { font-weight: 700; margin-bottom: 2px; }
-[data-game="sudoku"] .sd-hint-text { font-size: 14px; line-height: 1.35; }
-[data-game="sudoku"] .sd-hint-actions { display: flex; gap: 8px; }
-[data-game="sudoku"] .sd-hint-actions .btn { padding: 10px 12px; }
-[data-game="sudoku"] .sd-hint-actions .btn-secondary { background: var(--sd-bg); }
+[data-game="sudoku"] .sd-hint-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+[data-game="sudoku"] .sd-hint-title { font-size: 17px; font-weight: 700; }
+[data-game="sudoku"] .sd-hint-close { width: 30px; height: 30px; font-size: 14px; flex: none; }
+[data-game="sudoku"] .sd-hint-text { margin: 8px 0 12px; min-height: 2.8em; font-size: 15px; line-height: 1.4; }  /* 2 строки — карточка не прыгает между страницами */
+[data-game="sudoku"] .sd-mark { font-weight: 700; }
+[data-game="sudoku"] .sd-mark-key { color: var(--sd-h-key); }
+[data-game="sudoku"] .sd-mark-area { color: color-mix(in srgb, #0ea5e9 80%, var(--sd-text)); }
+[data-game="sudoku"] .sd-mark-unit { color: var(--sd-h-frame); }
+[data-game="sudoku"] .sd-mark-target { color: var(--sd-text); text-decoration: underline; text-underline-offset: 3px; }
+[data-game="sudoku"] .sd-mark-elim,
+[data-game="sudoku"] .sd-mark-wrong { color: var(--sd-h-elim); }
+[data-game="sudoku"] .sd-hint-nav { display: grid; grid-template-columns: 48px 1fr auto; align-items: center; gap: 8px; }
+[data-game="sudoku"] .sd-hint-arrow {
+  width: 44px;
+  height: 40px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--sd-bg);
+  color: var(--sd-h-frame);
+  font: inherit;
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+}
+[data-game="sudoku"] .sd-hint-arrow:disabled { opacity: 0.3; cursor: default; }
+[data-game="sudoku"] .sd-hint-single .sd-hint-arrow { visibility: hidden; }   /* одна страница — листать нечего */
+[data-game="sudoku"] .sd-hint-dots { display: flex; justify-content: center; gap: 8px; }
+[data-game="sudoku"] .sd-hint-dots span { width: 8px; height: 8px; border-radius: 50%; background: color-mix(in srgb, var(--sd-hint) 45%, transparent); transition: background-color 0.2s ease, transform 0.2s ease; }
+[data-game="sudoku"] .sd-hint-dots span.on { background: var(--sd-h-frame); transform: scale(1.25); }
+[data-game="sudoku"] .sd-hint-done { width: auto; padding: 10px 18px; }
 
 /* Окна: новая игра и статистика */
 [data-game="sudoku"] .sd-modal {
@@ -453,11 +519,11 @@
   pointer-events: none;
 }
 
-/* цель подсказки мягко пульсирует */
-[data-game="sudoku"] .sd-hint-target { animation: sd-target 1.4s ease-in-out infinite; }
+/* клетка ответа подсказки мягко пульсирует */
+[data-game="sudoku"] .sd-hinting .sd-h-target { animation: sd-target 1.4s ease-in-out infinite; }
 @keyframes sd-target {
-  0%, 100% { box-shadow: inset 0 0 0 2px var(--sd-accent); }
-  50% { box-shadow: inset 0 0 0 4px var(--sd-accent); }
+  0%, 100% { box-shadow: inset 0 0 0 2px var(--sd-h-frame); }
+  50% { box-shadow: inset 0 0 0 4px var(--sd-h-frame); }
 }
 
 /* образец скина при нажатии чуть сжимается */

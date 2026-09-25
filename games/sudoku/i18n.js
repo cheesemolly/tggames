@@ -17,7 +17,7 @@ export const TEXT = {
     loadFailed: 'Не удалось загрузить сетки',
     noHints: 'Подсказки закончились',
     nothingToUndo: 'Нечего отменять',
-    hint: { apply: 'Применить', close: 'Закрыть' },
+    hint: { apply: 'Применить', close: 'Закрыть', done: 'Готово', erase: 'Стереть', next: 'Дальше', back: 'Назад' },
     stats: {
       open: 'Статистика',
       title: 'Статистика',
