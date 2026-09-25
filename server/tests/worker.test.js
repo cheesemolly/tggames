@@ -193,9 +193,95 @@ test('бот: /me рассказывает прогресс', async () => {
       payload: { message: { chat: { id: 1 }, from: { id: USER.id }, text: '/me' } },
     });
     const text = tg.calls.at(-1).payload.text;
-    assert.match(text, /words: Уровень 14/);
+    assert.match(text, /Слова из слова: Уровень 14/, 'названия игр, а не id');
     assert.match(text, /2048: сыграно 5, рекорд 512/);
     assert.doesNotMatch(text, /2048:4/, 'варианты игры не перечисляем');
+  } finally {
+    tg.restore();
+  }
+});
+
+// ---------- инлайн-режим ----------
+
+async function inline(env, from, query) {
+  const tg = captureTelegram();
+  try {
+    await call(env, '/bot', {
+      method: 'POST',
+      headers: { 'X-Telegram-Bot-Api-Secret-Token': env.WEBHOOK_SECRET },
+      payload: { inline_query: { id: 'iq1', from: { id: from }, query, offset: '' } },
+    });
+    const answer = tg.calls.find((c) => c.method === 'answerInlineQuery');
+    assert.ok(answer, 'бот ответил на инлайн-запрос');
+    assert.equal(answer.payload.inline_query_id, 'iq1');
+    return answer.payload;
+  } finally {
+    tg.restore();
+  }
+}
+
+test('инлайн: пустой запрос — приглашение и все игры, кнопки — ссылки на мини-приложение', async () => {
+  const env = createEnv({ BOT_USERNAME: '@anygametg_bot' });
+  const res = await inline(env, 999, '');
+  assert.equal(res.is_personal, true);
+  assert.equal(res.results[0].id, 'all', 'первым — «позвать играть»');
+  const games = res.results.filter((r) => r.id.startsWith('g:'));
+  assert.equal(games.length, 17);
+  for (const r of res.results) {
+    const btn = r.reply_markup.inline_keyboard[0][0];
+    assert.equal(btn.web_app, undefined, 'web_app в чужих чатах запрещён');
+    assert.match(btn.url, /^https:\/\/t\.me\/anygametg_bot\?startapp/);
+  }
+  const sudoku = games.find((r) => r.id === 'g:sudoku');
+  assert.equal(sudoku.reply_markup.inline_keyboard[0][0].url, 'https://t.me/anygametg_bot?startapp=sudoku');
+  assert.match(sudoku.input_message_content.message_text, /Судоку/);
+  assert.ok(!res.results.some((r) => r.id === 'me'), 'у незнакомого игрока рекордов нет');
+});
+
+test('инлайн: поиск игры по названию и свои рекорды', async () => {
+  const env = createEnv({ BOT_USERNAME: 'anygametg_bot' });
+  const masha = await asUser(USER);
+  await call(env, '/me', { initData: masha });
+  await call(env, '/state', {
+    method: 'PUT',
+    initData: masha,
+    payload: { data: JSON.stringify({ 'shell:stats:sudoku': { played: 3, wins: 2, best: 450 }, 'shell:progress:loop': 'Уровень 14' }), base: 0 },
+  });
+
+  const found = await inline(env, USER.id, 'судо');
+  assert.deepEqual(found.results.map((r) => r.id), ['g:sudoku']);
+  const byWord = await inline(env, USER.id, 'точки');
+  assert.deepEqual(byWord.results.map((r) => r.id), ['g:connect-dots'], 'по любому слову названия');
+  const none = await inline(env, USER.id, 'шахматы');
+  assert.deepEqual(none.results.map((r) => r.id), ['all'], 'не нашлось — хотя бы приглашение');
+
+  const mine = await inline(env, USER.id, 'рекорды');
+  assert.equal(mine.results[0].id, 'me');
+  const text = mine.results[0].input_message_content.message_text;
+  assert.match(text, /Петля: Уровень 14/);
+  assert.match(text, /Судоку: сыграно 3, рекорд 450/);
+  // без запроса рекорды — вторыми, после приглашения
+  assert.deepEqual((await inline(env, USER.id, '')).results.slice(0, 2).map((r) => r.id), ['all', 'me']);
+});
+
+test('инлайн: имя бота берётся у Telegram, если не задано', async () => {
+  const env = createEnv();
+  const tg = captureTelegram();
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    const method = String(url).split('/').pop();
+    calls.push({ method, payload: init?.body ? JSON.parse(init.body) : null });
+    const result = method === 'getMe' ? { username: 'anygametg_bot' } : true;
+    return new Response(JSON.stringify({ ok: true, result }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+  try {
+    await call(env, '/bot', {
+      method: 'POST',
+      headers: { 'X-Telegram-Bot-Api-Secret-Token': env.WEBHOOK_SECRET },
+      payload: { inline_query: { id: 'iq2', from: { id: 5 }, query: '2048' } },
+    });
+    const answer = calls.find((c) => c.method === 'answerInlineQuery').payload;
+    assert.equal(answer.results[0].reply_markup.inline_keyboard[0][0].url, 'https://t.me/anygametg_bot?startapp=2048');
   } finally {
     tg.restore();
   }

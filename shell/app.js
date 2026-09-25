@@ -101,6 +101,10 @@ await migrateStats();
 
 platform.backButton.onClick(() => backFrom());
 onRouteChange(show);
+// Ссылка из инлайн-режима бота (t.me/<бот>?startapp=sudoku) открывает сразу игру, а не меню.
+// replaceState, а не location.replace: без лишнего hashchange (иначе игра открылась бы дважды).
+const startGame = platform.startParam && games.find((g) => g.id === platform.startParam && !g.admin);
+if (startGame && currentRoute().name === 'menu') history.replaceState(null, '', `#/game/${startGame.id}`);
 show(currentRoute());
 
 platform.ready();

@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   checkInitData, diagnoseInitData, dataCheckString, validateState, parseAdminIds, isAdmin, displayName,
   timingSafeEqual, MAX_STATE_BYTES, INIT_DATA_MAX_AGE_MS,
+  GAMES, findGames, startAppLink, progressLines,
 } from '../lib.js';
 import { makeInitData, TOKEN, USER } from './helpers.js';
 
@@ -105,4 +106,43 @@ test('диагностика подписи говорит, какой спос�
   assert.equal(alien.ok, false, 'чужой токен — не подходит ни один способ');
   assert.equal(Object.values(alien.matches).some(Boolean), false);
   assert.doesNotMatch(JSON.stringify(alien), /Маша/, 'данные игрока наружу не отдаются');
+});
+
+test('список игр бота совпадает с реестром мини-приложения', async () => {
+  const { games } = await import('../../shell/registry.js');
+  assert.deepEqual(GAMES.map((g) => [g.id, g.title]), games.map((g) => [g.id, g.title]),
+    'добавил игру в реестр — добавь её и в GAMES (server/lib.js)');
+  for (const g of GAMES) assert.ok(g.emoji && g.about, `${g.id}: нужны значок и описание`);
+});
+
+test('поиск игр: начало названия, слово названия, ё = е', () => {
+  assert.deepEqual(findGames('суд').map((g) => g.id), ['sudoku']);
+  assert.deepEqual(findGames('СЛОВ').map((g) => g.id), ['words'], 'регистр не важен');
+  assert.deepEqual(findGames('blast').map((g) => g.id), ['brick-blast', 'block-blast'], 'второе слово');
+  assert.equal(findGames('').length, GAMES.length);
+  assert.deepEqual(findGames('шахматы'), []);
+});
+
+test('ссылка на мини-приложение и строки прогресса', () => {
+  assert.equal(startAppLink('bot'), 'https://t.me/bot?startapp');
+  assert.equal(startAppLink('bot', 'connect-dots'), 'https://t.me/bot?startapp=connect-dots');
+  const lines = progressLines({
+    'shell:stats:2048': { played: 5, wins: 1, best: 512 },
+    'shell:stats:2048:4': { played: 5, wins: 1, best: 512 },
+    'shell:stats:mahjong': { played: 2, wins: 2, best: null },
+    'shell:stats:connect-dots': { played: 4, wins: 0, best: 9 },
+    'shell:progress:words': 'Уровень 14',
+    'shell:stats:wordle': { played: 12, wins: 9, best: 60 },
+    'shell:progress:wordle': 'Стрик: 3',
+    'shell:stats:old-game': { played: 1, wins: 0, best: null },
+  });
+  assert.deepEqual(lines, [
+    'Слова из слова: Уровень 14',
+    'Соедини точки: сыграно 4, рекорд: уровень 9',
+    'Маджонг: сыграно 2',
+    '2048: сыграно 5, рекорд 512',
+    'Wordle: сыграно 12 · Стрик: 3',
+    'old-game: сыграно 1',
+  ]);
+  assert.deepEqual(progressLines({}), []);
 });
