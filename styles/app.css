@@ -483,12 +483,16 @@ h1, h2 { margin: 0 0 8px; line-height: 1.2; }
 }
 .fs-offer:active { transform: translateX(-50%) scale(0.96); }
 
-/* Системная настройка «уменьшить движение» — без анимаций */
+/* Системная настройка «уменьшить движение» — без анимаций.
+   Переходы — ровно 0, не 1ms: 1ms включал переход ВСЕМ элементам (transition-property по умолчанию — all),
+   и игры, читающие цвета скина через пробный элемент (змейка, Brick Blast), получали в момент чтения
+   цвет текста, а не скина — поле и значки в «?» змейки были серыми (найдено 2026-09-25). */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 1ms !important;
     animation-delay: 0ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 1ms !important;
+    transition-duration: 0s !important;
+    transition-delay: 0s !important;
   }
 }
