@@ -45,6 +45,9 @@ export const SCENE_MIN = 6;                // препятствий в сцен
 export const SCENE_MAX = 11;
 export const STEP = 1 / 120;               // шаг физики
 export const DOOR_H = 100;                 // дверной проём между сценами — от пола, выше обычного проёма
+// Стена-переход — толстый блок: сама стена OB_W + фасад здания ещё на WALL_EXTRA px с уличной стороны
+// (у выхода на улицу — справа, у входа в бургерную — слева). Над проходом весь блок — препятствие.
+export const WALL_EXTRA = 34;
 export const SLICE = 4;                    // ширина «ступеньки» диагонального препятствия
 /** Виды препятствий по сценам (идут вперемешку, один вид дважды подряд не встречается) и их ширины. */
 export const TYPES = {
@@ -84,7 +87,9 @@ export function obstacleRects(ob) {
   let rects;
   switch (ob.type) {
     case 'door':
-      rects = [{ part: 'wall', x: 0, y: 0, w, h: top }];              // стена до верха проёма, проём — до пола
+      // стена с фасадом до верха прохода, проход — до пола (просьба владельца: в фасад над проходом
+      // бургер врезается, как в стену; раньше фасад был только картинкой)
+      rects = [{ part: 'wall', x: ob.facade === 'left' ? -WALL_EXTRA : 0, y: 0, w: w + WALL_EXTRA, h: top }];
       break;
     case 'chute':
     case 'stairs':
@@ -181,15 +186,18 @@ export function fillAhead(s, rng = Math.random) {
     if (s.sceneLeft <= 0) {
       // стена с дверью; граница сцен — её левый край (фон за проёмом — фасад здания)
       const to = s.scene === 'kitchen' ? 'street' : 'kitchen';
-      s.obstacles.push({ x, w: OB_W, gapY: PLAY_H - DOOR_H / 2, gap: DOOR_H, slope: 0, scene: s.scene, to, type: 'door', passed: false });
-      s.gates.push({ x, from: s.scene, to });
+      // фасад слева — стена сдвигается, чтобы свободное место до блока было честным
+      const facade = to === 'street' ? 'right' : 'left';
+      const wx = facade === 'left' ? x + WALL_EXTRA : x;
+      s.obstacles.push({ x: wx, w: OB_W, gapY: PLAY_H - DOOR_H / 2, gap: DOOR_H, slope: 0, scene: s.scene, to, type: 'door', facade, passed: false });
+      s.gates.push({ x: wx, from: s.scene, to });
       s.scene = to;
       s.sceneLeft = randInt(rng, SCENE_MIN, SCENE_MAX);
       s.lastGapY = Math.min(PLAY_H - EDGE - GAP / 2, PLAY_H - DOOR_H / 2);
       s.lastType = null;
       s.lastSlope = 0;
       s.free = randInt(rng, FREE_MIN, FREE_MAX);
-      s.nextX = x + OB_W + s.free;
+      s.nextX = x + OB_W + WALL_EXTRA + s.free;
       continue;
     }
     const type = pick(TYPES[s.scene].filter((t) => t !== s.lastType && !(s.alignFirst && DIAGONAL.has(t))), rng);
@@ -296,7 +304,8 @@ function hits(s) {
   if (by + BURGER_H >= PLAY_H) return 'ground';
   for (const o of s.obstacles) {
     const sx = o.x - s.dist;
-    if (sx > bx + BURGER_W || sx + o.w < bx) continue;
+    const ext = o.type === 'door' ? WALL_EXTRA : 0;         // фасад стены-перехода
+    if (sx - ext > bx + BURGER_W || sx + o.w + ext < bx) continue;
     for (const r of obstacleRects(o)) {
       if (bx < sx + r.x + r.w && bx + BURGER_W > sx + r.x && by < r.y + r.h && by + BURGER_H > r.y) return 'obstacle';
     }
@@ -384,7 +393,9 @@ export function step(s, dt, rng = Math.random) {
 
 /** Следующее препятствие перед бургером (для бота и подсказок). */
 export function nextObstacle(s) {
-  return s.obstacles.find((o) => o.x - s.dist + o.w >= BURGER_X) ?? null;
+  // у выхода на улицу фасад справа от стены — препятствие, пока бургер под ним
+  const right = (o) => o.x + o.w + (o.type === 'door' && o.facade === 'right' ? WALL_EXTRA : 0);
+  return s.obstacles.find((o) => right(o) - s.dist >= BURGER_X) ?? null;
 }
 
 // ---------- статистика ----------

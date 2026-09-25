@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import {
   W, PLAY_H, GAP, DIAG_GAP, EDGE, MAX_UP, MAX_DOWN, FREE_MIN, FREE_MAX, OB_W, BURGER_X, BURGER_W, BURGER_H, FLAP,
   GRAVITY, SPEED, SCENE_MIN, SCENE_MAX, DOOR_H, TYPES, WIDTHS, DIAGONAL, SLICE,
-  HOVER_Y, GAP_MIN, GAP_MAX, DIAG_GAP_MIN, DIAG_GAP_MAX, GAP_EASY, RAMP, GLIDE_STOP,
+  HOVER_Y, WALL_EXTRA, GAP_MIN, GAP_MAX, DIAG_GAP_MIN, DIAG_GAP_MAX, GAP_EASY, RAMP, GLIDE_STOP,
   newGame, step, flap, launch, fillAhead, sceneAt, obstacleRects, nextObstacle, gapCenterAt, exitGapY,
   emptyStats, recordGame, isValidStats,
 } from '../logic.js';
@@ -62,17 +62,23 @@ test('генерация: разные ширины и расстояния, п�
   assert.ok(all.length > 250);
   const widths = new Set();
   const frees = new Set();
+  // края препятствия с фасадом стены-перехода
+  const left = (o) => o.x - (o.type === 'door' && o.facade === 'left' ? WALL_EXTRA : 0);
+  const right = (o) => o.x + o.w + (o.type === 'door' && o.facade === 'right' ? WALL_EXTRA : 0);
   for (let i = 0; i < all.length; i++) {
     const o = all[i];
     widths.add(o.w);
     assert.ok(WIDTHS[o.type].includes(o.w), `${o.type}: ширина ${o.w}`);
     if (i) {
-      const free = o.x - (all[i - 1].x + all[i - 1].w);
+      const free = left(o) - right(all[i - 1]);
       frees.add(free);
       assert.ok(free >= FREE_MIN && free <= FREE_MAX, `свободно ${free}`);
     }
     if (o.type === 'door') {
       assert.equal(o.gap, DOOR_H);
+      assert.equal(o.facade, o.to === 'street' ? 'right' : 'left', 'фасад — с уличной стороны');
+      const [r] = obstacleRects(o);
+      assert.equal(r.w, OB_W + WALL_EXTRA, 'над проходом препятствие — вся стена с фасадом');
       assert.equal(o.gapY + o.gap / 2, PLAY_H, 'дверной проём — до пола');
       assert.ok(exitGapY(all[i - 1]) + MAX_DOWN * (FREE_MIN / 64) >= PLAY_H - DOOR_H + 12, 'перед дверью слишком высоко');
       continue;
@@ -85,7 +91,7 @@ test('генерация: разные ширины и расстояния, п�
     }
     if (i && all[i - 1].type !== 'door') {
       assert.notEqual(o.type, all[i - 1].type, 'вид дважды подряд');
-      const free = o.x - (all[i - 1].x + all[i - 1].w);
+      const free = o.x - right(all[i - 1]);
       const d = o.gapY - exitGapY(all[i - 1]);
       assert.ok(d >= -MAX_UP * (free / 64) - 1 && d <= MAX_DOWN * (free / 64) + 1, `скачок ${d} при ${free}`);
     }
@@ -199,6 +205,19 @@ test('столкновения: вытяжка, бак, ступенька ди�
   assert.ok(!step(d, 1 / 120).includes('hit'), 'в дверном проёме');
   d.y = PLAY_H - DOOR_H - 4;
   assert.ok(step(d, 1 / 120).includes('hit'), 'стена над дверью');
+  // фасад над проходом — тоже препятствие: справа у выхода на улицу, слева у входа в бургерную
+  const exitDoor = { ...door, x: BURGER_X - OB_W - 20, facade: 'right' };
+  const f1 = base([exitDoor]);
+  f1.y = PLAY_H - DOOR_H - 4;
+  assert.ok(step(f1, 1 / 120).includes('hit'), 'фасад справа');
+  const inDoor = { ...door, x: BURGER_X + BURGER_W + 20, to: 'kitchen', scene: 'street', facade: 'left' };
+  const f2 = base([inDoor]);
+  f2.y = PLAY_H - DOOR_H - 4;
+  assert.ok(step(f2, 1 / 120).includes('hit'), 'фасад слева');
+  const f3 = base([inDoor]);
+  f3.y = PLAY_H - 30;
+  f3.vy = -40;
+  assert.ok(!step(f3, 1 / 120).includes('hit'), 'под фасадом в проходе — свободно');
   const g = base([]);
   g.y = PLAY_H - BURGER_H - 1;
   g.vy = 200;

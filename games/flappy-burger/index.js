@@ -8,7 +8,7 @@ import { el } from '../../shared/dom.js';
 import { showLayer, hideLayer, pop, reducedMotion } from '../../shared/motion.js';
 import { createToast } from '../../shared/toast.js';
 import {
-  W, H, GROUND, PLAY_H, BURGER_X, BURGER_W, BURGER_H, MAX_FALL, FLAP, OB_W,
+  W, H, GROUND, PLAY_H, BURGER_X, BURGER_W, BURGER_H, MAX_FALL, FLAP, OB_W, WALL_EXTRA,
   newGame, step, flap, launch, sceneAt, obstacleRects, emptyStats, recordGame, isValidStats,
 } from './logic.js';
 import { createLogo, LOGO_COUNT } from './logos.js';
@@ -668,7 +668,8 @@ function drawDiagonal(ox, ob, t) {
 
 function drawObstacle(ox, ob, t) {
   if (ob.type === 'door') {
-    return;                                   // стена-переход рисуется поверх бургера (drawWallFront)
+    drawWall(ox, ob, t);
+    return;
   }
   if (ob.slope !== undefined && (ob.type === 'chute' || ob.type === 'stairs')) {
     drawDiagonal(ox, ob, t);
@@ -678,17 +679,16 @@ function drawObstacle(ox, ob, t) {
 }
 
 /**
- * Стена-переход между сценами — целиком поверх бургера: толстый кирпичный блок на всю высоту (сама стена
- * OB_W + фасад здания ещё на WALL_EXTRA px с уличной стороны) и вывеска. Бургер скрывается за стеной на всю
- * её толщину и выныривает с другой стороны. Хитбокс — прежний: стена над проходом (obstacleRects 'wall').
+ * Стена-переход между сценами: толстый кирпичный блок на всю высоту (сама стена OB_W + фасад здания ещё на
+ * WALL_EXTRA px с уличной стороны), затемнённый проход и вывеска. Рисуется ДО бургера: он пролетает проход
+ * на переднем плане (замечание владельца: бургер пропадал за проходом), а стена с фасадом над проходом —
+ * препятствие (obstacleRects 'wall').
  */
-const WALL_EXTRA = 34;
 function wallBlock(ox, ob) {
-  const toStreet = ob.to === 'street';
-  return toStreet ? [ox, OB_W + WALL_EXTRA] : [ox - WALL_EXTRA, OB_W + WALL_EXTRA];
+  return ob.facade === 'left' ? [ox - WALL_EXTRA, OB_W + WALL_EXTRA] : [ox, OB_W + WALL_EXTRA];
 }
 
-function drawWallFront(ox, ob, t) {
+function drawWall(ox, ob, t) {
   const toStreet = ob.to === 'street';
   const [x, w] = wallBlock(ox, ob);
   bricks(x, 0, w, PLAY_H, toStreet ? '#8a4b3a' : '#5a2e2e', toStreet ? '#6d3a2d' : '#442222');
@@ -778,7 +778,8 @@ function render() {
   }
   for (const o of s.obstacles) {
     const ox = Math.round(o.x) - d;
-    if (ox > W || ox + o.w < 0) continue;
+    const ext = o.type === 'door' ? WALL_EXTRA : 0;      // фасад стены-перехода
+    if (ox - ext > W || ox + o.w + ext < 0) continue;
     drawObstacle(ox, o, s.t);
   }
   for (const [x0, x1, scene] of segs) {
@@ -792,11 +793,6 @@ function render() {
   // крошки
   for (const p of particles) px(p.x, p.y, 1, 1, p.c);
   drawBurger(s);
-  // стены-переходы — целиком поверх бургера
-  for (const o of s.obstacles) {
-    const ox = Math.round(o.x) - d;
-    if (o.type === 'door' && ox - WALL_EXTRA < W && ox + OB_W + WALL_EXTRA > 0) drawWallFront(ox, o, s.t);
-  }
   // счёт пиксельными цифрами
   if (s.phase !== 'ready') {
     const lift = s.t - scorePopT < 0.12 ? 2 : 0;
