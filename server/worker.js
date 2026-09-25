@@ -21,9 +21,13 @@
 // Бот: POST /bot — вебхук Telegram, проверяется заголовком X-Telegram-Bot-Api-Secret-Token.
 //   /start, /me — всем; /broadcast и /message @ник — владельцу, через черновик: бот показывает, как
 //   сообщение увидят игроки, и отправляет только по кнопке «Разослать/Отправить» (можно с фото и альбомом).
+//   Инлайн-режим (включается в @BotFather: /setinline): в любом чате «@бот» — приглашение в игры,
+//   «@бот судоку» — конкретная игра, «@бот рекорды» — свой прогресс. Кнопка под сообщением — ссылка
+//   t.me/<бот>?startapp=<id игры>: она открывает главное мини-приложение сразу на этой игре.
 
 import {
   checkInitData, diagnoseInitData, validateState, parseAdminIds, isAdmin, displayName,
+  GAMES, findGames, startAppLink, progressLines,
 } from './lib.js';
 
 // Кто может обращаться к обработчику. Свой домен — чтобы чужой сайт не ходил в него от имени игрока.
@@ -295,6 +299,10 @@ async function botWebhook(request, env, ctx) {
     return new Response('forbidden', { status: 403 });
   }
   const update = await body(request);
+  if (update.inline_query) {
+    await onInline(update.inline_query, env);
+    return new Response('ok');
+  }
   if (update.callback_query) {
     await onButton(update.callback_query, env, ctx);
     return new Response('ok');
@@ -559,30 +567,119 @@ async function onButton(query, env, ctx) {
   else await job();
 }
 
-/** Текст для /me: уровни и рекорды из сохранённого прогресса. */
-async function meText(env, tgId) {
-  const player = await env.DB.prepare('SELECT * FROM users WHERE tg_id = ?').bind(tgId).first();
-  if (!player) return 'Ты ещё не заходил в игры. Нажми «Играть» — и всё появится.';
-  const row = await env.DB.prepare('SELECT data FROM states WHERE user_id = ?').bind(player.id).first();
+const escapeHtml = (text) => String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
+/** Игрок и его прогресс (строки по играм) по Telegram-id; игрока нет — null. */
+async function playerProgress(env, tgId) {
+  const player = await env.DB.prepare('SELECT * FROM users WHERE tg_id = ?').bind(tgId).first();
+  if (!player) return null;
+  const row = await env.DB.prepare('SELECT data FROM states WHERE user_id = ?').bind(player.id).first();
   let state = {};
   try {
     state = JSON.parse(row?.data ?? '{}');
   } catch {
     state = {};
   }
+  return { player, lines: progressLines(state) };
+}
 
-  const lines = [];
-  for (const [key, value] of Object.entries(state)) {
-    if (key.startsWith('shell:progress:')) {
-      lines.push(`• ${key.slice('shell:progress:'.length)}: ${value}`);
-    } else if (key.startsWith('shell:stats:') && !key.slice('shell:stats:'.length).includes(':') && value?.played) {
-      const best = value.best === null || value.best === undefined ? '' : `, рекорд ${value.best}`;
-      lines.push(`• ${key.slice('shell:stats:'.length)}: сыграно ${value.played}${best}`);
-    }
+/** Текст для /me: уровни и рекорды из сохранённого прогресса. */
+async function meText(env, tgId) {
+  const found = await playerProgress(env, tgId);
+  if (!found) return 'Ты ещё не заходил в игры. Нажми «Играть» — и всё появится.';
+  if (!found.lines.length) return 'Пока пусто — сыграй партию, и здесь появятся уровни и рекорды.';
+  const { player, lines } = found;
+  return `<b>${escapeHtml(displayName({ first_name: player.name, username: player.username }))}</b>\n`
+    + lines.map((l) => `• ${escapeHtml(l)}`).join('\n');
+}
+
+// ---------- инлайн-режим ----------
+
+let cachedUsername = null;
+
+/** Имя бота для ссылок t.me/<бот>: из переменной BOT_USERNAME или один раз у Telegram (getMe). */
+async function botUsername(env) {
+  if (env.BOT_USERNAME) return env.BOT_USERNAME.replace(/^@/, '');
+  if (cachedUsername) return cachedUsername;
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${env.BOT_TOKEN}/getMe`);
+    const data = await res.json();
+    if (data.ok && data.result?.username) cachedUsername = data.result.username;
+  } catch {
+    // сеть моргнула — ниже запасной вариант
   }
-  if (!lines.length) return 'Пока пусто — сыграй партию, и здесь появятся уровни и рекорды.';
-  return `<b>${displayName({ first_name: player.name, username: player.username })}</b>\n${lines.join('\n')}`;
+  return cachedUsername;
+}
+
+// Слова, по которым вместо игр показывается свой прогресс.
+const RECORDS_QUERY = /^(рекорд|мои|мой|прогресс|стат|me|my|score)/;
+
+/**
+ * Инлайн-запрос «@бот …» из любого чата. Кнопки web_app в чужих чатах Telegram не разрешает,
+ * поэтому кнопка — ссылка на главное мини-приложение (t.me/<бот>?startapp=<игра>).
+ */
+async function onInline(query, env) {
+  const username = await botUsername(env);
+  const link = (param) => (username ? startAppLink(username, param) : appUrl(env));
+  const button = (text, param) => ({ inline_keyboard: [[{ text, url: link(param) }]] });
+  const q = (query.query ?? '').trim().toLowerCase();
+
+  const invite = {
+    type: 'article',
+    id: 'all',
+    title: '🎮 Позвать играть',
+    description: `${GAMES.length} игр прямо в Telegram: слова, головоломки, аркады`,
+    input_message_content: {
+      message_text: `🎮 <b>Игры прямо в Telegram</b>\n${GAMES.map((g) => g.title).join(', ')}.`,
+      parse_mode: 'HTML',
+    },
+    reply_markup: button('🎮 Играть', ''),
+  };
+  const gameResult = (g) => ({
+    type: 'article',
+    id: `g:${g.id}`,
+    title: `${g.emoji} ${g.title}`,
+    description: g.about,
+    input_message_content: {
+      message_text: `${g.emoji} <b>${escapeHtml(g.title)}</b> — ${escapeHtml(g.about)}.\nСыграем?`,
+      parse_mode: 'HTML',
+    },
+    reply_markup: button(`▶️ Играть в «${g.title}»`, g.id),
+  });
+
+  const mine = await playerProgress(env, query.from?.id);
+  const records = mine?.lines.length ? {
+    type: 'article',
+    id: 'me',
+    title: '🏆 Мои рекорды',
+    description: mine.lines.slice(0, 3).join(' · '),
+    input_message_content: {
+      message_text: `🏆 <b>Мои игры</b>\n${mine.lines.map((l) => `• ${escapeHtml(l)}`).join('\n')}`,
+      parse_mode: 'HTML',
+    },
+    reply_markup: button('🎮 Попробуй побить', ''),
+  } : null;
+
+  const results = [];
+  if (!q) {
+    results.push(invite);
+    if (records) results.push(records);
+    results.push(...GAMES.map(gameResult));
+  } else if (RECORDS_QUERY.test(q)) {
+    if (records) results.push(records);
+    results.push(invite);
+  } else {
+    const games = findGames(q);
+    results.push(...games.map(gameResult));
+    if (!games.length) results.push(invite);
+  }
+
+  await api(env, 'answerInlineQuery', {
+    inline_query_id: query.id,
+    results: results.slice(0, 50),
+    cache_time: 10,
+    is_personal: true,          // «Мои рекорды» у каждого свои
+  });
 }
 
 /**

@@ -163,6 +163,80 @@ function displayName(user) {
   return user?.username ? `${name} (@${user.username})` : name;
 }
 
+// ---------- игры: для инлайн-режима и /me ----------
+
+/**
+ * Список игр для бота — сервер не грузит реестр мини-приложения (shell/registry.js), поэтому копия:
+ * id, название и строка-описание. Тест сверяет её с реестром — добавил игру и забыл сюда значит красный тест.
+ * best — как писать рекорд (как `menu` в реестре): false — не писать (у Wordle важна серия), функция — своя строка.
+ */
+const GAMES = [
+  { id: 'words', title: 'Слова из слова', emoji: '🔤', about: 'собери как можно больше слов из букв одного' },
+  { id: 'flags', title: 'Флаги', emoji: '🏳️', about: 'угадай страну по флагу' },
+  { id: 'checkers', title: 'Шашки', emoji: '⚫', about: 'русские шашки против бота, есть поддавки' },
+  { id: 'flappy-burger', title: 'Flappy Burger', emoji: '🍔', about: 'пролети бургером между препятствиями' },
+  { id: 'bubble-shooter', title: 'Шарики', emoji: '🫧', about: 'стреляй шариками, собирай по три одного цвета' },
+  { id: 'snake', title: 'Змейка', emoji: '🐍', about: 'классика и уровни с препятствиями' },
+  { id: 'brick-blast', title: 'Brick Blast', emoji: '🧱', about: 'разбей блоки очередью шариков' },
+  { id: 'loop', title: 'Петля', emoji: '➰', about: 'поворачивай плитки, пока все линии не замкнутся' },
+  { id: 'connect-dots', title: 'Соедини точки', emoji: '🔴', about: 'соедини пары точек и заполни всё поле', best: (n) => `рекорд: уровень ${n}` },
+  { id: 'mahjong', title: 'Маджонг', emoji: '🀄', about: 'пасьянс: снимай одинаковые свободные плитки' },
+  { id: '2048', title: '2048', emoji: '🔢', about: 'сдвигай плитки и собери 2048' },
+  { id: 'boggle', title: 'Филворд', emoji: '🔠', about: 'найди спрятанные на поле слова' },
+  { id: 'block-blast', title: 'Block Blast', emoji: '🟦', about: 'ставь фигуры, собирай линии' },
+  { id: 'sudoku', title: 'Судоку', emoji: '🧩', about: 'классика 9×9, четыре сложности и подсказки' },
+  { id: 'wordle', title: 'Wordle', emoji: '🟩', about: 'угадай слово из пяти букв: русский, украинский, английский', best: false },
+  { id: 'memory', title: 'Мемори', emoji: '🃏', about: 'найди пары одинаковых карточек' },
+  { id: 'bongo-cat', title: 'Bongo Cat', emoji: '🐱', about: 'кот играет на инструментах, разучи мелодию' },
+];
+
+const fold = (text) => String(text ?? '').toLowerCase().replace(/ё/g, 'е').trim();
+
+/** Игры по запросу из инлайн-режима: совпадение с началом названия, любого его слова или id. */
+function findGames(query) {
+  const q = fold(query);
+  if (!q) return [...GAMES];
+  const starts = (g) => fold(g.title).startsWith(q) || g.id.startsWith(q);
+  const wordStarts = (g) => fold(g.title).split(/[\s-]+/).some((w) => w.startsWith(q));
+  return [...GAMES.filter(starts), ...GAMES.filter((g) => !starts(g) && wordStarts(g))];
+}
+
+/** Ссылка, которая открывает главное мини-приложение бота; с param — сразу нужную игру. */
+function startAppLink(botUsername, param = '') {
+  return `https://t.me/${botUsername}?startapp${param ? `=${encodeURIComponent(param)}` : ''}`;
+}
+
+/**
+ * Строки «Судоку: сыграно 3, рекорд 450» из сохранённого прогресса (снимок хранилища игрока).
+ * Порядок — как в списке игр; варианты игры (ключи вида `2048:4`) не перечисляются.
+ */
+function progressLines(state) {
+  const lines = [];
+  const known = new Set(GAMES.map((g) => g.id));
+  const describe = (id, title, best) => {
+    const stats = state?.[`shell:stats:${id}`];
+    const line = state?.[`shell:progress:${id}`];
+    const parts = [];
+    if (stats?.played) {
+      const hasBest = best !== false && stats.best !== null && stats.best !== undefined;
+      const bestText = hasBest ? `, ${typeof best === 'function' ? best(stats.best) : `рекорд ${stats.best}`}` : '';
+      parts.push(`сыграно ${stats.played}${bestText}`);
+    }
+    if (typeof line === 'string' && line) parts.push(line);
+    if (parts.length) lines.push(`${title}: ${parts.join(' · ')}`);
+  };
+  for (const g of GAMES) describe(g.id, g.title, g.best);
+  // игры, которых нет в списке (например, удалённые), — под своим id, чтобы ничего не терялось
+  for (const key of Object.keys(state ?? {})) {
+    const m = key.match(/^shell:(?:stats|progress):([^:]+)$/);
+    if (m && !known.has(m[1])) {
+      known.add(m[1]);
+      describe(m[1], m[1]);
+    }
+  }
+  return lines;
+}
+
 // Обработчик Cloudflare Worker: вход через Telegram, прогресс игроков, панель владельца и сам бот.
 // База — Cloudflare D1 (привязка `DB`, схема в schema.sql). Как это выкладывается — в README.md.
 //
@@ -186,6 +260,9 @@ function displayName(user) {
 // Бот: POST /bot — вебхук Telegram, проверяется заголовком X-Telegram-Bot-Api-Secret-Token.
 //   /start, /me — всем; /broadcast и /message @ник — владельцу, через черновик: бот показывает, как
 //   сообщение увидят игроки, и отправляет только по кнопке «Разослать/Отправить» (можно с фото и альбомом).
+//   Инлайн-режим (включается в @BotFather: /setinline): в любом чате «@бот» — приглашение в игры,
+//   «@бот судоку» — конкретная игра, «@бот рекорды» — свой прогресс. Кнопка под сообщением — ссылка
+//   t.me/<бот>?startapp=<id игры>: она открывает главное мини-приложение сразу на этой игре.
 
 
 // Кто может обращаться к обработчику. Свой домен — чтобы чужой сайт не ходил в него от имени игрока.
@@ -457,6 +534,10 @@ async function botWebhook(request, env, ctx) {
     return new Response('forbidden', { status: 403 });
   }
   const update = await body(request);
+  if (update.inline_query) {
+    await onInline(update.inline_query, env);
+    return new Response('ok');
+  }
   if (update.callback_query) {
     await onButton(update.callback_query, env, ctx);
     return new Response('ok');
@@ -721,30 +802,119 @@ async function onButton(query, env, ctx) {
   else await job();
 }
 
-/** Текст для /me: уровни и рекорды из сохранённого прогресса. */
-async function meText(env, tgId) {
-  const player = await env.DB.prepare('SELECT * FROM users WHERE tg_id = ?').bind(tgId).first();
-  if (!player) return 'Ты ещё не заходил в игры. Нажми «Играть» — и всё появится.';
-  const row = await env.DB.prepare('SELECT data FROM states WHERE user_id = ?').bind(player.id).first();
+const escapeHtml = (text) => String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
+/** Игрок и его прогресс (строки по играм) по Telegram-id; игрока нет — null. */
+async function playerProgress(env, tgId) {
+  const player = await env.DB.prepare('SELECT * FROM users WHERE tg_id = ?').bind(tgId).first();
+  if (!player) return null;
+  const row = await env.DB.prepare('SELECT data FROM states WHERE user_id = ?').bind(player.id).first();
   let state = {};
   try {
     state = JSON.parse(row?.data ?? '{}');
   } catch {
     state = {};
   }
+  return { player, lines: progressLines(state) };
+}
 
-  const lines = [];
-  for (const [key, value] of Object.entries(state)) {
-    if (key.startsWith('shell:progress:')) {
-      lines.push(`• ${key.slice('shell:progress:'.length)}: ${value}`);
-    } else if (key.startsWith('shell:stats:') && !key.slice('shell:stats:'.length).includes(':') && value?.played) {
-      const best = value.best === null || value.best === undefined ? '' : `, рекорд ${value.best}`;
-      lines.push(`• ${key.slice('shell:stats:'.length)}: сыграно ${value.played}${best}`);
-    }
+/** Текст для /me: уровни и рекорды из сохранённого прогресса. */
+async function meText(env, tgId) {
+  const found = await playerProgress(env, tgId);
+  if (!found) return 'Ты ещё не заходил в игры. Нажми «Играть» — и всё появится.';
+  if (!found.lines.length) return 'Пока пусто — сыграй партию, и здесь появятся уровни и рекорды.';
+  const { player, lines } = found;
+  return `<b>${escapeHtml(displayName({ first_name: player.name, username: player.username }))}</b>\n`
+    + lines.map((l) => `• ${escapeHtml(l)}`).join('\n');
+}
+
+// ---------- инлайн-режим ----------
+
+let cachedUsername = null;
+
+/** Имя бота для ссылок t.me/<бот>: из переменной BOT_USERNAME или один раз у Telegram (getMe). */
+async function botUsername(env) {
+  if (env.BOT_USERNAME) return env.BOT_USERNAME.replace(/^@/, '');
+  if (cachedUsername) return cachedUsername;
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${env.BOT_TOKEN}/getMe`);
+    const data = await res.json();
+    if (data.ok && data.result?.username) cachedUsername = data.result.username;
+  } catch {
+    // сеть моргнула — ниже запасной вариант
   }
-  if (!lines.length) return 'Пока пусто — сыграй партию, и здесь появятся уровни и рекорды.';
-  return `<b>${displayName({ first_name: player.name, username: player.username })}</b>\n${lines.join('\n')}`;
+  return cachedUsername;
+}
+
+// Слова, по которым вместо игр показывается свой прогресс.
+const RECORDS_QUERY = /^(рекорд|мои|мой|прогресс|стат|me|my|score)/;
+
+/**
+ * Инлайн-запрос «@бот …» из любого чата. Кнопки web_app в чужих чатах Telegram не разрешает,
+ * поэтому кнопка — ссылка на главное мини-приложение (t.me/<бот>?startapp=<игра>).
+ */
+async function onInline(query, env) {
+  const username = await botUsername(env);
+  const link = (param) => (username ? startAppLink(username, param) : appUrl(env));
+  const button = (text, param) => ({ inline_keyboard: [[{ text, url: link(param) }]] });
+  const q = (query.query ?? '').trim().toLowerCase();
+
+  const invite = {
+    type: 'article',
+    id: 'all',
+    title: '🎮 Позвать играть',
+    description: `${GAMES.length} игр прямо в Telegram: слова, головоломки, аркады`,
+    input_message_content: {
+      message_text: `🎮 <b>Игры прямо в Telegram</b>\n${GAMES.map((g) => g.title).join(', ')}.`,
+      parse_mode: 'HTML',
+    },
+    reply_markup: button('🎮 Играть', ''),
+  };
+  const gameResult = (g) => ({
+    type: 'article',
+    id: `g:${g.id}`,
+    title: `${g.emoji} ${g.title}`,
+    description: g.about,
+    input_message_content: {
+      message_text: `${g.emoji} <b>${escapeHtml(g.title)}</b> — ${escapeHtml(g.about)}.\nСыграем?`,
+      parse_mode: 'HTML',
+    },
+    reply_markup: button(`▶️ Играть в «${g.title}»`, g.id),
+  });
+
+  const mine = await playerProgress(env, query.from?.id);
+  const records = mine?.lines.length ? {
+    type: 'article',
+    id: 'me',
+    title: '🏆 Мои рекорды',
+    description: mine.lines.slice(0, 3).join(' · '),
+    input_message_content: {
+      message_text: `🏆 <b>Мои игры</b>\n${mine.lines.map((l) => `• ${escapeHtml(l)}`).join('\n')}`,
+      parse_mode: 'HTML',
+    },
+    reply_markup: button('🎮 Попробуй побить', ''),
+  } : null;
+
+  const results = [];
+  if (!q) {
+    results.push(invite);
+    if (records) results.push(records);
+    results.push(...GAMES.map(gameResult));
+  } else if (RECORDS_QUERY.test(q)) {
+    if (records) results.push(records);
+    results.push(invite);
+  } else {
+    const games = findGames(q);
+    results.push(...games.map(gameResult));
+    if (!games.length) results.push(invite);
+  }
+
+  await api(env, 'answerInlineQuery', {
+    inline_query_id: query.id,
+    results: results.slice(0, 50),
+    cache_time: 10,
+    is_personal: true,          // «Мои рекорды» у каждого свои
+  });
 }
 
 /**

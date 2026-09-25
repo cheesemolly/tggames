@@ -59,6 +59,8 @@ function createTelegramPlatform(tg) {
   return {
     isTelegram: true,
     user: tg.initDataUnsafe?.user ?? null,
+    // Параметр из ссылки t.me/<бот>?startapp=<игра> (инлайн-режим бота) — какую игру открыть сразу.
+    startParam: tg.initDataUnsafe?.start_param ?? null,
     // Сырая строка с подписью: сервер по ней узнаёт игрока. Читается каждый раз — Telegram её обновляет.
     get initData() { return tg.initData; },
     get colorScheme() { return tg.colorScheme; },
@@ -207,6 +209,7 @@ function createBrowserPlatform() {
 
   return {
     isTelegram: false,
+    startParam: new URLSearchParams(location.search).get('startapp'),   // как ?startapp= в ссылке Telegram
     isDesktop: false,                // заглушка изображает телефон (разработка в мобильном режиме)
     initData: '',                    // вне Telegram подписывать нечего — аккаунтов тут нет
     user: FAKE_USER,
