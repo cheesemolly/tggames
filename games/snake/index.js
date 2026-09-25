@@ -648,11 +648,40 @@ function openStats() {
  * (замечание владельца: абстрактные кружки вместо предметов были непонятны).
  */
 function itemIcon(spec, size = 34) {
-  const canvas = el('canvas', { class: 'sn-help-canvas' });
-  const r = createRenderer(canvas);
+  // рисуем крупно и с запасом, находим, где предмет на самом деле нарисован, и вписываем эту область
+  // в значок: предметы на поле разного размера и «парят» над клеткой — подгонка вручную их обрезала
+  const big = document.createElement('canvas');
+  const r = createRenderer(big);
   r.setView(settings.view);
-  r.resize(size, size);
+  r.resize(size * 4, size * 4);
   r.icon(spec, pal ?? readPalette());
+  const { width: w, height: h } = big;
+  const alpha = big.getContext('2d').getImageData(0, 0, w, h).data;
+  let x0 = w;
+  let y0 = h;
+  let x1 = -1;
+  let y1 = -1;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (alpha[(y * w + x) * 4 + 3] > 12) {
+        if (x < x0) x0 = x;
+        if (x > x1) x1 = x;
+        if (y < y0) y0 = y;
+        if (y > y1) y1 = y;
+      }
+    }
+  }
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const canvas = el('canvas', { class: 'sn-help-canvas' });
+  canvas.width = canvas.height = Math.round(size * dpr);
+  canvas.style.width = canvas.style.height = `${size}px`;
+  if (x1 >= 0) {
+    const bw = x1 - x0 + 1;
+    const bh = y1 - y0 + 1;
+    const k = Math.min(canvas.width / bw, canvas.height / bh);
+    canvas.getContext('2d').drawImage(big, x0, y0, bw, bh,
+      (canvas.width - bw * k) / 2, (canvas.height - bh * k) / 2, bw * k, bh * k);
+  }
   return canvas;
 }
 
