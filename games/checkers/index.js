@@ -16,7 +16,7 @@ const T = {
   title: 'Шашки',
   levels: { novice: 'Новичок', easy: 'Лёгкий', medium: 'Средний', hard: 'Сложный', master: 'Мастер' },
   levelHint: {
-    novice: 'Часто ошибается', easy: 'Думает на 2 хода', medium: 'Думает на 4 хода', hard: 'Считает глубоко', master: 'Играет в полную силу',
+    novice: 'Часто зевает', easy: 'Видит ответный бой, но ошибается', medium: 'Считает на 3 хода', hard: 'Видит удары и комбинации', master: 'Играет в полную силу',
   },
   sub: (mode, level, side) => `${mode === 'giveaway' ? 'Поддавки · ' : ''}${T.levels[level]} · вы ${side === WHITE ? 'белыми' : 'чёрными'}`,
   mode: 'Режим',
@@ -72,7 +72,7 @@ let toast = null;
 let game = null;
 let stats = emptyStats();
 let settings = { skin: 'telegram', coords: true };
-let setup = { level: 'medium', color: 'white', mode: 'classic' };
+let setup = { level: 'easy', color: 'white', mode: 'classic' };        // по умолчанию — «Лёгкий» (2026-09-25)
 let selected = null;               // { from, path: [...] } — выбранная шашка и уже пройденные поля боя
 let busy = false;                  // анимация или бот думает
 let over = false;
@@ -441,7 +441,7 @@ async function onHint() {
   busy = true;
   renderInfo();
   const snapshot = game;
-  const move = await askBot(game.board, game.turn, 'medium', modeOf(game));
+  const move = await askBot(game.board, game.turn, 'hint', modeOf(game));
   busy = false;
   if (!ui || game !== snapshot || over) return;
   hintMove = move;
@@ -635,7 +635,7 @@ export default {
       coords: typeof savedSettings?.coords === 'boolean' ? savedSettings.coords : true,
     };
     setup = {
-      level: LEVEL_IDS.includes(savedSetup?.level) ? savedSetup.level : 'medium',
+      level: LEVEL_IDS.includes(savedSetup?.level) ? savedSetup.level : 'easy',
       color: ['white', 'black', 'random'].includes(savedSetup?.color) ? savedSetup.color : 'white',
       mode: MODES.includes(savedSetup?.mode) ? savedSetup.mode : 'classic',
     };

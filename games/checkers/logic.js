@@ -249,14 +249,23 @@ export function isValidState(s) {
 // ---------- движок ----------
 
 /** Уровни: глубина перебора, лимит времени, «шум» (случайная добавка к оценке хода в корне — ошибки слабых уровней). */
+// Уровни пересмотрены 2026-09-25 (владелец: «непроходимы даже на лёгком»). Главная сила бота в русских
+// шашках — досчёт взятий за горизонтом (quiesce): с ним даже глубина 1 находит «удары» (жертва → большой
+// бой), на которых и проигрывают люди. Поэтому у слабых уровней его нет — они, как новичок, видят только
+// прямой ответный бой. Ошибки — по образцу Stockfish Skill Level: считать честно, а с вероятностью mistake
+// выбрать не лучший ход (вес exp((оценка − лучшая) / temp)). Подобрано турнирами ботов (см. CLAUDE.md):
+// новый «Новичок» слабее старого, «Лёгкий» — между старыми «Новичком» и «Лёгким», «Средний» — чуть сильнее
+// старого «Лёгкого», «Сложный» — около старого «Среднего», «Мастер» — бывший «Сложный».
 export const LEVELS = {
-  novice: { depth: 1, timeMs: 200, noise: 160, blunder: 0.25 },
-  easy: { depth: 2, timeMs: 300, noise: 60, blunder: 0.08 },
-  medium: { depth: 4, timeMs: 600, noise: 18, blunder: 0 },
-  hard: { depth: 8, timeMs: 900, noise: 0, blunder: 0 },
-  master: { depth: 24, timeMs: 2200, noise: 0, blunder: 0 },
+  novice: { depth: 2, timeMs: 300, quiesce: false, mistake: 0.7, temp: 220 },
+  easy: { depth: 2, timeMs: 300, quiesce: false, mistake: 0.3, temp: 110 },
+  medium: { depth: 3, timeMs: 500, quiesce: false, mistake: 0.12, temp: 70 },
+  hard: { depth: 4, timeMs: 700, mistake: 0.08, temp: 60 },
+  master: { depth: 8, timeMs: 900 },
 };
 export const LEVEL_IDS = Object.keys(LEVELS);
+// подсказка игроку — точный ход без ошибок (не уровень бота)
+const SEARCH = { ...LEVELS, hint: { depth: 5, timeMs: 700 } };
 
 const MAN = 100;
 const KING = 300;
@@ -349,9 +358,14 @@ function orderMoves(moves, best) {
  * (negamax), таблица позиций, сортировка ходов, продление при взятиях (взятия обязательны — горизонт не режет бой).
  */
 export function bestMove(board, side, opts = {}) {
-  const cfg = { ...(LEVELS[opts.level] ?? LEVELS.medium), ...opts };
+  const cfg = { ...(SEARCH[opts.level] ?? LEVELS.medium), ...opts };
   const giveaway = cfg.mode === 'giveaway';
   const rng = cfg.rng ?? Math.random;
+  const quiesce = cfg.quiesce !== false;
+  // ошибка по образцу Stockfish (Skill Level): считать честно, а выбрать не лучший ход — с вероятностью mistake
+  // берётся случайный ход с весом exp((оценка − лучшая) / temp): чем хуже ход, тем реже, но и «зевок» возможен
+  const erring = Boolean(cfg.mistake) && rng() < cfg.mistake;
+  const fullWindow = Boolean(cfg.noise) || erring;
   const rootMoves = generateMoves(board, side);
   if (!rootMoves.length) return null;
   if (rootMoves.length === 1) return rootMoves[0];
@@ -369,7 +383,8 @@ export function bestMove(board, side, opts = {}) {
     const moves = generateMoves(b, s);
     if (!moves.length) return giveaway ? WIN - ply : -WIN + ply;     // поддавки: без ходов — выигрыш
     const capture = moves[0].captures.length > 0;
-    if (depth <= 0 && !capture) return evaluate(b, s, cfg.mode);
+    // досчёт взятий за горизонтом — только у сильных уровней: слабый бот, как новичок, не видит ответного боя
+    if (depth <= 0 && (!capture || !quiesce)) return evaluate(b, s, cfg.mode);
     if (depth <= -10) return evaluate(b, s, cfg.mode);        // предохранитель длинных разменов
     const key = hashOf(b, s);
     const entry = tt.get(key);
@@ -405,7 +420,7 @@ export function bestMove(board, side, opts = {}) {
     let alpha = -Infinity;
     for (const m of ordered) {
       // со «шумом» нужны точные оценки всех ходов — окно полное; без него — обычное отсечение
-      const sc = -search(applyMove(board, m), -side, depth - 1, -Infinity, cfg.noise ? Infinity : -alpha, 1);
+      const sc = -search(applyMove(board, m), -side, depth - 1, -Infinity, fullWindow ? Infinity : -alpha, 1);
       if (aborted) break;
       cur.push({ m, sc });
       if (sc > alpha) alpha = sc;
@@ -416,6 +431,16 @@ export function bestMove(board, side, opts = {}) {
     chosen = ordered[0];
     if (Math.abs(cur.find((x) => x.m === chosen).sc) > WIN / 2) break;   // найден форсированный выигрыш/проигрыш
     if (Date.now() - start > cfg.timeMs * 0.5 && depth >= 2) break;       // следующий уровень не успеем
+  }
+  if (erring && scores) {
+    const bestSc = Math.max(...scores.map((x) => x.sc));
+    const weights = scores.map(({ sc }) => Math.exp(Math.max(-50, (sc - bestSc) / cfg.temp)));
+    let r = rng() * weights.reduce((a, w) => a + w, 0);
+    for (let i = 0; i < scores.length; i++) {
+      r -= weights[i];
+      if (r <= 0) return scores[i].m;
+    }
+    return scores.at(-1).m;
   }
   // слабые уровни: к оценке добавляется шум — выбирают «почти лучшие», иногда ошибаясь
   if (cfg.noise && scores) {
