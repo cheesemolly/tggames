@@ -31,6 +31,7 @@ export function createRenderer(canvas) {
   let L = null;
   let floorCache = null;
   let floorKey = '';
+  let iconMode = false;        // рисуем значок для окна «?» (icon), а не поле
   let V = VIEWS['3d'];         // row — высота ряда у ближнего края, back — масштаб дальнего края,
                                // plinth — толщина стола спереди, z — множитель высоты (0 — плоско)
 
@@ -136,6 +137,7 @@ export function createRenderer(canvas) {
   }
 
   function shadow(x, y, rx, ry, alpha = 0.25) {
+    if (iconMode) return;         // в значке тень под предметом — просто тёмное пятно
     const p = P(x + 0.5, y + 0.58);
     const u = unit(y + 0.5);
     ctx.fillStyle = `rgba(0,0,0,${alpha})`;
@@ -894,20 +896,17 @@ export function createRenderer(canvas) {
    * 'mover', 'twin'. Холст заранее размером через resize().
    */
   function icon(spec, pal, time = 0.4) {
-    // предметы на поле разного размера относительно клетки — в окне все примерно в размер значка
-    const kind = spec.food?.kind;
-    const zoom = kind === 'bonus' ? 1.05 : kind ? 1.55 : spec === 'twin' ? 1.25 : spec === 'portal' ? 1.1 : spec === 'spikes' ? 1.05 : 0.7;
-    const c = W * zoom;
-    // предметы «парят» над клеткой (bob ≈ 0.24) — клетка ниже середины, чтобы сам предмет был по центру
-    const lift = kind && kind !== 'poison' ? 0.26 : spec === 'twin' ? 0.3 : 0.14;
-    L = { c, rh: c * V.row, cx: W / 2, oy: (H - c * V.row) / 2 + c * lift * Math.max(V.z, 0.6), cols: 1, rows: 1 };
+    // клетка — меньше половины холста: предмет «парит» над клеткой и может быть шире её, запас со всех
+    // сторон; лишнее поле обрезает itemIcon() в index.js, вписывая нарисованное в значок
+    const c = W * 0.4;
+    L = { c, rh: c * V.row, cx: W / 2, oy: (H - c * V.row) / 2, cols: 1, rows: 1 };
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
+    iconMode = true;
     const s = { cols: 1, rows: 1, steps: 0 };
     if (spec.food) {
       drawFood({ idx: 0, ttl: BONUS_TTL, ...spec.food }, s, pal, time, 1);
     } else if (spec === 'wall' || spec === 'brick') {
-      L.oy += c * 0.12 * V.z;
       const brick = spec === 'brick';
       cube(0, 0, WALL_H, brick ? pal.brick : pal.wallTop, brick ? shade(pal.brick, -0.35) : pal.wallSide, { inset: 0.04 });
       if (brick) brickLines(0, 0);
@@ -922,6 +921,7 @@ export function createRenderer(canvas) {
       sphere(-0.16, 0, 0.3, 0.3, pal.snakeHead);
       sphere(0.16, 0, 0.3, 0.3, pal.twinHead);
     }
+    iconMode = false;
   }
 
   return { resize, draw, cellCenter, setView, icon };

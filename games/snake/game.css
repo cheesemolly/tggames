@@ -338,7 +338,7 @@
 [data-game="snake"] .sn-help { display: grid; gap: 6px; }
 [data-game="snake"] .sn-help-row { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; line-height: 1.35; }
 /* картинки предметов в окне «?» — нарисованы тем же кодом, что и поле; несколько — внахлёст */
-[data-game="snake"] .sn-help-icon { flex: none; display: flex; margin-top: -6px; }
+[data-game="snake"] .sn-help-icon { flex: none; display: flex; margin-top: -3px; }
 [data-game="snake"] .sn-help-canvas { display: block; }
 [data-game="snake"] .sn-help-canvas + .sn-help-canvas { margin-left: -12px; }
 [data-game="snake"] .sn-small { font-size: 12px; }
