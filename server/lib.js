@@ -232,3 +232,24 @@ export function progressLines(state) {
   }
   return lines;
 }
+
+// ---------- оформление сообщений (entities) ----------
+
+/**
+ * Разметка Telegram (жирный, цитата, сворачиваемая цитата, ссылки…) хранится отдельно от текста — сдвигами
+ * в UTF-16 (как индексы строк JS). Когда бот вырезает начало сообщения («/broadcast », «/message @ник »),
+ * сдвиги надо уменьшить на длину вырезанного и обрезать по длине оставшегося текста. Команда и ник
+ * (что целиком до cut) выбрасываются; разметка, начавшаяся раньше cut, обрезается слева.
+ */
+export function shiftEntities(entities, cut, textLength) {
+  if (!Array.isArray(entities)) return [];
+  const out = [];
+  for (const e of entities) {
+    if (!e || typeof e.offset !== 'number' || typeof e.length !== 'number') continue;
+    const start = Math.max(e.offset, cut) - cut;
+    const end = Math.min(e.offset + e.length - cut, textLength);
+    if (end <= start) continue;
+    out.push({ ...e, offset: start, length: end - start });
+  }
+  return out;
+}

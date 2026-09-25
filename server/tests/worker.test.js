@@ -343,6 +343,45 @@ test('рассылка: только владельцу; сначала пред
   }
 });
 
+test('рассылка и /message сохраняют оформление: сворачиваемая цитата, жирный', async () => {
+  const { say, press } = await botEnv();
+  const tg = captureTelegram();
+  try {
+    const raw = '/broadcast девлог\nобщее\n- пункт';
+    const cut = '/broadcast '.length;
+    await say(ADMIN.id, {
+      text: raw,
+      entities: [
+        { type: 'bot_command', offset: 0, length: 10 },
+        { type: 'bold', offset: cut, length: 6 },
+        { type: 'expandable_blockquote', offset: cut + 7, length: raw.length - cut - 7 },
+      ],
+    });
+    const preview = tg.calls.find((c) => c.method === 'sendMessage' && c.payload.text?.startsWith('девлог'));
+    assert.ok(preview, 'предпросмотр');
+    assert.deepEqual(preview.payload.entities, [
+      { type: 'bold', offset: 0, length: 6 },
+      { type: 'expandable_blockquote', offset: 7, length: raw.length - cut - 7 },
+    ]);
+    const [send] = lastButtons(tg);
+    tg.calls.length = 0;
+    await press(ADMIN.id, send);
+    const sent = tg.calls.filter((c) => c.method === 'sendMessage' && c.payload.text?.startsWith('девлог'));
+    assert.equal(sent.length, 3);
+    assert.ok(sent.every((c) => c.payload.entities?.[1]?.type === 'expandable_blockquote'), 'всем — с цитатой');
+
+    // /message @ник: сдвиг ещё и на ник; подпись к фото — caption_entities
+    tg.calls.length = 0;
+    const cap = '/message @masha  Привет, жирный';
+    await say(ADMIN.id, { photo: [{ file_id: 'p1' }], caption: cap, caption_entities: [{ type: 'bold', offset: cap.indexOf('жирный'), length: 6 }] });
+    const photo = tg.calls.find((c) => c.method === 'sendPhoto');
+    assert.equal(photo.payload.caption, 'Привет, жирный');
+    assert.deepEqual(photo.payload.caption_entities, [{ type: 'bold', offset: 8, length: 6 }]);
+  } finally {
+    tg.restore();
+  }
+});
+
 test('рассылка: «Отмена» — никому не уходит', async () => {
   const { say, press } = await botEnv();
   const tg = captureTelegram();

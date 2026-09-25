@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS drafts (
   target      INTEGER,                    /* кому (для message) */
   target_name TEXT,
   text        TEXT,
+  entities    TEXT,                       /* оформление текста — JSON entities Telegram (сдвинутые) */
   stamp       TEXT NOT NULL,              /* метка последней части альбома — предпросмотр показывает она */
   state       TEXT NOT NULL DEFAULT 'new',/* new, preview, sending, sent, cancelled */
   created_at  INTEGER NOT NULL,
