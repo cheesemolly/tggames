@@ -420,8 +420,11 @@
   font-style: italic;
   line-height: 1;
   color: var(--bo-gold);
-  -webkit-text-stroke: 2px color-mix(in srgb, var(--bo-gold) 45%, #000000);
-  text-shadow: 0 4px 0 color-mix(in srgb, var(--bo-gold) 40%, #000000), 0 0 22px color-mix(in srgb, var(--bo-gold) 70%, transparent);
+  /* контур — тенями по кругу: -webkit-text-stroke в Safari рисует внутренние контуры букв (баг, найден в «Шариках») */
+  --bo-edge: color-mix(in srgb, var(--bo-gold) 45%, #000000);
+  text-shadow: 2px 0 0 var(--bo-edge), -2px 0 0 var(--bo-edge), 0 2px 0 var(--bo-edge), 0 -2px 0 var(--bo-edge),
+    1.5px 1.5px 0 var(--bo-edge), -1.5px 1.5px 0 var(--bo-edge), 1.5px -1.5px 0 var(--bo-edge), -1.5px -1.5px 0 var(--bo-edge),
+    0 4px 0 color-mix(in srgb, var(--bo-gold) 40%, #000000), 0 0 22px color-mix(in srgb, var(--bo-gold) 70%, transparent);
 }
 [data-game="boggle"] .bo-banner-word {
   padding: 4px 12px;
