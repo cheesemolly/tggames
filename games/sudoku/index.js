@@ -343,13 +343,18 @@ function report(won, { difficulty, mistakes, score, time }) {
 
 // ---------- пауза ----------
 
+/** Окно паузы без анимации: при новой партии и открытии сохранённой оно обязано совпадать с `paused`. */
+function showPauseCover(show) {
+  ui.pauseCover.getAnimations().forEach((a) => a.cancel());
+  ui.pauseCover.hidden = !show;
+}
+
 function setPaused(value) {
   if (!game || finished || paused === value) return;
   paused = value;
   if (paused) {
     stopClock();
-    ui.pauseCover.getAnimations().forEach((a) => a.cancel());
-    ui.pauseCover.hidden = false;
+    showPauseCover(true);
     animate(ui.pauseCover, [{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: 'ease-out' });
   } else {
     startClock();
@@ -484,7 +489,10 @@ async function showPicker(cancellable) {
 
 async function startNew(difficulty) {
   closeModal();
+  // «+» ставит партию на паузу на время выбора сложности — окно паузы надо убрать вместе с флагом,
+  // иначе оно оставалось поверх новой партии, а «Продолжить» ничего не делал (баг, видео владельца)
   paused = false;
+  showPauseCover(false);
   ui.sub.textContent = t.loading;
   let bank;
   try {
@@ -724,7 +732,7 @@ export default {
       board: el('div', { class: 'sd-board', role: 'grid' }),
       cells: [],
       pauseCover: el('div', { class: 'sd-pause-cover', hidden: true },
-        el('button', { class: 'btn sd-resume', onclick: () => setPaused(false) }, t.resume)),
+        el('button', { class: 'btn sd-resume', onclick: () => (paused ? setPaused(false) : showPauseCover(false)) }, t.resume)),
       notesBadge: el('span', { class: 'sd-badge sd-badge-pill' }),
       hintBadge: el('span', { class: 'sd-badge sd-badge-count' }),
       pad: el('div', { class: 'sd-pad' }),
@@ -806,6 +814,8 @@ export default {
     if (isValidState(savedGame)) {
       game = savedGame;
       selected = -1;
+      paused = false;
+      showPauseCover(false);
       startClock();
       renderAll();
     } else {
