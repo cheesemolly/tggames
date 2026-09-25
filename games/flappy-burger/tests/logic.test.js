@@ -7,7 +7,8 @@ import assert from 'node:assert/strict';
 import {
   W, PLAY_H, GAP, DIAG_GAP, EDGE, MAX_UP, MAX_DOWN, FREE_MIN, FREE_MAX, OB_W, BURGER_X, BURGER_W, BURGER_H, FLAP,
   GRAVITY, SPEED, SCENE_MIN, SCENE_MAX, DOOR_H, TYPES, WIDTHS, DIAGONAL, SLICE,
-  HOVER_Y, newGame, step, flap, launch, fillAhead, sceneAt, obstacleRects, nextObstacle, gapCenterAt, exitGapY,
+  HOVER_Y, GAP_MIN, GAP_MAX, DIAG_GAP_MIN, DIAG_GAP_MAX, GAP_EASY, RAMP, GLIDE_STOP,
+  newGame, step, flap, launch, fillAhead, sceneAt, obstacleRects, nextObstacle, gapCenterAt, exitGapY,
   emptyStats, recordGame, isValidStats,
 } from '../logic.js';
 
@@ -50,7 +51,7 @@ function generate(seed, screens = 600) {
 
 test('физика: прыжок ниже проёма, за минимальное расстояние успевает подняться на MAX_UP и опуститься на MAX_DOWN', () => {
   const jump = (FLAP * FLAP) / (2 * GRAVITY);
-  assert.ok(jump < GAP / 2, `прыжок ${jump.toFixed(1)} px меньше половины проёма`);
+  assert.ok(jump < GAP_MIN / 2, `прыжок ${jump.toFixed(1)} px меньше половины самого узкого проёма`);
   const time = 64 / SPEED;                                 // 64 px свободного места — «единица» сдвига проёма
   assert.ok(time * (jump / (-FLAP / GRAVITY)) > MAX_UP, 'подъём больше MAX_UP');
   assert.ok(0.5 * GRAVITY * time * time > MAX_DOWN, 'падение больше MAX_DOWN');
@@ -100,7 +101,13 @@ test('генерация: разные ширины и расстояния, п�
   assert.ok(frees.size >= 20, 'расстояния разные');
   const diags = all.filter((o) => DIAGONAL.has(o.type));
   assert.ok(diags.length > 20 && diags.some((o) => o.slope > 0) && diags.some((o) => o.slope < 0), 'диагонали вверх и вниз');
-  for (const o of diags) assert.equal(o.gap, DIAG_GAP);
+  for (const o of diags) assert.ok(o.gap >= DIAG_GAP_MIN && o.gap <= DIAG_GAP_MAX, `диагональ: проём ${o.gap}`);
+  // проёмы разной высоты: сначала только широкие, потом до самых узких
+  const plain = all.filter((o) => o.type !== 'door' && !DIAGONAL.has(o.type));
+  for (const o of plain.slice(1)) assert.ok(o.gap >= GAP_MIN && o.gap <= GAP_MAX, `проём ${o.gap}`);
+  assert.ok(plain.slice(1, 8).every((o) => o.gap >= GAP_EASY - 4), 'в начале проёмы широкие');
+  assert.ok(new Set(plain.map((o) => o.gap)).size >= 11, 'высоты проёмов разные (чётные 54…78)');
+  assert.ok(plain.slice(RAMP * 2).some((o) => o.gap <= GAP_MIN + 2), 'дальше встречаются самые узкие');
   for (const scene of ['kitchen', 'street']) for (const t of TYPES[scene]) assert.ok(all.some((o) => o.type === t), t);
   // сцены: кухня → улица → кухня…, стена с дверью на каждой границе, в сцене SCENE_MIN…SCENE_MAX препятствий
   assert.ok(gates.length >= 15);
@@ -118,7 +125,7 @@ test('генерация: разные ширины и расстояния, п�
   assert.equal(SLICE, 4);
 });
 
-test('старт после заставки: бургер «планирует» и сам проходит первый проём, первый взмах включает игру', () => {
+test('старт после заставки: бургер «планирует», перед первым препятствием управление — игроку', () => {
   for (let seed = 1; seed <= 60; seed++) {
     const rng = seeded(seed);
     const s = newGame(rng);
@@ -129,13 +136,24 @@ test('старт после заставки: бургер «планирует�
     assert.equal(s.dist, 0);
     launch(s);
     assert.equal(s.phase, 'glide');
-    // игрок не нажимает — бургер держит высоту и проходит первое препятствие
-    for (let t = 0; t < 8 && s.score < 1; t += 1 / 60) step(s, 1 / 60, rng);
-    assert.equal(s.score, 1, `зерно ${seed}: первое препятствие пройдено без нажатий`);
-    assert.equal(s.phase, 'glide');
-    assert.ok(Math.abs(s.y - HOVER_Y) <= 3.01, 'высота держится');
-    flap(s);
-    assert.equal(s.phase, 'play', 'первый взмах включает гравитацию');
+    assert.equal(first.gap, GAP_MAX, 'первый проём — самый широкий');
+    // игрок не нажимает: бургер держит высоту, но перед первым препятствием управление отдаётся игроку
+    const rng2 = seeded(seed);
+    const idle = newGame(rng2);
+    launch(idle);
+    let released = -1;
+    for (let t = 0; t < 8 && idle.phase !== 'over'; t += 1 / 60) {
+      if (idle.phase === 'glide') assert.ok(Math.abs(idle.y - HOVER_Y) <= 3.01, 'высота держится');
+      step(idle, 1 / 60, rng2);
+      if (released < 0 && idle.phase !== 'glide') released = idle.obstacles[0].x - idle.dist - (BURGER_X + BURGER_W);
+    }
+    assert.ok(released > 0 && released <= GLIDE_STOP + 1, `зерно ${seed}: отпустил за ${released} px до препятствия`);
+    assert.equal(idle.score, 0, `зерно ${seed}: сам бургер препятствие не проходит`);
+    // а с первым же взмахом и автопилотом — летит дальше
+    const s2 = newGame(seeded(seed));
+    launch(s2);
+    flap(s2);
+    assert.equal(s2.phase, 'play', 'первый взмах включает гравитацию');
   }
 });
 

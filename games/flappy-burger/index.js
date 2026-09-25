@@ -702,8 +702,27 @@ function drawWallFront(ox, ob, t) {
     lc.fillRect(x, 0, 4, PLAY_H);
     px(x + w - 3, 0, 3, PLAY_H, '#efe0c2');
   }
-  // вывеска — над проходом
+  // проход — затемнён, над ним балка, внутри бегут стрелки «›››»: видно, куда лететь
+  // (замечание владельца: игроки видели перед собой монолитную стену; дверь рисовать не нужно)
   const top = ob.gapY - ob.gap / 2;
+  const depth = PLAY_H - top;
+  lc.fillStyle = 'rgba(10, 5, 18, 0.55)';
+  lc.fillRect(x, top, w, depth);
+  lc.fillStyle = 'rgba(10, 5, 18, 0.3)';
+  lc.fillRect(x + 4, top + 3, w - 8, depth - 3);
+  lc.fillStyle = 'rgba(0, 0, 0, 0.45)';
+  lc.fillRect(x, top, w, 3);
+  px(x, top - 3, w, 3, '#5d626b');
+  px(x, top - 3, w, 1, '#a3a9b3');
+  const arrow = toStreet ? '#5fd88a' : '#ff8a3d';
+  const ay = Math.round(top + depth / 2) - 5;
+  const ax = Math.round(x + w / 2) - 11;
+  for (let k = 0; k < 3; k++) {
+    lc.globalAlpha = Math.floor(t * 6) % 3 === k ? 1 : 0.35;
+    for (const [dx, dy] of [[0, 0], [1, 1], [2, 2], [1, 3], [0, 4]]) px(ax + k * 8 + dx * 2, ay + dy * 2, 2, 2, arrow);
+  }
+  lc.globalAlpha = 1;
+  // вывеска — над проходом
   const mid = ox + OB_W / 2;
   if (toStreet) {
     px(mid - 11, top - 17, 22, 10, '#1f9d4a');
