@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import {
   W, PLAY_H, GAP, DIAG_GAP, EDGE, MAX_UP, MAX_DOWN, FREE_MIN, FREE_MAX, OB_W, BURGER_X, BURGER_W, BURGER_H, FLAP,
   GRAVITY, SPEED, SCENE_MIN, SCENE_MAX, DOOR_H, TYPES, WIDTHS, DIAGONAL, SLICE,
-  newGame, step, flap, fillAhead, sceneAt, obstacleRects, nextObstacle, gapCenterAt, exitGapY,
+  HOVER_Y, newGame, step, flap, launch, fillAhead, sceneAt, obstacleRects, nextObstacle, gapCenterAt, exitGapY,
   emptyStats, recordGame, isValidStats,
 } from '../logic.js';
 
@@ -118,8 +118,31 @@ test('генерация: разные ширины и расстояния, п�
   assert.equal(SLICE, 4);
 });
 
-test('проходимость: автопилот пролетает 300 препятствий на 12 зёрнах (диагонали, двери, кухни и улицы)', () => {
-  for (let seed = 1; seed <= 12; seed++) {
+test('старт после заставки: бургер «планирует» и сам проходит первый проём, первый взмах включает игру', () => {
+  for (let seed = 1; seed <= 60; seed++) {
+    const rng = seeded(seed);
+    const s = newGame(rng);
+    const first = s.obstacles[0];
+    assert.ok(!DIAGONAL.has(first.type) && first.slope === 0, `зерно ${seed}: первый проём прямой`);
+    assert.ok(Math.abs(first.gapY - (HOVER_Y + BURGER_H / 2)) <= 1, `зерно ${seed}: первый проём на высоте бургера`);
+    step(s, 1.5, rng);                       // заставка: мир стоит
+    assert.equal(s.dist, 0);
+    launch(s);
+    assert.equal(s.phase, 'glide');
+    // игрок не нажимает — бургер держит высоту и проходит первое препятствие
+    for (let t = 0; t < 8 && s.score < 1; t += 1 / 60) step(s, 1 / 60, rng);
+    assert.equal(s.score, 1, `зерно ${seed}: первое препятствие пройдено без нажатий`);
+    assert.equal(s.phase, 'glide');
+    assert.ok(Math.abs(s.y - HOVER_Y) <= 3.01, 'высота держится');
+    flap(s);
+    assert.equal(s.phase, 'play', 'первый взмах включает гравитацию');
+  }
+});
+
+test('проходимость: автопилот пролетает 300 препятствий на 40 зёрнах (диагонали, двери, кухни и улицы)', () => {
+  // было 12 зёрен; перебор 300 нашёл редкие непроходимые места (минимальный зазор перед дверью,
+  // резкий спуск после диагонали вверх) — исправлены в генераторе, проверка расширена
+  for (let seed = 1; seed <= 40; seed++) {
     const rng = seeded(seed);
     const s = autopilot(newGame(rng), rng, 300);
     assert.equal(s.score, 300, `зерно ${seed}: разбился на ${s.score}`);

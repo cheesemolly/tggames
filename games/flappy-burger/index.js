@@ -1,19 +1,22 @@
 // Flappy Burger — пиксельная графика: всё рисуется в буфер W×H (160×256 игровых пикселей) и увеличивается без
 // сглаживания в целое число экранных пикселей. Кухня (вытяжки и плиты) ↔ ночная улица (мусорные баки) через двери.
 // Нажатие / пробел — взмах. Забег не сохраняется (он короткий); статистика — в api.storage игры.
+// При входе — случайная из четырёх заставок (logos.js) и «Нажми, чтобы играть»: по нажатию заставка уезжает
+// вверх, бургер «планирует» (launch) до первого взмаха — на переходе он разбиться не может.
 
 import { el } from '../../shared/dom.js';
 import { showLayer, hideLayer, pop, reducedMotion } from '../../shared/motion.js';
 import { createToast } from '../../shared/toast.js';
 import {
   W, H, GROUND, PLAY_H, BURGER_X, BURGER_W, BURGER_H, MAX_FALL, FLAP, OB_W,
-  newGame, step, flap, sceneAt, obstacleRects, emptyStats, recordGame, isValidStats,
+  newGame, step, flap, launch, sceneAt, obstacleRects, emptyStats, recordGame, isValidStats,
 } from './logic.js';
+import { createLogo, LOGO_COUNT } from './logos.js';
 
 const T = {
   title: 'Flappy Burger',
   best: (n) => `Рекорд: ${n}`,
-  tap: 'Коснись, чтобы взлететь',
+  tap: 'Нажми, чтобы играть',
   street: 'На улицу!',
   kitchen: 'Обратно на кухню!',
   over: 'Игра окончена',
@@ -42,6 +45,8 @@ let shakeT = -1;
 let scorePopT = -1;
 let modalActive = false;
 let modalToken = 0;
+let title = null;                  // заставка: { logo, canvas, ctx, t, leaveT } — пока на экране
+const TITLE_LEAVE = 0.5;           // с, заставка уезжает вверх
 const timers = new Set();
 
 function later(fn, ms) {
@@ -146,11 +151,11 @@ function drawBurger(s) {
   const frames = burgerSprites();
   const sinceFlap = s.t - s.flapT;
   let frame = 0;
-  if (s.phase === 'ready') frame = Math.floor(s.t * 6) % 3;
+  if (s.phase === 'ready' || s.phase === 'glide') frame = Math.floor(s.t * 6) % 3;
   else if (s.phase === 'play' && sinceFlap < 0.3) frame = 1 + (Math.floor(sinceFlap * 20) % 2);
   // наклон как в Flappy Bird: вверх после взмаха, носом вниз при падении
   let angle = 0;
-  if (s.phase !== 'ready') {
+  if (s.phase !== 'ready' && s.phase !== 'glide') {
     const k = (s.vy - FLAP) / (MAX_FALL - FLAP);
     angle = (-25 + Math.max(0, Math.min(1, k)) * 105) * (Math.PI / 180);
   }
@@ -783,6 +788,11 @@ function render() {
     lc.fillStyle = `rgba(255, 255, 255, ${0.85 * (1 - (s.t - flashT) / 0.3)})`;
     lc.fillRect(0, 0, W, H);
   }
+  // заставка — поверх всего; по нажатию уезжает вверх и открывает игру
+  if (title) {
+    const p = title.leaveT < 0 ? 0 : Math.min(1, (s.t - title.leaveT) / TITLE_LEAVE);
+    lc.drawImage(title.canvas, 0, -Math.round(H * p * p * (3 - 2 * p)));
+  }
   // вывод на экран: целое число экранных пикселей на игровой пиксель, тряска после удара
   const c = ui.ctx;
   c.imageSmoothingEnabled = false;
@@ -818,6 +828,11 @@ function loop(now) {
   if (!ui || !game) return;
   const dt = Math.min(1 / 30, (now - lastFrame) / 1000 || 0);
   lastFrame = now;
+  if (title) {
+    title.t += dt;
+    if (title.leaveT >= 0 && game.t - title.leaveT >= TITLE_LEAVE) title = null;
+    else title.logo.draw(title.ctx, reducedMotion() ? 2.5 : title.t, reducedMotion() ? 0 : dt);
+  }
   if (!modalActive) {
     const events = step(game, dt);
     for (const e of events) onEvent(e);
@@ -881,6 +896,16 @@ function onEvent(e) {
 
 function onFlap() {
   if (!game || modalActive || finished) return;
+  if (title && title.leaveT < 0) {
+    // «Нажми, чтобы играть»: заставка уезжает, мир поехал, бургер планирует до первого взмаха
+    title.leaveT = game.t;
+    if (reducedMotion()) title = null;
+    launch(game);
+    ui.hint.classList.add('fb-hint-hide');
+    api.platform.haptic.impact('light');
+    kick();
+    return;
+  }
   if (game.phase === 'ready') ui.hint.classList.add('fb-hint-hide');
   if (flap(game)) {
     api.platform.haptic.impact('light');
@@ -1001,6 +1026,17 @@ export default {
 
     game = newGame();
     finished = false;
+    // заставка — случайная из четырёх (?fblogo=N в адресе — конкретная, для проверки)
+    const forced = Number(new URLSearchParams(location.search).get('fblogo'));
+    const variant = Number.isInteger(forced) && forced >= 1 && forced <= LOGO_COUNT ? forced - 1 : Math.floor(Math.random() * LOGO_COUNT);
+    const titleCanvas = document.createElement('canvas');
+    titleCanvas.width = W;
+    titleCanvas.height = H;
+    title = {
+      logo: createLogo(variant, { flying: burgerSprites(), burger: BURGER, pal: PAL }),
+      canvas: titleCanvas, ctx: titleCanvas.getContext('2d'), t: 0, leaveT: -1,
+    };
+    title.logo.draw(title.ctx, reducedMotion() ? 2.5 : 0, 0);
     // для проверки из Claude (страница-обёртка с автопилотом): ?fbdebug в адресе
     if (new URLSearchParams(location.search).has('fbdebug')) window.__flappy = { get game() { return game; }, flap: onFlap };
     ui.resizeObserver = new ResizeObserver(() => resize());
@@ -1023,7 +1059,7 @@ export default {
     ui?.resizeObserver?.disconnect();
     toast?.dispose();
     root?.remove();
-    api = host = root = ui = toast = game = lc = null;
+    api = host = root = ui = toast = game = lc = title = null;
     particles = [];
     flashT = shakeT = scorePopT = -1;
     finished = false;

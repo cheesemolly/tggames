@@ -31,6 +31,7 @@ export const MAX_UP = 48;                  // на 64 px свободного м
 export const MAX_DOWN = 64;                // и ниже на столько
 export const EDGE = 26;                    // проём не ближе к потолку/полу (до края проёма)
 export const FIRST_X = W + 40;             // первое препятствие (мировая x)
+export const HOVER_Y = PLAY_H * 0.42;      // высота бургера до старта и в «планировании» (верх хитбокса)
 export const SCENE_MIN = 6;                // препятствий в сцене
 export const SCENE_MAX = 11;
 export const STEP = 1 / 120;               // шаг физики
@@ -152,9 +153,12 @@ const pick = (arr, rng) => arr[Math.floor(rng() * arr.length)];
 
 export function newGame(rng = Math.random) {
   const s = {
-    y: PLAY_H * 0.42, vy: 0, dist: 0, idle: 0, t: 0, score: 0, phase: 'ready', flapT: -1,
+    y: HOVER_Y, vy: 0, dist: 0, idle: 0, t: 0, score: 0, phase: 'ready', flapT: -1,
     obstacles: [], gates: [], scene: 'kitchen', sceneLeft: randInt(rng, SCENE_MIN, SCENE_MAX),
-    nextX: FIRST_X, free: FREE_MAX, lastGapY: PLAY_H / 2, lastType: null, visits: { kitchen: 1, street: 0 },
+    nextX: FIRST_X, free: FREE_MAX, lastGapY: HOVER_Y + BURGER_H / 2, lastType: null, visits: { kitchen: 1, street: 0 },
+    // первый проём — прямой и ровно на высоте, где бургер «планирует»: после заставки игрок не разобьётся,
+    // пока не начал нажимать (замечание владельца: не умирать на переходе от лого к игре)
+    alignFirst: true,
   };
   fillAhead(s, rng);
   return s;
@@ -173,18 +177,21 @@ export function fillAhead(s, rng = Math.random) {
       s.sceneLeft = randInt(rng, SCENE_MIN, SCENE_MAX);
       s.lastGapY = Math.min(PLAY_H - EDGE - GAP / 2, PLAY_H - DOOR_H / 2);
       s.lastType = null;
+      s.lastSlope = 0;
       s.free = randInt(rng, FREE_MIN, FREE_MAX);
       s.nextX = x + OB_W + s.free;
       continue;
     }
-    const type = pick(TYPES[s.scene].filter((t) => t !== s.lastType), rng);
+    const type = pick(TYPES[s.scene].filter((t) => t !== s.lastType && !(s.alignFirst && DIAGONAL.has(t))), rng);
     const w = pick(WIDTHS[type], rng);
     const diag = DIAGONAL.has(type);
     const gap = diag ? DIAG_GAP : GAP;
     // вход проёма — в пределах досягаемости от выхода предыдущего (пропорционально свободному месту)
     const k = s.free / 64;
     const lo0 = Math.max(EDGE + gap / 2, s.lastGapY - MAX_UP * k);
-    const hi0 = Math.min(PLAY_H - EDGE - gap / 2, s.lastGapY + MAX_DOWN * k);
+    // после диагонали вверх бургер ещё летит вверх — резко нырнуть он не успевает: спуск меньше
+    const downK = s.lastSlope < 0 ? 0.6 : 1;
+    const hi0 = Math.min(PLAY_H - EDGE - gap / 2, s.lastGapY + MAX_DOWN * k * downK);
     let slope = 0;
     let lo = lo0;
     let hi = hi0;
@@ -207,7 +214,9 @@ export function fillAhead(s, rng = Math.random) {
     }
     // перед дверью выход проёма — не выше, чем позволяет спуститься под её притолоку (центр бургера ниже на 12 px)
     const needLow = PLAY_H - DOOR_H + 12 - MAX_DOWN * (FREE_MIN / 64);
-    let gapY = Math.round(lo + rng() * (hi - lo));
+    let gapY = s.alignFirst ? Math.round(Math.min(hi0, Math.max(lo0, s.lastGapY))) : Math.round(lo + rng() * (hi - lo));
+    if (s.alignFirst) slope = 0;
+    s.alignFirst = false;
     const ob = { x, w, gapY, gap, slope, scene: s.scene, type, passed: false };
     if (s.sceneLeft === 1 && exitGapY(ob) < needLow) {
       ob.slope = 0;
@@ -221,8 +230,12 @@ export function fillAhead(s, rng = Math.random) {
     s.obstacles.push(ob);
     s.lastType = ob.type;
     s.lastGapY = exitGapY(ob);
+    s.lastSlope = ob.slope;
     s.sceneLeft -= 1;
     s.free = randInt(rng, FREE_MIN, FREE_MAX);
+    // перед дверью — самое большое свободное место: нырнуть под притолоку после взмаха. С минимальным
+    // зазором бургер (и автопилот тестов — 3 зерна из 60) не успевал опуститься
+    if (s.sceneLeft === 0) s.free = FREE_MAX;
     s.nextX = x + ob.w + s.free;
   }
   // ушедшее за левый край — выбросить
@@ -243,9 +256,17 @@ export function sceneAt(s, x) {
 
 // ---------- ход игры ----------
 
+/**
+ * Старт после заставки: мир едет, а бургер «планирует» на высоте HOVER_Y без гравитации — до первого взмаха.
+ * Первый проём как раз на этой высоте, так что переход от лого к игре безопасен.
+ */
+export function launch(s) {
+  if (s.phase === 'ready') s.phase = 'glide';
+}
+
 export function flap(s) {
   if (s.phase === 'dead' || s.phase === 'over') return false;
-  if (s.phase === 'ready') s.phase = 'play';
+  if (s.phase === 'ready' || s.phase === 'glide') s.phase = 'play';
   s.vy = FLAP;
   s.flapT = s.t;
   return true;
@@ -278,13 +299,19 @@ export function step(s, dt, rng = Math.random) {
     s.t += h;
     if (s.phase === 'ready') {
       // ожидание старта: бургер покачивается, препятствия стоят (прокручивается только фон — s.idle)
-      s.y = PLAY_H * 0.42 + Math.sin(s.t * 5) * 3;
+      s.y = HOVER_Y + Math.sin(s.t * 5) * 3;
       s.idle += SPEED * h;
       continue;
     }
     if (s.phase === 'over') break;
-    s.vy = Math.min(MAX_FALL, s.vy + GRAVITY * h);
-    s.y += s.vy * h;
+    if (s.phase === 'glide') {
+      // «планирование»: высота держится сама, мир едет
+      s.y = HOVER_Y + Math.sin(s.t * 5) * 3;
+      s.vy = 0;
+    } else {
+      s.vy = Math.min(MAX_FALL, s.vy + GRAVITY * h);
+      s.y += s.vy * h;
+    }
     if (s.y < 0) {
       s.y = 0;
       s.vy = Math.max(0, s.vy);
