@@ -237,6 +237,27 @@ function progressLines(state) {
   return lines;
 }
 
+// ---------- оформление сообщений (entities) ----------
+
+/**
+ * Разметка Telegram (жирный, цитата, сворачиваемая цитата, ссылки…) хранится отдельно от текста — сдвигами
+ * в UTF-16 (как индексы строк JS). Когда бот вырезает начало сообщения («/broadcast », «/message @ник »),
+ * сдвиги надо уменьшить на длину вырезанного и обрезать по длине оставшегося текста. Команда и ник
+ * (что целиком до cut) выбрасываются; разметка, начавшаяся раньше cut, обрезается слева.
+ */
+function shiftEntities(entities, cut, textLength) {
+  if (!Array.isArray(entities)) return [];
+  const out = [];
+  for (const e of entities) {
+    if (!e || typeof e.offset !== 'number' || typeof e.length !== 'number') continue;
+    const start = Math.max(e.offset, cut) - cut;
+    const end = Math.min(e.offset + e.length - cut, textLength);
+    if (end <= start) continue;
+    out.push({ ...e, offset: start, length: end - start });
+  }
+  return out;
+}
+
 // Обработчик Cloudflare Worker: вход через Telegram, прогресс игроков, панель владельца и сам бот.
 // База — Cloudflare D1 (привязка `DB`, схема в schema.sql). Как это выкладывается — в README.md.
 //
@@ -545,12 +566,18 @@ async function botWebhook(request, env, ctx) {
   const message = update.message ?? update.edited_message;
   const chatId = message?.chat?.id;
   const tgId = message?.from?.id;
-  const text = (message?.text ?? message?.caption ?? '').trim();
+  const raw = message?.text ?? message?.caption ?? '';
+  const text = raw.trim();
   const media = mediaOf(message);
   if (!chatId || (!text && !media.length)) return new Response('ok');
 
   const command = text.startsWith('/') ? text.split(/\s+/)[0].split('@')[0].toLowerCase() : '';
   const rest = command ? text.slice(text.split(/\s+/)[0].length).trim() : text;
+  // где в исходном сообщении начинается rest — от этого места сдвигается разметка (цитаты, жирный…)
+  const lead = raw.length - raw.trimStart().length;
+  const afterCmd = command ? text.slice(text.split(/\s+/)[0].length) : text;
+  const restAt = lead + (text.length - afterCmd.length) + (afterCmd.length - afterCmd.trimStart().length);
+  const entities = message?.entities ?? message?.caption_entities ?? [];
   const admin = isAdmin(tgId, parseAdminIds(env.ADMIN_IDS));
 
   if (command === '/start') {
@@ -573,13 +600,13 @@ async function botWebhook(request, env, ctx) {
       await api(env, 'sendMessage', { chat_id: chatId, text: 'Эта команда только для владельца.' });
       return new Response('ok');
     }
-    await collectDraft(env, ctx, message, { command, rest, media });
+    await collectDraft(env, ctx, message, { command, rest, media, entities, restAt });
     return new Response('ok');
   }
 
   // картинки альбома без подписи — часть черновика владельца (подпись с командой у одной из них)
   if (admin && media.length && message.media_group_id) {
-    await collectDraft(env, ctx, message, { command: '', rest: '', media });
+    await collectDraft(env, ctx, message, { command: '', rest: '', media, entities: [], restAt: 0 });
     return new Response('ok');
   }
 
@@ -619,11 +646,17 @@ async function ensureDraftTables(env) {
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS draft_media (
     admin_id INTEGER NOT NULL, group_key TEXT NOT NULL, message_id INTEGER NOT NULL,
     type TEXT NOT NULL, file_id TEXT NOT NULL, PRIMARY KEY (admin_id, group_key, message_id))`).run();
+  // оформление текста (JSON entities) — столбец добавлен позже: у уже созданной таблицы его может не быть
+  try {
+    await env.DB.prepare('ALTER TABLE drafts ADD COLUMN entities TEXT').run();
+  } catch {
+    // уже есть
+  }
 }
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function collectDraft(env, ctx, message, { command, rest, media }) {
+async function collectDraft(env, ctx, message, { command, rest, media, entities = [], restAt = 0 }) {
   await ensureDraftTables(env);
   const adminId = message.from.id;
   const chatId = message.chat.id;
@@ -634,6 +667,7 @@ async function collectDraft(env, ctx, message, { command, rest, media }) {
   let target = null;
   let targetName = null;
   let text = null;
+  let textAt = restAt;                     // где текст рассылки начинается в исходном сообщении
   if (command === '/broadcast') {
     kind = 'broadcast';
     text = rest;
@@ -652,18 +686,22 @@ async function collectDraft(env, ctx, message, { command, rest, media }) {
     kind = 'message';
     target = player.tg_id;
     targetName = player.username ? `@${player.username}` : player.name;
-    text = rest.slice(who.length).trim();
+    const tail = rest.slice(who.length);
+    text = tail.trim();
+    textAt = restAt + who.length + (tail.length - tail.trimStart().length);
     void words;
   }
+  // оформление (сворачиваемые цитаты, жирный, ссылки) — сдвигается на вырезанную команду и ник
+  const format = text ? shiftEntities(entities, textAt, text.length) : [];
 
   const stamp = crypto.randomUUID();
-  await env.DB.prepare(`INSERT INTO drafts (admin_id, chat_id, group_key, kind, target, target_name, text, stamp, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  await env.DB.prepare(`INSERT INTO drafts (admin_id, chat_id, group_key, kind, target, target_name, text, entities, stamp, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT (admin_id, group_key) DO UPDATE SET
         kind = COALESCE(excluded.kind, drafts.kind), target = COALESCE(excluded.target, drafts.target),
         target_name = COALESCE(excluded.target_name, drafts.target_name), text = COALESCE(excluded.text, drafts.text),
-        stamp = excluded.stamp`)
-    .bind(adminId, chatId, key, kind, target, targetName, text, stamp, Date.now()).run();
+        entities = COALESCE(excluded.entities, drafts.entities), stamp = excluded.stamp`)
+    .bind(adminId, chatId, key, kind, target, targetName, text, format.length ? JSON.stringify(format) : null, stamp, Date.now()).run();
   for (const m of media) {
     await env.DB.prepare('INSERT OR IGNORE INTO draft_media (admin_id, group_key, message_id, type, file_id) VALUES (?, ?, ?, ?, ?)')
       .bind(adminId, key, message.message_id, m.type, m.id).run();
@@ -740,18 +778,26 @@ async function previewDraft(env, adminId, key, stamp) {
 async function sendDraft(env, chatId, draft) {
   const text = draft.text ?? '';
   const media = draft.media ?? [];
+  let format = [];
+  try {
+    format = draft.entities ? JSON.parse(draft.entities) : [];
+  } catch {
+    format = [];
+  }
+  const withText = format.length ? { entities: format } : {};
+  const withCaption = text ? { caption: text, ...(format.length ? { caption_entities: format } : {}) } : {};
   let res;
   if (!media.length) {
-    res = await api(env, 'sendMessage', { chat_id: chatId, text, reply_markup: playButton(env) });
+    res = await api(env, 'sendMessage', { chat_id: chatId, text, ...withText, reply_markup: playButton(env) });
   } else if (media.length === 1) {
     const [m] = media;
     res = await api(env, m.type === 'video' ? 'sendVideo' : 'sendPhoto', {
-      chat_id: chatId, [m.type]: m.id, ...(text ? { caption: text } : {}), reply_markup: playButton(env),
+      chat_id: chatId, [m.type]: m.id, ...withCaption, reply_markup: playButton(env),
     });
   } else {
     res = await api(env, 'sendMediaGroup', {
       chat_id: chatId,
-      media: media.map((m, i) => ({ type: m.type, media: m.id, ...(i === 0 && text ? { caption: text } : {}) })),
+      media: media.map((m, i) => ({ type: m.type, media: m.id, ...(i === 0 ? withCaption : {}) })),
     });
   }
   return res.ok;

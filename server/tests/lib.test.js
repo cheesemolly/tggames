@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {
   checkInitData, diagnoseInitData, dataCheckString, validateState, parseAdminIds, isAdmin, displayName,
   timingSafeEqual, MAX_STATE_BYTES, INIT_DATA_MAX_AGE_MS,
-  GAMES, findGames, startAppLink, progressLines,
+  GAMES, findGames, startAppLink, progressLines, shiftEntities,
 } from '../lib.js';
 import { makeInitData, TOKEN, USER } from './helpers.js';
 
@@ -145,4 +145,25 @@ test('ссылка на мини-приложение и строки прогр
     'old-game: сыграно 1',
   ]);
   assert.deepEqual(progressLines({}), []);
+});
+
+test('оформление: сдвиг разметки на вырезанную команду', () => {
+  const raw = '/broadcast девлог\nобщее\n- пункт';
+  const cut = '/broadcast '.length;
+  const text = raw.slice(cut);
+  const ents = [
+    { type: 'bot_command', offset: 0, length: 10 },
+    { type: 'bold', offset: cut, length: 6 },
+    { type: 'expandable_blockquote', offset: cut + 7, length: text.length - 7 },
+  ];
+  const out = shiftEntities(ents, cut, text.length);
+  assert.deepEqual(out.map((e) => e.type), ['bold', 'expandable_blockquote'], 'команда выброшена');
+  assert.equal(text.slice(out[0].offset, out[0].offset + out[0].length), 'девлог');
+  assert.equal(text.slice(out[1].offset, out[1].offset + out[1].length), 'общее\n- пункт');
+  // разметка, начатая до cut, обрезается слева; выходящая за текст — справа
+  assert.deepEqual(shiftEntities([{ type: 'italic', offset: 2, length: 20 }], 5, 10), [{ type: 'italic', offset: 0, length: 10 }]);
+  // эмодзи — 2 единицы UTF-16, как и в Telegram
+  const emoji = '/b \u{1F354} бургер';
+  assert.deepEqual(shiftEntities([{ type: 'bold', offset: 6, length: 6 }], 3, emoji.length - 3), [{ type: 'bold', offset: 3, length: 6 }]);
+  assert.deepEqual(shiftEntities(null, 3, 10), []);
 });
