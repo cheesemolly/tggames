@@ -7,7 +7,7 @@ import {
   COLS, R, ROW_H, WIDTH, VIEW_ROWS, ANCHOR, MATCH, STONE, LOCK, BONUS_MAX,
   rowCols, cellX, cellY, neighbors, emptyGrid, cloneGrid, countBubbles, countColored, colorsOnField, lowestRow,
   scrollFor, shooterPos, ceilingY, snapCell, fly, cluster, floating, blastArea,
-  newLevel, shoot, swap, arm, aimPath, angleTo, clampAngle, MAX_ANGLE, starsFor, levelRows, paletteFor,
+  newLevel, shoot, swap, arm, aimPath, angleTo, clampAngle, MAX_ANGLE, clearedShare, rewardProgress, levelRows, paletteFor,
   isValidState, emptyStats, recordGame, isValidStats,
 } from '../logic.js';
 
@@ -326,10 +326,24 @@ test('прицел, замена шара, звёзды, сохранение, �
   swap(s);
   assert.deepEqual([s.current, s.next], [b, a]);
 
-  assert.equal(starsFor({ score: 0, target: 100 }), 0);
-  assert.equal(starsFor({ score: 30, target: 100 }), 1);
-  assert.equal(starsFor({ score: 60, target: 100 }), 2);
-  assert.equal(starsFor({ score: 100, target: 100 }), 3);
+  // процент очистки поля вместо звёзд
+  assert.equal(clearedShare(s), 0, 'в начале — 0%');
+  assert.equal(s.total, countColored(s.grid));
+  const half = { ...s, grid: s.grid.map((row) => [...row]) };
+  let removed = 0;
+  for (const row of half.grid) {
+    for (let c = 0; c < row.length && removed < Math.floor(s.total / 2); c++) {
+      if (row[c] !== null && row[c] !== STONE) { row[c] = null; removed++; }
+    }
+  }
+  assert.ok(Math.abs(clearedShare(half) - removed / s.total) < 1e-9);
+  const clean = { ...s, grid: s.grid.map((row) => row.map((v) => (v === STONE ? v : null))) };
+  assert.equal(clearedShare(clean), 1, 'остались одни камни — 100%');
+  assert.equal(clearedShare({ ...s, total: undefined }), 0, 'старое сохранение без total');
+  assert.equal(rewardProgress({ combo: 0 }), 0);
+  assert.equal(rewardProgress({ combo: 2 }), 2);
+  assert.equal(rewardProgress({ combo: 3 }), 0, 'бонус получен — счёт заново');
+  assert.equal(rewardProgress({ combo: 7 }), 1);
 
   assert.ok(isValidState(JSON.parse(JSON.stringify(s))));
   assert.equal(isValidState({ ...s, armed: 'нет' }), false);
