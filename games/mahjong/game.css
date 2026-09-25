@@ -224,8 +224,8 @@
   background: linear-gradient(90deg, #ff4d4d, #ffd23f, #3ddc84, #2ec4f1, #9b5de5, #ff5fa2, #ff4d4d) 0 0 / 200% 100%;
   -webkit-background-clip: text;
   background-clip: text;
-  -webkit-text-stroke: 1px rgb(255 255 255 / 0.6);
-  filter: drop-shadow(0 2px 0 rgb(0 0 0 / 0.35));
+  /* контур — тенями: -webkit-text-stroke в Safari рисует внутренние контуры букв (баг, найден в «Шариках») */
+  filter: drop-shadow(1px 0 0 rgb(255 255 255 / 0.6)) drop-shadow(-1px 0 0 rgb(255 255 255 / 0.6)) drop-shadow(0 1px 0 rgb(255 255 255 / 0.6)) drop-shadow(0 -1px 0 rgb(255 255 255 / 0.6)) drop-shadow(0 2px 0 rgb(0 0 0 / 0.35));
   animation: mj-float 1.2s ease-out forwards, mj-rainbow 0.8s linear infinite;
 }
 @keyframes mj-rainbow { to { background-position: 200% 0; } }

@@ -347,8 +347,9 @@
   background: linear-gradient(90deg, #ff4d4d, #ffd23f, #3ddc84, #2ec4f1, #9b5de5, #ff5fa2, #ff4d4d) 0 0 / 200% 100%;
   -webkit-background-clip: text;
   background-clip: text;
-  -webkit-text-stroke: 1px rgb(255 255 255 / 0.6);
-  filter: drop-shadow(0 2px 0 rgb(0 0 0 / 0.35)) drop-shadow(0 0 10px rgb(255 255 255 / 0.5));
+  /* контур — тенями: -webkit-text-stroke в Safari рисует внутренние контуры букв (баг, найден в «Шариках») */
+  filter: drop-shadow(1px 0 0 rgb(255 255 255 / 0.6)) drop-shadow(-1px 0 0 rgb(255 255 255 / 0.6)) drop-shadow(0 1px 0 rgb(255 255 255 / 0.6)) drop-shadow(0 -1px 0 rgb(255 255 255 / 0.6))
+    drop-shadow(0 2px 0 rgb(0 0 0 / 0.35)) drop-shadow(0 0 10px rgb(255 255 255 / 0.5));
   animation-name: bb-float-combo, bb-rainbow-text;
   animation-duration: 1.4s, 0.8s;
   animation-timing-function: ease-out, linear;
