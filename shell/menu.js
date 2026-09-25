@@ -21,7 +21,7 @@ async function gameInfo(game) {
   const [stats, line, save] = await Promise.all([
     getStats(game.id), progress.get(game.id), saves.get(game.id),
   ]);
-  return { game, line: menuLine(stats, { menu: game.menu, progress: line }), hasSave: save != null };
+  return { game, line: menuLine(stats, { menu: game.menu, progress: line, save }), hasSave: save != null };
 }
 
 export async function renderMenu(container, { games, account = null }) {

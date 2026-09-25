@@ -7,12 +7,20 @@
 // — при первом входе прогресс берётся с сервера; если на сервере пусто, а локально что-то есть
 //   (играл в браузере до Telegram) — наоборот, локальное уезжает в аккаунт;
 // — если с другого устройства сохранили новее, сервер отвечает «конфликт» и присылает свой прогресс:
-//   он и побеждает, о чём игроку показывается сообщение.
+//   он и побеждает, о чём игроку показывается сообщение;
+// — несохранённые на сервере изменения помечаются в localStorage (DIRTY_KEY). Telegram закрывает
+//   мини-приложение сразу, и последняя отправка часто не доходит; раньше при следующем запуске серверная
+//   (старая) копия затирала локальную — пропадали законченные партии (замечание владельца, 2026-09-25:
+//   «проиграл в шашки раз 5, а пишет — ещё не играли»). Теперь, если сервер с прошлого обмена не менялся,
+//   при запуске на сервер уезжает локальное.
 
 import { snapshot, restore, onStorageChange } from '../platform/storage.js';
 
 export const SYNC_DELAY = 4000;
 const BASE_KEY = 'tggames-sync';   // вне пространства `tggames:` — иначе синхронизировался бы сам
+const DIRTY_KEY = 'tggames-sync-dirty';   // есть изменения, которых сервер ещё не видел
+// Запрос с keepalive браузер доводит до конца и после закрытия страницы, но тело — не больше 64 КБ.
+export const KEEPALIVE_LIMIT = 60000;
 
 export const isEmpty = (data) => !data || Object.keys(data).length === 0;
 
@@ -24,6 +32,35 @@ export const isEmpty = (data) => !data || Object.keys(data).length === 0;
 export function pickOnLogin(serverData, localData) {
   if (isEmpty(serverData) && !isEmpty(localData)) return 'local';
   return 'server';
+}
+
+/**
+ * Что делать при открытии: взять серверное или отправить локальное.
+ * Локальное побеждает, только если в нём есть неотправленные изменения, а сервер с нашего
+ * последнего обмена (base) не менялся — значит, это мы просто не успели сохранить перед закрытием.
+ * Если сервер тоже изменился (играли на другом устройстве) — как раньше, побеждает сервер.
+ */
+export function pickOnOpen({ serverData, serverUpdatedAt = 0, localData, base = 0, localDirty = false, afterLogin = false }) {
+  if (afterLogin && pickOnLogin(serverData, localData) === 'local') return 'local';
+  if (localDirty && !isEmpty(localData) && base > 0 && serverUpdatedAt <= base) return 'local';
+  return 'server';
+}
+
+function readDirty() {
+  try {
+    return localStorage.getItem(DIRTY_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writeDirty(value) {
+  try {
+    if (value) localStorage.setItem(DIRTY_KEY, '1');
+    else localStorage.removeItem(DIRTY_KEY);
+  } catch {
+    // приватный режим — без отметки, как было раньше
+  }
 }
 
 function readBase() {
@@ -52,13 +89,15 @@ export function createSync({ account, onMessage = () => {}, delay = SYNC_DELAY, 
   let applying = false;      // мы сами пишем в хранилище — это не повод слать его обратно
   let pushing = null;        // текущая отправка, чтобы не слать две сразу
   let dirty = false;
+  let changes = 0;           // счётчик изменений: отметку DIRTY_KEY снимаем, только если за отправку ничего не менялось
 
   const stop = () => {
     if (timer !== null) clearTimeout(timer);
     timer = null;
   };
 
-  async function push() {
+  /** final — отправка при уходе со страницы: с keepalive, чтобы запрос пережил закрытие. */
+  async function push({ final = false } = {}) {
     if (!account.current) return;
     if (pushing) {                       // уже отправляем — отметим, что нужен ещё заход
       dirty = true;
@@ -66,11 +105,13 @@ export function createSync({ account, onMessage = () => {}, delay = SYNC_DELAY, 
     }
     stop();
     dirty = false;
+    const sent = changes;
     const data = JSON.stringify(snapshot());
-    pushing = account.saveState(data, readBase())
+    pushing = account.saveState(data, readBase(), { keepalive: final && data.length < KEEPALIVE_LIMIT })
       .then(async (res) => {
         if (res.ok) {
           writeBase(res.data.updatedAt);
+          if (changes === sent) writeDirty(false);
           return;
         }
         if (res.status === 409 && res.data?.data) {
@@ -82,6 +123,7 @@ export function createSync({ account, onMessage = () => {}, delay = SYNC_DELAY, 
             applying = false;
           }
           writeBase(res.data.updatedAt);
+          writeDirty(false);
           await afterRestore();
           onMessage('Прогресс обновлён с другого устройства');
           return;
@@ -121,8 +163,12 @@ export function createSync({ account, onMessage = () => {}, delay = SYNC_DELAY, 
       serverData = {};
     }
 
-    if (afterLogin && pickOnLogin(serverData, snapshot()) === 'local') {
-      writeBase(res.data.updatedAt);
+    const serverUpdatedAt = res.data.updatedAt ?? 0;
+    const choice = pickOnOpen({
+      serverData, serverUpdatedAt, localData: snapshot(), base: readBase(), localDirty: readDirty(), afterLogin,
+    });
+    if (choice === 'local') {
+      writeBase(serverUpdatedAt);
       await push();
       return;
     }
@@ -133,21 +179,24 @@ export function createSync({ account, onMessage = () => {}, delay = SYNC_DELAY, 
     } finally {
       applying = false;
     }
-    writeBase(res.data.updatedAt);
+    writeBase(serverUpdatedAt);
+    writeDirty(false);
     await afterRestore();
   }
 
   const unsubscribe = onStorageChange(() => {
     if (applying) return;
+    changes++;
+    writeDirty(true);
     schedule();
   });
 
   // Уход со страницы: последний шанс сохранить. Браузер уже не ждёт ответа, но запрос уходит.
   const onHide = () => {
-    if (document.visibilityState === 'hidden') push();
+    if (document.visibilityState === 'hidden') push({ final: true });
   };
   document.addEventListener('visibilitychange', onHide);
-  window.addEventListener('pagehide', () => push());
+  window.addEventListener('pagehide', () => push({ final: true }));
 
   return {
     pull,
@@ -160,6 +209,7 @@ export function createSync({ account, onMessage = () => {}, delay = SYNC_DELAY, 
     reset() {
       stop();
       writeBase(0);
+      writeDirty(false);
     },
     destroy() {
       stop();
