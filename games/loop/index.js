@@ -80,25 +80,30 @@ function svgEl(tag, attrs = {}) {
 
 // Фигуры в координатах плитки с центром (0, 0), края — ±0.5. Каноническое положение (как в tileKind):
 // end — вверх, straight — вверх-вниз, corner — вверх-вправо, tee — вверх-вправо-вниз.
-const ARC_NE = 'M0,-0.5 A0.5,0.5 0 0 0 0.5,0';
-const ARC_ES = 'M0.5,0 A0.5,0.5 0 0 0 0,0.5';
-const ARC_SW = 'M0,0.5 A0.5,0.5 0 0 0 -0.5,0';
-const ARC_WN = 'M-0.5,0 A0.5,0.5 0 0 0 0,-0.5';
+// Концы линий заходят за край плитки на OVER: два отдельно сглаженных конца, встык сходящиеся на границе,
+// давали светлую щель на каждом стыке (скрин владельца с ПК, 2026-09-25). Несоединённый конец торчит к соседу
+// на 2% клетки (около пикселя) — не видно.
+const OVER = 0.02;
+const X = 0.5 + OVER;
+const ARC_NE = `M0,${-X} V-0.5 A0.5,0.5 0 0 0 0.5,0 H${X}`;
+const ARC_ES = `M${X},0 H0.5 A0.5,0.5 0 0 0 0,0.5 V${X}`;
+const ARC_SW = `M0,${X} V0.5 A0.5,0.5 0 0 0 -0.5,0 H${-X}`;
+const ARC_WN = `M${-X},0 H-0.5 A0.5,0.5 0 0 0 0,-0.5 V${-X}`;
 const KNOB = 0.16;
 const SHAPE_PARTS = {
   round: {
-    end: [['path', { d: `M0,-0.5 V${-KNOB}` }], ['circle', { r: KNOB, class: 'lp-knob' }]],
-    straight: [['path', { d: 'M0,-0.5 V0.5' }]],
+    end: [['path', { d: `M0,${-X} V${-KNOB}` }], ['circle', { r: KNOB, class: 'lp-knob' }]],
+    straight: [['path', { d: `M0,${-X} V${X}` }]],
     corner: [['path', { d: ARC_NE }]],
     tee: [['path', { d: ARC_NE }], ['path', { d: ARC_ES }]],
     cross: [['path', { d: ARC_NE }], ['path', { d: ARC_ES }], ['path', { d: ARC_SW }], ['path', { d: ARC_WN }]],
   },
   square: {
-    end: [['path', { d: `M0,-0.5 V${-KNOB}` }], ['rect', { x: -KNOB, y: -KNOB, width: KNOB * 2, height: KNOB * 2, class: 'lp-knob' }]],
-    straight: [['path', { d: 'M0,-0.5 V0.5' }]],
-    corner: [['path', { d: 'M0,-0.5 V0 H0.5' }]],
-    tee: [['path', { d: 'M0,-0.5 V0.5 M0,0 H0.5' }]],
-    cross: [['path', { d: 'M0,-0.5 V0.5 M-0.5,0 H0.5' }]],
+    end: [['path', { d: `M0,${-X} V${-KNOB}` }], ['rect', { x: -KNOB, y: -KNOB, width: KNOB * 2, height: KNOB * 2, class: 'lp-knob' }]],
+    straight: [['path', { d: `M0,${-X} V${X}` }]],
+    corner: [['path', { d: `M0,${-X} V0 H${X}` }]],
+    tee: [['path', { d: `M0,${-X} V${X} M0,0 H${X}` }]],
+    cross: [['path', { d: `M0,${-X} V${X} M${-X},0 H${X}` }]],
   },
 };
 
