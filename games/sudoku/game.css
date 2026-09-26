@@ -538,13 +538,25 @@
   --sd-bg: #f4eefb; --sd-surface: #e7dcf6; --sd-text: #2c2242; --sd-hint: #6c5f92;
   --sd-accent: #8a63d2; --sd-accent-text: #ffffff; --sd-link: #6a43c0; --sd-danger: #e0457b;
 }
+/* Подсветка доски в «Ёжике» — полупрозрачная: обычно её цвета смешаны с плотным --sd-bg, и выбранная клетка, её
+   строка, столбец и блок закрывали фото сплошной заливкой (скрин игрока, 2026-09-26: «добавь прозрачности»). */
+[data-game="sudoku"][data-skin="hedgehog"] {
+  --sd-peer: rgb(138 99 210 / 0.13);
+  --sd-same: rgb(138 99 210 / 0.26);
+  --sd-selected: rgb(138 99 210 / 0.42);
+  --sd-conflict: rgb(224 69 123 / 0.3);
+  --sd-flash: rgb(138 99 210 / 0.4);
+  --sd-h-dim: rgb(52 40 78 / 0.3);
+  --sd-h-dim-text: #4a3f63;
+  --sd-h-area: rgb(56 189 248 / 0.32);
+}
 .game-root[data-game="sudoku"][data-skin="hedgehog"] {
   background: linear-gradient(rgb(244 238 251 / 0.5), rgb(244 238 251 / 0.3)),
     url('../../shared/backgrounds/hedgehog.jpg') center 60% / cover no-repeat, #b9a6e8;
 }
 /* доска полупрозрачная без размытия: ёжик сидит за сеткой и просвечивает */
 [data-game="sudoku"][data-skin="hedgehog"] .sd-board {
-  background: rgb(255 255 255 / 0.5);
+  background: rgb(255 255 255 / 0.36);
 }
 [data-game="sudoku"][data-skin="hedgehog"] .sd-cell { font-weight: 600; }
 [data-game="sudoku"][data-skin="hedgehog"] .sd-tool,
