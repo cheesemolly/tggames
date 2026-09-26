@@ -605,6 +605,17 @@ async function botWebhook(request, env, ctx) {
   const entities = message?.entities ?? message?.caption_entities ?? [];
   const admin = isAdmin(tgId, parseAdminIds(env.ADMIN_IDS));
 
+  // /edit: следующее сообщение владельца без команды — новый текст выбранной рассылки; /cancel — передумал
+  if (admin && (command === '/cancel' || (!command && !media.length))) {
+    await ensureDraftTables(env);
+    if (command === '/cancel') {
+      await env.DB.prepare('DELETE FROM bot_pending WHERE admin_id = ?').bind(tgId).run();
+      await api(env, 'sendMessage', { chat_id: chatId, text: 'Отменено.' });
+      return new Response('ok');
+    }
+    if (await takeEditText(env, tgId, chatId, text, shiftEntities(entities, lead, text.length))) return new Response('ok');
+  }
+
   if (command === '/start') {
     if (betaOpen('welcome', admin)) await sendWelcome(env, chatId);
     else await api(env, 'sendMessage', { chat_id: chatId, text: START_TEXT, reply_markup: playButton(env) });
@@ -635,12 +646,12 @@ async function botWebhook(request, env, ctx) {
     return new Response('ok');
   }
 
-  if (command === '/unsend') {
+  if (command === '/unsend' || command === '/edit') {
     if (!admin) {
       await api(env, 'sendMessage', { chat_id: chatId, text: 'Эта команда только для владельца.' });
       return new Response('ok');
     }
-    await listSent(env, chatId, tgId);
+    await listSent(env, chatId, tgId, command === '/edit' ? 'e' : 'u');
     return new Response('ok');
   }
 
@@ -672,6 +683,7 @@ const ADMIN_HELP = 'Команды: /start — открыть игры, /me — 
   + '/broadcast текст — всем игрокам;\n'
   + '/silentbroadcast текст — всем, но без звука уведомления;\n'
   + '/unsend — удалить у всех недавнюю рассылку или сообщение (Telegram даёт 48 часов);\n'
+  + '/edit — изменить текст недавней рассылки у всех (там же, без нового уведомления);\n'
   + '/message @ник текст — одному игроку (можно id вместо ника).\n'
   + 'Можно с фото или альбомом: прикрепи картинки и напиши команду в подписи. '
   + 'Сначала бот покажет, как это увидят, и отправит только по кнопке.';
@@ -710,6 +722,9 @@ async function ensureDraftTables(env) {
     draft_id INTEGER NOT NULL, chat_id INTEGER NOT NULL, message_ids TEXT NOT NULL, PRIMARY KEY (draft_id, chat_id))`).run();
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS unsend_done (
     draft_id INTEGER NOT NULL, chat_id INTEGER NOT NULL, PRIMARY KEY (draft_id, chat_id))`).run();
+  // /edit: владелец выбрал рассылку и присылает новый текст
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS bot_pending (
+    admin_id INTEGER PRIMARY KEY, draft_id INTEGER NOT NULL, text TEXT, entities TEXT, created_at INTEGER NOT NULL)`).run();
 }
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -882,13 +897,13 @@ async function recordSent(env, draftId, chatId, ids) {
 async function onButton(query, env, ctx) {
   const answer = (text) => api(env, 'answerCallbackQuery', { callback_query_id: query.id, ...(text ? { text } : {}) });
   const [prefix, action, rawId] = String(query.data ?? '').split(':');
-  if (!['d', 'u'].includes(prefix) || !isAdmin(query.from?.id, parseAdminIds(env.ADMIN_IDS))) {
+  if (!['d', 'u', 'e'].includes(prefix) || !isAdmin(query.from?.id, parseAdminIds(env.ADMIN_IDS))) {
     await answer('Это только для владельца.');
     return;
   }
   await ensureDraftTables(env);
-  if (prefix === 'u') {
-    await onUnsendButton(query, env, ctx, action, Number(rawId), answer);
+  if (prefix === 'u' || prefix === 'e') {
+    await onSentButton(query, env, ctx, prefix, action, Number(rawId), answer);
     return;
   }
   const draft = await loadDraft(env, 'id = ? AND admin_id = ?', Number(rawId), query.from.id);
@@ -1069,53 +1084,91 @@ async function broadcast(env, content) {
   return { total: ids.length, sent, failed };
 }
 
-// ---------- /unsend: удалить у всех недавнюю рассылку или сообщение ----------
-// Номера отправленных сообщений записываются (sent_messages) — по ним удаление точное. У рассылок, отправленных до
-// этого (номеров нет), сообщение ищется по тексту: перед сообщением более поздней рассылки, чей номер известен, бот
-// смотрит до UNSEND_PROBE сообщений — пересылает каждое себе (и сразу стирает копию), удаляет только своё с тем же
-// текстом. Чужое (например, сообщение самого игрока) не трогается. Telegram даёт удалять только 48 часов.
-// Много игроков — Cloudflare может оборвать работу по лимиту запросов: тогда «Продолжить» доделает (unsend_done).
+// ---------- /unsend и /edit: удалить или изменить у всех недавнюю рассылку ----------
+// Номера отправленного записываются (sent_messages) — по ним всё точно. У рассылок, ушедших до записи номеров,
+// сообщение ищется по тексту (locate): от «якоря» — номера более позднего сообщения в том же чате — бот смотрит до
+// PROBE сообщений назад: пересылает каждое владельцу (копию сразу стирает) и берёт только своё с тем же текстом;
+// сообщения игрока не трогаются. Якоря нет — бот шлёт игроку служебную точку без звука и сразу её удаляет: её номер
+// и есть «сейчас». Найденные попутно свои сообщения других рассылок тоже записываются — второй раз искать не нужно.
+// Удалять свои сообщения Telegram даёт боту только 48 часов. Много игроков — Cloudflare может оборвать работу по
+// лимиту запросов: «Продолжить» доделает (удалённое помнит unsend_done, изменённое уже записано).
 
-const UNSEND_PROBE = 6;
+const PROBE = 8;
+const norm = (t) => String(t ?? '').replace(/\s+/g, ' ').trim();
 const clip = (text, n = 40) => {
-  const t = String(text ?? '').replace(/\s+/g, ' ').trim() || '(картинка)';
+  const t = norm(text) || '(картинка)';
   return t.length > n ? `${t.slice(0, n - 1)}…` : t;
 };
+const SENT_ACTIONS = {
+  u: { icon: '🗑', intro: 'Что удалить у всех, кому ушло? Telegram даёт боту удалять свои сообщения только 48 часов.' },
+  e: { icon: '✏️', intro: 'Что изменить? Сообщение поменяется там же, где было, без нового уведомления.' },
+};
 
-async function listSent(env, chatId, adminId) {
+async function listSent(env, chatId, adminId, prefix) {
   await ensureDraftTables(env);
   const rows = (await env.DB.prepare(`SELECT id, kind, target_name, text FROM drafts
       WHERE admin_id = ? AND state = 'sent' ORDER BY id DESC LIMIT 6`).bind(adminId).all()).results ?? [];
   if (!rows.length) {
-    await api(env, 'sendMessage', { chat_id: chatId, text: 'Удалять нечего: рассылок и сообщений ещё не было.' });
+    await api(env, 'sendMessage', { chat_id: chatId, text: 'Рассылок и сообщений ещё не было.' });
     return;
   }
   await api(env, 'sendMessage', {
     chat_id: chatId,
-    text: 'Что удалить у всех, кому ушло? Telegram разрешает удалять только сообщения моложе 48 часов.',
+    text: SENT_ACTIONS[prefix].intro,
     reply_markup: {
       inline_keyboard: rows.map((d) => [{
-        text: `🗑 ${d.kind === 'broadcast' ? 'Всем' : d.target_name}: ${clip(d.text, 32)}`,
-        callback_data: `u:ask:${d.id}`,
+        text: `${SENT_ACTIONS[prefix].icon} ${d.kind === 'broadcast' ? 'Всем' : d.target_name}: ${clip(d.text, 32)}`,
+        callback_data: `${prefix}:ask:${d.id}`,
       }]),
     },
   });
 }
 
-async function onUnsendButton(query, env, ctx, action, draftId, answer) {
+/** /edit: владелец выбрал рассылку — следующее его сообщение без команды станет новым текстом. */
+async function takeEditText(env, adminId, chatId, text, entities) {
+  const pending = await env.DB.prepare('SELECT * FROM bot_pending WHERE admin_id = ? AND created_at > ?')
+    .bind(adminId, Date.now() - 30 * 60 * 1000).first();
+  if (!pending) return false;
+  const draft = await loadDraft(env, 'id = ?', pending.draft_id);
+  if (!draft) return false;
+  const limit = draft.media.length ? CAPTION_LIMIT : TEXT_LIMIT;
+  if (text.length > limit) {
+    await api(env, 'sendMessage', { chat_id: chatId, text: `Слишком длинно: ${text.length} символов, можно ${limit}.` });
+    return true;
+  }
+  await env.DB.prepare('UPDATE bot_pending SET text = ?, entities = ? WHERE admin_id = ?')
+    .bind(text, entities.length ? JSON.stringify(entities) : null, adminId).run();
+  await api(env, 'sendMessage', { chat_id: chatId, text: 'Будет так:' });
+  await api(env, 'sendMessage', { chat_id: chatId, text, ...(entities.length ? { entities } : {}), reply_markup: playButton(env) });
+  await api(env, 'sendMessage', {
+    chat_id: chatId,
+    text: `Заменить «${clip(draft.text, 40)}» ${draft.kind === 'broadcast' ? 'у всех игроков' : `у ${draft.target_name}`}?`,
+    reply_markup: {
+      inline_keyboard: [[
+        { text: '✏️ Заменить', callback_data: `e:go:${draft.id}` },
+        { text: 'Отмена', callback_data: `e:no:${draft.id}` },
+      ]],
+    },
+  });
+  return true;
+}
+
+async function onSentButton(query, env, ctx, prefix, action, draftId, answer) {
   const chat = query.message?.chat?.id;
+  const adminId = query.from.id;
   const edit = (text, buttons = null) => query.message && api(env, 'editMessageText', {
     chat_id: chat, message_id: query.message.message_id, text,
     ...(buttons ? { reply_markup: { inline_keyboard: [buttons] } } : {}),
   });
   const draft = await env.DB.prepare("SELECT * FROM drafts WHERE id = ? AND admin_id = ? AND state = 'sent'")
-    .bind(draftId, query.from.id).first();
+    .bind(draftId, adminId).first();
   if (!draft) {
     await answer('Не нашёл такую рассылку.');
     return;
   }
   const who = draft.kind === 'broadcast' ? 'у всех игроков' : `у ${draft.target_name}`;
-  if (action === 'ask') {
+
+  if (prefix === 'u' && action === 'ask') {
     await answer();
     await edit(`Удалить «${clip(draft.text, 60)}» ${who}?`, [
       { text: '🗑 Удалить', callback_data: `u:go:${draft.id}` },
@@ -1123,81 +1176,158 @@ async function onUnsendButton(query, env, ctx, action, draftId, answer) {
     ]);
     return;
   }
-  if (action === 'no') {
+  if (prefix === 'e' && action === 'ask') {
+    await env.DB.prepare(`INSERT INTO bot_pending (admin_id, draft_id, text, entities, created_at) VALUES (?, ?, NULL, NULL, ?)
+        ON CONFLICT (admin_id) DO UPDATE SET draft_id = excluded.draft_id, text = NULL, entities = NULL, created_at = excluded.created_at`)
+      .bind(adminId, draft.id, Date.now()).run();
     await answer();
-    await edit('Ничего не удалено.');
+    await edit(`Пришли одним сообщением новый текст вместо «${clip(draft.text, 60)}». `
+      + 'Оформление (жирный, ссылки, цитаты) сохранится. Передумал — /cancel.');
     return;
   }
-  await answer('Удаляю…');
+  if (action === 'no') {
+    if (prefix === 'e') await env.DB.prepare('DELETE FROM bot_pending WHERE admin_id = ?').bind(adminId).run();
+    await answer();
+    await edit(prefix === 'e' ? 'Ничего не изменено.' : 'Ничего не удалено.');
+    return;
+  }
+
+  let act = { kind: 'delete' };
+  if (prefix === 'e') {
+    const pending = await env.DB.prepare('SELECT * FROM bot_pending WHERE admin_id = ? AND draft_id = ? AND text IS NOT NULL')
+      .bind(adminId, draft.id).first();
+    if (!pending) {
+      await answer('Сначала пришли новый текст.');
+      return;
+    }
+    let entities = [];
+    try {
+      entities = pending.entities ? JSON.parse(pending.entities) : [];
+    } catch {
+      entities = [];
+    }
+    act = { kind: 'edit', text: pending.text, entities };
+  }
+  await answer(prefix === 'e' ? 'Меняю…' : 'Удаляю…');
   const job = async () => {
-    const r = await unsendDraft(env, draft, chat);
-    const parts = [`Удалено: ${r.deleted}.`];
-    if (r.missing) parts.push(`Не нашёл: ${r.missing}${r.searched ? ' — сообщение не нашлось рядом с более поздней рассылкой' : ''}.`);
-    if (r.failed) parts.push(`Не удалось: ${r.failed} — старше 48 часов или игрок удалил чат.`);
+    const r = await applyToSent(env, draft, chat, act);
+    const parts = [`${prefix === 'e' ? 'Изменено' : 'Удалено'}: ${r.done}.`];
+    if (r.missing) parts.push(`Не нашёл: ${r.missing} — игрок писал боту много после этого или удалил чат.`);
+    if (r.failed) parts.push(`Не удалось: ${r.failed}${prefix === 'u' ? ' — старше 48 часов или чат удалён' : ''}.`);
     if (r.stopped) parts.push('Не успел всех — нажми «Продолжить».');
-    await edit(parts.join(' '), r.stopped ? [{ text: 'Продолжить', callback_data: `u:go:${draft.id}` }] : null);
+    if (prefix === 'e' && !r.stopped) {
+      // теперь у рассылки новый текст — по нему её и искать, если понадобится ещё раз
+      await env.DB.prepare('UPDATE drafts SET text = ?, entities = ? WHERE id = ?')
+        .bind(act.text, act.entities.length ? JSON.stringify(act.entities) : null, draft.id).run();
+      await env.DB.prepare('DELETE FROM bot_pending WHERE admin_id = ?').bind(adminId).run();
+    }
+    await edit(parts.join(' '), r.stopped ? [{ text: 'Продолжить', callback_data: `${prefix}:go:${draft.id}` }] : null);
   };
   if (ctx?.waitUntil) ctx.waitUntil(job());
   else await job();
 }
 
-async function unsendDraft(env, draft, adminChat) {
-  const r = { deleted: 0, missing: 0, failed: 0, stopped: false, searched: false };
+/** Удалить или изменить рассылку у каждого получателя. */
+async function applyToSent(env, draft, adminChat, act) {
+  const r = { done: 0, missing: 0, failed: 0, stopped: false };
   const tg = async (method, payload) => {
     const res = await api(env, method, payload);
     return res.json().catch(() => ({ ok: res.ok }));
   };
-  const done = new Set(((await env.DB.prepare('SELECT chat_id FROM unsend_done WHERE draft_id = ?').bind(draft.id).all())
-    .results ?? []).map((row) => row.chat_id));
-  const mark = (chatId) => env.DB.prepare('INSERT OR IGNORE INTO unsend_done (draft_id, chat_id) VALUES (?, ?)').bind(draft.id, chatId).run();
-  const recorded = (await env.DB.prepare('SELECT chat_id, message_ids FROM sent_messages WHERE draft_id = ?').bind(draft.id).all()).results ?? [];
+  const deleting = act.kind === 'delete';
+  const done = new Set(deleting
+    ? ((await env.DB.prepare('SELECT chat_id FROM unsend_done WHERE draft_id = ?').bind(draft.id).all()).results ?? []).map((row) => row.chat_id)
+    : []);
+  const recordedIds = async (chatId) => {
+    const row = await env.DB.prepare('SELECT message_ids FROM sent_messages WHERE draft_id = ? AND chat_id = ?').bind(draft.id, chatId).first();
+    return row ? JSON.parse(row.message_ids) : null;
+  };
+  const recorded = ((await env.DB.prepare('SELECT chat_id FROM sent_messages WHERE draft_id = ?').bind(draft.id).all()).results ?? [])
+    .map((row) => row.chat_id);
+  const recipients = draft.kind === 'broadcast'
+    ? [...new Set([...recorded, ...((await env.DB.prepare('SELECT tg_id FROM users WHERE banned = 0').all()).results ?? []).map((u) => u.tg_id)])]
+    : [draft.target];
+  // тексты всех своих рассылок: найденные попутно — тоже записываются
+  const known = new Map();
+  for (const d of (await env.DB.prepare("SELECT id, text FROM drafts WHERE admin_id = ? AND state = 'sent'").bind(draft.admin_id).all()).results ?? []) {
+    const t = norm(d.text);
+    if (t) known.set(t, [...(known.get(t) ?? []), d.id]);
+  }
+  const mediaCount = (await env.DB.prepare('SELECT COUNT(*) AS n FROM draft_media WHERE admin_id = ? AND group_key = ?')
+    .bind(draft.admin_id, draft.group_key).first())?.n ?? 0;
   try {
-    if (recorded.length) {
-      for (const row of recorded) {
-        if (done.has(row.chat_id)) continue;
-        const res = await tg('deleteMessages', { chat_id: row.chat_id, message_ids: JSON.parse(row.message_ids) });
-        if (res.ok) {
-          r.deleted += 1;
-          await mark(row.chat_id);
-        } else r.failed += 1;
-      }
-      return r;
-    }
-    // старая рассылка: номеров нет — ищем по тексту перед сообщением более поздней рассылки
-    r.searched = true;
-    const norm = (t) => String(t ?? '').replace(/\s+/g, ' ').trim();
-    const text = norm(draft.text);
-    const anchors = new Map();
-    for (const row of (await env.DB.prepare('SELECT chat_id, message_ids FROM sent_messages WHERE draft_id > ?').bind(draft.id).all()).results ?? []) {
-      const first = Math.min(...JSON.parse(row.message_ids));
-      if (!anchors.has(row.chat_id) || first < anchors.get(row.chat_id)) anchors.set(row.chat_id, first);
-    }
-    const recipients = draft.kind === 'broadcast'
-      ? ((await env.DB.prepare('SELECT tg_id FROM users WHERE banned = 0').all()).results ?? []).map((u) => u.tg_id)
-      : [draft.target];
     for (const chatId of recipients) {
       if (done.has(chatId)) continue;
-      const anchor = anchors.get(chatId);
-      let found = false;
-      for (let k = 1; text && anchor && k <= UNSEND_PROBE && anchor - k > 0 && !found; k++) {
-        const id = anchor - k;
-        const fw = await tg('forwardMessage', { chat_id: adminChat, from_chat_id: chatId, message_id: id, disable_notification: true });
-        if (!fw.ok || !fw.result) continue;
-        await tg('deleteMessage', { chat_id: adminChat, message_id: fw.result.message_id });
-        const byBot = fw.result.forward_origin?.sender_user?.is_bot || fw.result.forward_from?.is_bot;
-        if (!byBot || norm(fw.result.text ?? fw.result.caption) !== text) continue;
-        found = true;
-        const del = await tg('deleteMessage', { chat_id: chatId, message_id: id });
-        if (del.ok) {
-          r.deleted += 1;
-          await mark(chatId);
-        } else r.failed += 1;
+      let ids = await recordedIds(chatId);
+      if (!ids) {
+        const id = await locate(env, tg, draft, chatId, adminChat, known);
+        ids = id ? [id] : null;
       }
-      if (!found) r.missing += 1;
+      if (!ids) {
+        r.missing += 1;
+        continue;
+      }
+      let ok;
+      if (deleting) {
+        ok = (await tg('deleteMessages', { chat_id: chatId, message_ids: ids })).ok;
+        if (ok) await env.DB.prepare('INSERT OR IGNORE INTO unsend_done (draft_id, chat_id) VALUES (?, ?)').bind(draft.id, chatId).run();
+      } else {
+        const format = act.entities;
+        const res = mediaCount
+          ? await tg('editMessageCaption', {
+            chat_id: chatId, message_id: ids[0], caption: act.text, ...(format.length ? { caption_entities: format } : {}),
+            ...(mediaCount === 1 ? { reply_markup: playButton(env) } : {}),
+          })
+          : await tg('editMessageText', {
+            chat_id: chatId, message_id: ids[0], text: act.text, ...(format.length ? { entities: format } : {}),
+            reply_markup: playButton(env),
+          });
+        ok = res.ok || /not modified/i.test(res.description ?? '');
+      }
+      if (ok) r.done += 1;
+      else r.failed += 1;
     }
   } catch (err) {
-    console.warn('unsend прерван:', err);
+    console.warn('рассылка: работа прервана', err);
     r.stopped = true;
   }
   return r;
+}
+
+/** Номер сообщения рассылки у игрока, если он не записан: поиск по тексту назад от «якоря». */
+async function locate(env, tg, draft, chatId, adminChat, known) {
+  const text = norm(draft.text);
+  if (!text) return null;
+  // якорь — номер более позднего записанного сообщения в этом чате (рассылки идут по порядку id)
+  let anchor = null;
+  for (const row of (await env.DB.prepare('SELECT message_ids FROM sent_messages WHERE draft_id > ? AND chat_id = ?')
+    .bind(draft.id, chatId).all()).results ?? []) {
+    const first = Math.min(...JSON.parse(row.message_ids));
+    if (anchor == null || first < anchor) anchor = first;
+  }
+  if (anchor == null) {
+    // номер «сейчас»: служебная точка без звука, сразу удаляется
+    const probe = await tg('sendMessage', { chat_id: chatId, text: '·', disable_notification: true });
+    if (!probe.ok || !probe.result) return null;
+    anchor = probe.result.message_id;
+    await tg('deleteMessage', { chat_id: chatId, message_id: anchor });
+  }
+  let found = null;
+  let extra = 0;
+  for (let k = 1; k <= PROBE && anchor - k > 0 && extra < 2; k++) {
+    if (found) extra += 1;                 // пару сообщений за найденным — записать и предыдущую рассылку
+    const id = anchor - k;
+    const fw = await tg('forwardMessage', { chat_id: adminChat, from_chat_id: chatId, message_id: id, disable_notification: true });
+    if (!fw.ok || !fw.result) continue;
+    await tg('deleteMessage', { chat_id: adminChat, message_id: fw.result.message_id });
+    const byBot = fw.result.forward_origin?.sender_user?.is_bot || fw.result.forward_from?.is_bot;
+    if (!byBot) continue;
+    const t = norm(fw.result.text ?? fw.result.caption);
+    for (const other of known.get(t) ?? []) {
+      await env.DB.prepare('INSERT OR IGNORE INTO sent_messages (draft_id, chat_id, message_ids) VALUES (?, ?, ?)')
+        .bind(other, chatId, JSON.stringify([id])).run();
+    }
+    if (!found && t === text) found = id;
+  }
+  return found;
 }
