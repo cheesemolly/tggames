@@ -42,12 +42,8 @@ test('склонение «игра»', () => {
   assert.equal(gameWord(21), 'игра');
 });
 
-test('игры в обкатке (admin: true) видны только владельцу', () => {
-  // так оболочка отбирает список (shell/app.js, visibleGames)
-  const list = [{ id: 'a' }, { id: 'b', admin: true }];
-  const visible = (isAdmin) => list.filter((g) => !g.admin || isAdmin).map((g) => g.id);
-  assert.deepEqual(visible(false), ['a'], 'игроку — без игры в обкатке');
-  assert.deepEqual(visible(true), ['a', 'b'], 'владельцу — все');
+test('старое поле admin: true больше не используется — обкатка идёт через бету (shell/beta.js)', () => {
+  assert.ok(games.every((g) => !('admin' in g)), 'в реестре нет admin');
 
   // «Шарики» вышли из обкатки (решение владельца) — видны всем
   const bubble = games.find((g) => g.id === 'bubble-shooter');

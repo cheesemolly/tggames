@@ -5,6 +5,7 @@
   "description": "Только для тестов (node --test). Зависимостей и сборки нет.",
   "scripts": {
     "start": "python tools/serve.py 8000",
-    "test": "node --test"
+    "test": "node --test",
+    "release": "node tools/release.js"
   }
 }

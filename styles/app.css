@@ -496,3 +496,75 @@ h1, h2 { margin: 0 0 8px; line-height: 1.2; }
     transition-delay: 0s !important;
   }
 }
+
+/* ---------- бета (shell/beta.js, вкладка #/beta — только владелец) ---------- */
+.account-btn-beta {
+  background: var(--tg-theme-secondary-bg-color);
+  color: var(--tg-theme-button-color);
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--tg-theme-button-color) 60%, transparent);
+}
+/* метки в правом верхнем углу плитки игры — стопкой: «бета», «продолжить» */
+.badge-stack {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+.badge-stack .badge-corner { position: static; }
+.badge-beta {
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: var(--tg-theme-secondary-bg-color);
+  color: var(--tg-theme-button-color);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tg-theme-button-color) 55%, transparent);
+}
+.beta-screen { display: grid; gap: 10px; align-content: start; }
+.beta-h { margin: 12px 0 0; font-size: 13px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--tg-theme-hint-color); }
+.beta-row,
+.beta-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--tg-theme-secondary-bg-color);
+}
+.beta-row { justify-content: space-between; }
+.beta-card-text { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.beta-card-title { font-weight: 700; }
+.beta-card-note { font-size: 13px; color: var(--tg-theme-hint-color); }
+.beta-since { margin-left: 8px; font-size: 12px; font-weight: 400; color: var(--tg-theme-hint-color); }
+.beta-empty { margin-top: 8px; }
+.beta-switch {
+  position: relative;
+  flex: none;
+  width: 48px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--tg-theme-hint-color) 45%, transparent);
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+.beta-switch.on { background: var(--tg-theme-button-color); }
+.beta-knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--tg-theme-bg-color);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.25);
+  transition: transform 0.2s ease;
+}
+.beta-switch.on .beta-knob { transform: translateX(20px); }
+.beta-switch:focus-visible { outline: 2px solid var(--tg-theme-button-color); outline-offset: 2px; }

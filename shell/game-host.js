@@ -21,7 +21,7 @@ const EYE_ICON = `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="t
 const EYE_OFF_ICON = `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="currentColor"><path d="${EYE_PATH}"/>`
   + '<path d="M3 4.5 4.5 3l16.5 16.5-1.5 1.5Z"/></svg>';
 
-export function openGame(container, entry, { platform, onExit, beta = false }) {
+export function openGame(container, entry, { platform, onExit, beta = false, feature = () => true }) {
   const gameStorage = createStorage(`game:${entry.id}`);
   let game = null;
   let scoped = null;
@@ -66,8 +66,10 @@ export function openGame(container, entry, { platform, onExit, beta = false }) {
       platform: scoped.api,
       storage: gameStorage,
       savedState: save?.state ?? null,
-      // true только у владельца: игра может включить обновление в обкатке, пока остальные играют в прежнюю версию
+      // true, если игрок видит бету (владелец); новое в игре лучше спрашивать по id — api.feature('<id>'):
+      // так релиз (очистка shell/beta.js) включает его всем без правки игры
       beta: Boolean(beta),
+      feature: (id) => Boolean(feature(id)),
       finish: (result) => {
         if (thisRun === run) onFinish(result).catch(showError);
       },

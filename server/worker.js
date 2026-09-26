@@ -27,7 +27,7 @@
 
 import {
   checkInitData, diagnoseInitData, validateState, parseAdminIds, isAdmin, displayName,
-  GAMES, findGames, startAppLink, progressLines, shiftEntities,
+  publicGames, findGames, startAppLink, progressLines, shiftEntities,
 } from './lib.js';
 
 // Кто может обращаться к обработчику. Свой домен — чтобы чужой сайт не ходил в него от имени игрока.
@@ -653,9 +653,9 @@ async function onInline(query, env) {
     type: 'article',
     id: 'all',
     title: '🎮 Позвать играть',
-    description: `${GAMES.length} игр прямо в Telegram: слова, головоломки, аркады`,
+    description: `${publicGames().length} игр прямо в Telegram: слова, головоломки, аркады`,
     input_message_content: {
-      message_text: `🎮 <b>Игры прямо в Telegram</b>\n${GAMES.map((g) => g.title).join(', ')}.`,
+      message_text: `🎮 <b>Игры прямо в Telegram</b>\n${publicGames().map((g) => g.title).join(', ')}.`,
       parse_mode: 'HTML',
     },
     reply_markup: button('🎮 Играть', ''),
@@ -689,7 +689,7 @@ async function onInline(query, env) {
   if (!q) {
     results.push(invite);
     if (records) results.push(records);
-    results.push(...GAMES.map(gameResult));
+    results.push(...publicGames().map(gameResult));
   } else if (RECORDS_QUERY.test(q)) {
     if (records) results.push(records);
     results.push(invite);
