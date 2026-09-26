@@ -1,16 +1,16 @@
-// Звуки «Слов из слова» на поддельном AudioContext: каждый звучит, узлы подключены, спад не до нуля.
+// Звуки Филворда на поддельном AudioContext: каждый звучит, узлы подключены; линия идёт вверх гаммой.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createSounds, SOUNDS } from '../sounds.js';
 import { fakeContext } from '../../../shared/tests/fake-audio.js';
 
-test('каждый звук игры звучит, все узлы подключены', () => {
+test('каждый звук Филворда звучит, все узлы подключены', () => {
   const { ctx, created } = fakeContext();
   const sounds = createSounds(ctx);
   for (const name of SOUNDS) {
     assert.ok(sounds.has(name), `нет звука ${name}`);
-    for (const step of [0, 3, 8, 20]) {
+    for (const step of [0, 1, 5, 8, 30]) {
       const before = created.length;
       sounds.play(name, { step });
       const fresh = created.slice(before);
@@ -18,15 +18,13 @@ test('каждый звук игры звучит, все узлы подклю�
       for (const n of fresh) assert.ok(n.connections > 0, `${name}: узел ${n.kind} ни к чему не подключён`);
     }
   }
-  assert.doesNotThrow(() => sounds.play('нет-такого'));
 });
 
-test('буквы слова звучат ступенями вверх', () => {
-  const { ctx, created } = fakeContext();
+test('чем длиннее линия, тем выше нота', () => {
+  const { ctx } = fakeContext();
   const sounds = createSounds(ctx);
   const freqs = [];
-  for (let step = 0; step < 6; step++) {
-    const before = created.length;
+  for (let step = 1; step <= 8; step++) {
     const seen = [];
     const orig = ctx.createOscillator;
     ctx.createOscillator = () => {
@@ -35,9 +33,8 @@ test('буквы слова звучат ступенями вверх', () => {
       o.frequency.exponentialRampToValueAtTime = (v, t) => { seen.push(v); set(v, t); };
       return o;
     };
-    sounds.play('tap', { step });
+    sounds.play('drag', { step });
     ctx.createOscillator = orig;
-    assert.ok(created.length > before);
     freqs.push(seen[0]);
   }
   for (let i = 1; i < freqs.length; i++) assert.ok(freqs[i] > freqs[i - 1], `буква ${i + 1} выше предыдущей`);
