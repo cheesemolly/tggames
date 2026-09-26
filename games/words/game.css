@@ -258,6 +258,7 @@
 [data-game="words"] .wd-lvl-passed { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--wd-ok) 60%, transparent); }
 [data-game="words"] .wd-lvl-current { box-shadow: inset 0 0 0 2px var(--wd-accent); }
 [data-game="words"] .wd-lvl-locked { opacity: 0.35; cursor: default; font-size: 12px; }
+[data-game="words"] .wd-muted { opacity: 0.55; }
 [data-game="words"] .wd-skins { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 8px; }
 [data-game="words"] .wd-skin {
   display: grid;
