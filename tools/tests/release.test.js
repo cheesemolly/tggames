@@ -72,8 +72,27 @@ test('релиз убирает выпущенные id из серверной 
 
 
 test('частичный релиз (--only) убирает из беты только эти записи, остальные остаются и читаются', async () => {
-  const real = readFileSync(new URL('../../shell/beta.js', import.meta.url), 'utf8');
-  const { BETA } = await import('../../shell/beta.js');
+  // образец в том же виде, что shell/beta.js (настоящий список после релиза пустой)
+  const real = `export const BETA = [
+  // >>> список беты (tools/release.js очищает всё между этими строками)
+  {
+    id: 'splash',
+    kind: 'feature',
+    title: 'Заставка',
+    note: 'змейка, «скобки» {в тексте} не мешают',
+    since: '2026-09-26',
+  },
+  {
+    id: 'chess',
+    kind: 'game',
+    title: 'Шахматы',
+    note: 'против бота',
+    since: '2026-09-27',
+  },
+  // <<< конец списка беты
+];
+`;
+  const BETA = [{ id: 'splash' }, { id: 'chess' }];
   const [first, second] = BETA.map((b) => b.id);
   const next = removeBetaEntries(real, [first]);
   const load = (src) => new Function(`${src.replace(/export const /g, 'const ').replace(/export function /g, 'function ')}; return BETA;`)();

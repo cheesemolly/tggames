@@ -157,7 +157,8 @@ test('бот: /start и подсказка отвечают кнопкой «И�
 
     await update('/start');
     const start = tg.calls.at(-1);
-    assert.equal(start.method, 'sendMessage');
+    // приветствие — гифка с подписью (если 'welcome' в серверной бете, у игрока — текст; тест ниже)
+    assert.ok(['sendAnimation', 'sendMessage'].includes(start.method));
     assert.equal(start.payload.chat_id, 500);
     assert.equal(start.payload.reply_markup.inline_keyboard[0][0].web_app.url, env.APP_URL);
 
@@ -169,6 +170,10 @@ test('бот: /start и подсказка отвечают кнопкой «И�
 });
 
 test('бот: приветствие с гифкой — в бете только владельцу, file_id запоминается, без гифки — текст', async () => {
+  // серверная бета задаётся тут же: после релиза 'welcome' в SERVER_BETA нет, а проверить бету всё равно нужно
+  const lib = await import('../lib.js');
+  const wasBeta = [...lib.SERVER_BETA];
+  lib.SERVER_BETA.splice(0, lib.SERVER_BETA.length, 'welcome');
   const env = createEnv();
   let fail = false;
   const tg = captureTelegram(({ method }) => (method === 'sendAnimation'
@@ -207,6 +212,7 @@ test('бот: приветствие с гифкой — в бете тольк�
     await start(ADMIN);
     assert.equal(tg.calls.at(-1).payload.animation, new URL('media/welcome.mp4', env.APP_URL).href);
   } finally {
+    lib.SERVER_BETA.splice(0, lib.SERVER_BETA.length, ...wasBeta);
     tg.restore();
   }
 });

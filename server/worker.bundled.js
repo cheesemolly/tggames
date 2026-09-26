@@ -251,8 +251,6 @@ function progressLines(state) {
  */
 const SERVER_BETA = [
   // >>> серверная бета
-  'feedback',
-  'welcome',
   // <<< конец серверной беты
 ];
 
