@@ -75,9 +75,12 @@ const ROW_KEYS = {
 
 /**
  * Клавиши пианино или маримбы на 1 или 2 октавы: ноты 0…11 (…23), id — n<нота> (как у обычных, чтобы
- * подсказка мелодии находила клавишу). Лапа: одна октава — нижняя половина левой; две — нижняя октава левой.
+ * подсказка мелодии находила клавишу). Лапа — по месту клавиши на экране (левая половина ряда — левой лапой):
+ * в ряду из одной октавы (7 белых) до…фа — левой (фа — ровно посередине, её центр чуть левее), фа♯…си — правой; две октавы одной строкой (oneRow, альбомный
+ * вид) — нижняя октава левой, верхняя правой. Раньше при двух рядах лапа шла по октаве, и левые клавиши верхнего
+ * ряда били правой лапой (видео владельца, 2026-09-26).
  */
-export function octavePads(instrumentId, octaves = 1) {
+export function octavePads(instrumentId, octaves = 1, oneRow = false) {
   const row = ROW_KEYS[instrumentId];
   if (!row) return null;
   return Array.from({ length: 12 * octaves }, (_, note) => {
@@ -90,7 +93,7 @@ export function octavePads(instrumentId, octaves = 1) {
       note,
       name: NAMES_12[k],
       black: BLACK_12.has(k),
-      paw: (octaves === 2 ? note < 12 : note < 6) ? 'left' : 'right',
+      paw: (octaves === 2 && oneRow ? note < 12 : k < 6) ? 'left' : 'right',
     };
   });
 }

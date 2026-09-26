@@ -62,7 +62,7 @@ const octavesOn = () => Boolean(api?.feature?.('bongo-octaves'));
 
 /** Клавиши инструмента на экране: у пианино и маримбы в режиме октав — полная октава или две (в альбомном виде — две). */
 function padsOf(id) {
-  if (octavesOn() && OCTAVE_INSTRUMENTS.includes(id)) return octavePads(id, landscape ? 2 : octaves);
+  if (octavesOn() && OCTAVE_INSTRUMENTS.includes(id)) return landscape ? octavePads(id, 2, true) : octavePads(id, octaves);
   return findInstrument(id).pads;
 }
 
