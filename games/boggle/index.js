@@ -619,7 +619,8 @@ export default {
         el('div', {}, el('div', { class: 'bo-title' }, T.title), ui.sub),
         el('div', { class: 'bo-actions' },
           ui.soundBtn,
-          iconButton(ICONS.restart, T.newGame, askRestart),
+          // кнопка «Новая игра» (сбросить уровни) — в бете убрана: смысла в ней нет (владелец, 2026-09-26)
+          !api.feature?.('boggle-no-restart') && iconButton(ICONS.restart, T.newGame, askRestart),
           iconButton(ICONS.stats, T.stats.open, () => showStats()),
           iconButton(ICONS.gear, T.settings.open, showSettings),
         ),

@@ -168,17 +168,36 @@ test('оформление: сдвиг разметки на вырезанну�
   assert.deepEqual(shiftEntities(null, 3, 10), []);
 });
 
+test('рейтинг Филворда — все найденные слова: пройденные уровни × слов по размеру + бонусные + начатый уровень', async () => {
+  const { boggleWords, BOGGLE_WORDS_BY_SIZE, BOARDS } = await import('../lib.js');
+  const { WORDS_BY_SIZE, SIZES } = await import('../../games/boggle/logic.js');
+  assert.deepEqual(BOGGLE_WORDS_BY_SIZE, Object.fromEntries(SIZES.map((n) => [n, WORDS_BY_SIZE[n]])),
+    'число слов по размерам — как в игре');
+  const state = {
+    'game:boggle:stats': {
+      5: { played: 3, best: 200, bonus: 4 },      // 3 × 5 + 4 = 19
+      8: { played: 2, best: 900, bonus: 10 },     // 2 × 12 + 10 = 34
+      12: { played: 50, best: 1, bonus: 50 },     // старый размер — не считается
+    },
+    'game:boggle:current': { size: 8, found: [{ word: 'кот' }, { word: 'нос' }], bonus: ['сон'] },   // + 3
+  };
+  assert.equal(boggleWords(state), 56);
+  assert.equal(BOARDS.boggle.text(56), '56 слов');
+  assert.equal(boggleWords({}), 0);
+  assert.equal(boggleWords({ 'game:boggle:stats': { 5: { played: -3, bonus: 'x' } } }), 0);
+});
+
 test('рейтинг: у каждой игры своя мера, мусор и нули не попадают', async () => {
   const { BOARDS, boardScores, boardName, plural, levelOf } = await import('../lib.js');
   assert.deepEqual(Object.keys(BOARDS).sort(), GAMES.map((g) => g.id).sort(), 'у каждой игры есть рейтинг');
   for (const [id, b] of Object.entries(BOARDS)) assert.ok(b.by && typeof b.text(5) === 'string', id);
   assert.deepEqual(boardScores({
-    'shell:progress:boggle': 'Уровень 4 · Рекорд за уровень: 765',
+    'shell:progress:words': 'Уровень 4',
     'shell:stats:block-blast': { played: 3, best: 1520 },
     'shell:stats:sudoku': { played: 3, wins: 0 },           // ноль — не в рейтинге
     'shell:stats:2048': { best: 'много' },                  // мусор
     'game:flags:stats': { correct: 1e12 },                  // явно испорчено
-  }), { boggle: 4, 'block-blast': 1520 });
+  }), { words: 4, 'block-blast': 1520 });
   assert.deepEqual(boardScores(null), {});
   assert.equal(levelOf('Уровень 14'), 14);
   assert.equal(levelOf('Стрик: 3'), null);

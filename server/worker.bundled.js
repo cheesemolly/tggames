@@ -271,6 +271,30 @@ const shellStats = (id, field) => (state) => state?.[`shell:stats:${id}`]?.[fiel
 const menuLevel = (id) => (state) => levelOf(state?.[`shell:progress:${id}`]);
 const gameStats = (id, field) => (state) => state?.[`game:${id}:stats`]?.[field];
 
+/**
+ * Филворд — все найденные слова (из списка и бонусные): кто-то играет на 5×5, кто-то на 8×8, и уровень у них
+ * значит разное (решение владельца, 2026-09-26). Отдельного счётчика в игре нет, но он выводится: на каждом
+ * пройденном уровне найдены все слова списка (их число зависит только от размера), бонусные — в статистике,
+ * плюс слова начатого уровня. Размеры и число слов — копия WORDS_BY_SIZE из games/boggle/logic.js (тест сверяет).
+ */
+const BOGGLE_WORDS_BY_SIZE = { 5: 5, 6: 7, 7: 9, 8: 12 };
+
+function boggleWords(state) {
+  const stats = state?.['game:boggle:stats'];
+  let total = 0;
+  for (const [size, words] of Object.entries(BOGGLE_WORDS_BY_SIZE)) {
+    const s = stats?.[size];
+    if (!s) continue;
+    const played = Number.isInteger(s.played) && s.played > 0 ? s.played : 0;
+    const bonus = Number.isInteger(s.bonus) && s.bonus > 0 ? s.bonus : 0;
+    total += played * words + bonus;
+  }
+  const current = state?.['game:boggle:current'];
+  if (Array.isArray(current?.found)) total += current.found.length;
+  if (Array.isArray(current?.bonus)) total += current.bonus.length;
+  return total;
+}
+
 const POINTS = count(['очко', 'очка', 'очков']);
 const WINS = count(['победа', 'победы', 'побед']);
 
@@ -286,7 +310,7 @@ const BOARDS = {
   'connect-dots': { by: 'лучший уровень', score: shellStats('connect-dots', 'best'), text: levelText },
   mahjong: { by: 'разобранные раскладки', score: shellStats('mahjong', 'wins'), text: count(['раскладка', 'раскладки', 'раскладок']) },
   2048: { by: 'лучшая плитка', score: shellStats('2048', 'best'), text: (n) => `плитка ${n}` },
-  boggle: { by: 'уровень', score: menuLevel('boggle'), text: levelText },
+  boggle: { by: 'найденные слова, включая бонусные', score: boggleWords, text: count(['слово', 'слова', 'слов']) },
   'block-blast': { by: 'рекорд', score: shellStats('block-blast', 'best'), text: POINTS },
   sudoku: { by: 'решённые судоку', score: shellStats('sudoku', 'wins'), text: count(['судоку', 'судоку', 'судоку']) },
   wordle: { by: 'угаданные слова', score: shellStats('wordle', 'wins'), text: count(['слово', 'слова', 'слов']) },
