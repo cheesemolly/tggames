@@ -5,6 +5,8 @@
 import { el } from '../../shared/dom.js';
 import { animate, showLayer, hideLayer, pop, shake, reducedMotion, EASE_OUT } from '../../shared/motion.js';
 import { createToast } from '../../shared/toast.js';
+import { createAudio } from '../../shared/sfx.js';
+import { createSounds } from './sounds.js';
 import {
   SIZES, DEFAULT_SIZE, WIN_VALUE, UNDO_PER_GAME, canMove, maxTile, newGame, play, undo, isValidState,
   emptyStats, recordGame, isValidStats,
@@ -31,6 +33,8 @@ const T = {
   resultTitle: 'Игра окончена',
   result: (tile, moves) => `Лучшая плитка: ${tile} · ходов: ${moves}`,
   newGame: 'Новая игра',
+  soundOn: 'Выключить звук',
+  soundOff: 'Включить звук',
   restartQuestion: 'Начать заново? Текущая партия будет потеряна.',
   restart: 'Начать заново',
   cancel: 'Отмена',
@@ -44,6 +48,8 @@ const svg = (body, fill = false) => `<svg viewBox="0 0 24 24" width="20" height=
   + `${body}</svg>`;
 const ICONS = {
   restart: svg('<path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/>'),
+  soundOn: svg('<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/>'),
+  soundOff: svg('<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="m16 9 5 6"/><path d="m21 9-5 6"/>'),
   undo: svg('<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>'),
   stats: svg('<rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="7" width="4" height="14" rx="1"/><rect x="17" y="3" width="4" height="18" rx="1"/>', true),
   gear: svg('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/>'),
@@ -62,6 +68,35 @@ let sliding = null;             // таймер завершения анима�
 let swipe = null;
 let modalActive = false;
 let modalToken = 0;
+let soundOn = true;
+// звук (в бете: api.feature('2048-sounds')) — один AudioContext на страницу, заводится при первом звуке
+const audio = createAudio(createSounds);
+
+const soundFeature = () => Boolean(api?.feature?.('2048-sounds'));
+
+function sfx(name, opts) {
+  if (!soundFeature() || !soundOn) return;
+  try {
+    audio.get()?.play(name, opts);
+  } catch (err) {
+    console.warn('звук', name, err);
+  }
+}
+
+function renderSoundBtn() {
+  if (!ui?.soundBtn) return;
+  ui.soundBtn.innerHTML = soundOn ? ICONS.soundOn : ICONS.soundOff;
+  ui.soundBtn.setAttribute('aria-label', soundOn ? T.soundOn : T.soundOff);
+  ui.soundBtn.title = soundOn ? T.soundOn : T.soundOff;
+  ui.soundBtn.classList.toggle('tt-muted', !soundOn);
+}
+
+function toggleSound() {
+  soundOn = !soundOn;
+  api.storage.set('sound', soundOn);
+  renderSoundBtn();
+  sfx('click');
+}
 const timers = new Set();
 
 function later(fn, ms) {
@@ -145,9 +180,11 @@ function doMove(dir) {
   const before = game.grid;
   const result = play(game, dir);
   if (!result.moved) {
+    sfx('blocked');
     shake(ui.board, { distance: 3, duration: 200 });
     return;
   }
+  sfx('slide');
   api.platform.haptic.impact(result.merges.length ? 'medium' : 'light');
 
   // 1) скольжение: существующие плитки едут к новым местам
@@ -168,6 +205,8 @@ function doMove(dir) {
   const finish = () => {
     if (!ui) return;
     renderTiles({ merged: new Set(result.merges.map((m) => m.at)), spawned: result.spawned?.at });
+    // слитые плитки впрыгивают — «поп» по самой большой из них
+    if (result.merges.length) sfx('merge', { step: Math.max(...result.merges.map((m) => m.value)), count: result.merges.length });
     renderInfo();
     if (result.merges.length) pop(ui.score, { from: 0.85, duration: 200 });
     save();
@@ -189,6 +228,7 @@ function onUndo() {
     toast.show(T.nothingToUndo);
     return;
   }
+  sfx('undo');
   api.platform.haptic.selection();
   renderTiles();
   renderInfo();
@@ -234,6 +274,7 @@ function onKeydown(e) {
 // ---------- победа и конец ----------
 
 function showWin() {
+  sfx('win');
   api.platform.haptic.notification('success');
   const tile2048 = [...ui.tiles.children].find((node) => node.classList.contains('tt-2048'));
   if (tile2048) animate(tile2048, [{ filter: 'brightness(1)' }, { filter: 'brightness(1.5)' }, { filter: 'brightness(1)' }], { duration: 700, iterations: 2 });
@@ -250,6 +291,7 @@ function showWin() {
 
 function gameOver() {
   toast.show(T.noMoves, 1400);
+  sfx('over');
   api.platform.haptic.notification('error');
   shake(ui.board, { distance: 6, duration: 400 });
   ui.board.classList.add('tt-over');
@@ -278,6 +320,7 @@ function endGame(delay = 0) {
 // ---------- окна ----------
 
 function openModal(content) {
+  if (!modalActive) sfx('click');
   modalToken++;
   ui.modal.replaceChildren(content);
   if (!modalActive) showLayer(ui.modal);
@@ -373,6 +416,8 @@ function startGame(saved = null) {
   buildBoard();
   renderInfo();
   save();
+  // две стартовые плитки появляются — по «плипу» (в такт анимации)
+  if (!saved) [...ui.tiles.children].forEach((_, k) => later(() => sfx('spawn', { step: k }), reducedMotion() ? 0 : 200 + k * 80));
   if (!saved && !reducedMotion()) {
     [...ui.tiles.children].forEach((node, k) => animate(node.firstChild, [{ transform: 'scale(0)' }, { transform: 'scale(1)' }],
       { duration: 240, delay: 120 + k * 80, easing: EASE_OUT, fill: 'backwards' }));
@@ -393,10 +438,11 @@ export default {
     api = gameApi;
     host = container;
     toast = createToast();
-    const [savedGame, savedStats, savedSettings] = await Promise.all([
-      api.storage.get('current'), api.storage.get('stats'), api.storage.get('settings'),
+    const [savedGame, savedStats, savedSettings, savedSound] = await Promise.all([
+      api.storage.get('current'), api.storage.get('stats'), api.storage.get('settings'), api.storage.get('sound'),
     ]);
     if (!api) return;
+    soundOn = savedSound !== false;
     stats = {};
     for (const n of SIZES) stats[n] = isValidStats(savedStats?.[n]) ? savedStats[n] : emptyStats();
     settings = {
@@ -416,6 +462,7 @@ export default {
       modal: el('div', { class: 'tt-modal', hidden: true }),
     };
     ui.scoreBox = el('div', { class: 'tt-box' }, el('div', { class: 'tt-box-label' }, T.tile), ui.score);
+    ui.soundBtn = soundFeature() ? iconButton(ICONS.soundOn, T.soundOn, toggleSound) : null;
     ui.undoButton = iconButton(ICONS.undo, T.undo, onUndo, ui.undoBadge);
     ui.undoButton.classList.add('tt-undo');
     ui.board.append(ui.cells, ui.tiles);
@@ -428,6 +475,7 @@ export default {
       el('div', { class: 'tt-header' },
         el('div', {}, el('div', { class: 'tt-title' }, T.title), ui.sub),
         el('div', { class: 'tt-actions' },
+          ui.soundBtn,
           iconButton(ICONS.restart, T.newGame, askRestart),
           iconButton(ICONS.stats, T.stats.open, () => showStats()),
           iconButton(ICONS.gear, T.settings.open, showSettings),
@@ -444,6 +492,7 @@ export default {
       toast.el,
     );
     container.append(root);
+    renderSoundBtn();
     document.addEventListener('keydown', onKeydown);
 
     const saved = isValidState(savedGame) && canMove(savedGame.grid, savedGame.size) ? savedGame : null;
