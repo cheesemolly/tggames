@@ -46,7 +46,7 @@ const T = {
     open: 'Настройки', title: 'Настройки', size: 'Размер поля', skin: 'Оформление', close: 'Закрыть',
     words: (n) => `${WORDS_BY_SIZE[n]} слов`, nextGame: 'Новый размер — со следующей партии.',
   },
-  skins: { telegram: 'Как в Telegram', classic: 'Кубики', night: 'Ночь', paper: 'Бумага', neon: 'Неон', mint: 'Мята' },
+  skins: { telegram: 'По умолчанию', classic: 'Кубики', night: 'Ночь', paper: 'Бумага', neon: 'Неон', mint: 'Мята' },
 };
 
 const svg = (body, fill = false) => `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" `

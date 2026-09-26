@@ -49,7 +49,7 @@ const T = {
   },
   stats: { open: 'Статистика', title: 'Статистика', played: 'Партий', wins: 'Побед', losses: 'Поражений', draws: 'Ничьих', close: 'Закрыть' },
   settings: { open: 'Настройки', title: 'Настройки', skin: 'Доска', coords: 'Координаты', coordsHint: 'Буквы и цифры по краям доски', close: 'Закрыть' },
-  skins: { telegram: 'Как в Telegram', wood: 'Дерево', green: 'Турнир', marble: 'Мрамор', night: 'Ночь', candy: 'Конфета' },
+  skins: { telegram: 'По умолчанию', wood: 'Дерево', green: 'Турнир', marble: 'Мрамор', night: 'Ночь', candy: 'Конфета' },
 };
 
 const svgIcon = (body, fill = false) => `<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" `

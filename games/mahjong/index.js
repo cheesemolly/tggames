@@ -39,7 +39,7 @@ const T = {
   newGameWarning: 'Текущая партия будет потеряна.',
   stats: { open: 'Статистика', title: 'Статистика', played: 'Игр', wins: 'Побед', clean: 'Чисто', cleanHint: '«Чисто» — победы без подсказок и перемешиваний.', close: 'Закрыть' },
   settings: { open: 'Настройки', title: 'Настройки', style: 'Плитки', dim: 'Затемнять закрытые плитки', dimDesc: 'Сразу видно, какие плитки можно брать.', skin: 'Стол', close: 'Закрыть' },
-  skins: { telegram: 'Как в Telegram', felt: 'Сукно', wood: 'Дерево', night: 'Ночь', sakura: 'Сакура', jade: 'Нефрит' },
+  skins: { telegram: 'По умолчанию', felt: 'Сукно', wood: 'Дерево', night: 'Ночь', sakura: 'Сакура', jade: 'Нефрит' },
 };
 
 const svgIcon = (body) => `<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;

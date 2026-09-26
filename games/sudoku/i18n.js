@@ -39,7 +39,7 @@ export const TEXT = {
       close: 'Закрыть',
     },
     skins: {
-      telegram: 'Как в Telegram',
+      telegram: 'По умолчанию',
       classic: 'Белый и голубой',
       claude: 'Чёрный и оранжевый',
       sepia: 'Сепия',
