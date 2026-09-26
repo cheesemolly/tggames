@@ -13,6 +13,8 @@ import { migrateStats } from './stats.js';
 import { openGame } from './game-host.js';
 import { createSync } from './sync.js';
 import { renderAdmin } from './admin.js';
+import { renderBeta } from './beta-screen.js';
+import { setBetaViewer, seesBeta, feature, inBeta, playerView } from './beta.js';
 import { lockPageScroll } from './no-scroll.js';
 
 const root = document.getElementById('app');
@@ -28,8 +30,16 @@ const sync = createSync({
   afterRestore: migrateStats,      // серверный прогресс может быть ещё со старыми рекордами
 });
 
-/** Игры, которые видит этот игрок: помеченные admin — только владельцу. */
-const visibleGames = () => games.filter((g) => !g.admin || account.isAdmin);
+// Владелец — по /me (решает сервер). Для проверки из Claude на локальном сервере — ещё ?owner в адресе:
+// только localhost, на GitHub Pages не работает; панели игроков это не открывает (её закрывает сервер).
+const LOCAL_OWNER = ['localhost', '127.0.0.1'].includes(location.hostname) && new URLSearchParams(location.search).has('owner');
+const isOwner = () => account.isAdmin || LOCAL_OWNER;
+
+// Бету (shell/beta.js) видит только владелец — и то пока не включил «Смотреть как игрок».
+setBetaViewer(() => isOwner() && !playerView());
+
+/** Игры, которые видит этот игрок: игры из беты — только владельцу. */
+const visibleGames = () => games.filter((g) => feature(g.id));
 
 function show(route) {
   session?.close();
@@ -47,13 +57,23 @@ function show(route) {
       goToMenu();
       return;
     }
-    if (entry.admin && !account.isAdmin) {          // чужая ссылка на игру в обкатке
+    if (!feature(entry.id)) {                       // чужая ссылка на игру в бете
       goToMenu();
       return;
     }
     platform.backButton.show();
     // «Назад» из игры возвращает в её папку, а не на главную.
-    session = openGame(screen, entry, { platform, beta: account.isAdmin, onExit: () => backFrom(route) });
+    session = openGame(screen, entry, { platform, beta: seesBeta(), feature, onExit: () => backFrom(route) });
+    return;
+  }
+
+  if (route.name === 'beta') {
+    if (!isOwner()) {
+      goToMenu();
+      return;
+    }
+    platform.backButton.show();
+    renderBeta(screen, { games, onBack: goToMenu, onChange: redraw });
     return;
   }
 
@@ -79,7 +99,7 @@ function show(route) {
   }
 
   platform.backButton.hide();
-  renderMenu(screen, { games: visibleGames(), account }).catch((err) => console.error(err));
+  renderMenu(screen, { games: visibleGames(), account, owner: isOwner() }).catch((err) => console.error(err));
 }
 
 /** Куда ведёт «Назад»: из игры — в её папку, из папки — на главную. */
@@ -103,7 +123,7 @@ platform.backButton.onClick(() => backFrom());
 onRouteChange(show);
 // Ссылка из инлайн-режима бота (t.me/<бот>?startapp=sudoku) открывает сразу игру, а не меню.
 // replaceState, а не location.replace: без лишнего hashchange (иначе игра открылась бы дважды).
-const startGame = platform.startParam && games.find((g) => g.id === platform.startParam && !g.admin);
+const startGame = platform.startParam && games.find((g) => g.id === platform.startParam && !inBeta(g.id));
 if (startGame && currentRoute().name === 'menu') history.replaceState(null, '', `#/game/${startGame.id}`);
 show(currentRoute());
 

@@ -9,6 +9,7 @@ import { progress } from './progress.js';
 import { menuLine } from './menu-line.js';
 import { visibleCategories, gamesOf, gameWord } from './categories.js';
 import { GAME_ICONS, CATEGORY_ICONS } from './icons.js';
+import { BETA, inBeta, seesBeta } from './beta.js';
 
 /** Иконка в цветной плитке: цвет берётся из переменной папки. */
 function tile(markup, extraClass = '') {
@@ -24,7 +25,7 @@ async function gameInfo(game) {
   return { game, line: menuLine(stats, { menu: game.menu, progress: line, save }), hasSave: save != null };
 }
 
-export async function renderMenu(container, { games, account = null }) {
+export async function renderMenu(container, { games, account = null, owner = false }) {
   // Незаконченные партии считаем заранее — по ним на папке загорается точка «есть что продолжить».
   const savedIds = new Set(
     (await Promise.all(games.map(async (g) => ((await saves.get(g.id)) != null ? g.id : null)))).filter(Boolean),
@@ -50,7 +51,7 @@ export async function renderMenu(container, { games, account = null }) {
     el('h1', {}, 'Игры'),
     el('div', { class: 'title-rule' }),
     el('p', { class: 'hint' }, 'Выбери игру ниже.'),
-    accountRow(account),
+    accountRow(account, owner),
     el('div', { class: 'folder-grid' }, cards),
   ));
 }
@@ -76,7 +77,10 @@ export async function renderFolder(container, { category, games, onBack }) {
       tile(GAME_ICONS[game.id] ?? ''),
       el('span', { class: 'game-tile-title' }, game.title),
       el('span', { class: 'game-tile-meta' }, line),
-      hasSave && el('span', { class: 'badge badge-corner' }, 'продолжить'),
+      (hasSave || (inBeta(game.id) && seesBeta())) && el('span', { class: 'badge-stack' },
+        inBeta(game.id) && seesBeta() && el('span', { class: 'badge badge-beta' }, 'бета'),
+        hasSave && el('span', { class: 'badge badge-corner' }, 'продолжить'),
+      ),
     ))),
   ));
 }
@@ -85,14 +89,16 @@ export async function renderFolder(container, { category, games, onBack }) {
  * Внутри Telegram — имя игрока (вход происходит сам) и кнопка панели у владельца.
  * В обычном браузере аккаунтов нет: честно пишем, что прогресс живёт только здесь.
  */
-function accountRow(account) {
+function accountRow(account, owner = false) {
+  const betaBtn = owner && el('a', { class: 'account-btn account-btn-beta', href: '#/beta' }, BETA.length ? `Бета · ${BETA.length}` : 'Бета');
   if (!account?.enabled) {
     return el('div', { class: 'account-row' },
-      el('span', { class: 'account-name' }, 'Прогресс хранится только в этом браузере'));
+      el('span', { class: 'account-name' }, 'Прогресс хранится только в этом браузере'), betaBtn);
   }
   if (!account.current) return null;          // вход ещё идёт — не мигаем пустой строкой
   return el('div', { class: 'account-row' },
     el('span', { class: 'account-name' }, `Аккаунт Telegram: ${account.name}`),
+    betaBtn,
     account.isAdmin && el('a', { class: 'account-btn', href: '#/admin' }, 'Панель'),
   );
 }

@@ -166,6 +166,7 @@ export function displayName(user) {
  * id, название и строка-описание. Тест сверяет её с реестром — добавил игру и забыл сюда значит красный тест.
  * best — как писать рекорд (как `menu` в реестре): false — не писать (у Wordle важна серия), функция — своя строка.
  */
+// beta: true — игра ещё в бете у владельца (shell/beta.js): в инлайн-режиме её нет. Релиз снимает пометку.
 export const GAMES = [
   { id: 'words', title: 'Слова из слова', emoji: '🔤', about: 'собери как можно больше слов из букв одного' },
   { id: 'flags', title: 'Флаги', emoji: '🏳️', about: 'угадай страну по флагу' },
@@ -189,12 +190,16 @@ export const GAMES = [
 const fold = (text) => String(text ?? '').toLowerCase().replace(/ё/g, 'е').trim();
 
 /** Игры по запросу из инлайн-режима: совпадение с началом названия, любого его слова или id. */
+/** Игры, которые видят все (без беты). */
+export const publicGames = () => GAMES.filter((g) => !g.beta);
+
 export function findGames(query) {
   const q = fold(query);
-  if (!q) return [...GAMES];
+  const list = publicGames();
+  if (!q) return list;
   const starts = (g) => fold(g.title).startsWith(q) || g.id.startsWith(q);
   const wordStarts = (g) => fold(g.title).split(/[\s-]+/).some((w) => w.startsWith(q));
-  return [...GAMES.filter(starts), ...GAMES.filter((g) => !starts(g) && wordStarts(g))];
+  return [...list.filter(starts), ...list.filter((g) => !starts(g) && wordStarts(g))];
 }
 
 /** Ссылка, которая открывает главное мини-приложение бота; с param — сразу нужную игру. */

@@ -60,7 +60,7 @@ export function gamesOf(category, games) {
 }
 
 /**
- * Папки, в которых игроку есть что открыть. Игры в обкатке (admin) видны только владельцу —
+ * Папки, в которых игроку есть что открыть. Игры из беты (shell/beta.js) видны только владельцу —
  * папка из одних таких у остальных пропадает, а не показывает «0 игр».
  */
 export const visibleCategories = (games) => categories.filter((c) => gamesOf(c, games).length > 0);
