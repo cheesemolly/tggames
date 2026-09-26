@@ -40,6 +40,14 @@ export const BETA = [
     open: '#/game/boggle',
     since: '2026-09-26',
   },
+  {
+    id: 'boggle-no-restart',
+    kind: 'feature',
+    title: 'Филворд без кнопки «Новая игра»',
+    note: 'убрана кнопка ↻ в шапке — сброс уровней не нужен',
+    open: '#/game/boggle',
+    since: '2026-09-26',
+  },
   // <<< конец списка беты
 ];
 
