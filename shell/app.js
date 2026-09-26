@@ -14,6 +14,7 @@ import { openGame } from './game-host.js';
 import { createSync } from './sync.js';
 import { renderAdmin } from './admin.js';
 import { renderBeta } from './beta-screen.js';
+import { renderTop } from './top.js';
 import { setBetaViewer, seesBeta, feature, inBeta, playerView } from './beta.js';
 import { lockPageScroll } from './no-scroll.js';
 
@@ -77,6 +78,28 @@ function show(route) {
     return;
   }
 
+  if (route.name === 'top') {
+    // рейтинг — в бете (shell/beta.js) и только с аккаунтом: вне Telegram его нет
+    if (!feature('leaderboard') || !account.enabled) {
+      if (feature('leaderboard')) toast.show('Рейтинг работает внутри Telegram', 2500);
+      goToMenu();
+      return;
+    }
+    if (route.game) lastBoard = route.game;
+    platform.backButton.show();
+    renderTop(screen, {
+      route,
+      games: visibleGames(),
+      source: {
+        summary: () => account.topSummary(),
+        game: (id) => account.topGame(id),
+        player: (pid) => account.topPlayer(pid),
+      },
+      onBack: () => backFrom(route),
+    }).catch((err) => console.error(err));
+    return;
+  }
+
   if (route.name === 'admin') {
     if (!account.isAdmin) {
       goToMenu();
@@ -99,11 +122,20 @@ function show(route) {
   }
 
   platform.backButton.hide();
-  renderMenu(screen, { games: visibleGames(), account, owner: isOwner() }).catch((err) => console.error(err));
+  renderMenu(screen, { games: visibleGames(), account, owner: isOwner(), top: feature('leaderboard') })
+    .catch((err) => console.error(err));
 }
 
-/** Куда ведёт «Назад»: из игры — в её папку, из папки — на главную. */
+// Из профиля игрока «Назад» ведёт в таблицу, из которой его открыли.
+let lastBoard = null;
+
+/** Куда ведёт «Назад»: из игры — в её папку, из папки — на главную, в рейтинге — на шаг вверх. */
 function backFrom(route = currentRoute()) {
+  if (route.name === 'top' && (route.game || route.pid)) {
+    location.replace(route.pid && lastBoard ? `#/top/${encodeURIComponent(lastBoard)}` : '#/top');
+    if (!route.pid) lastBoard = null;
+    return;
+  }
   if (route.name === 'game') {
     const category = categoryOfGame(route.id);
     if (category) {

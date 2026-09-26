@@ -238,6 +238,84 @@ export function progressLines(state) {
   return lines;
 }
 
+// ---------- рейтинг (лидерборды) ----------
+
+// Рейтинг считается из того же прогресса, что синхронизируется (снимок хранилища игрока), — игры для него
+// ничего не шлют. У каждой игры своя мера успеха (как строка в меню): уровень, рекорд, победы…
+// score(state) — число или null (в рейтинг не попадает), text(n) — как это написать.
+
+/** Русское множественное: plural(3, ['очко', 'очка', 'очков']) → 'очка'. */
+export function plural(n, [one, few, many]) {
+  const m10 = n % 10;
+  const m100 = n % 100;
+  if (m10 === 1 && m100 !== 11) return one;
+  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
+  return many;
+}
+
+const digits = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '\u00a0');
+const count = (forms) => (n) => `${digits(n)} ${plural(n, forms)}`;
+const levelText = (n) => `уровень ${digits(n)}`;
+
+/** Номер уровня из строки меню («Уровень 14», «Уровень 4 · Рекорд за уровень: 765»). */
+export function levelOf(text) {
+  const m = typeof text === 'string' ? text.match(/Уровень\s+(\d+)/i) : null;
+  return m ? Number(m[1]) : null;
+}
+
+const shellStats = (id, field) => (state) => state?.[`shell:stats:${id}`]?.[field];
+const menuLevel = (id) => (state) => levelOf(state?.[`shell:progress:${id}`]);
+const gameStats = (id, field) => (state) => state?.[`game:${id}:stats`]?.[field];
+
+const POINTS = count(['очко', 'очка', 'очков']);
+const WINS = count(['победа', 'победы', 'побед']);
+
+export const BOARDS = {
+  words: { by: 'уровень', score: menuLevel('words'), text: levelText },
+  flags: { by: 'угадано флагов за всё время', score: gameStats('flags', 'correct'), text: count(['флаг', 'флага', 'флагов']) },
+  checkers: { by: 'победы над ботом', score: shellStats('checkers', 'wins'), text: WINS },
+  'flappy-burger': { by: 'рекорд', score: shellStats('flappy-burger', 'best'), text: POINTS },
+  'bubble-shooter': { by: 'уровень', score: menuLevel('bubble-shooter'), text: levelText },
+  snake: { by: 'рекорд в классике', score: shellStats('snake', 'best'), text: POINTS },
+  'brick-blast': { by: 'уровень', score: menuLevel('brick-blast'), text: levelText },
+  loop: { by: 'уровень', score: menuLevel('loop'), text: levelText },
+  'connect-dots': { by: 'лучший уровень', score: shellStats('connect-dots', 'best'), text: levelText },
+  mahjong: { by: 'разобранные раскладки', score: shellStats('mahjong', 'wins'), text: count(['раскладка', 'раскладки', 'раскладок']) },
+  2048: { by: 'лучшая плитка', score: shellStats('2048', 'best'), text: (n) => `плитка ${n}` },
+  boggle: { by: 'уровень', score: menuLevel('boggle'), text: levelText },
+  'block-blast': { by: 'рекорд', score: shellStats('block-blast', 'best'), text: POINTS },
+  sudoku: { by: 'решённые судоку', score: shellStats('sudoku', 'wins'), text: count(['судоку', 'судоку', 'судоку']) },
+  wordle: { by: 'угаданные слова', score: shellStats('wordle', 'wins'), text: count(['слово', 'слова', 'слов']) },
+  memory: { by: 'уровень', score: menuLevel('memory'), text: levelText },
+  'bongo-cat': { by: 'ударов за всё время', score: gameStats('bongo-cat', 'hits'), text: count(['удар', 'удара', 'ударов']) },
+};
+
+const MAX_SCORE = 1e9;   // больше — явно испорченные данные
+
+/** Очки игрока по всем играм рейтинга: { gameId: целое > 0 }. Пустое и мусор — пропускаются. */
+export function boardScores(state) {
+  const out = {};
+  for (const [id, board] of Object.entries(BOARDS)) {
+    let value;
+    try {
+      value = board.score(state);
+    } catch {
+      value = null;
+    }
+    if (Number.isInteger(value) && value > 0 && value <= MAX_SCORE) out[id] = value;
+  }
+  return out;
+}
+
+/**
+ * Имя для рейтинга — только имя из Telegram (без фамилии, ника и id: требование владельца, 2026-09-26).
+ * Длинное обрезается, пустое — «Игрок».
+ */
+export function boardName(firstName) {
+  const name = String(firstName ?? '').replace(/\s+/g, ' ').trim();
+  return [...name].slice(0, 24).join('') || 'Игрок';
+}
+
 // ---------- оформление сообщений (entities) ----------
 
 /**

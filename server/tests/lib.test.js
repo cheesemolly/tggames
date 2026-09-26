@@ -167,3 +167,23 @@ test('оформление: сдвиг разметки на вырезанну�
   assert.deepEqual(shiftEntities([{ type: 'bold', offset: 6, length: 6 }], 3, emoji.length - 3), [{ type: 'bold', offset: 3, length: 6 }]);
   assert.deepEqual(shiftEntities(null, 3, 10), []);
 });
+
+test('рейтинг: у каждой игры своя мера, мусор и нули не попадают', async () => {
+  const { BOARDS, boardScores, boardName, plural, levelOf } = await import('../lib.js');
+  assert.deepEqual(Object.keys(BOARDS).sort(), GAMES.map((g) => g.id).sort(), 'у каждой игры есть рейтинг');
+  for (const [id, b] of Object.entries(BOARDS)) assert.ok(b.by && typeof b.text(5) === 'string', id);
+  assert.deepEqual(boardScores({
+    'shell:progress:boggle': 'Уровень 4 · Рекорд за уровень: 765',
+    'shell:stats:block-blast': { played: 3, best: 1520 },
+    'shell:stats:sudoku': { played: 3, wins: 0 },           // ноль — не в рейтинге
+    'shell:stats:2048': { best: 'много' },                  // мусор
+    'game:flags:stats': { correct: 1e12 },                  // явно испорчено
+  }), { boggle: 4, 'block-blast': 1520 });
+  assert.deepEqual(boardScores(null), {});
+  assert.equal(levelOf('Уровень 14'), 14);
+  assert.equal(levelOf('Стрик: 3'), null);
+  assert.deepEqual([1, 2, 5, 11, 21, 104, 112].map((n) => plural(n, ['очко', 'очка', 'очков'])),
+    ['очко', 'очка', 'очков', 'очков', 'очко', 'очка', 'очков']);
+  assert.equal(boardName('   '), 'Игрок');
+  assert.equal(boardName('Очень-очень-длинное-имя-игрока-тут'), 'Очень-очень-длинное-имя-');
+});
