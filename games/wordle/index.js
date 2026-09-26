@@ -4,10 +4,13 @@
 //   'boards' — lang → доска | null, 'stats' — lang → статистика, 'lang' — выбранный язык.
 // Поэтому «Ещё раз» после партии на одном языке не стирает партии на других.
 // Ввод — своя экранная клавиатура + физическая (keydown), системная клавиатура телефона не нужна.
+// Звуки (sounds.js) — в бете у владельца: api.feature('wordle-sounds'); кнопка в шапке, 'sound' в api.storage.
 
 import { el } from '../../shared/dom.js';
 import { animate, showLayer, hideLayer, shake, reducedMotion, EASE_OUT } from '../../shared/motion.js';
 import { createToast } from '../../shared/toast.js';
+import { createAudio } from '../../shared/sfx.js';
+import { createSounds } from './sounds.js';
 import { LANGUAGES, LANG_ORDER, defaultLang, toLetter } from './languages.js';
 import { TEXT } from './i18n.js';
 import {
@@ -20,6 +23,11 @@ const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const FLIP_MS = 450;
 const FLIP_STEP_MS = 250;
 const REVEAL_MS = reduceMotion ? 0 : FLIP_STEP_MS * (WORD_LEN - 1) + FLIP_MS;
+
+const svgIcon = (body) => '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" '
+  + `stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
+const SOUND_ON_ICON = svgIcon('<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/>');
+const SOUND_OFF_ICON = svgIcon('<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="m16 9 5 6"/><path d="m21 9-5 6"/>');
 
 const STATS_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="currentColor">'
   + '<rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="7" width="4" height="14" rx="1"/>'
@@ -55,7 +63,10 @@ let revealing = false;  // идёт анимация хода — ввод и с
 let loadToken = 0;
 let toast = null;
 let statsOpen = false;
+let soundOn = true;
 const timers = new Set();
+// звук — один AudioContext на всю жизнь страницы, заводится при первом звуке (из нажатия)
+const audio = createAudio(createSounds);
 
 const t = () => TEXT[lang];
 
@@ -66,6 +77,26 @@ function later(fn, ms) {
   }, ms);
   timers.add(id);
   return id;
+}
+
+// ---------- звук ----------
+
+const soundFeature = () => Boolean(api?.feature?.('wordle-sounds'));
+
+function sfx(name, opts) {
+  if (!soundFeature() || !soundOn) return;
+  try {
+    audio.get()?.play(name, opts);
+  } catch (err) {
+    console.warn('звук', name, err);
+  }
+}
+
+function toggleSound() {
+  soundOn = !soundOn;
+  api.storage.set('sound', soundOn);
+  renderHeader();
+  sfx('click');
 }
 
 function canPlay() {
@@ -82,6 +113,12 @@ function renderHeader() {
   // идёт партия — номер текущей попытки; кончилась — сколько ходов сделано
   const attempt = board && (getStatus(board) === 'playing' ? board.guesses.length + 1 : board.guesses.length);
   ui.sub.textContent = board && dict ? t().attempt(attempt, MAX_TRIES) : t().loading;
+  if (ui.soundButton) {
+    ui.soundButton.innerHTML = soundOn ? SOUND_ON_ICON : SOUND_OFF_ICON;
+    ui.soundButton.setAttribute('aria-label', soundOn ? t().soundOn : t().soundOff);
+    ui.soundButton.title = soundOn ? t().soundOn : t().soundOff;
+    ui.soundButton.classList.toggle('wd-muted', !soundOn);
+  }
   ui.statsButton.setAttribute('aria-label', t().stats.open);
   ui.statsButton.title = t().stats.open;
   ui.langs.setAttribute('aria-label', t().language);
@@ -163,6 +200,8 @@ function popTile(row, col) {
 
 /** Угаданная строка подпрыгивает по буквам. Возвращает длительность, мс. */
 function bounceRow(row) {
+  // по ноте на каждую подпрыгнувшую букву (вершина прыжка — 40% из 500 мс)
+  for (let i = 0; i < WORD_LEN; i++) later(() => sfx('hop', { step: i }), reducedMotion() ? i * 60 : i * 100 + 200);
   if (reducedMotion()) return 0;
   [...ui.board.children[row].children].forEach((tileEl, i) => animate(tileEl, [
     { transform: 'translateY(0)' },
@@ -208,6 +247,7 @@ function openStats() {
     ))),
   ));
   statsOpen = true;
+  sfx('click');
   showLayer(ui.stats);
   // Столбики распределения вырастают слева направо, по очереди.
   ui.stats.querySelectorAll('.wd-dist-bar').forEach((bar, i) => animate(bar, [
@@ -226,6 +266,7 @@ function closeStats() {
 function onLetter(ch) {
   if (!canPlay() || [...typed].length >= WORD_LEN) return;
   typed += ch;
+  sfx('key', { step: [...typed].length - 1 });
   api.platform.haptic.impact('light');
   renderBoard();
   popTile(boards[lang].guesses.length, [...typed].length - 1);
@@ -234,10 +275,12 @@ function onLetter(ch) {
 function backspace() {
   if (!canPlay() || !typed) return;
   typed = [...typed].slice(0, -1).join('');
+  sfx('back', { step: [...typed].length });
   renderBoard();
 }
 
 function reject(code) {
+  sfx('reject');
   api.platform.haptic.notification('error');
   showToast(t().errors[code]);
   const row = ui.board.children[boards[lang].guesses.length];
@@ -249,6 +292,12 @@ function submit() {
   const board = boards[lang];
   const error = checkGuess(board, typed, dict.allowed);
   if (error) return reject(error);
+
+  // звук переворота: у каждой клетки свой по цвету, в момент, когда клетка «показывает» цвет (середина переворота)
+  const marks = score(typed, board.secret);
+  sfx('enter');
+  marks.forEach((mark, i) => later(() => sfx(`tile-${mark}`, { step: i }),
+    reduceMotion ? i * 70 : i * FLIP_STEP_MS + FLIP_MS / 2));
 
   const next = { ...board, guesses: [...board.guesses, typed] };
   boards[lang] = next;
@@ -306,6 +355,7 @@ function finishBoard() {
 
   const common = { variant: lang, locale: cfg.locale, share: shareText(board) };
   if (won) {
+    sfx('win');
     api.platform.haptic.notification('success');
     api.finish({
       ...common,
@@ -314,6 +364,7 @@ function finishBoard() {
       message: t().won(word, board.guesses.length, MAX_TRIES, stats[lang].streak),
     });
   } else {
+    sfx('lose');
     api.platform.haptic.notification('error');
     api.finish({ ...common, outcome: 'lose', message: t().lost(word) });
   }
@@ -379,7 +430,10 @@ async function selectLang(next) {
 function onLangClick(e) {
   const next = e.currentTarget.dataset.lang;
   e.currentTarget.blur();                 // иначе Enter с клавиатуры «нажмёт» эту кнопку
-  if (next !== lang && !revealing) selectLang(next);
+  if (next !== lang && !revealing) {
+    sfx('lang');
+    selectLang(next);
+  }
 }
 
 export default {
@@ -389,9 +443,10 @@ export default {
   async init(container, gameApi) {
     api = gameApi;
     toast = createToast();
-    const [savedBoards, savedStats, savedLang] = await Promise.all([
-      api.storage.get('boards'), api.storage.get('stats'), api.storage.get('lang'),
+    const [savedBoards, savedStats, savedLang, savedSound] = await Promise.all([
+      api.storage.get('boards'), api.storage.get('stats'), api.storage.get('lang'), api.storage.get('sound'),
     ]);
+    soundOn = savedSound !== false;
     if (!api) return;                     // закрыли, пока читали хранилище
 
     boards = {};
@@ -410,6 +465,11 @@ export default {
         onmousedown: (e) => e.preventDefault(),
         onclick: openStats,
       }),
+      soundButton: soundFeature() ? el('button', {
+        class: 'wd-icon-btn',
+        onmousedown: (e) => e.preventDefault(),
+        onclick: toggleSound,
+      }) : null,
       langs: el('div', { class: 'wd-langs', role: 'group' }),
       langButtons: Object.fromEntries(LANG_ORDER.map((id) => [id, el('button', {
         class: 'wd-lang',
@@ -426,7 +486,7 @@ export default {
     root = el('div', { class: 'wd' },
       el('div', { class: 'wd-header' },
         el('div', { class: 'wd-heading' }, ui.title, ui.sub),
-        el('div', { class: 'wd-actions' }, ui.statsButton, ui.langs),
+        el('div', { class: 'wd-actions' }, ui.soundButton, ui.statsButton, ui.langs),
       ),
       el('div', { class: 'wd-board-wrap' }, ui.board),
       ui.keyboard,
