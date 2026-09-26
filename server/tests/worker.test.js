@@ -760,3 +760,87 @@ test('обратная связь из приложения: POST /report — в
     tg.restore();
   }
 });
+
+test('тихая рассылка, номера отправленного и /unsend: точно по номерам и поиском по тексту у старой рассылки', async () => {
+  const { env, say, press } = await botEnv();
+  // номера сообщений у каждого чата свои, как в Telegram
+  const counters = new Map();
+  const nextIn = (chat) => { counters.set(chat, (counters.get(chat) ?? 500) + 1); return counters.get(chat); };
+  const inChat = new Map();          // chat → { message_id → текст } — что «лежит» в чатах игроков
+  const forwarded = new Set();
+  const tg = captureTelegram(({ method, payload }) => {
+    if (method === 'sendMessage') {
+      const id = nextIn(payload.chat_id);
+      if (!inChat.has(payload.chat_id)) inChat.set(payload.chat_id, new Map());
+      inChat.get(payload.chat_id).set(id, payload.text);
+      return { ok: true, result: { message_id: id } };
+    }
+    if (method === 'forwardMessage') {
+      const text = inChat.get(payload.from_chat_id)?.get(payload.message_id);
+      if (text == null) return { ok: false, description: 'message to forward not found' };
+      const copy = nextIn(payload.chat_id);
+      forwarded.add(`${payload.chat_id}:${copy}`);
+      const fromBot = !String(text).startsWith('игрок:');
+      return { ok: true, result: { message_id: copy, text: text.replace(/^игрок:/, ''), forward_origin: { type: 'user', sender_user: { id: fromBot ? 1 : payload.from_chat_id, is_bot: fromBot } } } };
+    }
+    return { ok: true };
+  });
+  try {
+    // старая рассылка — без записанных номеров (так было до этой правки): кладём её в чаты «вручную»
+    await say(ADMIN.id, { text: '/broadcast' });                         // заводит таблицы черновиков
+    const old = await env.DB.prepare(`INSERT INTO drafts (admin_id, chat_id, group_key, kind, text, stamp, state, created_at)
+      VALUES (?, ?, 'old', 'broadcast', 'пост с ошибкой', 's', 'sent', 0)`).bind(ADMIN.id, ADMIN.id).run();
+    const oldId = old.meta.last_row_id;
+    for (const chat of [USER.id, 43, ADMIN.id]) {
+      if (!inChat.has(chat)) inChat.set(chat, new Map());
+      inChat.get(chat).set(nextIn(chat), 'пост с ошибкой');
+    }
+    inChat.get(USER.id).set(nextIn(USER.id), 'игрок:пост с ошибкой');           // игрок написал то же самое — не трогаем
+
+    // тихая рассылка исправленного поста
+    await say(ADMIN.id, { text: '/silentbroadcast исправленный пост' });
+    assert.match(tg.calls.findLast((c) => c.payload.reply_markup?.inline_keyboard).payload.text, /без звука/);
+    const [send] = lastButtons(tg);
+    tg.calls.length = 0;
+    await press(ADMIN.id, send);
+    const sent = tg.calls.filter((c) => c.method === 'sendMessage' && c.payload.text === 'исправленный пост');
+    assert.equal(sent.length, 3);
+    assert.ok(sent.every((c) => c.payload.disable_notification === true), 'без звука');
+    const rows = (await env.DB.prepare('SELECT chat_id FROM sent_messages WHERE draft_id = ?').bind(Number(send.split(':')[2])).all()).results;
+    assert.equal(rows.length, 3, 'номера записаны');
+
+    // /unsend старой: ищет по тексту перед исправленным постом, удаляет только своё
+    tg.calls.length = 0;
+    await say(ADMIN.id, { text: '/unsend' });
+    const list = tg.calls.at(-1).payload.reply_markup.inline_keyboard.map((row) => row[0].callback_data);
+    assert.ok(list.includes(`u:ask:${oldId}`));
+    await press(ADMIN.id, `u:ask:${oldId}`);
+    assert.deepEqual(lastButtons(tg), [`u:go:${oldId}`, `u:no:${oldId}`]);
+    tg.calls.length = 0;
+    await press(ADMIN.id, `u:go:${oldId}`);
+    const isCopy = (c) => forwarded.has(`${c.payload.chat_id}:${c.payload.message_id}`);
+    const deleted = tg.calls.filter((c) => c.method === 'deleteMessage' && !isCopy(c));
+    assert.equal(deleted.length, 3, 'по одному у каждого');
+    for (const d of deleted) assert.equal(inChat.get(d.payload.chat_id).get(d.payload.message_id), 'пост с ошибкой');
+    const found = tg.calls.filter((c) => c.method === 'forwardMessage'
+      && inChat.get(c.payload.from_chat_id)?.has(c.payload.message_id)).length;
+    assert.equal(tg.calls.filter((c) => c.method === 'deleteMessage' && isCopy(c)).length, found, 'пересланные себе копии стёрты');
+    assert.match(tg.calls.findLast((c) => c.method === 'editMessageText').payload.text, /Удалено: 3/);
+
+    // /unsend новой — точно по записанным номерам
+    const silentId = Number(send.split(':')[2]);
+    tg.calls.length = 0;
+    await press(ADMIN.id, `u:go:${silentId}`);
+    const bulk = tg.calls.filter((c) => c.method === 'deleteMessages');
+    assert.equal(bulk.length, 3);
+    for (const b of bulk) assert.equal(inChat.get(b.payload.chat_id).get(b.payload.message_ids[0]), 'исправленный пост');
+
+    // чужой не может
+    await press(USER.id, `u:go:${silentId}`);
+    assert.match(tg.calls.at(-1).payload.text, /только для владельца/);
+    await say(USER.id, { text: '/unsend' });
+    assert.match(tg.calls.at(-1).payload.text, /только для владельца/);
+  } finally {
+    tg.restore();
+  }
+});

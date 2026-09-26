@@ -1054,7 +1054,16 @@ async function botWebhook(request, env, ctx) {
     return new Response('ok');
   }
 
-  if (command === '/broadcast' || command === '/message') {
+  if (command === '/unsend') {
+    if (!admin) {
+      await api(env, 'sendMessage', { chat_id: chatId, text: 'Эта команда только для владельца.' });
+      return new Response('ok');
+    }
+    await listSent(env, chatId, tgId);
+    return new Response('ok');
+  }
+
+  if (command === '/broadcast' || command === '/silentbroadcast' || command === '/message') {
     if (!admin) {
       await api(env, 'sendMessage', { chat_id: chatId, text: 'Эта команда только для владельца.' });
       return new Response('ok');
@@ -1080,6 +1089,8 @@ async function botWebhook(request, env, ctx) {
 const ADMIN_HELP = 'Команды: /start — открыть игры, /me — мой прогресс, /report текст — отзыв.\n\n'
   + 'Для владельца:\n'
   + '/broadcast текст — всем игрокам;\n'
+  + '/silentbroadcast текст — всем, но без звука уведомления;\n'
+  + '/unsend — удалить у всех недавнюю рассылку или сообщение (Telegram даёт 48 часов);\n'
   + '/message @ник текст — одному игроку (можно id вместо ника).\n'
   + 'Можно с фото или альбомом: прикрепи картинки и напиши команду в подписи. '
   + 'Сначала бот покажет, как это увидят, и отправит только по кнопке.';
@@ -1105,12 +1116,19 @@ async function ensureDraftTables(env) {
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS draft_media (
     admin_id INTEGER NOT NULL, group_key TEXT NOT NULL, message_id INTEGER NOT NULL,
     type TEXT NOT NULL, file_id TEXT NOT NULL, PRIMARY KEY (admin_id, group_key, message_id))`).run();
-  // оформление текста (JSON entities) — столбец добавлен позже: у уже созданной таблицы его может не быть
-  try {
-    await env.DB.prepare('ALTER TABLE drafts ADD COLUMN entities TEXT').run();
-  } catch {
-    // уже есть
+  // оформление текста (JSON entities) и «без звука» — столбцы добавлены позже: у старой таблицы их может не быть
+  for (const column of ['entities TEXT', 'silent INTEGER']) {
+    try {
+      await env.DB.prepare(`ALTER TABLE drafts ADD COLUMN ${column}`).run();
+    } catch {
+      // уже есть
+    }
   }
+  // кому и какие сообщения ушли (номера нужны, чтобы потом удалить — /unsend) и у кого уже удалено
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS sent_messages (
+    draft_id INTEGER NOT NULL, chat_id INTEGER NOT NULL, message_ids TEXT NOT NULL, PRIMARY KEY (draft_id, chat_id))`).run();
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS unsend_done (
+    draft_id INTEGER NOT NULL, chat_id INTEGER NOT NULL, PRIMARY KEY (draft_id, chat_id))`).run();
 }
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -1127,9 +1145,11 @@ async function collectDraft(env, ctx, message, { command, rest, media, entities 
   let targetName = null;
   let text = null;
   let textAt = restAt;                     // где текст рассылки начинается в исходном сообщении
-  if (command === '/broadcast') {
+  let silent = null;                       // null — часть альбома без подписи: берётся у части с командой
+  if (command === '/broadcast' || command === '/silentbroadcast') {
     kind = 'broadcast';
     text = rest;
+    silent = command === '/silentbroadcast' ? 1 : 0;
   } else if (command === '/message') {
     const [who, ...words] = rest.split(/\s+/);
     const player = who ? await findPlayer(env, who) : null;
@@ -1154,13 +1174,14 @@ async function collectDraft(env, ctx, message, { command, rest, media, entities 
   const format = text ? shiftEntities(entities, textAt, text.length) : [];
 
   const stamp = crypto.randomUUID();
-  await env.DB.prepare(`INSERT INTO drafts (admin_id, chat_id, group_key, kind, target, target_name, text, entities, stamp, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  await env.DB.prepare(`INSERT INTO drafts (admin_id, chat_id, group_key, kind, target, target_name, text, entities, silent, stamp, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT (admin_id, group_key) DO UPDATE SET
         kind = COALESCE(excluded.kind, drafts.kind), target = COALESCE(excluded.target, drafts.target),
         target_name = COALESCE(excluded.target_name, drafts.target_name), text = COALESCE(excluded.text, drafts.text),
-        entities = COALESCE(excluded.entities, drafts.entities), stamp = excluded.stamp`)
-    .bind(adminId, chatId, key, kind, target, targetName, text, format.length ? JSON.stringify(format) : null, stamp, Date.now()).run();
+        entities = COALESCE(excluded.entities, drafts.entities), silent = COALESCE(excluded.silent, drafts.silent),
+        stamp = excluded.stamp`)
+    .bind(adminId, chatId, key, kind, target, targetName, text, format.length ? JSON.stringify(format) : null, silent, stamp, Date.now()).run();
   for (const m of media) {
     await env.DB.prepare('INSERT OR IGNORE INTO draft_media (admin_id, group_key, message_id, type, file_id) VALUES (?, ?, ?, ?, ?)')
       .bind(adminId, key, message.message_id, m.type, m.id).run();
@@ -1220,10 +1241,12 @@ async function previewDraft(env, adminId, key, stamp) {
     : 1;
   await api(env, 'sendMessage', {
     chat_id: draft.chat_id,
-    text: draft.kind === 'broadcast' ? `Разослать всем игрокам (${players})?` : `Отправить ${draft.target_name}?`,
+    text: draft.kind === 'broadcast'
+      ? `Разослать всем игрокам${draft.silent ? ' без звука' : ''} (${players})?`
+      : `Отправить ${draft.target_name}?`,
     reply_markup: {
       inline_keyboard: [[
-        { text: draft.kind === 'broadcast' ? `📣 Разослать (${players})` : '✉️ Отправить', callback_data: `d:send:${draft.id}` },
+        { text: draft.kind === 'broadcast' ? `${draft.silent ? '🔕' : '📣'} Разослать (${players})` : '✉️ Отправить', callback_data: `d:send:${draft.id}` },
         { text: 'Отмена', callback_data: `d:cancel:${draft.id}` },
       ]],
     },
@@ -1245,32 +1268,48 @@ async function sendDraft(env, chatId, draft) {
   }
   const withText = format.length ? { entities: format } : {};
   const withCaption = text ? { caption: text, ...(format.length ? { caption_entities: format } : {}) } : {};
+  const quiet = draft.silent ? { disable_notification: true } : {};
   let res;
   if (!media.length) {
-    res = await api(env, 'sendMessage', { chat_id: chatId, text, ...withText, reply_markup: playButton(env) });
+    res = await api(env, 'sendMessage', { chat_id: chatId, text, ...withText, ...quiet, reply_markup: playButton(env) });
   } else if (media.length === 1) {
     const [m] = media;
     res = await api(env, m.type === 'video' ? 'sendVideo' : 'sendPhoto', {
-      chat_id: chatId, [m.type]: m.id, ...withCaption, reply_markup: playButton(env),
+      chat_id: chatId, [m.type]: m.id, ...withCaption, ...quiet, reply_markup: playButton(env),
     });
   } else {
     res = await api(env, 'sendMediaGroup', {
-      chat_id: chatId,
+      chat_id: chatId, ...quiet,
       media: media.map((m, i) => ({ type: m.type, media: m.id, ...(i === 0 ? withCaption : {}) })),
     });
   }
-  return res.ok;
+  const data = await res.json().catch(() => null);
+  if (!res.ok || data?.ok === false) return { ok: false, ids: [] };
+  const result = data?.result;
+  const ids = (Array.isArray(result) ? result : [result]).map((m) => m?.message_id).filter(Number.isInteger);
+  return { ok: true, ids };
+}
+
+/** Запомнить, что ушло игроку, — /unsend потом удалит именно эти сообщения. */
+async function recordSent(env, draftId, chatId, ids) {
+  if (!draftId || !ids.length) return;
+  await env.DB.prepare('INSERT OR REPLACE INTO sent_messages (draft_id, chat_id, message_ids) VALUES (?, ?, ?)')
+    .bind(draftId, chatId, JSON.stringify(ids)).run();
 }
 
 /** Кнопки под предпросмотром. Нажать может только владелец; дважды не отправится. */
 async function onButton(query, env, ctx) {
   const answer = (text) => api(env, 'answerCallbackQuery', { callback_query_id: query.id, ...(text ? { text } : {}) });
   const [prefix, action, rawId] = String(query.data ?? '').split(':');
-  if (prefix !== 'd' || !isAdmin(query.from?.id, parseAdminIds(env.ADMIN_IDS))) {
+  if (!['d', 'u'].includes(prefix) || !isAdmin(query.from?.id, parseAdminIds(env.ADMIN_IDS))) {
     await answer('Это только для владельца.');
     return;
   }
   await ensureDraftTables(env);
+  if (prefix === 'u') {
+    await onUnsendButton(query, env, ctx, action, Number(rawId), answer);
+    return;
+  }
   const draft = await loadDraft(env, 'id = ? AND admin_id = ?', Number(rawId), query.from.id);
   const edit = (text) => query.message && api(env, 'editMessageText', {
     chat_id: query.message.chat.id, message_id: query.message.message_id, text,
@@ -1298,7 +1337,9 @@ async function onButton(query, env, ctx) {
       await edit(`Разослано: ${result.sent} из ${result.total}.`
         + (result.failed ? ` Не доставлено: ${result.failed} (заблокировали бота).` : ''));
     } else {
-      const ok = await sendDraft(env, draft.target, draft).catch(() => false);
+      const sent = await sendDraft(env, draft.target, draft).catch(() => ({ ok: false, ids: [] }));
+      await recordSent(env, draft.id, draft.target, sent.ids);
+      const { ok } = sent;
       await edit(ok ? `Отправлено ${draft.target_name}.` : `Не доставлено ${draft.target_name}: игрок заблокировал бота или не начинал с ним чат.`);
     }
     await env.DB.prepare("UPDATE drafts SET state = 'sent' WHERE id = ?").bind(draft.id).run();
@@ -1432,13 +1473,150 @@ async function broadcast(env, content) {
   const ids = (rows.results ?? []).map((r) => r.tg_id);
   let sent = 0;
   let failed = 0;
+  if (draft.id) await ensureDraftTables(env);
   for (const id of ids) {
     try {
-      if (await sendDraft(env, id, draft)) sent += 1;
-      else failed += 1;
+      const res = await sendDraft(env, id, draft);
+      if (res.ok) {
+        sent += 1;
+        await recordSent(env, draft.id, id, res.ids);
+      } else failed += 1;
     } catch {
       failed += 1;
     }
   }
   return { total: ids.length, sent, failed };
+}
+
+// ---------- /unsend: удалить у всех недавнюю рассылку или сообщение ----------
+// Номера отправленных сообщений записываются (sent_messages) — по ним удаление точное. У рассылок, отправленных до
+// этого (номеров нет), сообщение ищется по тексту: перед сообщением более поздней рассылки, чей номер известен, бот
+// смотрит до UNSEND_PROBE сообщений — пересылает каждое себе (и сразу стирает копию), удаляет только своё с тем же
+// текстом. Чужое (например, сообщение самого игрока) не трогается. Telegram даёт удалять только 48 часов.
+// Много игроков — Cloudflare может оборвать работу по лимиту запросов: тогда «Продолжить» доделает (unsend_done).
+
+const UNSEND_PROBE = 6;
+const clip = (text, n = 40) => {
+  const t = String(text ?? '').replace(/\s+/g, ' ').trim() || '(картинка)';
+  return t.length > n ? `${t.slice(0, n - 1)}…` : t;
+};
+
+async function listSent(env, chatId, adminId) {
+  await ensureDraftTables(env);
+  const rows = (await env.DB.prepare(`SELECT id, kind, target_name, text FROM drafts
+      WHERE admin_id = ? AND state = 'sent' ORDER BY id DESC LIMIT 6`).bind(adminId).all()).results ?? [];
+  if (!rows.length) {
+    await api(env, 'sendMessage', { chat_id: chatId, text: 'Удалять нечего: рассылок и сообщений ещё не было.' });
+    return;
+  }
+  await api(env, 'sendMessage', {
+    chat_id: chatId,
+    text: 'Что удалить у всех, кому ушло? Telegram разрешает удалять только сообщения моложе 48 часов.',
+    reply_markup: {
+      inline_keyboard: rows.map((d) => [{
+        text: `🗑 ${d.kind === 'broadcast' ? 'Всем' : d.target_name}: ${clip(d.text, 32)}`,
+        callback_data: `u:ask:${d.id}`,
+      }]),
+    },
+  });
+}
+
+async function onUnsendButton(query, env, ctx, action, draftId, answer) {
+  const chat = query.message?.chat?.id;
+  const edit = (text, buttons = null) => query.message && api(env, 'editMessageText', {
+    chat_id: chat, message_id: query.message.message_id, text,
+    ...(buttons ? { reply_markup: { inline_keyboard: [buttons] } } : {}),
+  });
+  const draft = await env.DB.prepare("SELECT * FROM drafts WHERE id = ? AND admin_id = ? AND state = 'sent'")
+    .bind(draftId, query.from.id).first();
+  if (!draft) {
+    await answer('Не нашёл такую рассылку.');
+    return;
+  }
+  const who = draft.kind === 'broadcast' ? 'у всех игроков' : `у ${draft.target_name}`;
+  if (action === 'ask') {
+    await answer();
+    await edit(`Удалить «${clip(draft.text, 60)}» ${who}?`, [
+      { text: '🗑 Удалить', callback_data: `u:go:${draft.id}` },
+      { text: 'Отмена', callback_data: `u:no:${draft.id}` },
+    ]);
+    return;
+  }
+  if (action === 'no') {
+    await answer();
+    await edit('Ничего не удалено.');
+    return;
+  }
+  await answer('Удаляю…');
+  const job = async () => {
+    const r = await unsendDraft(env, draft, chat);
+    const parts = [`Удалено: ${r.deleted}.`];
+    if (r.missing) parts.push(`Не нашёл: ${r.missing}${r.searched ? ' — сообщение не нашлось рядом с более поздней рассылкой' : ''}.`);
+    if (r.failed) parts.push(`Не удалось: ${r.failed} — старше 48 часов или игрок удалил чат.`);
+    if (r.stopped) parts.push('Не успел всех — нажми «Продолжить».');
+    await edit(parts.join(' '), r.stopped ? [{ text: 'Продолжить', callback_data: `u:go:${draft.id}` }] : null);
+  };
+  if (ctx?.waitUntil) ctx.waitUntil(job());
+  else await job();
+}
+
+async function unsendDraft(env, draft, adminChat) {
+  const r = { deleted: 0, missing: 0, failed: 0, stopped: false, searched: false };
+  const tg = async (method, payload) => {
+    const res = await api(env, method, payload);
+    return res.json().catch(() => ({ ok: res.ok }));
+  };
+  const done = new Set(((await env.DB.prepare('SELECT chat_id FROM unsend_done WHERE draft_id = ?').bind(draft.id).all())
+    .results ?? []).map((row) => row.chat_id));
+  const mark = (chatId) => env.DB.prepare('INSERT OR IGNORE INTO unsend_done (draft_id, chat_id) VALUES (?, ?)').bind(draft.id, chatId).run();
+  const recorded = (await env.DB.prepare('SELECT chat_id, message_ids FROM sent_messages WHERE draft_id = ?').bind(draft.id).all()).results ?? [];
+  try {
+    if (recorded.length) {
+      for (const row of recorded) {
+        if (done.has(row.chat_id)) continue;
+        const res = await tg('deleteMessages', { chat_id: row.chat_id, message_ids: JSON.parse(row.message_ids) });
+        if (res.ok) {
+          r.deleted += 1;
+          await mark(row.chat_id);
+        } else r.failed += 1;
+      }
+      return r;
+    }
+    // старая рассылка: номеров нет — ищем по тексту перед сообщением более поздней рассылки
+    r.searched = true;
+    const norm = (t) => String(t ?? '').replace(/\s+/g, ' ').trim();
+    const text = norm(draft.text);
+    const anchors = new Map();
+    for (const row of (await env.DB.prepare('SELECT chat_id, message_ids FROM sent_messages WHERE draft_id > ?').bind(draft.id).all()).results ?? []) {
+      const first = Math.min(...JSON.parse(row.message_ids));
+      if (!anchors.has(row.chat_id) || first < anchors.get(row.chat_id)) anchors.set(row.chat_id, first);
+    }
+    const recipients = draft.kind === 'broadcast'
+      ? ((await env.DB.prepare('SELECT tg_id FROM users WHERE banned = 0').all()).results ?? []).map((u) => u.tg_id)
+      : [draft.target];
+    for (const chatId of recipients) {
+      if (done.has(chatId)) continue;
+      const anchor = anchors.get(chatId);
+      let found = false;
+      for (let k = 1; text && anchor && k <= UNSEND_PROBE && anchor - k > 0 && !found; k++) {
+        const id = anchor - k;
+        const fw = await tg('forwardMessage', { chat_id: adminChat, from_chat_id: chatId, message_id: id, disable_notification: true });
+        if (!fw.ok || !fw.result) continue;
+        await tg('deleteMessage', { chat_id: adminChat, message_id: fw.result.message_id });
+        const byBot = fw.result.forward_origin?.sender_user?.is_bot || fw.result.forward_from?.is_bot;
+        if (!byBot || norm(fw.result.text ?? fw.result.caption) !== text) continue;
+        found = true;
+        const del = await tg('deleteMessage', { chat_id: chatId, message_id: id });
+        if (del.ok) {
+          r.deleted += 1;
+          await mark(chatId);
+        } else r.failed += 1;
+      }
+      if (!found) r.missing += 1;
+    }
+  } catch (err) {
+    console.warn('unsend прерван:', err);
+    r.stopped = true;
+  }
+  return r;
 }
