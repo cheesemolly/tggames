@@ -939,6 +939,9 @@ async function adminRoutes(request, env, path, url, origin) {
     await env.DB.prepare('DELETE FROM board_scores WHERE user_id = ?').bind(id).run();
     await env.DB.prepare('DELETE FROM board_players WHERE user_id = ?').bind(id).run();
     await env.DB.prepare('DELETE FROM states WHERE user_id = ?').bind(id).run();
+    // отзывы тоже: политика конфиденциальности (privacy.html) обещает удалить всё, что связано с игроком
+    await ensureReports(env);
+    await env.DB.prepare('DELETE FROM reports WHERE tg_id = ?').bind(player.tg_id).run();
     await env.DB.prepare('DELETE FROM users WHERE id = ?').bind(id).run();
     return json({ ok: true }, 200, origin);
   }

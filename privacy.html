@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>AnyGame — политика конфиденциальности</title>
+  <link rel="icon" href="data:,">
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #ffffff; --text: #1c1c1e; --hint: #6d6d72; --line: #e3e3e8; --accent: #2481cc; --card: #f4f4f7;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #17212b; --text: #f2f2f5; --hint: #8b98a5; --line: #2b3a48; --accent: #62aef0; --card: #1f2c38; }
+    }
+    body {
+      margin: 0; background: var(--bg); color: var(--text);
+      font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+    main { max-width: 680px; margin: 0 auto; padding: 28px 20px 56px; }
+    h1 { font-size: 26px; line-height: 1.25; margin: 0 0 6px; text-wrap: balance; }
+    h2 { font-size: 18px; margin: 30px 0 8px; }
+    p, li { margin: 0 0 10px; }
+    ul { padding-left: 22px; margin: 0 0 10px; }
+    .meta { color: var(--hint); font-size: 14px; margin-bottom: 18px; }
+    .lang { display: flex; gap: 10px; margin-bottom: 22px; font-size: 14px; }
+    .lang a { color: var(--accent); text-decoration: none; padding: 4px 12px; border: 1px solid var(--line); border-radius: 999px; }
+    .card { background: var(--card); border-radius: 12px; padding: 14px 16px; margin: 14px 0; }
+    a { color: var(--accent); }
+    hr { border: 0; border-top: 1px solid var(--line); margin: 48px 0 32px; }
+    code { font-size: 15px; }
+  </style>
+</head>
+<body>
+<main>
+  <nav class="lang"><a href="#ru">Русский</a><a href="#en">English</a></nav>
+
+  <article id="ru" lang="ru">
+    <h1>Политика конфиденциальности AnyGame</h1>
+    <div class="meta">Бот @anygametg_bot и мини-приложение с играми · действует с 26&nbsp;сентября 2026&nbsp;г.</div>
+
+    <div class="card">Коротко: мы храним только то, что нужно, чтобы твой прогресс не терялся и работал рейтинг.
+      Никакой рекламы, трекеров и продажи данных. В рейтинге другие игроки видят только твоё имя.</div>
+
+    <h2>Что мы храним</h2>
+    <ul>
+      <li><b>Данные Telegram, которые приходят при запуске игр:</b> id аккаунта, имя и @username (если есть).
+        По ним мы узнаём тебя без паролей и регистрации. Подлинность этих данных проверяется подписью Telegram.</li>
+      <li><b>Игровой прогресс:</b> уровни, рекорды, статистика, начатые партии и настройки игр (скины, звук).</li>
+      <li><b>Время</b> первого и последнего захода.</li>
+      <li><b>Отзывы</b>, если ты сам их отправляешь (команда <code>/report</code> или «Обратная связь» в меню):
+        текст, имя, @username и id — чтобы мы могли ответить.</li>
+    </ul>
+    <p>Если ты только нажал «Старт» в боте и ни разу не открывал игры, мы ничего о тебе не сохраняем.
+      Мы не получаем твой номер телефона, контакты, переписку, геолокацию и фотографии профиля.</p>
+
+    <h2>Кто что видит</h2>
+    <ul>
+      <li><b>Другие игроки</b> в рейтинге видят только твоё имя (без фамилии, @username и id) и результаты в играх.
+        Ссылка на профиль в рейтинге — случайный код, он не связан с твоим аккаунтом.</li>
+      <li><b>Разработчик</b> (владелец бота) видит в панели управления имя, @username, id, прогресс и время
+        последнего захода — чтобы помогать с ошибками, отвечать на отзывы и блокировать нарушителей
+        (например, подделку рекордов).</li>
+    </ul>
+
+    <h2>Зачем</h2>
+    <ul>
+      <li>сохранять прогресс и продолжать игру с любого устройства;</li>
+      <li>показывать рейтинг по играм;</li>
+      <li>отвечать на отзывы и присылать новости об играх в этом боте (от них можно отказаться, заблокировав бота).</li>
+    </ul>
+
+    <h2>Где хранится</h2>
+    <p>Игры — это статические файлы на GitHub Pages. Прогресс и данные аккаунта хранятся в базе Cloudflare
+      (Workers и D1). Эти сервисы обрабатывают данные по нашему поручению по своим правилам безопасности;
+      GitHub и Cloudflare могут вести технические журналы запросов (например, IP-адрес). Часть прогресса
+      хранится ещё и в памяти приложения на твоём устройстве — так игры быстрее открываются.</p>
+    <p>Мы не продаём и не передаём данные третьим лицам, не показываем рекламу и не используем
+      системы аналитики и трекеры.</p>
+
+    <h2>Сколько хранится и как удалить</h2>
+    <p>Данные хранятся, пока ты пользуешься играми. Чтобы удалить аккаунт, прогресс и место в рейтинге,
+      напиши боту <code>/report удалите мои данные</code> — удалим всё, что с тобой связано. Так же можно
+      попросить показать, что о тебе хранится.</p>
+
+    <h2>Изменения</h2>
+    <p>Если политика изменится, новая версия появится на этой странице с новой датой, а о важных изменениях
+      мы напишем в боте.</p>
+  </article>
+
+  <hr>
+
+  <article id="en" lang="en">
+    <h1>AnyGame Privacy Policy</h1>
+    <div class="meta">Bot @anygametg_bot and its games Mini App · effective September 26, 2026</div>
+
+    <div class="card">In short: we store only what is needed to keep your progress and run the leaderboard.
+      No ads, no trackers, no selling of data. Other players see only your first name in the leaderboard.</div>
+
+    <h2>What we store</h2>
+    <ul>
+      <li><b>Telegram data sent when you open the games:</b> account id, name and @username (if any).
+        This is how we recognise you without passwords; the data is verified by Telegram's signature.</li>
+      <li><b>Game progress:</b> levels, records, statistics, unfinished games and game settings.</li>
+      <li><b>Time</b> of your first and last visit.</li>
+      <li><b>Feedback</b> you choose to send (<code>/report</code> or “Feedback” in the menu): the text, your name,
+        @username and id, so we can reply.</li>
+    </ul>
+    <p>If you only pressed “Start” in the bot and never opened the games, we store nothing about you.
+      We never receive your phone number, contacts, messages, location or profile photos.</p>
+
+    <h2>Who sees what</h2>
+    <ul>
+      <li><b>Other players</b> see only your first name (no last name, @username or id) and your game results
+        in the leaderboard. Profile links there use a random code unrelated to your account.</li>
+      <li><b>The developer</b> (bot owner) sees name, @username, id, progress and last visit in the admin panel —
+        to fix bugs, answer feedback and block cheaters.</li>
+    </ul>
+
+    <h2>Why</h2>
+    <ul>
+      <li>to save your progress and let you continue on any device;</li>
+      <li>to show leaderboards;</li>
+      <li>to answer feedback and send game news in this bot (block the bot to opt out).</li>
+    </ul>
+
+    <h2>Where it is stored</h2>
+    <p>The games are static files on GitHub Pages; progress and account data are stored in Cloudflare
+      (Workers and D1), which process it on our behalf under their own security rules and may keep technical
+      request logs (such as IP addresses). Part of your progress is also kept on your device.
+      We do not sell or share data with third parties, show ads, or use analytics or trackers.</p>
+
+    <h2>Retention and deletion</h2>
+    <p>Data is kept while you use the games. To delete your account, progress and leaderboard entries, send the
+      bot <code>/report delete my data</code> — we will remove everything linked to you. You can also ask what
+      we store about you.</p>
+
+    <h2>Changes</h2>
+    <p>Any update will appear on this page with a new date; important changes will be announced in the bot.</p>
+  </article>
+</main>
+</body>
+</html>

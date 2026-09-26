@@ -741,6 +741,14 @@ test('обратная связь из приложения: POST /report — в
     assert.match(tg.calls.find((c) => c.payload.chat_id === ADMIN.id).payload.text, /из приложения[\s\S]*хочу бильярд/);
     assert.equal((await call(env, '/report', { method: 'POST', initData: masha, payload: { text: '   ' } })).status, 400);
     assert.equal((await call(env, '/report', { method: 'POST', initData: masha, payload: { text: 'я'.repeat(1001) } })).status, 400);
+
+    // удаление игрока из панели стирает и его отзывы (так обещает privacy.html), чужие остаются
+    const count = async (tgId) => (await env.DB.prepare('SELECT COUNT(*) AS n FROM reports WHERE tg_id = ?').bind(tgId).first()).n;
+    assert.equal(await count(USER.id), 1);
+    const mashaId = (await call(env, '/me', { initData: masha })).data.id;
+    assert.equal((await call(env, `/admin/player/${mashaId}`, { method: 'DELETE', initData: owner })).status, 200);
+    assert.equal(await count(USER.id), 0);
+    assert.equal(await count(ADMIN.id), 1);
   } finally {
     lib.SERVER_BETA.splice(0, lib.SERVER_BETA.length, ...wasBeta);
     tg.restore();
