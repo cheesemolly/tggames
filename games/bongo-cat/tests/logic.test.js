@@ -170,8 +170,20 @@ test('две октавы: 12 и 24 клавиши, чёрные на своих
     assert.deepEqual(one.filter((p) => p.black).map((p) => p.note), [1, 3, 6, 8, 10]);
     assert.equal(new Set(two.map((p) => p.id)).size, 24);
     assert.equal(two[0].id, 'n0', 'id как у обычных клавиш — подсказка мелодии находит');
-    assert.equal(two.filter((p) => p.paw === 'left').length, 12);
-    assert.equal(one.filter((p) => p.paw === 'left').length, 6);
+    // лапа — по месту клавиши на экране: в каждом ряду левые клавиши левой лапой, правые — правой
+    const splitsInHalf = (row) => {
+      const left = row.filter((p) => p.paw === 'left').map((p) => p.note);
+      const right = row.filter((p) => p.paw === 'right').map((p) => p.note);
+      return left.length && right.length && Math.max(...left) < Math.min(...right);
+    };
+    assert.ok(splitsInHalf(one), 'одна октава');
+    assert.deepEqual(one.filter((p) => p.paw === 'left').map((p) => p.note), [0, 1, 2, 3, 4, 5], 'до…фа — левой');
+    assert.ok(splitsInHalf(two.slice(0, 12)) && splitsInHalf(two.slice(12)), 'два ряда: каждый делится пополам');
+    assert.equal(two[12].paw, 'left', 'левая клавиша верхнего ряда — левой лапой (видео владельца)');
+    assert.equal(two[11].paw, 'right', 'правая клавиша нижнего ряда — правой лапой');
+    const wide = octavePads(inst, 2, true);
+    assert.ok(splitsInHalf(wide), 'одна строка на 24 клавиши');
+    assert.equal(wide.filter((p) => p.paw === 'left').length, 12, 'нижняя октава — левой');
     assert.equal(two[23].name, 'си');
   }
   assert.equal(octavePads('bongo', 2), null);
