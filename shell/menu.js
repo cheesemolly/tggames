@@ -25,7 +25,7 @@ async function gameInfo(game) {
   return { game, line: menuLine(stats, { menu: game.menu, progress: line, save }), hasSave: save != null };
 }
 
-export async function renderMenu(container, { games, account = null, owner = false, top = false }) {
+export async function renderMenu(container, { games, account = null, owner = false, top = false, feedback = null }) {
   // Незаконченные партии считаем заранее — по ним на папке загорается точка «есть что продолжить».
   const savedIds = new Set(
     (await Promise.all(games.map(async (g) => ((await saves.get(g.id)) != null ? g.id : null)))).filter(Boolean),
@@ -54,7 +54,20 @@ export async function renderMenu(container, { games, account = null, owner = fal
     accountRow(account, owner),
     top && account?.enabled && account.current && topEntry(),
     el('div', { class: 'folder-grid' }, cards),
+    feedback && feedbackEntry(feedback),
   ));
+}
+
+/** «Обратная связь» — карточкой под папками (в бете: feedback); onclick открывает окно (shell/feedback.js). */
+function feedbackEntry(onclick) {
+  return el('button', { class: 'top-entry feedback-entry', onclick },
+    el('span', { class: 'top-entry-cup' }, '💬'),
+    el('span', { class: 'top-row-main' },
+      el('span', { class: 'top-row-name' }, 'Обратная связь'),
+      el('span', { class: 'top-row-sub' }, 'Идея, ошибка, какую игру добавить'),
+    ),
+    el('span', { class: 'top-chevron' }, '›'),
+  );
 }
 
 export async function renderFolder(container, { category, games, onBack }) {

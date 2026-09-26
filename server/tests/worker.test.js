@@ -635,3 +635,71 @@ test('особые скины: игрок видит только выданны
   await call(env, `/admin/player/${id}/perk`, { method: 'POST', initData: owner, payload: { perk: 'hedgehog', on: false } });
   assert.deepEqual((await call(env, '/me', { initData: masha })).data.perks, [], 'забрали');
 });
+
+// ---------- обратная связь (/report) ----------
+
+test('обратная связь: /report в боте приходит владельцу, пустой — подсказка, больше 5 в час — отказ; в бете — только владельцу', async () => {
+  const lib = await import('../lib.js');
+  const env = createEnv();
+  const tg = captureTelegram();
+  const say = (from, text) => call(env, '/bot', {
+    method: 'POST',
+    headers: { 'X-Telegram-Bot-Api-Secret-Token': env.WEBHOOK_SECRET },
+    payload: { message: { chat: { id: from.id }, from, text, message_id: 1 } },
+  });
+  const wasBeta = [...lib.SERVER_BETA];
+  try {
+    // в бете игрок команды не видит — получает обычную справку, владельцам ничего не уходит
+    lib.SERVER_BETA.splice(0, lib.SERVER_BETA.length, 'feedback');
+    await say(USER, '/report добавьте бильярд');
+    assert.ok(!tg.calls.some((c) => c.payload.chat_id === ADMIN.id), 'пока в бете — игроку недоступно');
+    tg.calls.length = 0;
+
+    // после релиза — всем
+    lib.SERVER_BETA.splice(0, lib.SERVER_BETA.length);
+    await say(USER, '/report добавьте бильярд');
+    const toOwner = tg.calls.find((c) => c.payload.chat_id === ADMIN.id);
+    assert.ok(toOwner, 'отзыв ушёл владельцу');
+    assert.match(toOwner.payload.text, /добавьте бильярд/);
+    assert.match(toOwner.payload.text, /@masha/);
+    assert.match(tg.calls.at(-1).payload.text, /Спасибо/);
+
+    tg.calls.length = 0;
+    await say(USER, '/report');
+    assert.match(tg.calls.at(-1).payload.text, /Напиши после команды/);
+
+    for (let k = 0; k < 4; k++) await say(USER, `/report идея ${k}`);
+    tg.calls.length = 0;
+    await say(USER, '/report ещё одна');
+    assert.match(tg.calls.at(-1).payload.text, /Слишком много/);
+    assert.ok(!tg.calls.some((c) => c.payload.chat_id === ADMIN.id), 'шестой за час владельцу не уходит');
+  } finally {
+    lib.SERVER_BETA.splice(0, lib.SERVER_BETA.length, ...wasBeta);
+    tg.restore();
+  }
+});
+
+test('обратная связь из приложения: POST /report — владельцу; в бете игроку 404, владельцу можно', async () => {
+  const lib = await import('../lib.js');
+  const env = createEnv();
+  const tg = captureTelegram();
+  const wasBeta = [...lib.SERVER_BETA];
+  try {
+    lib.SERVER_BETA.splice(0, lib.SERVER_BETA.length, 'feedback');
+    const masha = await asUser(USER);
+    const owner = await asUser(ADMIN);
+    assert.equal((await call(env, '/report', { method: 'POST', initData: masha, payload: { text: 'хочу бильярд' } })).status, 404);
+    const mine = await call(env, '/report', { method: 'POST', initData: owner, payload: { text: 'проверка' } });
+    assert.equal(mine.status, 200);
+
+    lib.SERVER_BETA.splice(0, lib.SERVER_BETA.length);
+    tg.calls.length = 0;
+    assert.equal((await call(env, '/report', { method: 'POST', initData: masha, payload: { text: 'хочу бильярд' } })).status, 200);
+    assert.match(tg.calls.find((c) => c.payload.chat_id === ADMIN.id).payload.text, /из приложения[\s\S]*хочу бильярд/);
+    assert.equal((await call(env, '/report', { method: 'POST', initData: masha, payload: { text: '   ' } })).status, 400);
+    assert.equal((await call(env, '/report', { method: 'POST', initData: masha, payload: { text: 'я'.repeat(1001) } })).status, 400);
+  } finally {
+    lib.SERVER_BETA.splice(0, lib.SERVER_BETA.length, ...wasBeta);
+    tg.restore();
+  }
+});

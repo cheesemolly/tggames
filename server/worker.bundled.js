@@ -242,6 +242,36 @@ function progressLines(state) {
   return lines;
 }
 
+// ---------- бета на сервере ----------
+
+/**
+ * Серверная часть функций, которые ещё в бете (id — как в shell/beta.js): пока id здесь, команда бота и запрос
+ * сервера работают только для владельца (ADMIN_IDS). Релиз (tools/release.js) убирает выпущенные id из списка —
+ * после этого нужно заново вставить worker.bundled.js в Cloudflare. Тест: каждый id есть в BETA.
+ */
+const SERVER_BETA = [
+  // >>> серверная бета
+  'feedback',
+  // <<< конец серверной беты
+];
+
+// ---------- обратная связь (/report) ----------
+
+const REPORT_MAX = 1000;        // символов в одном отзыве
+const REPORT_PER_HOUR = 5;      // отзывов в час от одного игрока — защита от спама
+
+const escHtml = (text) => String(text ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+/**
+ * Сообщение владельцу об отзыве (HTML). Ник и id — владельцу можно (как в панели): по ним он отвечает через /message.
+ */
+function reportMessage({ name, username, tgId, text, source }) {
+  const who = `${escHtml(name || 'Без имени')}${username ? ` (@${escHtml(username)})` : ''}, id ${tgId}`;
+  const reply = username ? `/message @${escHtml(username)} текст` : `/message ${tgId} текст`;
+  return `📝 <b>Отзыв</b> ${source === 'app' ? 'из приложения' : 'в боте'}\n${who}\n\n${escHtml(text)}\n\n`
+    + `<i>Ответить: ${reply}</i>`;
+}
+
 // ---------- особые скины (перки) ----------
 
 /**
@@ -401,6 +431,7 @@ function shiftEntities(entities, cut, textLength) {
 //   PUT    /admin/player/<id>/state  { data }
 //   POST   /admin/player/<id>/ban    { banned }
 //   POST   /admin/player/<id>/perk   { perk, on } — выдать / забрать особый скин (PERKS в lib.js)
+// Обратная связь: POST /report { text } (из приложения) и /report текст в боте — отзыв приходит владельцам.
 //   DELETE /admin/player/<id>
 //   POST   /admin/broadcast          { text }
 // Бот: POST /bot — вебхук Telegram, проверяется заголовком X-Telegram-Bot-Api-Secret-Token.
@@ -479,6 +510,12 @@ export default {
       if (path === '/state' && request.method === 'GET') return await getState(env, player, origin);
       if (path === '/state' && request.method === 'PUT') return await putState(request, env, player, user, origin);
       if (path === '/top' || path.startsWith('/top/')) return await topRoutes(env, path, player, admin, origin);
+      if (path === '/report' && request.method === 'POST') {
+        if (!betaOpen('feedback', admin)) return fail('not_found', 404, origin);
+        const { text } = await body(request);
+        const res = await submitReport(env, { player, user, text, source: 'app' });
+        return res.ok ? json({ ok: true }, 200, origin) : fail(res.error, res.error === 'too_many' ? 429 : 400, origin);
+      }
 
       if (path.startsWith('/admin/')) {
         if (!admin) return fail('forbidden', 403, origin);
@@ -715,6 +752,47 @@ async function topRoutes(env, path, player, admin, origin) {
   }, 200, origin);
 }
 
+// ---------- бета на сервере и обратная связь ----------
+
+/** Функция из серверной беты (SERVER_BETA) доступна только владельцу; после релиза — всем. */
+const betaOpen = (id, admin) => admin || !SERVER_BETA.includes(id);
+
+const reportsReady = new WeakSet();
+
+async function ensureReports(env) {
+  if (reportsReady.has(env.DB)) return;
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS reports (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, tg_id INTEGER NOT NULL, user_id INTEGER, name TEXT, username TEXT,
+    text TEXT NOT NULL, source TEXT NOT NULL, created_at INTEGER NOT NULL)`).run();
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS reports_tg ON reports(tg_id, created_at)').run();
+  reportsReady.add(env.DB);
+}
+
+/**
+ * Отзыв игрока: проверка длины и частоты, запись в reports и сообщение каждому владельцу (ADMIN_IDS).
+ * copy — { chat, id }: сообщение с картинкой из бота, его бот копирует владельцу следом за текстом.
+ */
+async function submitReport(env, { player, user, text, source, copy = null }) {
+  const clean = String(text ?? '').trim();
+  if (!clean) return { ok: false, error: 'empty_text' };
+  if (clean.length > REPORT_MAX) return { ok: false, error: 'too_long' };
+  await ensureReports(env);
+  const now = Date.now();
+  const recent = await env.DB.prepare('SELECT COUNT(*) AS n FROM reports WHERE tg_id = ? AND created_at > ?')
+    .bind(user.id, now - 60 * 60 * 1000).first();
+  if ((recent?.n ?? 0) >= REPORT_PER_HOUR) return { ok: false, error: 'too_many' };
+  const name = [user.first_name, user.last_name].filter(Boolean).join(' ').trim();
+  await env.DB.prepare(
+    'INSERT INTO reports (tg_id, user_id, name, username, text, source, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+  ).bind(user.id, player?.id ?? null, name, user.username ?? null, clean, source, now).run();
+  const note = reportMessage({ name, username: user.username, tgId: user.id, text: clean, source });
+  for (const adminId of parseAdminIds(env.ADMIN_IDS)) {
+    await api(env, 'sendMessage', { chat_id: adminId, text: note, parse_mode: 'HTML' });
+    if (copy) await api(env, 'copyMessage', { chat_id: adminId, from_chat_id: copy.chat, message_id: copy.id });
+  }
+  return { ok: true };
+}
+
 // ---------- особые скины (перки) ----------
 
 const perksReady = new WeakSet();
@@ -904,6 +982,25 @@ async function botWebhook(request, env, ctx) {
     return new Response('ok');
   }
 
+  if (command === '/report' && betaOpen('feedback', admin)) {
+    if (!rest && !media.length) {
+      await api(env, 'sendMessage', { chat_id: chatId, text: 'Напиши после команды, что хочешь сказать. Например:\n/report добавьте бильярд' });
+      return new Response('ok');
+    }
+    const player = await env.DB.prepare('SELECT * FROM users WHERE tg_id = ?').bind(tgId).first();
+    const res = await submitReport(env, {
+      player, user: message.from, text: rest || '(без текста, только картинка)', source: 'bot',
+      copy: media.length ? { chat: chatId, id: message.message_id } : null,
+    });
+    await api(env, 'sendMessage', {
+      chat_id: chatId,
+      text: res.ok ? 'Спасибо! Передал разработчику 🙌'
+        : res.error === 'too_many' ? 'Слишком много отзывов за час — попробуй чуть позже.'
+          : 'Отзыв слишком длинный — уложись в 1000 символов.',
+    });
+    return new Response('ok');
+  }
+
   if (command === '/me') {
     await api(env, 'sendMessage', { chat_id: chatId, text: await meText(env, tgId), parse_mode: 'HTML' });
     return new Response('ok');
@@ -926,13 +1023,13 @@ async function botWebhook(request, env, ctx) {
 
   await api(env, 'sendMessage', {
     chat_id: chatId,
-    text: admin ? ADMIN_HELP : 'Команды: /start — открыть игры, /me — мой прогресс.',
+    text: admin ? ADMIN_HELP : `Команды: /start — открыть игры, /me — мой прогресс${betaOpen('feedback', false) ? ',\n/report текст — написать разработчику (идея, ошибка, пожелание)' : ''}.`,
     reply_markup: playButton(env),
   });
   return new Response('ok');
 }
 
-const ADMIN_HELP = 'Команды: /start — открыть игры, /me — мой прогресс.\n\n'
+const ADMIN_HELP = 'Команды: /start — открыть игры, /me — мой прогресс, /report текст — отзыв.\n\n'
   + 'Для владельца:\n'
   + '/broadcast текст — всем игрокам;\n'
   + '/message @ник текст — одному игроку (можно id вместо ника).\n'

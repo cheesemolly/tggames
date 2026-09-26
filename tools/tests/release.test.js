@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-import { clearBetaList, unflagGames, devlog } from '../release.js';
+import { clearBetaList, unflagGames, unflagServerBeta, devlog } from '../release.js';
 
 const SAMPLE = `export const BETA = [
   // >>> список беты (tools/release.js очищает всё между этими строками)
@@ -51,3 +51,22 @@ test('черновик девлога — команда /broadcast, игры и
     '- рейтинг: таблица лидеров по каждой игре',
   ].join('\n'));
 });
+
+test('релиз убирает выпущенные id из серверной беты, остальные остаются', () => {
+  const lib = [
+    'export const SERVER_BETA = [',
+    '  // >>> серверная бета',
+    "  'feedback',",
+    "  'duels',",
+    '  // <<< конец серверной беты',
+    '];',
+  ].join('\n');
+  const out = unflagServerBeta(lib, ['feedback', 'rating']);
+  assert.ok(!out.includes("'feedback'"));
+  assert.ok(out.includes("'duels'"));
+  assert.ok(out.includes('>>> серверная бета') && out.includes('<<< конец серверной беты'));
+  // настоящий lib.js — с метками
+  const real = readFileSync(new URL('../../server/lib.js', import.meta.url), 'utf8');
+  assert.ok(/>>> серверная бета[\s\S]*<<< конец серверной беты/.test(real));
+});
+

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { BETA, KINDS, inBeta, betaGames, feature, seesBeta, setBetaViewer } from '../beta.js';
 import { games } from '../registry.js';
 import { categoryOfGame } from '../categories.js';
-import { GAMES } from '../../server/lib.js';
+import { GAMES, SERVER_BETA } from '../../server/lib.js';
 
 test('список беты: записи в порядке — id уникальны, вид известен, есть название и описание', () => {
   const ids = BETA.map((b) => b.id);
@@ -38,3 +38,8 @@ test('видимость: вне беты — у всех, в бете — то�
   assert.equal(inBeta('нет-такой-функции'), false);
   setBetaViewer(() => false);
 });
+
+test('серверная бета (команды бота, запросы) — только из функций, которые сейчас в бете', () => {
+  for (const id of SERVER_BETA) assert.ok(inBeta(id), `${id}: в SERVER_BETA (server/lib.js), но не в shell/beta.js — забыли убрать при релизе`);
+});
+
