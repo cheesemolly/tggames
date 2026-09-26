@@ -20,6 +20,7 @@ import {
   newGame, placeDigit, toggleNote, erase, undo, applyHintDigit, applyHintErase,
   isSolved, isLost, isGiven, isWrong, isLocked, digitCounts, conflicts, isValidState,
   emptyStats, recordGame, isValidStats, normalizeSettings, defaultSettings, SKINS, PERK_SKINS,
+  AUTOFILL_MODES, autofillPlan, applyAutofill,
 } from './logic.js';
 
 const t = TEXT.ru;
@@ -74,6 +75,7 @@ let modalActive = false;  // окно открыто (во время анима
 let modalToken = 0;
 let hintToken = 0;
 let soundOn = true;
+let autofilling = false;   // идёт автозаполнение — ввод на это время закрыт
 const timers = new Set();
 // звук — один AudioContext на всю жизнь страницы, заводится при первом звуке (из нажатия)
 const audio = createAudio(createSounds);
@@ -145,7 +147,7 @@ function modalOpen() {
 }
 
 function canPlay() {
-  return Boolean(game && !finished && !paused && !hint && !modalOpen());
+  return Boolean(game && !finished && !paused && !hint && !modalOpen() && !autofilling);
 }
 
 // ---------- отрисовка ----------
@@ -302,6 +304,36 @@ function bump(node, color = null) {
 
 // ---------- действия ----------
 
+/**
+ * Автозаполнение (настройка «Автозаполнение», в бете — api.feature('sudoku-autofill')): после хода дописывает
+ * однозначные клетки по одной — с тем же звуком карандаша, «впрыгиванием» и волной, что и обычный ход.
+ * На это время ввод закрыт (canPlay), в конце — победа, если доска заполнена.
+ */
+function runAutofill() {
+  if (!api.feature('sudoku-autofill') || settings.autofill === 'off' || !game || finished || autofilling) return;
+  const plan = autofillPlan(game, settings.autofill);
+  if (!plan.length) return;
+  const g = game;
+  autofilling = true;
+  plan.forEach(({ i, d }, k) => later(() => {
+    if (game !== g || finished) return;
+    applyAutofill(game, i, d);
+    sfx('digit', { step: d });
+    api.platform.haptic.selection();
+    save();
+    renderInfo();
+    renderControls();
+    renderBoard({ cell: i, kind: 'pop' });
+    bump(ui.info.score);
+    if (k === plan.length - 1) autofilling = false;
+    if (isSolved(game)) finishGame(true);
+    else {
+      unitWave(i);
+      if (digitCounts(game)[d] === 9) later(() => sfx('done', { step: d }), 180);
+    }
+  }, 280 + k * 170));
+}
+
 function select(i) {
   if (!canPlay()) return;
   if (i !== selected) sfx('select');
@@ -344,6 +376,7 @@ function inputDigit(d) {
   // партия не должна закончиться от верной цифры.
   if (result === 'wrong' && isLost(game, settings.mistakesLimit)) finishGame(false);
   else if (isSolved(game)) finishGame(true);
+  else if (result === 'correct') runAutofill();
 }
 
 function onErase() {
@@ -352,6 +385,7 @@ function onErase() {
     sfx('erase');
     save();
     renderAll();
+    runAutofill();   // стёрта ошибка — автозаполнение снова может дописывать
   }
 }
 
@@ -558,7 +592,10 @@ function applyHint() {
   save();
   renderBoard({ cell: action.cell, kind: 'pop' });
   if (isSolved(game)) finishGame(true);
-  else if (action.kind === 'place') unitWave(action.cell);
+  else {
+    if (action.kind === 'place') unitWave(action.cell);
+    runAutofill();
+  }
 }
 
 // ---------- окна: новая игра и статистика ----------
@@ -591,6 +628,7 @@ async function showPicker(cancellable) {
     closeModal();
     if (!wasPaused) setPaused(false);
   };
+
   openModal(el('div', { class: 'sd-card', role: 'dialog', 'aria-label': t.newGame },
     el('div', { class: 'sd-card-head' },
       el('h2', {}, t.newGame),
@@ -611,6 +649,7 @@ async function startNew(difficulty) {
   // «+» ставит партию на паузу на время выбора сложности — окно паузы надо убрать вместе с флагом,
   // иначе оно оставалось поверх новой партии, а «Продолжить» ничего не делал (баг, видео владельца)
   paused = false;
+  autofilling = false;
   showPauseCover(false);
   ui.sub.textContent = t.loading;
   let bank;
@@ -713,10 +752,30 @@ function showSettings() {
   if (hint) return;
   const wasPaused = paused;
   setPaused(true);
+  const autofillWas = settings.autofill;
   const close = () => {
     closeModal();
     if (!wasPaused) setPaused(false);
+    if (settings.autofill !== autofillWas) runAutofill();   // включили — дописывает сразу, если уже есть что
   };
+
+  const autofillDesc = el('div', { class: 'sd-setting-desc' }, t.settings.autofillModes[settings.autofill].desc);
+  const autofillButtons = AUTOFILL_MODES.map((mode) => el('button', {
+    class: 'sd-seg-btn',
+    role: 'radio',
+    'aria-checked': String(mode === settings.autofill),
+    onclick: () => {
+      settings.autofill = mode;
+      saveSettings();
+      autofillDesc.textContent = t.settings.autofillModes[mode].desc;
+      autofillButtons.forEach((b, k) => b.setAttribute('aria-checked', String(AUTOFILL_MODES[k] === mode)));
+    },
+  }, t.settings.autofillModes[mode].label));
+  const autofillRow = api.feature('sudoku-autofill') && el('div', { class: 'sd-setting sd-setting-col' },
+    el('div', { class: 'sd-setting-title' }, t.settings.autofill),
+    el('div', { class: 'sd-seg', role: 'radiogroup', 'aria-label': t.settings.autofill }, autofillButtons),
+    autofillDesc,
+  );
 
   const limitSwitch = el('input', {
     type: 'checkbox',
@@ -755,6 +814,7 @@ function showSettings() {
       ),
       limitSwitch,
     ),
+    autofillRow || null,
     el('h3', { class: 'sd-section-title' }, t.settings.appearance),
     el('div', { class: 'sd-skins', role: 'radiogroup', 'aria-label': t.settings.appearance }, skinButtons),
   ));
@@ -986,6 +1046,6 @@ export default {
     stats = {};
     settings = defaultSettings();
     selected = -1;
-    notesMode = paused = finished = false;
+    notesMode = paused = finished = autofilling = false;
   },
 };

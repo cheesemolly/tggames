@@ -4,7 +4,7 @@
 //     scored[81] (очки за клетку уже начислены), hintsLeft, elapsedMs, undo: [[{ i, value, notes }]] }
 // Верная цифра закрепляется (как данная), неверная остаётся красной и считается ошибкой.
 
-import { PEERS, UNITS, bit } from './grid.js';
+import { PEERS, UNITS, bit, ALL_DIGITS, popcount } from './grid.js';
 
 export const DIFFICULTIES = ['easy', 'medium', 'hard', 'expert'];
 export const MAX_MISTAKES = 3;
@@ -113,6 +113,64 @@ export function applyHintErase(s, i) {
   s.undo = [];
 }
 
+// ---------- автозаполнение (настройка игрока, по умолчанию выключено) ----------
+// Как «Smart Fill» в мобильных судоку (идея игрока и владельца, 2026-09-26):
+//   'end'     — в каждой пустой клетке остался ровно один вариант: головоломка по сути решена, остаток дописывается;
+//   'obvious' — ещё и очевидное по ходу: последняя свободная клетка строки/столбца/блока и девятая цифра, когда
+//               восемь таких уже стоят (её место определено однозначно), — и так по цепочке; потом — как 'end'.
+// Пока на доске неверная цифра — ничего: иначе дописывалось бы от ошибки.
+
+export const AUTOFILL_MODES = ['off', 'end', 'obvious'];
+
+/** Что дописать: [{ i, d }] в порядке дописывания. Состояние партии не меняется. */
+export function autofillPlan(s, mode) {
+  if (mode !== 'end' && mode !== 'obvious') return [];
+  if (s.values.some((v, i) => v !== 0 && v !== s.solution[i])) return [];
+  const values = [...s.values];
+  const plan = [];
+  const put = (i) => {
+    values[i] = s.solution[i];
+    plan.push({ i, d: s.solution[i] });
+  };
+  if (mode === 'obvious') {
+    for (let changed = true; changed;) {
+      changed = false;
+      for (const unit of UNITS) {
+        const empty = unit.filter((i) => !values[i]);
+        if (empty.length === 1) { put(empty[0]); changed = true; }
+      }
+      const counts = Array(10).fill(0);
+      for (const v of values) if (v) counts[v]++;
+      for (let d = 1; d <= 9; d++) {
+        if (counts[d] !== 8) continue;
+        const i = values.findIndex((v, k) => !v && s.solution[k] === d);
+        if (i >= 0) { put(i); changed = true; }
+      }
+    }
+  }
+  const empty = [];
+  values.forEach((v, i) => { if (!v) empty.push(i); });
+  const single = (i) => {
+    let mask = ALL_DIGITS;
+    for (const p of PEERS[i]) if (values[p]) mask &= ~bit(values[p]);
+    return popcount(mask) === 1;
+  };
+  if (empty.length && empty.every(single)) empty.forEach(put);
+  return plan;
+}
+
+/** Дописать одну клетку автозаполнением: как верный ход (очки за клетку — как обычно), отмена после него не нужна. */
+export function applyAutofill(s, i, d) {
+  for (const p of clearPeerNotes(s, i, d)) s.notes[p] &= ~bit(d);
+  s.values[i] = d;
+  s.notes[i] = 0;
+  if (!s.scored[i]) {
+    s.score += CELL_POINTS[s.difficulty];
+    s.scored[i] = true;
+  }
+  s.undo = [];
+}
+
 export const isSolved = (s) => s.values.every((v, i) => v === s.solution[i]);
 /** Поражение — только при включённом лимите ошибок (настройка игрока). */
 export const isLost = (s, mistakesLimit = true) => mistakesLimit && s.mistakes >= MAX_MISTAKES;
@@ -124,7 +182,7 @@ export const SKINS = ['telegram', 'classic', 'claude', 'sepia', 'forest', 'night
 export const PERK_SKINS = ['hedgehog'];
 
 export function defaultSettings() {
-  return { mistakesLimit: true, skin: 'telegram' };
+  return { mistakesLimit: true, skin: 'telegram', autofill: 'off' };
 }
 
 /** Сохранённые настройки → полные и корректные (неизвестное отбрасывается). */
@@ -132,6 +190,7 @@ export function normalizeSettings(saved) {
   const s = defaultSettings();
   if (typeof saved?.mistakesLimit === 'boolean') s.mistakesLimit = saved.mistakesLimit;
   if (SKINS.includes(saved?.skin)) s.skin = saved.skin;
+  if (AUTOFILL_MODES.includes(saved?.autofill)) s.autofill = saved.autofill;
   return s;
 }
 
