@@ -370,3 +370,4 @@
 [data-game="mahjong"] .mj-stats th { font-size: 12px; font-weight: 600; color: var(--mj-hint); text-align: center; padding: 4px; }
 [data-game="mahjong"] .mj-stats td { padding: 6px 4px; text-align: center; border-top: 1px solid color-mix(in srgb, var(--mj-hint) 25%, transparent); }
 [data-game="mahjong"] .mj-stats td:first-child { text-align: left; font-weight: 600; }
+[data-game="mahjong"] .mj-muted { opacity: 0.55; }

@@ -2,11 +2,14 @@
 // Без времени. Подсказка, перемешать (разбираемо по построению), отмена — без ограничений.
 // Раскладки — layouts.js, рисунки (5 стилей) — faces.js, правила — logic.js.
 // Партия, статистика (по раскладкам) и настройки — в api.storage игры.
+// Звуки (sounds.js, «дзен») — в бете у владельца: api.feature('mahjong-sounds'); кнопка в шапке, 'sound' в api.storage.
 
 import { el } from '../../shared/dom.js';
 import { animate, showLayer, hideLayer, shake, pop, reducedMotion, EASE_OUT } from '../../shared/motion.js';
 import { createToast } from '../../shared/toast.js';
 import { createFx } from '../../shared/fx.js';
+import { createAudio } from '../../shared/sfx.js';
+import { createSounds } from './sounds.js';
 import { LAYOUTS, LAYOUT_BY_ID, DEFAULT_LAYOUT } from './layouts.js';
 import { STYLES, STYLE_NAMES, faceHTML } from './faces.js';
 import {
@@ -34,6 +37,8 @@ const T = {
   resultTitle: 'Победа!',
   result: (layout, moves, hints, shuffles) => `«${layout}» · ходов: ${moves} · подсказок: ${hints} · перемешиваний: ${shuffles}`,
   newGame: 'Новая партия',
+  soundOn: 'Выключить звук',
+  soundOff: 'Включить звук',
   pick: 'Выбери раскладку',
   tiles: (n) => `${n} плиток`,
   newGameWarning: 'Текущая партия будет потеряна.',
@@ -45,6 +50,8 @@ const T = {
 const svgIcon = (body) => `<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
 const ICONS = {
   plus: svgIcon('<path d="M12 5v14M5 12h14"/>'),
+  soundOn: svgIcon('<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/>'),
+  soundOff: svgIcon('<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="m16 9 5 6"/><path d="m21 9-5 6"/>'),
   stats: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="currentColor"><rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="7" width="4" height="14" rx="1"/><rect x="17" y="3" width="4" height="18" rx="1"/></svg>',
   gear: svgIcon('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/>'),
   undo: svgIcon('<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>'),
@@ -65,6 +72,9 @@ let selected = -1;
 let busy = false;
 let finished = false;
 let streak = 0;
+let soundOn = true;
+// звук — один AudioContext на всю жизнь страницы, заводится при первом звуке (из касания)
+const audio = createAudio(createSounds);
 let lastMatch = 0;
 let geo = null;                  // размеры плиток для текущего экрана
 let view = { s: 1, tx: 0, ty: 0 };  // масштаб и сдвиг поля
@@ -86,6 +96,34 @@ function later(fn, ms) {
 }
 
 const cssVar = (name) => getComputedStyle(host).getPropertyValue(name).trim();
+
+// ---------- звук ----------
+
+const soundFeature = () => Boolean(api?.feature?.('mahjong-sounds'));
+
+function sfx(name, opts) {
+  if (!soundFeature() || !soundOn) return;
+  try {
+    audio.get()?.play(name, opts);
+  } catch (err) {
+    console.warn('звук', name, err);
+  }
+}
+
+function renderSoundBtn() {
+  if (!ui?.soundBtn) return;
+  ui.soundBtn.innerHTML = soundOn ? ICONS.soundOn : ICONS.soundOff;
+  ui.soundBtn.setAttribute('aria-label', soundOn ? T.soundOn : T.soundOff);
+  ui.soundBtn.title = soundOn ? T.soundOn : T.soundOff;
+  ui.soundBtn.classList.toggle('mj-muted', !soundOn);
+}
+
+function toggleSound() {
+  soundOn = !soundOn;
+  api.storage.set('sound', soundOn);
+  renderSoundBtn();
+  sfx('click');
+}
 
 function save() {
   if (game && !finished) api.storage.set('current', game);
@@ -339,12 +377,14 @@ function onTile(i) {
   if (busy || finished || modalActive || !game.tiles[i].alive) return;
   const free = new Set(freeTiles(game));
   if (!free.has(i)) {
+    sfx('blocked');
     api.platform.haptic.notification('warning');
     shake(ui.tiles[i], { distance: 3, duration: 260 });
     return;
   }
   if (selected === i) {
     selected = -1;
+    sfx('deselect');
     renderState();
     return;
   }
@@ -353,6 +393,7 @@ function onTile(i) {
     return;
   }
   selected = i;
+  sfx('select');
   api.platform.haptic.selection();
   renderState();
   pop(ui.tiles[i].firstChild, { from: 0.9, duration: 160 });
@@ -365,6 +406,7 @@ function matchPair(a, b) {
   const now = performance.now();
   streak = now - lastMatch < STREAK_MS ? streak + 1 : 1;
   lastMatch = now;
+  sfx('match', { step: streak });
   api.platform.haptic.impact(streak >= 3 ? 'heavy' : 'medium');
 
   // Пара слетается в середину между плитками и рассыпается искрами
@@ -423,6 +465,7 @@ function onUndo() {
     return;
   }
   selected = -1;
+  sfx('undo');
   api.platform.haptic.selection();
   renderState();
   save();
@@ -440,6 +483,7 @@ function onHint() {
   const [a, b] = pairs[Math.floor(Math.random() * pairs.length)];
   game.hints += 1;
   save();
+  sfx('hint');
   api.platform.haptic.selection();
   ensureVisible([a, b]);
   for (const i of [a, b]) {
@@ -455,6 +499,7 @@ function onShuffle() {
   if (busy || finished || modalActive) return;
   busy = true;
   selected = -1;
+  sfx('shuffle');
   api.platform.haptic.impact('medium');
   const center = ui.board.getBoundingClientRect();
   const cx = center.left + center.width / 2;
@@ -487,6 +532,7 @@ function onShuffle() {
 
 function showStuck() {
   if (finished || isWon(game)) return;
+  sfx('stuck');
   openModal(card(T.stuck.title,
     el('p', { class: 'mj-note' }, T.stuck.text),
     el('div', { class: 'mj-card-actions' },
@@ -501,6 +547,7 @@ function win() {
   api.storage.remove('current');
   stats[game.layout] = recordGame(stats[game.layout], game, true);
   api.storage.set('stats', stats);
+  sfx('win');
   api.platform.haptic.notification('success');
   if (fx) {
     fx.confetti(['#ff4d4d', '#ffd23f', '#3ddc84', '#2ec4f1', '#9b5de5', '#ff5fa2', cssVar('--mj-accent')], 140);
@@ -524,6 +571,7 @@ function win() {
 // ---------- окна ----------
 
 function openModal(content) {
+  if (!modalActive) sfx('click');
   modalToken++;
   ui.modal.replaceChildren(content);
   if (!modalActive) showLayer(ui.modal);
@@ -637,6 +685,7 @@ function startGame(layoutId = settings.layout, saved = null) {
   streak = 0;
   buildBoard();
   save();
+  if (!saved) sfx('deal', { step: 1 + Math.max(...LAYOUT_BY_ID[game.layout].tiles.map((t) => t.z)) });
   if (!saved && !reducedMotion()) {
     // раздача: плитки падают сверху слой за слоем
     ui.tiles.forEach((node, i) => {
@@ -682,10 +731,11 @@ export default {
     api = gameApi;
     host = container;
     toast = createToast();
-    const [savedGame, savedStats, savedSettings] = await Promise.all([
-      api.storage.get('current'), api.storage.get('stats'), api.storage.get('settings'),
+    const [savedGame, savedStats, savedSettings, savedSound] = await Promise.all([
+      api.storage.get('current'), api.storage.get('stats'), api.storage.get('settings'), api.storage.get('sound'),
     ]);
     if (!api) return;
+    soundOn = savedSound !== false;
     stats = {};
     for (const l of LAYOUTS) stats[l.id] = isValidStats(savedStats?.[l.id]) ? savedStats[l.id] : emptyStats();
     settings = {
@@ -705,6 +755,7 @@ export default {
       modal: el('div', { class: 'mj-modal', hidden: true }),
       tiles: null,
     };
+    ui.soundBtn = soundFeature() ? iconButton(ICONS.soundOn, T.soundOn, toggleSound) : null;
     ui.zoomFit = el('button', { class: 'mj-zoom-btn mj-zoom-fit', onclick: zoomToggle });
     ui.zoom = el('div', { class: 'mj-zoom', hidden: true },
       el('button', { class: 'mj-zoom-btn', 'aria-label': T.zoom.out, title: T.zoom.out, onclick: () => zoomStep(1 / 1.3) }, '−'),
@@ -722,6 +773,7 @@ export default {
       el('div', { class: 'mj-header' },
         el('div', {}, el('div', { class: 'mj-title' }, T.title), ui.sub),
         el('div', { class: 'mj-actions' },
+          ui.soundBtn,
           iconButton(ICONS.plus, T.newGame, () => showPicker(true)),
           iconButton(ICONS.stats, T.stats.open, showStats),
           iconButton(ICONS.gear, T.settings.open, showSettings),
@@ -742,6 +794,7 @@ export default {
       toast.el,
     );
     container.append(root);
+    renderSoundBtn();
     fx = createFx(root, 'mj-fx');
     root.append(fx.canvas);
     ui.resize = new ResizeObserver(() => relayout());

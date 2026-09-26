@@ -17,7 +17,7 @@ export const SOUNDS = [
 export const colorNote = (color) => pentaStep(((color % 10) + 10) % 10);
 
 export function createSounds(ctx) {
-  const { now, bell, plip, bup, swoosh } = createSfx(ctx);
+  const { now, bell, plip, bup, swoosh, pad } = createSfx(ctx);
   const base = (color) => freqOf(colorNote(color) - 12);
 
   const play = {
@@ -38,11 +38,12 @@ export function createSounds(ctx) {
       bup(freqOf(-10), t, { peak: 0.22 });
       bup(freqOf(-5), t + 0.14, { peak: 0.22, drop: 0.7 });
     },
-    // уровень: «плинь» на каждую пару по очереди (step — число пар), потом аккорд
+    // уровень: мягкие «плинь» вверх (не больше пяти, октавой ниже, тихо) и тёплый аккорд без звона.
+    // Первая версия — до десяти колокольчиков и аккорд из четырёх высоких — «ДЗЫНЬ!», било по ушам (владелец).
     cleared: (t, { step: pairs = 5 }) => {
-      const n = Math.max(2, Math.min(10, pairs));
-      for (let k = 0; k < n; k++) bell(freqOf(colorNote(k)), t + k * 0.07, { peak: 0.16, decay: 0.4 });
-      [0, 4, 7, 12].forEach((s) => bell(freqOf(s + 12), t + n * 0.07 + 0.05, { peak: 0.13, decay: 1.1 }));
+      const n = Math.max(3, Math.min(5, pairs));
+      for (let k = 0; k < n; k++) bell(freqOf(colorNote(k) - 12), t + k * 0.08, { peak: 0.08, decay: 0.35 });
+      pad([freqOf(-12), freqOf(-5), freqOf(4)], t + n * 0.08, { peak: 0.04, attack: 0.12, decay: 1.4, cutoff: 1300 });
     },
     // новое поле: точка пары впрыгивает (step — номер пары)
     intro: (t, { step: k = 0 }) => bup(base(k), t, { peak: 0.14, decay: 0.08 }),
