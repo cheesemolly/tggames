@@ -119,7 +119,9 @@ export const isLost = (s, mistakesLimit = true) => mistakesLimit && s.mistakes >
 
 // ---------- настройки (общие для всех партий) ----------
 
-export const SKINS = ['telegram', 'classic', 'claude', 'sepia', 'forest', 'night'];
+export const SKINS = ['telegram', 'classic', 'claude', 'sepia', 'forest', 'night', 'hedgehog'];
+// особые скины — только тем, кому выдал владелец (api.perk, shell/perks.js); id скина = id перка
+export const PERK_SKINS = ['hedgehog'];
 
 export function defaultSettings() {
   return { mistakesLimit: true, skin: 'telegram' };

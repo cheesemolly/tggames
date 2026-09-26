@@ -530,3 +530,32 @@
 /* образец скина при нажатии чуть сжимается */
 [data-game="sudoku"] .sd-swatch { transition: transform 0.2s ease, outline-color 0.2s ease; }
 [data-game="sudoku"] .sd-skin:active .sd-swatch { transform: scale(0.92); }
+
+/* ---------- особый скин «Ёжик» (перк hedgehog: выдаёт владелец, shell/perks.js) ----------
+   Фото — фоном всей игры, доска — полупрозрачная с лёгким размытием (ёжик просвечивает, цифры читаются).
+   --sd-bg остаётся плотным: из него сделаны окна и пауза (пауза обязана прятать доску). */
+[data-game="sudoku"][data-skin="hedgehog"], [data-game="sudoku"] [data-skin="hedgehog"] {
+  --sd-bg: #f4eefb; --sd-surface: #e7dcf6; --sd-text: #2c2242; --sd-hint: #6c5f92;
+  --sd-accent: #8a63d2; --sd-accent-text: #ffffff; --sd-link: #6a43c0; --sd-danger: #e0457b;
+}
+.game-root[data-game="sudoku"][data-skin="hedgehog"] {
+  background: linear-gradient(rgb(244 238 251 / 0.5), rgb(244 238 251 / 0.3)),
+    url('../../shared/backgrounds/hedgehog.jpg') center 60% / cover no-repeat, #b9a6e8;
+}
+/* доска полупрозрачная без размытия: ёжик сидит за сеткой и просвечивает */
+[data-game="sudoku"][data-skin="hedgehog"] .sd-board {
+  background: rgb(255 255 255 / 0.5);
+}
+[data-game="sudoku"][data-skin="hedgehog"] .sd-cell { font-weight: 600; }
+[data-game="sudoku"][data-skin="hedgehog"] .sd-tool,
+[data-game="sudoku"][data-skin="hedgehog"] .sd-digit {
+  background: rgb(255 255 255 / 0.55);
+  border-radius: 12px;
+}
+[data-game="sudoku"][data-skin="hedgehog"] .sd-header,
+[data-game="sudoku"][data-skin="hedgehog"] .sd-info {
+  text-shadow: 0 0 6px rgb(255 255 255 / 0.9);
+}
+[data-game="sudoku"] .sd-swatch[data-skin="hedgehog"] {
+  background: url('../../shared/backgrounds/hedgehog-thumb.jpg') center / cover;
+}

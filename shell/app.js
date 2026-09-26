@@ -64,7 +64,7 @@ function show(route) {
     }
     platform.backButton.show();
     // «Назад» из игры возвращает в её папку, а не на главную.
-    session = openGame(screen, entry, { platform, beta: seesBeta(), feature, onExit: () => backFrom(route) });
+    session = openGame(screen, entry, { platform, beta: seesBeta(), feature, perk: hasPerk, onExit: () => backFrom(route) });
     return;
   }
 
@@ -128,6 +128,12 @@ function show(route) {
 
 // Из профиля игрока «Назад» ведёт в таблицу, из которой его открыли.
 let lastBoard = null;
+
+/**
+ * Особый скин (shell/perks.js): выдан владельцем в панели. Владелец видит все, пока не включил «Смотреть как игрок»
+ * (seesBeta; на локальном сервере — и с ?owner) — даже если в Cloudflare ещё старый воркер, не отдающий perks.
+ */
+const hasPerk = (id) => seesBeta() || account.perks.includes(id);
 
 /** Куда ведёт «Назад»: из игры — в её папку, из папки — на главную, в рейтинге — на шаг вверх. */
 function backFrom(route = currentRoute()) {

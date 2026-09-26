@@ -8,7 +8,7 @@ import { API_URL } from '../shell/config.js';
 import { platform } from './telegram.js';
 export { ERRORS, message } from './errors.js';
 
-let me = null;              // { id, tgId, name, username, isAdmin, banned } или null
+let me = null;              // { id, tgId, name, username, isAdmin, banned, perks } или null
 
 export const account = {
   /** Аккаунты работают, только если выложен сервер и игра открыта внутри Telegram. */
@@ -27,6 +27,11 @@ export const account = {
 
   get isAdmin() {
     return Boolean(me?.isAdmin);
+  },
+
+  /** Особые скины этого игрока (shell/perks.js); владельцу сервер отдаёт все. */
+  get perks() {
+    return Array.isArray(me?.perks) ? me.perks : [];
   },
 
   async request(path, { method = 'GET', payload = null, keepalive = false } = {}) {
@@ -112,6 +117,10 @@ export const account = {
 
   savePlayerState(id, data) {
     return this.request(`/admin/player/${id}/state`, { method: 'PUT', payload: { data } });
+  },
+
+  setPerk(id, perk, on) {
+    return this.request(`/admin/player/${id}/perk`, { method: 'POST', payload: { perk, on } });
   },
 
   banPlayer(id, banned) {

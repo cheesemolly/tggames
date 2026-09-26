@@ -70,3 +70,10 @@ CREATE TABLE IF NOT EXISTS board_scores (
 );
 
 CREATE INDEX IF NOT EXISTS board_scores_game ON board_scores(game_id, value DESC);
+
+/* Особые скины (перки), которые владелец выдаёт игрокам в панели. Обработчик заводит таблицу сам. */
+CREATE TABLE IF NOT EXISTS user_perks (
+  user_id INTEGER NOT NULL,
+  perk    TEXT NOT NULL,                  /* id из PERKS в lib.js */
+  PRIMARY KEY (user_id, perk)
+);

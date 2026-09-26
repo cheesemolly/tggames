@@ -21,7 +21,7 @@ const EYE_ICON = `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="t
 const EYE_OFF_ICON = `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="currentColor"><path d="${EYE_PATH}"/>`
   + '<path d="M3 4.5 4.5 3l16.5 16.5-1.5 1.5Z"/></svg>';
 
-export function openGame(container, entry, { platform, onExit, beta = false, feature = () => true }) {
+export function openGame(container, entry, { platform, onExit, beta = false, feature = () => true, perk = () => false }) {
   const gameStorage = createStorage(`game:${entry.id}`);
   let game = null;
   let scoped = null;
@@ -70,6 +70,8 @@ export function openGame(container, entry, { platform, onExit, beta = false, fea
       // так релиз (очистка shell/beta.js) включает его всем без правки игры
       beta: Boolean(beta),
       feature: (id) => Boolean(feature(id)),
+      // особый скин, выданный владельцем этому игроку (shell/perks.js)
+      perk: (id) => Boolean(perk(id)),
       finish: (result) => {
         if (thisRun === run) onFinish(result).catch(showError);
       },
