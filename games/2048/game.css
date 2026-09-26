@@ -325,3 +325,4 @@
   animation: tt-win 1.2s ease-in-out infinite;
 }
 @keyframes tt-win { 50% { transform: scale(1.08) rotate(-3deg); } }
+[data-game="2048"] .tt-muted { opacity: 0.55; }
