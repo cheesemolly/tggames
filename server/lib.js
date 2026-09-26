@@ -238,6 +238,36 @@ export function progressLines(state) {
   return lines;
 }
 
+// ---------- бета на сервере ----------
+
+/**
+ * Серверная часть функций, которые ещё в бете (id — как в shell/beta.js): пока id здесь, команда бота и запрос
+ * сервера работают только для владельца (ADMIN_IDS). Релиз (tools/release.js) убирает выпущенные id из списка —
+ * после этого нужно заново вставить worker.bundled.js в Cloudflare. Тест: каждый id есть в BETA.
+ */
+export const SERVER_BETA = [
+  // >>> серверная бета
+  'feedback',
+  // <<< конец серверной беты
+];
+
+// ---------- обратная связь (/report) ----------
+
+export const REPORT_MAX = 1000;        // символов в одном отзыве
+export const REPORT_PER_HOUR = 5;      // отзывов в час от одного игрока — защита от спама
+
+const escHtml = (text) => String(text ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+/**
+ * Сообщение владельцу об отзыве (HTML). Ник и id — владельцу можно (как в панели): по ним он отвечает через /message.
+ */
+export function reportMessage({ name, username, tgId, text, source }) {
+  const who = `${escHtml(name || 'Без имени')}${username ? ` (@${escHtml(username)})` : ''}, id ${tgId}`;
+  const reply = username ? `/message @${escHtml(username)} текст` : `/message ${tgId} текст`;
+  return `📝 <b>Отзыв</b> ${source === 'app' ? 'из приложения' : 'в боте'}\n${who}\n\n${escHtml(text)}\n\n`
+    + `<i>Ответить: ${reply}</i>`;
+}
+
 // ---------- особые скины (перки) ----------
 
 /**

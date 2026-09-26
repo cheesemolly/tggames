@@ -77,3 +77,16 @@ CREATE TABLE IF NOT EXISTS user_perks (
   perk    TEXT NOT NULL,                  /* id из PERKS в lib.js */
   PRIMARY KEY (user_id, perk)
 );
+
+/* Обратная связь: /report в боте и кнопка «Обратная связь» в приложении. Обработчик заводит таблицу сам. */
+CREATE TABLE IF NOT EXISTS reports (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  tg_id      INTEGER NOT NULL,
+  user_id    INTEGER,                     /* users.id, если игрок уже заходил в приложение */
+  name       TEXT,
+  username   TEXT,
+  text       TEXT NOT NULL,
+  source     TEXT NOT NULL,               /* bot | app */
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS reports_tg ON reports(tg_id, created_at);

@@ -4,7 +4,8 @@
 // Что делает:
 //   1) печатает список и черновик девлога для /broadcast;
 //   2) очищает список беты в shell/beta.js (проверки feature('<id>') в коде становятся «включено у всех»);
-//   3) снимает beta: true с выходящих игр в server/lib.js и пересобирает server/worker.bundled.js
+//   3) снимает beta: true с выходящих игр и убирает выходящие id из SERVER_BETA (команды бота, запросы сервера)
+//      в server/lib.js и пересобирает server/worker.bundled.js
 //      (тогда бот покажет их в инлайн-режиме — но только после того, как владелец вставит воркер в Cloudflare).
 // Коммит, архив и пуш — дальше обычным бэкапом (CLAUDE.md).
 
@@ -25,6 +26,15 @@ export function unflagGames(src, ids) {
   return src.split('\n').map((line) => (ids.some((id) => line.includes(`id: '${id}'`))
     ? line.replace(/,\s*beta:\s*true/, '').replace(/beta:\s*true,\s*/, '')
     : line)).join('\n');
+}
+
+/** Исходник server/lib.js без выпущенных id в SERVER_BETA (серверная часть беты: команды бота, запросы). */
+export function unflagServerBeta(src, ids) {
+  const block = /( *\/\/ >>> серверная бета[^\n]*\n)([\s\S]*?)( *\/\/ <<< конец серверной беты)/;
+  const m = src.match(block);
+  if (!m) return src;
+  const kept = m[2].split('\n').filter((line) => !ids.some((id) => line.trim() === `'${id}',`)).join('\n');
+  return src.replace(block, `$1${kept}$3`);
 }
 
 /** Черновик девлога для рассылки — в стиле владельца: с маленьких букв, без эмодзи. */
@@ -59,11 +69,11 @@ async function main() {
   writeFileSync(betaPath, clearBetaList(readFileSync(betaPath, 'utf8')));
   const gameIds = BETA.filter((b) => b.kind === 'game').map((b) => b.id);
   const lib = readFileSync(libPath, 'utf8');
-  const next = unflagGames(lib, gameIds);
+  const next = unflagServerBeta(unflagGames(lib, gameIds), BETA.map((b) => b.id));
   if (next !== lib) {
     writeFileSync(libPath, next);
     execFileSync(process.execPath, [`${root}server/tools/bundle.js`], { stdio: 'inherit' });
-    console.log('Бот изменился (новые игры в инлайн-режиме): вставь server/worker.bundled.js в Cloudflare.');
+    console.log('Сервер изменился (игры в инлайн-режиме, команды бота из беты): вставь server/worker.bundled.js в Cloudflare.');
   }
   console.log('Список беты очищен. Дальше — npm test и бэкап (коммит, архив, пуш).');
 }

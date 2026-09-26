@@ -89,6 +89,11 @@ export const account = {
     return this.request('/state', { method: 'PUT', payload: { data, base }, keepalive });
   },
 
+  /** Обратная связь (как /report в боте): отзыв сразу приходит владельцу. */
+  report(text) {
+    return this.request('/report', { method: 'POST', payload: { text } });
+  },
+
   // ---------- рейтинг (в ответах только имя игрока — без ника и id) ----------
 
   topSummary() {

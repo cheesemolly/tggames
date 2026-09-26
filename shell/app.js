@@ -15,6 +15,7 @@ import { createSync } from './sync.js';
 import { renderAdmin } from './admin.js';
 import { renderBeta } from './beta-screen.js';
 import { renderTop } from './top.js';
+import { openFeedback } from './feedback.js';
 import { setBetaViewer, seesBeta, feature, inBeta, playerView } from './beta.js';
 import { lockPageScroll } from './no-scroll.js';
 
@@ -122,7 +123,10 @@ function show(route) {
   }
 
   platform.backButton.hide();
-  renderMenu(screen, { games: visibleGames(), account, owner: isOwner(), top: feature('leaderboard') })
+  renderMenu(screen, {
+    games: visibleGames(), account, owner: isOwner(), top: feature('leaderboard'),
+    feedback: feature('feedback') ? () => openFeedback({ account, toast }) : null,
+  })
     .catch((err) => console.error(err));
 }
 
