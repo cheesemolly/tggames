@@ -4,10 +4,14 @@
 // Управление: свайп в любом месте поля (срабатывает по ходу пальца, не по отпусканию; можно вести палец
 // «змейкой» — каждый новый поворот считается от точки прошлого), стрелки/WASD, по желанию — кнопки-стрелки.
 // Классика заканчивается api.finish (экран результата и рекорд оболочки), уровни — своими окнами.
+// Звуки (sounds.js: «ням», «юк!», 8-бит) — в бете у владельца: api.feature('snake-sounds'); кнопка в шапке,
+// выбор — 'sound' в api.storage.
 
 import { el } from '../../shared/dom.js';
 import { animate, showLayer, hideLayer, reducedMotion, shake } from '../../shared/motion.js';
 import { createToast } from '../../shared/toast.js';
+import { createAudio } from '../../shared/sfx.js';
+import { createSounds } from './sounds.js';
 import { createFx } from '../../shared/fx.js';
 import {
   newGame, turn, step, tickMs, xy, isValidState, emptyStats, isValidStats, recordRun, bestKey,
@@ -51,6 +55,8 @@ const FRUIT_COLORS = {
 const svgIcon = (body) => `<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" `
   + `stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
 const ICONS = {
+  soundOn: svgIcon('<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/>'),
+  soundOff: svgIcon('<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="m16 9 5 6"/><path d="m21 9-5 6"/>'),
   pause: svgIcon('<rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/>'),
   play: svgIcon('<path d="M7 5l12 7-12 7z"/>'),
   gear: svgIcon('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/>'),
@@ -86,6 +92,36 @@ let winning = false;
 let swipe = null;
 let seenPowers = [];
 let finished = false;
+let soundOn = true;
+// звук — один AudioContext на всю жизнь страницы, заводится при первом звуке (из касания)
+const audio = createAudio(createSounds);
+
+const soundFeature = () => Boolean(api?.feature?.('snake-sounds'));
+
+function sfx(name, opts) {
+  if (!soundFeature() || !soundOn) return;
+  try {
+    audio.get()?.play(name, opts);
+  } catch (err) {
+    console.warn('звук', name, err);
+  }
+}
+
+function renderSoundBtn() {
+  if (!ui?.soundBtn) return;
+  ui.soundBtn.innerHTML = soundOn ? ICONS.soundOn : ICONS.soundOff;
+  const label = soundOn ? 'Выключить звук' : 'Включить звук';
+  ui.soundBtn.setAttribute('aria-label', label);
+  ui.soundBtn.title = label;
+  ui.soundBtn.classList.toggle('sn-muted', !soundOn);
+}
+
+function toggleSound() {
+  soundOn = !soundOn;
+  api.storage.set('sound', soundOn);
+  renderSoundBtn();
+  sfx('click');
+}
 const timers = new Set();
 
 function later(fn, ms) {
@@ -282,6 +318,11 @@ function doStep() {
   prevTwin = game.twin?.snake.slice() ?? null;
   const events = step(game);
   let hudDirty = false;
+  // за шаг — один звук еды (у близнеца в «Инь-ян» могут съесть разом): самый «вкусный»
+  const eaten = events.filter((ev) => ev.type === 'eat');
+  if (eaten.length) {
+    sfx(eaten.some((ev) => ev.kind === 'bonus') ? 'bonus' : eaten.some((ev) => ev.fruit === 'burger') ? 'burger' : 'nom');
+  }
   for (const ev of events) {
     if (ev.type === 'eat') {
       hudDirty = true;
@@ -291,6 +332,7 @@ function doStep() {
       api.platform.haptic.impact(ev.kind === 'bonus' ? 'medium' : 'light');
     } else if (ev.type === 'power') {
       hudDirty = true;
+      sfx(ev.power);
       burstAt(ev.idx, '#ffffff', 14);
       const info = POWER_INFO[ev.power];
       toast.show(seenPowers.includes(ev.power) ? info.title : `${info.title}: ${info.text}`, 1600);
@@ -301,18 +343,22 @@ function doStep() {
       api.platform.haptic.impact('medium');
     } else if (ev.type === 'poison') {
       hudDirty = true;
+      sfx('yuk');
       burstAt(ev.idx, '#8b5cf6', 14);
       floatAt(ev.idx, '−20', false, true);
       toast.show('Ядовитый гриб! Змейка стала короче', 1500);
       api.platform.haptic.notification('warning');
     } else if (ev.type === 'shield') {
       hudDirty = true;
+      sfx('saved');
       toast.show('Щит спас! Поворачивай', 1400);
       shake(ui.stage, { distance: 4, duration: 260 });
       api.platform.haptic.notification('warning');
     } else if (ev.type === 'teleport') {
+      sfx('portal');
       burstAt(ev.to, '#22d3ee', 8);
     } else if (ev.type === 'brick') {
+      sfx('brick');
       burstAt(ev.idx, pal.brick, 6);
     } else if (ev.type === 'spawn' && ev.kind === 'bonus') {
       api.platform.haptic.selection();
@@ -378,6 +424,7 @@ function onDeath(reason, who = 'main') {
   // кто разбился — главная, близнец или обе: у них глаза крестиком и звёздочки
   dying = { at: performance.now(), reason, who, bump: deathBump(who) };
   host.classList.add('sn-dead');
+  sfx('die');
   api.platform.haptic.notification('error');
   shake(ui.stage, { distance: 8, duration: 420 });
   const head = cellScreen(game.snake[0]);
@@ -412,6 +459,7 @@ function onDeath(reason, who = 'main') {
 function onWin() {
   winning = true;
   renderHud();                                     // иначе на экране остаётся «11/12»: счётчик не успел обновиться
+  sfx('level');
   api.platform.haptic.notification('success');
   stats = recordRun(stats, game);
   api.storage.set('stats', stats);
@@ -444,6 +492,7 @@ function doTurn(dir) {
   const wasStarted = game.started;
   const ok = turn(game, dir);
   if (!wasStarted && game.started) {
+    sfx('start');
     showHint();
     lastFrame = performance.now();
   }
@@ -509,6 +558,7 @@ let dismissible = true;
 
 function openModal(content, { dismissible: canDismiss = true } = {}) {
   dismissible = canDismiss;
+  if (!modalActive) sfx('click');
   ui.modal.replaceChildren(el('div', { class: 'sn-card' }, content));
   if (!modalActive) showLayer(ui.modal);
   modalActive = true;
@@ -751,7 +801,7 @@ export default {
     host = container;
     toast = createToast();
 
-    const keys = ['settings', 'stats', 'levels', 'mode', 'run', 'seenPowers'];
+    const keys = ['settings', 'stats', 'levels', 'mode', 'run', 'seenPowers', 'sound'];
     const loaded = Object.fromEntries(await Promise.all(keys.map(async (k) => [k, await api.storage.get(k)])));
     if (!api) return;
     settings = { ...settings, ...(loaded.settings ?? {}) };
@@ -766,6 +816,7 @@ export default {
     bestLevel = Number.isInteger(loaded.levels?.best) ? loaded.levels.best : 0;
     mode = loaded.mode === 'levels' ? 'levels' : 'classic';
     seenPowers = Array.isArray(loaded.seenPowers) ? loaded.seenPowers : [];
+    soundOn = loaded.sound !== false;
 
     const iconBtn = (icon, label, onclick) => {
       const b = el('button', { class: 'sn-icon-btn', 'aria-label': label, title: label, onclick });
@@ -786,7 +837,8 @@ export default {
       title: el('div', { class: 'sn-title' }, 'Змейка'),
       sub: el('div', { class: 'sn-sub' }),
       modeBtn: iconBtn(ICONS.levels, 'Уровни', () => switchMode()),
-      pauseBtn: iconBtn(ICONS.pause, 'Пауза', () => { if (game?.started) setPaused(!paused); }),
+      pauseBtn: iconBtn(ICONS.pause, 'Пауза', () => { if (game?.started) { sfx('pause'); setPaused(!paused); } }),
+      soundBtn: soundFeature() ? iconBtn(ICONS.soundOn, 'Выключить звук', toggleSound) : null,
       hud: el('div', { class: 'sn-hud' }),
       goal: el('div', { class: 'sn-goal', hidden: true }),
       goalFill: el('span', { class: 'sn-goal-fill' }),
@@ -806,7 +858,8 @@ export default {
     container.replaceChildren(el('div', { class: 'sn' },
       el('header', { class: 'sn-header' },
         el('div', { class: 'sn-head-text' }, ui.title, ui.sub),
-        el('div', { class: 'sn-actions' },
+        el('div', { class: ui.soundBtn ? 'sn-actions sn-actions-6' : 'sn-actions' },
+          ui.soundBtn,
           ui.modeBtn,
           iconBtn(ICONS.stats, 'Статистика', openStats),
           iconBtn(ICONS.gear, 'Настройки', openSettings),
@@ -823,6 +876,7 @@ export default {
       ui.probe,
     ), toast.el);
 
+    renderSoundBtn();
     renderer = createRenderer(ui.canvas);
     renderer.setView(settings.view);
     fx = createFx(ui.stage, 'sn-fx');

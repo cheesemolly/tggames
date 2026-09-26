@@ -342,3 +342,9 @@
 [data-game="snake"] .sn-help-canvas { display: block; }
 [data-game="snake"] .sn-help-canvas + .sn-help-canvas { margin-left: -12px; }
 [data-game="snake"] .sn-small { font-size: 12px; }
+[data-game="snake"] .sn-muted { opacity: 0.55; }
+/* шесть кнопок в шапке (со звуком) на узком экране — чуть меньше, иначе не помещаются */
+@media (max-width: 380px) {
+  [data-game="snake"] .sn-actions-6 { gap: 3px; }
+  [data-game="snake"] .sn-actions-6 .sn-icon-btn { width: 30px; height: 30px; }
+}

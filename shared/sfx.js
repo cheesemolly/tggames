@@ -112,6 +112,50 @@ export function createSfx(ctx, { volume = 0.55 } = {}) {
     g.connect(master);
   }
 
+  /**
+   * 8-битный «чип», как в аркадных автоматах: квадратная (или треугольная) волна, по желанию — скольжение тона
+   * к slideTo. Верх слегка подрезан, чтобы не резало уши.
+   */
+  function chip(freq, t, { dur = 0.08, slideTo = null, type = 'square', peak = 0.08, cutoff = 4000 } = {}) {
+    const o = osc(type, freq, t, t + dur + 0.03);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+    const f = filter('lowpass', cutoff, 0.5);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(peak, t + 0.004);
+    g.gain.setValueAtTime(peak, t + Math.max(0.005, dur - 0.02));
+    g.gain.linearRampToValueAtTime(0.0001, t + dur);
+    o.connect(f);
+    f.connect(g);
+    g.connect(master);
+  }
+
+  /**
+   * Голос: «гласная» — пила через два полосовых фильтра-форманты, частоты которых меняются по ключевым точкам.
+   * pitch — [в начале, в конце] (Гц); marks — [[время от начала, F1, F2], …] (закрытый рот — «м», «н» — это
+   * низкие F1 и F2 в начале или в конце). Так змейка говорит «ням» и «юк».
+   */
+  function voice(t, { dur = 0.22, pitch = [260, 240], marks, peak = 0.22, attack = 0.02, release = 0.05 } = {}) {
+    const o = osc('sawtooth', pitch[0], t, t + dur + 0.05);
+    o.frequency.exponentialRampToValueAtTime(pitch[1], t + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(peak, t + attack);
+    g.gain.setValueAtTime(peak, t + Math.max(attack, dur - release));
+    g.gain.linearRampToValueAtTime(0.0001, t + dur);
+    [1, 2].forEach((n) => {
+      const f = filter('bandpass', marks[0][n], n === 1 ? 6 : 9);
+      f.frequency.setValueAtTime(marks[0][n], t);
+      for (const m of marks) f.frequency.linearRampToValueAtTime(m[n], t + m[0]);
+      const fg = ctx.createGain();
+      fg.gain.value = n === 1 ? 1 : 0.6;
+      o.connect(f);
+      f.connect(fg);
+      fg.connect(g);
+    });
+    g.connect(master);
+  }
+
   // ---------- тихие «дзен»-звуки (судоку, Петля): бумага, карандаш, камень, тёплые аккорды — без звона ----------
 
   /**
@@ -194,7 +238,7 @@ export function createSfx(ctx, { volume = 0.55 } = {}) {
     }
   }
 
-  return { now, bell, plip, bup, swoosh, thud, grain, pencil, rub, rustle, tock, pad };
+  return { now, bell, plip, bup, chip, voice, swoosh, thud, grain, pencil, rub, rustle, tock, pad };
 }
 
 /**
