@@ -385,6 +385,7 @@
 }
 [data-game="sudoku"] .sd-card-head h2 { margin: 0; font-size: 18px; }
 [data-game="sudoku"] .sd-card .sd-icon-btn { background: var(--sd-bg); }
+[data-game="sudoku"] .sd-muted { opacity: 0.55; }
 [data-game="sudoku"] .sd-card .btn-secondary { background: var(--sd-bg); }
 [data-game="sudoku"] .sd-warning { margin: -4px 0 12px; }
 [data-game="sudoku"] .sd-picker { display: grid; gap: 8px; }
