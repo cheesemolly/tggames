@@ -761,43 +761,49 @@ test('обратная связь из приложения: POST /report — в
   }
 });
 
-test('тихая рассылка, номера отправленного и /unsend: точно по номерам и поиском по тексту у старой рассылки', async () => {
-  const { env, say, press } = await botEnv();
-  // номера сообщений у каждого чата свои, как в Telegram
-  const counters = new Map();
-  const nextIn = (chat) => { counters.set(chat, (counters.get(chat) ?? 500) + 1); return counters.get(chat); };
-  const inChat = new Map();          // chat → { message_id → текст } — что «лежит» в чатах игроков
-  const forwarded = new Set();
+
+/**
+ * Подделка Telegram для рассылок: у бота ОДИН общий счётчик номеров сообщений на все чаты (как в настоящем Telegram),
+ * forwardMessage отдаёт сообщение только из того чата, где оно лежит.
+ */
+function fakeChats() {
+  let counter = 1000;
+  const chats = new Map();                   // chat → Map(номер → текст); «игрок:» в начале — написал игрок
+  const put = (chat, text) => {
+    if (!chats.has(chat)) chats.set(chat, new Map());
+    const id = ++counter;
+    chats.get(chat).set(id, text);
+    return id;
+  };
   const tg = captureTelegram(({ method, payload }) => {
-    if (method === 'sendMessage') {
-      const id = nextIn(payload.chat_id);
-      if (!inChat.has(payload.chat_id)) inChat.set(payload.chat_id, new Map());
-      inChat.get(payload.chat_id).set(id, payload.text);
-      return { ok: true, result: { message_id: id } };
-    }
+    if (method === 'sendMessage') return { ok: true, result: { message_id: put(payload.chat_id, payload.text) } };
     if (method === 'forwardMessage') {
-      const text = inChat.get(payload.from_chat_id)?.get(payload.message_id);
-      if (text == null) return { ok: false, description: 'message to forward not found' };
-      const copy = nextIn(payload.chat_id);
-      forwarded.add(`${payload.chat_id}:${copy}`);
-      const fromBot = !String(text).startsWith('игрок:');
-      return { ok: true, result: { message_id: copy, text: text.replace(/^игрок:/, ''), forward_origin: { type: 'user', sender_user: { id: fromBot ? 1 : payload.from_chat_id, is_bot: fromBot } } } };
+      const text = chats.get(payload.from_chat_id)?.get(payload.message_id);
+      if (text == null) return { ok: false, description: 'Bad Request: message to forward not found' };
+      const copy = put(payload.chat_id, text);
+      const fromBot = !text.startsWith('игрок:');
+      return { ok: true, result: { message_id: copy, text: text.replace(/^игрок:/, ''), forward_origin: { type: 'user', sender_user: { id: fromBot ? 1 : 2, is_bot: fromBot } } } };
+    }
+    if (method === 'deleteMessage') return { ok: Boolean(chats.get(payload.chat_id)?.delete(payload.message_id)) };
+    if (method === 'deleteMessages') {
+      for (const id of payload.message_ids) chats.get(payload.chat_id)?.delete(id);
+      return { ok: true };
+    }
+    if (method === 'editMessageText') {
+      if (!chats.get(payload.chat_id)?.has(payload.message_id)) return { ok: false, description: 'Bad Request: message to edit not found' };
+      chats.get(payload.chat_id).set(payload.message_id, payload.text);
+      return { ok: true };
     }
     return { ok: true };
   });
-  try {
-    // старая рассылка — без записанных номеров (так было до этой правки): кладём её в чаты «вручную»
-    await say(ADMIN.id, { text: '/broadcast' });                         // заводит таблицы черновиков
-    const old = await env.DB.prepare(`INSERT INTO drafts (admin_id, chat_id, group_key, kind, text, stamp, state, created_at)
-      VALUES (?, ?, 'old', 'broadcast', 'пост с ошибкой', 's', 'sent', 0)`).bind(ADMIN.id, ADMIN.id).run();
-    const oldId = old.meta.last_row_id;
-    for (const chat of [USER.id, 43, ADMIN.id]) {
-      if (!inChat.has(chat)) inChat.set(chat, new Map());
-      inChat.get(chat).set(nextIn(chat), 'пост с ошибкой');
-    }
-    inChat.get(USER.id).set(nextIn(USER.id), 'игрок:пост с ошибкой');           // игрок написал то же самое — не трогаем
+  const texts = (chat) => [...(chats.get(chat)?.values() ?? [])];
+  return { tg, put, texts };
+}
 
-    // тихая рассылка исправленного поста
+test('тихая рассылка без звука, номера записываются, /unsend удаляет точно по ним', async () => {
+  const { say, press } = await botEnv();
+  const { tg, texts } = fakeChats();
+  try {
     await say(ADMIN.id, { text: '/silentbroadcast исправленный пост' });
     assert.match(tg.calls.findLast((c) => c.payload.reply_markup?.inline_keyboard).payload.text, /без звука/);
     const [send] = lastButtons(tg);
@@ -806,37 +812,20 @@ test('тихая рассылка, номера отправленного и /u
     const sent = tg.calls.filter((c) => c.method === 'sendMessage' && c.payload.text === 'исправленный пост');
     assert.equal(sent.length, 3);
     assert.ok(sent.every((c) => c.payload.disable_notification === true), 'без звука');
-    const rows = (await env.DB.prepare('SELECT chat_id FROM sent_messages WHERE draft_id = ?').bind(Number(send.split(':')[2])).all()).results;
-    assert.equal(rows.length, 3, 'номера записаны');
 
-    // /unsend старой: ищет по тексту перед исправленным постом, удаляет только своё
+    const id = Number(send.split(':')[2]);
     tg.calls.length = 0;
     await say(ADMIN.id, { text: '/unsend' });
-    const list = tg.calls.at(-1).payload.reply_markup.inline_keyboard.map((row) => row[0].callback_data);
-    assert.ok(list.includes(`u:ask:${oldId}`));
-    await press(ADMIN.id, `u:ask:${oldId}`);
-    assert.deepEqual(lastButtons(tg), [`u:go:${oldId}`, `u:no:${oldId}`]);
+    assert.ok(tg.calls.at(-1).payload.reply_markup.inline_keyboard.some((row) => row[0].callback_data === `u:ask:${id}`));
+    await press(ADMIN.id, `u:ask:${id}`);
+    assert.deepEqual(lastButtons(tg), [`u:go:${id}`, `u:no:${id}`]);
     tg.calls.length = 0;
-    await press(ADMIN.id, `u:go:${oldId}`);
-    const isCopy = (c) => forwarded.has(`${c.payload.chat_id}:${c.payload.message_id}`);
-    const deleted = tg.calls.filter((c) => c.method === 'deleteMessages');
-    assert.equal(deleted.length, 3, 'по одному у каждого');
-    for (const d of deleted) assert.deepEqual(d.payload.message_ids.map((id) => inChat.get(d.payload.chat_id).get(id)), ['пост с ошибкой']);
-    const found = tg.calls.filter((c) => c.method === 'forwardMessage'
-      && inChat.get(c.payload.from_chat_id)?.has(c.payload.message_id)).length;
-    assert.equal(tg.calls.filter((c) => c.method === 'deleteMessage' && isCopy(c)).length, found, 'пересланные себе копии стёрты');
-    assert.match(tg.calls.findLast((c) => c.method === 'editMessageText').payload.text, /Удалено: 3/);
+    await press(ADMIN.id, `u:go:${id}`);
+    assert.equal(tg.calls.filter((c) => c.method === 'deleteMessages').length, 3);
+    assert.equal(tg.calls.filter((c) => c.method === 'forwardMessage').length, 0, 'номера известны — искать не нужно');
+    for (const chat of [USER.id, 43]) assert.ok(!texts(chat).includes('исправленный пост'));
 
-    // /unsend новой — точно по записанным номерам
-    const silentId = Number(send.split(':')[2]);
-    tg.calls.length = 0;
-    await press(ADMIN.id, `u:go:${silentId}`);
-    const bulk = tg.calls.filter((c) => c.method === 'deleteMessages');
-    assert.equal(bulk.length, 3);
-    for (const b of bulk) assert.equal(inChat.get(b.payload.chat_id).get(b.payload.message_ids[0]), 'исправленный пост');
-
-    // чужой не может
-    await press(USER.id, `u:go:${silentId}`);
+    await press(USER.id, `u:go:${id}`);
     assert.match(tg.calls.at(-1).payload.text, /только для владельца/);
     await say(USER.id, { text: '/unsend' });
     assert.match(tg.calls.at(-1).payload.text, /только для владельца/);
@@ -845,68 +834,47 @@ test('тихая рассылка, номера отправленного и /u
   }
 });
 
-test('/edit и /unsend старых рассылок без записанных номеров: служебная точка, поиск по тексту, правка на месте', async () => {
+test('старая рассылка без номеров: ответ командой на свою копию — номера у остальных находятся по порядку', async () => {
   const { env, say, press } = await botEnv();
-  const counters = new Map();
-  const nextIn = (chat) => { counters.set(chat, (counters.get(chat) ?? 700) + 1); return counters.get(chat); };
-  const inChat = new Map();
-  const put = (chat, text) => { if (!inChat.has(chat)) inChat.set(chat, new Map()); const id = nextIn(chat); inChat.get(chat).set(id, text); return id; };
-  const copies = new Set();
-  const tg = captureTelegram(({ method, payload }) => {
-    if (method === 'sendMessage') return { ok: true, result: { message_id: put(payload.chat_id, payload.text) } };
-    if (method === 'forwardMessage') {
-      const text = inChat.get(payload.from_chat_id)?.get(payload.message_id);
-      if (text == null) return { ok: false, description: 'message to forward not found' };
-      const copy = put(payload.chat_id, text);
-      copies.add(`${payload.chat_id}:${copy}`);
-      const fromBot = !text.startsWith('игрок:');
-      return { ok: true, result: { message_id: copy, text: text.replace(/^игрок:/, ''), forward_origin: { type: 'user', sender_user: { id: fromBot ? 1 : 2, is_bot: fromBot } } } };
-    }
-    if (method === 'deleteMessage') { inChat.get(payload.chat_id)?.delete(payload.message_id); return { ok: true }; }
-    if (method === 'deleteMessages') { for (const id of payload.message_ids) inChat.get(payload.chat_id)?.delete(id); return { ok: true }; }
-    if (method === 'editMessageText') {
-      if (!inChat.get(payload.chat_id)?.has(payload.message_id)) return { ok: false, description: 'message to edit not found' };
-      inChat.get(payload.chat_id).set(payload.message_id, payload.text);
-      return { ok: true };
-    }
-    return { ok: true };
-  });
+  const { tg, put, texts } = fakeChats();
   try {
     await say(ADMIN.id, { text: '/broadcast' });                       // таблицы черновиков
     const addOld = async (text) => (await env.DB.prepare(`INSERT INTO drafts (admin_id, chat_id, group_key, kind, text, stamp, state, created_at)
       VALUES (?, ?, ?, 'broadcast', ?, 's', 'sent', 0)`).bind(ADMIN.id, ADMIN.id, `old-${text}`, text).run()).meta.last_row_id;
     const postId = await addOld('пост с опечаткой');
     const oopsId = await addOld('обратная* :)');
-    const chats = [USER.id, 43, ADMIN.id];
+    // как ушло тогда: по порядку игроков (id), общий счётчик; между ними — чужие сообщения
+    const order = [USER.id, 43, ADMIN.id];
     const postAt = new Map();
-    for (const chat of chats) postAt.set(chat, put(chat, 'пост с опечаткой'));
-    put(USER.id, 'игрок:пост с опечаткой');                               // игрок написал то же — не трогать
-    for (const chat of chats) put(chat, 'обратная* :)');
+    for (const chat of order) {
+      postAt.set(chat, put(chat, 'пост с опечаткой'));
+      if (chat === USER.id) put(USER.id, 'игрок:пост с опечаткой');     // игрок написал то же самое — не трогать
+    }
+    const oopsAt = new Map();
+    for (const chat of order) oopsAt.set(chat, put(chat, 'обратная* :)'));
+    for (let i = 0; i < 40; i++) put(999, 'чужой чат');                   // бот успел много написать другим
 
-    // 1) /unsend «обратная*»: якоря нет — служебная точка без звука, сразу удаляется
+    // без ответа — бот просит ответить на сообщение
+    await say(ADMIN.id, { text: '/unsend' });
+    await press(ADMIN.id, `u:ask:${oopsId}`);
+    assert.match(tg.calls.findLast((c) => c.method === 'editMessageText').payload.text, /ответь на неё командой/);
+
+    // ответ /unsend на свою копию «обратная*»
+    await say(ADMIN.id, { text: '/unsend', reply_to_message: { message_id: oopsAt.get(ADMIN.id), from: { id: 1, is_bot: true }, text: 'обратная* :)' } });
+    assert.deepEqual(lastButtons(tg), [`u:go:${oopsId}`, `u:no:${oopsId}`]);
     tg.calls.length = 0;
     await press(ADMIN.id, `u:go:${oopsId}`);
-    const dots = tg.calls.filter((c) => c.method === 'sendMessage' && c.payload.text === '·');
-    assert.equal(dots.length, 3);
-    assert.ok(dots.every((c) => c.payload.disable_notification === true), 'точка — без звука');
-    for (const chat of chats) {
-      assert.ok(![...inChat.get(chat).values()].includes('·'), 'точка удалена');
-      assert.ok(![...inChat.get(chat).values()].includes('обратная* :)'), '«обратная*» удалена');
-    }
-    const recorded = (await env.DB.prepare('SELECT chat_id FROM sent_messages WHERE draft_id = ?').bind(postId).all()).results;
-    assert.equal(recorded.length, 3, 'попутно записан и старый пост');
+    for (const chat of order) assert.ok(!texts(chat).includes('обратная* :)'), `удалено у ${chat}`);
+    assert.match(tg.calls.findLast((c) => c.method === 'editMessageText').payload.text, /Удалено: 3/);
+    assert.equal(tg.calls.filter((c) => c.method === 'sendMessage' && c.payload.chat_id !== ADMIN.id).length, 0, 'игрокам ничего не пришло');
 
-    // 2) /edit старого поста: номера уже известны — точка не нужна
-    tg.calls.length = 0;
-    await say(ADMIN.id, { text: '/edit' });
-    assert.ok(tg.calls.at(-1).payload.reply_markup.inline_keyboard.some((row) => row[0].callback_data === `e:ask:${postId}`));
-    await press(ADMIN.id, `e:ask:${postId}`);
+    // ответ /edit на свою копию старого поста
+    await say(ADMIN.id, { text: '/edit', reply_to_message: { message_id: postAt.get(ADMIN.id), from: { id: 1, is_bot: true }, text: 'пост с опечаткой' } });
+    assert.match(tg.calls.at(-1).payload.text, /Пришли одним сообщением новый текст/);
     await say(ADMIN.id, { text: 'исправленный пост', entities: [{ type: 'bold', offset: 0, length: 11 }] });
-    assert.ok(tg.calls.some((c) => c.method === 'sendMessage' && c.payload.text === 'исправленный пост'), 'предпросмотр');
     assert.deepEqual(lastButtons(tg), [`e:go:${postId}`, `e:no:${postId}`]);
     tg.calls.length = 0;
     await press(ADMIN.id, `e:go:${postId}`);
-    assert.equal(tg.calls.filter((c) => c.payload.text === '·').length, 0, 'второй раз искать не пришлось');
     const edits = tg.calls.filter((c) => c.method === 'editMessageText' && c.payload.text === 'исправленный пост');
     assert.equal(edits.length, 3);
     for (const e of edits) {
@@ -914,13 +882,11 @@ test('/edit и /unsend старых рассылок без записанных
       assert.equal(e.payload.entities[0].type, 'bold');
       assert.ok(e.payload.reply_markup.inline_keyboard[0][0].web_app, 'кнопка «Играть» осталась');
     }
-    assert.ok([...inChat.get(USER.id).values()].includes('игрок:пост с опечаткой'), 'сообщение игрока цело');
-    assert.match(tg.calls.findLast((c) => c.method === 'editMessageText' && c.payload.chat_id === ADMIN.id && /Изменено/.test(c.payload.text)).payload.text, /Изменено: 3/);
-    const draft = await env.DB.prepare('SELECT text FROM drafts WHERE id = ?').bind(postId).first();
-    assert.equal(draft.text, 'исправленный пост', 'у рассылки новый текст');
+    assert.ok(texts(USER.id).includes('игрок:пост с опечаткой'), 'сообщение игрока цело');
+    assert.equal((await env.DB.prepare('SELECT text FROM drafts WHERE id = ?').bind(postId).first()).text, 'исправленный пост');
 
-    // 3) /cancel — обычное сообщение владельца снова просто сообщение
-    await press(ADMIN.id, `e:ask:${postId}`);
+    // /cancel — обычное сообщение владельца снова просто сообщение
+    await say(ADMIN.id, { text: '/edit', reply_to_message: { message_id: postAt.get(ADMIN.id), from: { id: 1, is_bot: true }, text: 'исправленный пост' } });
     await say(ADMIN.id, { text: '/cancel' });
     assert.equal(tg.calls.at(-1).payload.text, 'Отменено.');
     await say(ADMIN.id, { text: 'привет' });

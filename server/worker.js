@@ -651,7 +651,10 @@ async function botWebhook(request, env, ctx) {
       await api(env, 'sendMessage', { chat_id: chatId, text: 'Эта команда только для владельца.' });
       return new Response('ok');
     }
-    await listSent(env, chatId, tgId, command === '/edit' ? 'e' : 'u');
+    const prefix = command === '/edit' ? 'e' : 'u';
+    // ответ командой на сообщение рассылки в своём чате — сразу эта рассылка, и её номер известен (якорь)
+    if (message.reply_to_message?.from?.is_bot) await pickByReply(env, chatId, tgId, prefix, message.reply_to_message);
+    else await listSent(env, chatId, tgId, prefix);
     return new Response('ok');
   }
 
@@ -722,6 +725,9 @@ async function ensureDraftTables(env) {
     draft_id INTEGER NOT NULL, chat_id INTEGER NOT NULL, message_ids TEXT NOT NULL, PRIMARY KEY (draft_id, chat_id))`).run();
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS unsend_done (
     draft_id INTEGER NOT NULL, chat_id INTEGER NOT NULL, PRIMARY KEY (draft_id, chat_id))`).run();
+  // старая рассылка без записанных номеров: номер копии владельца — он ответил командой на это сообщение
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS draft_anchor (
+    draft_id INTEGER PRIMARY KEY, chat_id INTEGER NOT NULL, message_id INTEGER NOT NULL)`).run();
   // /edit: владелец выбрал рассылку и присылает новый текст
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS bot_pending (
     admin_id INTEGER PRIMARY KEY, draft_id INTEGER NOT NULL, text TEXT, entities TEXT, created_at INTEGER NOT NULL)`).run();
@@ -1065,7 +1071,7 @@ async function onInline(query, env) {
  */
 async function broadcast(env, content) {
   const draft = typeof content === 'string' ? { text: content, media: [] } : content;
-  const rows = await env.DB.prepare('SELECT tg_id FROM users WHERE banned = 0 LIMIT ?').bind(BROADCAST_LIMIT).all();
+  const rows = await env.DB.prepare('SELECT tg_id FROM users WHERE banned = 0 ORDER BY id LIMIT ?').bind(BROADCAST_LIMIT).all();
   const ids = (rows.results ?? []).map((r) => r.tg_id);
   let sent = 0;
   let failed = 0;
@@ -1086,14 +1092,15 @@ async function broadcast(env, content) {
 
 // ---------- /unsend и /edit: удалить или изменить у всех недавнюю рассылку ----------
 // Номера отправленного записываются (sent_messages) — по ним всё точно. У рассылок, ушедших до записи номеров,
-// сообщение ищется по тексту (locate): от «якоря» — номера более позднего сообщения в том же чате — бот смотрит до
-// PROBE сообщений назад: пересылает каждое владельцу (копию сразу стирает) и берёт только своё с тем же текстом;
-// сообщения игрока не трогаются. Якоря нет — бот шлёт игроку служебную точку без звука и сразу её удаляет: её номер
-// и есть «сейчас». Найденные попутно свои сообщения других рассылок тоже записываются — второй раз искать не нужно.
-// Удалять свои сообщения Telegram даёт боту только 48 часов. Много игроков — Cloudflare может оборвать работу по
-// лимиту запросов: «Продолжить» доделает (удалённое помнит unsend_done, изменённое уже записано).
+// номера ищутся. У бота номера сообщений — ОДИН общий счётчик на все чаты (первая версия считала, что у каждого чата
+// свой, и искала рядом с «якорем» в том же чате — не находила ничего). Рассылка уходила игрокам подряд, в порядке id,
+// поэтому её сообщения — почти подряд идущие номера. Владелец отвечает командой на копию рассылки в своём чате
+// (draft_anchor) — от неё номер у соседнего по порядку игрока ожидается на 1 больше/меньше; бот проверяет номера
+// вокруг ожидаемого (SEEK): пересылает сообщение себе (копию сразу стирает) — чужой чат не отдаст, своё сообщение с
+// тем же текстом и есть нужное; сообщения игрока не трогаются. Найденные номера записываются. Удалять свои сообщения
+// Telegram даёт боту 48 часов. Много игроков — Cloudflare может оборвать по лимиту запросов: «Продолжить» доделает.
 
-const PROBE = 8;
+const SEEK = [0, 1, -1, 2, -2, 3, -3, 4, -4, 5, -5, 6, -6, 8, -8, 10, -10];
 const norm = (t) => String(t ?? '').replace(/\s+/g, ' ').trim();
 const clip = (text, n = 40) => {
   const t = norm(text) || '(картинка)';
@@ -1103,6 +1110,7 @@ const SENT_ACTIONS = {
   u: { icon: '🗑', intro: 'Что удалить у всех, кому ушло? Telegram даёт боту удалять свои сообщения только 48 часов.' },
   e: { icon: '✏️', intro: 'Что изменить? Сообщение поменяется там же, где было, без нового уведомления.' },
 };
+const REPLY_HINT = 'Эту рассылку бот не запомнил. Найди её в этом чате и ответь на неё командой (реплаем) — ';
 
 async function listSent(env, chatId, adminId, prefix) {
   await ensureDraftTables(env);
@@ -1114,7 +1122,7 @@ async function listSent(env, chatId, adminId, prefix) {
   }
   await api(env, 'sendMessage', {
     chat_id: chatId,
-    text: SENT_ACTIONS[prefix].intro,
+    text: `${SENT_ACTIONS[prefix].intro} Старую рассылку проще выбрать ответом на неё: ${prefix === 'e' ? '/edit' : '/unsend'} реплаем.`,
     reply_markup: {
       inline_keyboard: rows.map((d) => [{
         text: `${SENT_ACTIONS[prefix].icon} ${d.kind === 'broadcast' ? 'Всем' : d.target_name}: ${clip(d.text, 32)}`,
@@ -1122,6 +1130,49 @@ async function listSent(env, chatId, adminId, prefix) {
       }]),
     },
   });
+}
+
+/** Владелец ответил командой на сообщение рассылки: находим рассылку по тексту и запоминаем номер его копии. */
+async function pickByReply(env, chatId, adminId, prefix, replied) {
+  await ensureDraftTables(env);
+  const text = norm(replied.text ?? replied.caption);
+  const drafts = (await env.DB.prepare("SELECT * FROM drafts WHERE admin_id = ? AND state = 'sent' ORDER BY id DESC LIMIT 50")
+    .bind(adminId).all()).results ?? [];
+  const draft = drafts.find((d) => norm(d.text) === text);
+  if (!draft) {
+    await api(env, 'sendMessage', { chat_id: chatId, text: 'Это сообщение не похоже на рассылку — не нашёл такую.' });
+    return;
+  }
+  await env.DB.prepare(`INSERT INTO draft_anchor (draft_id, chat_id, message_id) VALUES (?, ?, ?)
+      ON CONFLICT (draft_id) DO UPDATE SET chat_id = excluded.chat_id, message_id = excluded.message_id`)
+    .bind(draft.id, chatId, replied.message_id).run();
+  await env.DB.prepare('INSERT OR IGNORE INTO sent_messages (draft_id, chat_id, message_ids) VALUES (?, ?, ?)')
+    .bind(draft.id, chatId, JSON.stringify([replied.message_id])).run();
+  await askAbout(env, chatId, adminId, prefix, draft, (text2, buttons) => api(env, 'sendMessage', {
+    chat_id: chatId, text: text2, ...(buttons ? { reply_markup: { inline_keyboard: [buttons] } } : {}),
+  }));
+}
+
+/** Вопрос по выбранной рассылке: удалить — подтверждение; изменить — «пришли новый текст». */
+async function askAbout(env, chatId, adminId, prefix, draft, say) {
+  const who = draft.kind === 'broadcast' ? 'у всех игроков' : `у ${draft.target_name}`;
+  const recorded = await env.DB.prepare('SELECT 1 FROM sent_messages WHERE draft_id = ? LIMIT 1').bind(draft.id).first();
+  if (!recorded) {
+    await say(`${REPLY_HINT}${prefix === 'e' ? '/edit' : '/unsend'}.`);
+    return;
+  }
+  if (prefix === 'u') {
+    await say(`Удалить «${clip(draft.text, 60)}» ${who}?`, [
+      { text: '🗑 Удалить', callback_data: `u:go:${draft.id}` },
+      { text: 'Отмена', callback_data: `u:no:${draft.id}` },
+    ]);
+    return;
+  }
+  await env.DB.prepare(`INSERT INTO bot_pending (admin_id, draft_id, text, entities, created_at) VALUES (?, ?, NULL, NULL, ?)
+      ON CONFLICT (admin_id) DO UPDATE SET draft_id = excluded.draft_id, text = NULL, entities = NULL, created_at = excluded.created_at`)
+    .bind(adminId, draft.id, Date.now()).run();
+  await say(`Пришли одним сообщением новый текст вместо «${clip(draft.text, 60)}». `
+    + 'Оформление (жирный, ссылки, цитаты) сохранится. Передумал — /cancel.');
 }
 
 /** /edit: владелец выбрал рассылку — следующее его сообщение без команды станет новым текстом. */
@@ -1166,23 +1217,9 @@ async function onSentButton(query, env, ctx, prefix, action, draftId, answer) {
     await answer('Не нашёл такую рассылку.');
     return;
   }
-  const who = draft.kind === 'broadcast' ? 'у всех игроков' : `у ${draft.target_name}`;
-
-  if (prefix === 'u' && action === 'ask') {
+  if (action === 'ask') {
     await answer();
-    await edit(`Удалить «${clip(draft.text, 60)}» ${who}?`, [
-      { text: '🗑 Удалить', callback_data: `u:go:${draft.id}` },
-      { text: 'Отмена', callback_data: `u:no:${draft.id}` },
-    ]);
-    return;
-  }
-  if (prefix === 'e' && action === 'ask') {
-    await env.DB.prepare(`INSERT INTO bot_pending (admin_id, draft_id, text, entities, created_at) VALUES (?, ?, NULL, NULL, ?)
-        ON CONFLICT (admin_id) DO UPDATE SET draft_id = excluded.draft_id, text = NULL, entities = NULL, created_at = excluded.created_at`)
-      .bind(adminId, draft.id, Date.now()).run();
-    await answer();
-    await edit(`Пришли одним сообщением новый текст вместо «${clip(draft.text, 60)}». `
-      + 'Оформление (жирный, ссылки, цитаты) сохранится. Передумал — /cancel.');
+    await askAbout(env, chat, adminId, prefix, draft, edit);
     return;
   }
   if (action === 'no') {
@@ -1212,7 +1249,7 @@ async function onSentButton(query, env, ctx, prefix, action, draftId, answer) {
   const job = async () => {
     const r = await applyToSent(env, draft, chat, act);
     const parts = [`${prefix === 'e' ? 'Изменено' : 'Удалено'}: ${r.done}.`];
-    if (r.missing) parts.push(`Не нашёл: ${r.missing} — игрок писал боту много после этого или удалил чат.`);
+    if (r.missing) parts.push(`Не нашёл: ${r.missing}.`);
     if (r.failed) parts.push(`Не удалось: ${r.failed}${prefix === 'u' ? ' — старше 48 часов или чат удалён' : ''}.`);
     if (r.stopped) parts.push('Не успел всех — нажми «Продолжить».');
     if (prefix === 'e' && !r.stopped) {
@@ -1227,7 +1264,7 @@ async function onSentButton(query, env, ctx, prefix, action, draftId, answer) {
   else await job();
 }
 
-/** Удалить или изменить рассылку у каждого получателя. */
+/** Удалить или изменить рассылку у каждого получателя (номера — записанные или найденные от якоря). */
 async function applyToSent(env, draft, adminChat, act) {
   const r = { done: 0, missing: 0, failed: 0, stopped: false };
   const tg = async (method, payload) => {
@@ -1238,30 +1275,56 @@ async function applyToSent(env, draft, adminChat, act) {
   const done = new Set(deleting
     ? ((await env.DB.prepare('SELECT chat_id FROM unsend_done WHERE draft_id = ?').bind(draft.id).all()).results ?? []).map((row) => row.chat_id)
     : []);
-  const recordedIds = async (chatId) => {
-    const row = await env.DB.prepare('SELECT message_ids FROM sent_messages WHERE draft_id = ? AND chat_id = ?').bind(draft.id, chatId).first();
-    return row ? JSON.parse(row.message_ids) : null;
-  };
-  const recorded = ((await env.DB.prepare('SELECT chat_id FROM sent_messages WHERE draft_id = ?').bind(draft.id).all()).results ?? [])
-    .map((row) => row.chat_id);
-  const recipients = draft.kind === 'broadcast'
-    ? [...new Set([...recorded, ...((await env.DB.prepare('SELECT tg_id FROM users WHERE banned = 0').all()).results ?? []).map((u) => u.tg_id)])]
-    : [draft.target];
-  // тексты всех своих рассылок: найденные попутно — тоже записываются
-  const known = new Map();
-  for (const d of (await env.DB.prepare("SELECT id, text FROM drafts WHERE admin_id = ? AND state = 'sent'").bind(draft.admin_id).all()).results ?? []) {
-    const t = norm(d.text);
-    if (t) known.set(t, [...(known.get(t) ?? []), d.id]);
+  const known = new Map();                        // chat → номера сообщений рассылки
+  for (const row of (await env.DB.prepare('SELECT chat_id, message_ids FROM sent_messages WHERE draft_id = ?').bind(draft.id).all()).results ?? []) {
+    known.set(row.chat_id, JSON.parse(row.message_ids));
   }
+  // порядок, в котором рассылка уходила (по id игрока), — по нему ожидаемые номера соседей
+  const order = draft.kind === 'broadcast'
+    ? ((await env.DB.prepare('SELECT tg_id FROM users WHERE banned = 0 ORDER BY id').all()).results ?? []).map((u) => u.tg_id)
+    : [draft.target];
+  const recipients = [...new Set([...known.keys(), ...order])];
+  const text = norm(draft.text);
   const mediaCount = (await env.DB.prepare('SELECT COUNT(*) AS n FROM draft_media WHERE admin_id = ? AND group_key = ?')
     .bind(draft.admin_id, draft.group_key).first())?.n ?? 0;
+
+  /** Номер у игрока: от ближайшего по порядку, чей номер известен, — ожидаемый ± SEEK. */
+  const seek = async (chatId) => {
+    const k = order.indexOf(chatId);
+    if (k < 0 || !text) return null;
+    let base = null;
+    for (let d = 1; d < order.length && base == null; d++) {
+      for (const j of [k - d, k + d]) {
+        const ids = j >= 0 && j < order.length ? known.get(order[j]) : null;
+        if (ids && base == null) base = ids[0] + (k - j);
+      }
+    }
+    if (base == null) return null;
+    for (const off of SEEK) {
+      const id = base + off;
+      if (id <= 0) continue;
+      const fw = await tg('forwardMessage', { chat_id: adminChat, from_chat_id: chatId, message_id: id, disable_notification: true });
+      if (!fw.ok || !fw.result) continue;                  // не из этого чата
+      await tg('deleteMessage', { chat_id: adminChat, message_id: fw.result.message_id });
+      const byBot = fw.result.forward_origin?.sender_user?.is_bot || fw.result.forward_from?.is_bot;
+      if (byBot && norm(fw.result.text ?? fw.result.caption) === text) return id;
+    }
+    return null;
+  };
+
+  // сначала ближние к известным: так ожидаемые номера точнее
+  const pendingChats = recipients.filter((c) => !done.has(c));
   try {
-    for (const chatId of recipients) {
-      if (done.has(chatId)) continue;
-      let ids = await recordedIds(chatId);
+    for (const chatId of pendingChats) {
+      let ids = known.get(chatId);
       if (!ids) {
-        const id = await locate(env, tg, draft, chatId, adminChat, known);
-        ids = id ? [id] : null;
+        const id = await seek(chatId);
+        if (id) {
+          ids = [id];
+          known.set(chatId, ids);
+          await env.DB.prepare('INSERT OR IGNORE INTO sent_messages (draft_id, chat_id, message_ids) VALUES (?, ?, ?)')
+            .bind(draft.id, chatId, JSON.stringify(ids)).run();
+        }
       }
       if (!ids) {
         r.missing += 1;
@@ -1292,42 +1355,4 @@ async function applyToSent(env, draft, adminChat, act) {
     r.stopped = true;
   }
   return r;
-}
-
-/** Номер сообщения рассылки у игрока, если он не записан: поиск по тексту назад от «якоря». */
-async function locate(env, tg, draft, chatId, adminChat, known) {
-  const text = norm(draft.text);
-  if (!text) return null;
-  // якорь — номер более позднего записанного сообщения в этом чате (рассылки идут по порядку id)
-  let anchor = null;
-  for (const row of (await env.DB.prepare('SELECT message_ids FROM sent_messages WHERE draft_id > ? AND chat_id = ?')
-    .bind(draft.id, chatId).all()).results ?? []) {
-    const first = Math.min(...JSON.parse(row.message_ids));
-    if (anchor == null || first < anchor) anchor = first;
-  }
-  if (anchor == null) {
-    // номер «сейчас»: служебная точка без звука, сразу удаляется
-    const probe = await tg('sendMessage', { chat_id: chatId, text: '·', disable_notification: true });
-    if (!probe.ok || !probe.result) return null;
-    anchor = probe.result.message_id;
-    await tg('deleteMessage', { chat_id: chatId, message_id: anchor });
-  }
-  let found = null;
-  let extra = 0;
-  for (let k = 1; k <= PROBE && anchor - k > 0 && extra < 2; k++) {
-    if (found) extra += 1;                 // пару сообщений за найденным — записать и предыдущую рассылку
-    const id = anchor - k;
-    const fw = await tg('forwardMessage', { chat_id: adminChat, from_chat_id: chatId, message_id: id, disable_notification: true });
-    if (!fw.ok || !fw.result) continue;
-    await tg('deleteMessage', { chat_id: adminChat, message_id: fw.result.message_id });
-    const byBot = fw.result.forward_origin?.sender_user?.is_bot || fw.result.forward_from?.is_bot;
-    if (!byBot) continue;
-    const t = norm(fw.result.text ?? fw.result.caption);
-    for (const other of known.get(t) ?? []) {
-      await env.DB.prepare('INSERT OR IGNORE INTO sent_messages (draft_id, chat_id, message_ids) VALUES (?, ?, ?)')
-        .bind(other, chatId, JSON.stringify([id])).run();
-    }
-    if (!found && t === text) found = id;
-  }
-  return found;
 }
