@@ -296,3 +296,4 @@
 }
 [data-game="checkers"] .ck-skin:active .ck-swatch { transform: scale(0.92); }
 [data-game="checkers"] .ck-skin[aria-checked="true"] .ck-swatch { outline: 3px solid var(--ck-accent); outline-offset: 3px; }
+[data-game="checkers"] .ck-muted { opacity: 0.55; }

@@ -6,6 +6,8 @@
 import { el } from '../../shared/dom.js';
 import { animate, showLayer, hideLayer, pop, reducedMotion } from '../../shared/motion.js';
 import { createToast } from '../../shared/toast.js';
+import { createAudio } from '../../shared/sfx.js';
+import { createSounds } from './sounds.js';
 import {
   WHITE, BLACK, LEVEL_IDS, generateMoves, newGame, playMove, undoMove, result, bestMove, sameMove, moveTo, count,
   isValidState, emptyStats, migrateStats, MODES, rowOf, colOf, isDark,
@@ -57,6 +59,8 @@ const svgIcon = (body, fill = false) => `<svg viewBox="0 0 24 24" width="22" hei
   + `${body}</svg>`;
 const ICONS = {
   restart: svgIcon('<path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/>'),
+  soundOn: svgIcon('<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/>'),
+  soundOff: svgIcon('<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="m16 9 5 6"/><path d="m21 9-5 6"/>'),
   stats: svgIcon('<rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="7" width="4" height="14" rx="1"/><rect x="17" y="3" width="4" height="18" rx="1"/>', true),
   gear: svgIcon('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/>'),
   undo: svgIcon('<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>'),
@@ -81,6 +85,36 @@ let requestId = 0;
 let hintMove = null;
 let modalActive = false;
 let modalToken = 0;
+let soundOn = true;
+// звуки (в бете: api.feature('checkers-sounds')) — один AudioContext на страницу, заводится при первом звуке
+const audio = createAudio(createSounds);
+
+const soundFeature = () => Boolean(api?.feature?.('checkers-sounds'));
+
+function sfx(name, opts) {
+  if (!soundFeature() || !soundOn) return;
+  try {
+    audio.get()?.play(name, opts);
+  } catch (err) {
+    console.warn('звук', name, err);
+  }
+}
+
+function renderSoundBtn() {
+  if (!ui?.soundBtn) return;
+  ui.soundBtn.innerHTML = soundOn ? ICONS.soundOn : ICONS.soundOff;
+  const label = soundOn ? 'Выключить звук' : 'Включить звук';
+  ui.soundBtn.setAttribute('aria-label', label);
+  ui.soundBtn.title = label;
+  ui.soundBtn.classList.toggle('ck-muted', !soundOn);
+}
+
+function toggleSound() {
+  soundOn = !soundOn;
+  api.storage.set('sound', soundOn);
+  renderSoundBtn();
+  sfx('click');
+}
 const timers = new Set();
 
 function later(fn, ms) {
@@ -219,11 +253,13 @@ function onBoardTap(e) {
     if (legal.some((m) => m.from === i)) {
       selected = { from: i, path: [] };
       hintMove = null;
+      sfx('select');
       api.platform.haptic.selection();
       renderMarks();
     } else if (legal.length && legal[0].captures.length) {
       toast.show(T.mustCapture);
       for (const p of ui.pieces.querySelectorAll('.ck-must')) shakePiece(p);
+      sfx('must');
       api.platform.haptic.notification('warning');
     } else {
       shakePiece(pieceAt(i), 3, 250);
@@ -244,6 +280,7 @@ function onBoardTap(e) {
   const done = step.find((m) => m.path.length === selected.path.length);
   const piece = pieceAt(selected.from);
   hopTo(piece, i);
+  sfx('move');
   if (done) {
     commitMove(done, true);
   } else {
@@ -273,6 +310,7 @@ async function commitMove(m, alreadyMoved) {
   if (!alreadyMoved) {
     for (let k = 0; k < m.path.length; k++) {
       hopTo(piece, m.path[k]);
+      sfx('move', { bot: game.turn !== game.player });
       if (m.captures[k] !== undefined) pieceAt(m.captures[k])?.classList.add('ck-taken');
       await later(null, hopMs);
       if (!ui) return;
@@ -283,6 +321,7 @@ async function commitMove(m, alreadyMoved) {
   }
   // побитые снимаются в конце хода (турецкий удар)
   const gone = m.captures.map((c) => pieceAt(c)).filter(Boolean);
+  if (gone.length) sfx('capture', { step: gone.length });
   // scale, а не transform — позицию шашки (transform) не трогаем
   await Promise.all(gone.map((g) => animate(g, [{ opacity: 1, scale: 1 }, { opacity: 0, scale: 0.4 }], { duration: 220, easing: 'ease-in', fill: 'forwards' })));
   if (!ui) return;
@@ -292,7 +331,10 @@ async function commitMove(m, alreadyMoved) {
   else api.platform.haptic.selection();
   renderPieces();
   const moved = pieceAt(moveTo(m));
-  if (wasMan && Math.abs(game.board[moveTo(m)]) === 2 && moved) popPiece(moved);
+  if (wasMan && Math.abs(game.board[moveTo(m)]) === 2 && moved) {
+    popPiece(moved);
+    sfx('king');
+  }
   busy = false;
   save();
   const res = result(game);
@@ -415,6 +457,7 @@ function finishGame(res, resigned = false) {
   }
   api.storage.set('stats', stats);
   api.storage.remove('current');
+  sfx(outcome);
   api.platform.haptic.notification(outcome === 'win' ? 'success' : outcome === 'draw' ? 'warning' : 'error');
   if (outcome === 'win') for (const p of ui.pieces.querySelectorAll(game.player === WHITE ? '.ck-white' : '.ck-black')) popPiece(p, 0.8, 400);
   later(() => api?.finish({
@@ -433,6 +476,7 @@ function onUndo() {
   renderPieces();
   renderMarks();
   save();
+  sfx('undo');
   api.platform.haptic.impact('light');
 }
 
@@ -446,6 +490,7 @@ async function onHint() {
   if (!ui || game !== snapshot || over) return;
   hintMove = move;
   selected = null;
+  sfx('hint');
   renderMarks();
   for (const sq of ui.squares.querySelectorAll('.ck-hint')) pop(sq, { from: 0.8, duration: 300 });
 }
@@ -464,6 +509,7 @@ function onResign() {
 // ---------- окна ----------
 
 function openModal(content) {
+  if (!modalActive) sfx('click');
   modalToken++;
   ui.modal.replaceChildren(content);
   if (!modalActive) showLayer(ui.modal);
@@ -625,10 +671,12 @@ export default {
     api = gameApi;
     host = container;
     toast = createToast();
-    const [saved, savedStats, savedSettings, savedSetup] = await Promise.all([
+    const [saved, savedStats, savedSettings, savedSetup, savedSound] = await Promise.all([
       api.storage.get('current'), api.storage.get('stats'), api.storage.get('settings'), api.storage.get('setup'),
+      api.storage.get('sound'),
     ]);
     if (!api) return;
+    soundOn = savedSound !== false;
     stats = migrateStats(savedStats);
     settings = {
       skin: SKINS.includes(savedSettings?.skin) ? savedSettings.skin : 'telegram',
@@ -651,6 +699,7 @@ export default {
     };
     ui.board = el('div', { class: `ck-board${settings.coords ? '' : ' ck-no-coords'}` }, ui.squares, ui.pieces);
     ui.board.addEventListener('click', onBoardTap);
+    ui.soundBtn = soundFeature() ? iconButton(ICONS.soundOn, 'Выключить звук', toggleSound) : null;
     ui.undo = toolButton(ICONS.undo, T.undo, onUndo);
     ui.hint = toolButton(ICONS.hint, T.hint, onHint);
     ui.resign = toolButton(ICONS.flag, T.resign, onResign);
@@ -659,6 +708,7 @@ export default {
       el('div', { class: 'ck-header' },
         el('div', {}, el('div', { class: 'ck-title' }, T.title), ui.sub),
         el('div', { class: 'ck-actions' },
+          ui.soundBtn,
           iconButton(ICONS.restart, T.newGame, () => showNewGame(true)),
           iconButton(ICONS.stats, T.stats.open, showStats),
           iconButton(ICONS.gear, T.settings.open, showSettings),
@@ -675,6 +725,7 @@ export default {
       toast.el,
     );
     container.append(root);
+    renderSoundBtn();
     document.addEventListener('keydown', onKeydown);
     startWorker();
 

@@ -6,6 +6,8 @@
 import { el } from '../../shared/dom.js';
 import { animate, showLayer, hideLayer, shake, pop, reducedMotion } from '../../shared/motion.js';
 import { createToast } from '../../shared/toast.js';
+import { createAudio } from '../../shared/sfx.js';
+import { createSounds } from './sounds.js';
 import {
   MODES, LENGTHS, REGIONS, MARATHON_LIVES, WIN_SHARE, findCountry, suggest, newGame, answer, next, isOver, current,
   asked, isValidState, emptyStats, recordGame, isValidStats, regionPool,
@@ -45,6 +47,8 @@ const svgIcon = (body, fill = false) => `<svg viewBox="0 0 24 24" width="22" hei
   + `${body}</svg>`;
 const ICONS = {
   restart: svgIcon('<path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/>'),
+  soundOn: svgIcon('<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/>'),
+  soundOff: svgIcon('<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="m16 9 5 6"/><path d="m21 9-5 6"/>'),
   stats: svgIcon('<rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="7" width="4" height="14" rx="1"/><rect x="17" y="3" width="4" height="18" rx="1"/>', true),
 };
 // своя русская клавиатура (ё — через е: ввод сравнивается без различия ё/е)
@@ -63,6 +67,36 @@ let typed = '';
 let busy = false;
 let modalActive = false;
 let modalToken = 0;
+let soundOn = true;
+// звуки (в бете: api.feature('flags-sounds')) — один AudioContext на страницу, заводится при первом звуке
+const audio = createAudio(createSounds);
+
+const soundFeature = () => Boolean(api?.feature?.('flags-sounds'));
+
+function sfx(name, opts) {
+  if (!soundFeature() || !soundOn) return;
+  try {
+    audio.get()?.play(name, opts);
+  } catch (err) {
+    console.warn('звук', name, err);
+  }
+}
+
+function renderSoundBtn() {
+  if (!ui?.soundBtn) return;
+  ui.soundBtn.innerHTML = soundOn ? ICONS.soundOn : ICONS.soundOff;
+  const label = soundOn ? 'Выключить звук' : 'Включить звук';
+  ui.soundBtn.setAttribute('aria-label', label);
+  ui.soundBtn.title = label;
+  ui.soundBtn.classList.toggle('fl-muted', !soundOn);
+}
+
+function toggleSound() {
+  soundOn = !soundOn;
+  api.storage.set('sound', soundOn);
+  renderSoundBtn();
+  sfx('click');
+}
 const timers = new Set();
 
 function later(fn, ms) {
@@ -131,6 +165,7 @@ function typeKey(ch) {
   if (busy || game.answered) return;
   if (ch === '⌫') typed = typed.slice(0, -1);
   else if (typed.length < 40) typed += ch;
+  sfx('key');
   api.platform.haptic.selection();
   renderTyped();
 }
@@ -146,6 +181,7 @@ function submitTyped() {
       return;
     }
     toast.show(T.unknown);
+    sfx('unknown');
     shake(ui.fieldWrap, { distance: 5, duration: 300 });
     api.platform.haptic.notification('warning');
     return;
@@ -173,6 +209,7 @@ function showAnswered(fresh) {
     ui.verdict.textContent = `✅ ${T.right} ${right.name}`;
     ui.verdict.className = 'fl-verdict fl-ok';
     if (fresh) {
+      sfx('right', { step: game.streak });
       api.platform.haptic.notification('success');
       pop(ui.card, { from: 0.9, duration: 320 });
     }
@@ -180,6 +217,7 @@ function showAnswered(fresh) {
     ui.verdict.textContent = `❌ ${T.wrong(right.name)}`;
     ui.verdict.className = 'fl-verdict fl-bad';
     if (fresh) {
+      sfx('wrong');
       api.platform.haptic.notification('error');
       shake(ui.card, { distance: 8, duration: 380 });
     }
@@ -211,6 +249,7 @@ function goNext() {
     return;
   }
   busy = true;
+  sfx('next');
   ui.fieldWrap.classList.remove('fl-field-ok', 'fl-field-bad');
   const out = reducedMotion() ? Promise.resolve() : animate(ui.card, [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateX(-40px) rotate(-3deg)' }], { duration: 200, easing: 'ease-in', fill: 'forwards' });
   out.then(() => {
@@ -232,12 +271,14 @@ function finishGame() {
   const outcome = total && game.correct / total >= WIN_SHARE ? 'win' : 'lose';
   const s = game;
   game = null;
+  sfx(outcome);
   api.finish({ outcome, score: s.correct, title: T.resultTitle(s), message: T.message(s), variant: s.mode, locale: 'ru' });
 }
 
 // ---------- окна ----------
 
 function openModal(content) {
+  if (!modalActive) sfx('click');
   modalToken++;
   ui.modal.replaceChildren(content);
   if (!modalActive) showLayer(ui.modal);
@@ -364,11 +405,13 @@ export default {
   async init(container, gameApi) {
     api = gameApi;
     toast = createToast();
-    const [saved, savedStats, savedSetup, list] = await Promise.all([
+    const [saved, savedStats, savedSetup, list, savedSound] = await Promise.all([
       api.storage.get('current'), api.storage.get('stats'), api.storage.get('setup'),
       countries ?? fetch(new URL('./countries.json', import.meta.url)).then((r) => r.json()),
+      api.storage.get('sound'),
     ]);
     if (!api) return;
+    soundOn = savedSound !== false;
     countries = list;
     byCode = new Map(countries.map((c) => [c.code, c]));
     stats = isValidStats(savedStats) ? savedStats : emptyStats();
@@ -392,6 +435,7 @@ export default {
       modal: el('div', { class: 'fl-modal', hidden: true }),
     };
     ui.card = el('div', { class: 'fl-card' }, ui.flag);
+    ui.soundBtn = soundFeature() ? iconButton(ICONS.soundOn, 'Выключить звук', toggleSound) : null;
     ui.fieldWrap = el('div', { class: 'fl-field-wrap' }, ui.field);
     ui.field.dataset.placeholder = T.placeholder;
     ui.nextBtn = el('button', { class: 'btn fl-next', hidden: true, onclick: goNext }, T.next);
@@ -402,6 +446,7 @@ export default {
       el('div', { class: 'fl-header' },
         el('div', {}, el('div', { class: 'fl-title' }, T.title), ui.sub),
         el('div', { class: 'fl-actions' },
+          ui.soundBtn,
           iconButton(ICONS.restart, T.newGame, () => showSetup(true)),
           iconButton(ICONS.stats, T.stats.open, showStats),
         ),
@@ -415,6 +460,7 @@ export default {
       toast.el,
     );
     container.append(root);
+    renderSoundBtn();
     document.addEventListener('keydown', onKeydown);
 
     if (isValidState(saved, countries)) {
