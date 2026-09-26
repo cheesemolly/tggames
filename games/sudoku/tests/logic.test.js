@@ -51,8 +51,8 @@ test('без лимита ошибок партия не проигрывает�
 });
 
 test('настройки: значения по умолчанию и отбраковка мусора', () => {
-  assert.deepEqual(normalizeSettings(null), { mistakesLimit: true, skin: 'telegram' });
-  assert.deepEqual(normalizeSettings({ mistakesLimit: false, skin: 'ember' }), { mistakesLimit: false, skin: 'ember' });
+  assert.deepEqual(normalizeSettings(null), { mistakesLimit: true, skin: 'telegram', autofill: 'off' });
+  assert.deepEqual(normalizeSettings({ mistakesLimit: false, skin: 'ember', autofill: 'end' }), { mistakesLimit: false, skin: 'ember', autofill: 'end' });
   assert.deepEqual(normalizeSettings({ mistakesLimit: 'no', skin: 'pink' }), defaultSettings());
   assert.equal(SKINS[0], 'telegram');
 });
