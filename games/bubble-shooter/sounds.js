@@ -19,14 +19,15 @@ export const SOUNDS = [
 export const colorNote = (color) => pentaStep(((color % 6) + 6) % 6);
 
 export function createSounds(ctx) {
-  const { now, bup, plip, chip, bell, swoosh, grain, thud } = createSfx(ctx, { volume: 0.55 });
+  const { now, bup, plip, chip, bell, swoosh, grain, thud, tock, pad } = createSfx(ctx, { volume: 0.55 });
 
   const play = {
     shoot: (t, { color = 0 }) => {
       swoosh(t, 900, 2800, 0.12, 0.05);
       bup(freqOf(colorNote(color) - 5), t, { peak: 0.16, decay: 0.08, drop: 0.6 });     // тон вверх — «блуп»
     },
-    bounce: (t) => chip(freqOf(24), t, { dur: 0.03, type: 'triangle', peak: 0.05 }),
+    // отскок от стены — глухой «тук» шарика о бортик (первая версия — звонкое «тинь», на отскок не походило)
+    bounce: (t) => tock(190, t, { peak: 0.13, decay: 0.05 }),
     stick: (t, { color = 0 }) => bup(freqOf(colorNote(color) - 12), t, { peak: 0.16, decay: 0.08, drop: 1.4 }),
     // лопнул: «поп», по волне выше
     pop: (t, { step: k = 0 }) => bup(freqOf(pentaStep(Math.min(12, k)) - 2) * (0.97 + Math.random() * 0.06), t, { peak: 0.12, decay: 0.06, drop: 2.2 }),
@@ -58,16 +59,14 @@ export function createSounds(ctx) {
       [0, 4, 7, 12].forEach((s, k) => chip(freqOf(s + 7), t + k * 0.06, { dur: 0.06, peak: 0.05 }));
       bell(freqOf(26), t + 0.26, { peak: 0.1, decay: 0.6 });
     },
-    // комбо — по ступеням, как анимация
+    // комбо — по ступеням, как анимация. Всё в среднем регистре: первая версия «Мега-комбо» (колокольчики на две
+    // октавы выше и шипящий шум до 8 кГц) резала уши (владелец). Выше ступень — больше нот и тёплый аккорд, но не выше.
     combo: (t, { tier = 1 }) => {
-      bell(freqOf(7), t, { peak: 0.14, decay: 0.45 });
-      bell(freqOf(12), t + 0.07, { peak: 0.12, decay: 0.5 });
-      if (tier >= 2) [16, 19].forEach((s, k) => bell(freqOf(s), t + 0.14 + k * 0.07, { peak: 0.1, decay: 0.5 }));
-      if (tier >= 3) [0, 4, 7, 12, 16, 19].forEach((s, k) => chip(freqOf(s + 12), t + 0.25 + k * 0.04, { dur: 0.05, peak: 0.04 }));
-      if (tier >= 4) {
-        [0, 4, 7, 12].forEach((s) => bell(freqOf(s + 19), t + 0.55, { peak: 0.09, decay: 1.2 }));
-        grain(t + 0.5, 0.4, { f0: 3000, f1: 8000, q: 0.5, peak: 0.04, attack: 0.1, release: 0.25 });
-      }
+      bell(freqOf(-12), t, { peak: 0.13, decay: 0.45 });
+      bell(freqOf(-5), t + 0.07, { peak: 0.11, decay: 0.5 });
+      if (tier >= 2) [4, 12].forEach((s, k) => bell(freqOf(s - 12), t + 0.14 + k * 0.07, { peak: 0.09, decay: 0.5 }));
+      if (tier >= 3) [0, 4, 7, 12].forEach((s, k) => bup(freqOf(s - 5), t + 0.28 + k * 0.05, { peak: 0.1, decay: 0.07, drop: 0.7 }));
+      if (tier >= 4) pad([freqOf(-12), freqOf(-5), freqOf(4), freqOf(7)], t + 0.4, { peak: 0.05, attack: 0.15, decay: 1.6, cutoff: 1400 });
     },
     level: (t) => swoosh(t, 3000, 800, 0.4, 0.05),
     win: (t) => {
