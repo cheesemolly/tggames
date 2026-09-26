@@ -2,10 +2,12 @@
 // На поле — слоты обычных (частых) слов точками по числу букв; вкладка «Редкие» — найденные редкие слова (тоже идут
 // в зачёт). Уровень пройден при 50% (звёзды 50/75/100%); выбор уровня — пройденные и следующий.
 // Прогресс и настройки — в api.storage игры.
+// Звуки (sounds.js) — в бете у владельца: api.feature('words-sounds'); кнопка в шапке включает и выключает их.
 
 import { el } from '../../shared/dom.js';
 import { animate, showLayer, hideLayer, shake, pop, reducedMotion } from '../../shared/motion.js';
 import { createToast } from '../../shared/toast.js';
+import { createSounds } from './sounds.js';
 import {
   normalize, target, stars, passed, share, newProgress, levelState, unlockedMax, isUnlocked, submit, hint,
   isValidProgress,
@@ -41,6 +43,8 @@ const T = {
   stay: 'Искать ещё',
   allDone: 'Все 100 уровней пройдены!',
   settings: { open: 'Настройки', title: 'Настройки', skin: 'Оформление', close: 'Закрыть' },
+  soundOn: 'Выключить звук',
+  soundOff: 'Включить звук',
   skins: { telegram: 'По умолчанию', notebook: 'Тетрадь', board: 'Школьная доска' },
   close: 'Закрыть',
 };
@@ -51,6 +55,8 @@ const svgIcon = (body, fill = false) => `<svg viewBox="0 0 24 24" width="22" hei
 const ICONS = {
   levels: svgIcon('<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>'),
   gear: svgIcon('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/>'),
+  soundOn: svgIcon('<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/>'),
+  soundOff: svgIcon('<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="m16 9 5 6"/><path d="m21 9-5 6"/>'),
   hint: svgIcon('<path d="M9 18h6"/><path d="M10 21h4"/><path d="M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1.1 2.2h5c.1-1 .5-1.7 1.1-2.2A6 6 0 0 0 12 3Z"/>'),
 };
 
@@ -61,7 +67,8 @@ let ui = null;
 let toast = null;
 let levels = null;
 let progress = newProgress();
-let settings = { skin: 'telegram' };
+let settings = { skin: 'telegram', sound: true };
+let audio = null;                   // { ctx, sounds } — один на всю жизнь страницы (iOS ограничивает число AudioContext)
 let picked = [];                    // индексы выбранных букв исходного слова
 let tab = 'common';
 let modalActive = false;
@@ -87,6 +94,53 @@ const cur = () => levels[progress.current];
 const st = () => levelState(progress, progress.current);
 
 // ---------- отрисовка ----------
+
+// ---------- звук ----------
+
+const soundFeature = () => Boolean(api?.feature?.('words-sounds'));
+
+/** AudioContext можно завести только из обработчика нажатия — поэтому лениво, при первом звуке. */
+function ensureAudio() {
+  if (audio) {
+    if (audio.ctx.state === 'suspended') audio.ctx.resume().catch(() => {});
+    return audio;
+  }
+  const Ctx = window.AudioContext ?? window.webkitAudioContext;
+  if (!Ctx) return null;
+  try {
+    const ctx = new Ctx({ latencyHint: 'interactive' });
+    audio = { ctx, sounds: createSounds(ctx) };
+  } catch {
+    return null;
+  }
+  return audio;
+}
+
+function sfx(name, opts) {
+  if (!soundFeature() || !settings.sound) return;
+  try {
+    ensureAudio()?.sounds.play(name, opts);
+  } catch (err) {
+    console.warn('звук', name, err);
+  }
+}
+
+function renderSoundBtn() {
+  if (!ui?.soundBtn) return;
+  ui.soundBtn.innerHTML = settings.sound ? ICONS.soundOn : ICONS.soundOff;
+  const label = settings.sound ? T.soundOn : T.soundOff;
+  ui.soundBtn.setAttribute('aria-label', label);
+  ui.soundBtn.title = label;
+  ui.soundBtn.classList.toggle('wd-muted', !settings.sound);
+}
+
+function toggleSound() {
+  settings.sound = !settings.sound;
+  api.storage.set('settings', settings);
+  renderSoundBtn();
+  pop(ui.soundBtn, { from: 0.8, duration: 220 });
+  sfx('click');
+}
 
 function renderAll(animateIn = false) {
   const level = cur();
@@ -174,6 +228,7 @@ function renderWord() {
 function pick(i) {
   if (modalActive || picked.includes(i)) return;
   picked.push(i);
+  sfx('tap', { step: picked.length - 1 });
   api.platform.haptic.selection();
   renderWord();
   const last = ui.word.lastElementChild;
@@ -183,6 +238,7 @@ function pick(i) {
 function backspace() {
   if (!picked.length) return;
   picked.pop();
+  sfx('back', { step: picked.length });
   renderWord();
 }
 
@@ -191,13 +247,22 @@ function clearWord() {
   renderWord();
 }
 
+/** Стереть по кнопке ✕ или Escape — со звуком (clearWord зовётся и сам, после проверки слова). */
+function clearByPlayer() {
+  if (picked.length) sfx('clear');
+  clearWord();
+}
+
 function typeLetter(ch) {
   const word = cur().word;
   const c = normalize(ch);
   if (!c) return;
   const i = [...word].findIndex((x, k) => x === c && !picked.includes(k));
   if (i >= 0) pick(i);
-  else shake(ui.word, { distance: 4, duration: 200 });
+  else {
+    sfx('empty');
+    shake(ui.word, { distance: 4, duration: 200 });
+  }
 }
 
 function submitWord() {
@@ -208,6 +273,7 @@ function submitWord() {
   const res = submit(progress, levels, progress.current, text);
   if (res.result === 'common' || res.result === 'rare') {
     save();
+    sfx(res.result, { step: text.length });
     api.platform.haptic.notification('success');
     flyWord(text, res.result);
     clearWord();
@@ -232,6 +298,7 @@ function submitWord() {
     return;
   }
   // ошибка
+  sfx(res.result === 'found' ? 'found' : 'wrong');
   api.platform.haptic.notification('error');
   toast.show(T.results[res.result], 1300);
   shake(ui.word, { distance: 8, duration: 360 });
@@ -260,6 +327,7 @@ function flyWord(text, kind) {
 function onHint() {
   if (modalActive) return;
   if (progress.hints <= 0) {
+    sfx('empty');
     toast.show(T.noHints, 2200);
     shake(ui.hintBtn, { distance: 4, duration: 300 });
     return;
@@ -270,6 +338,7 @@ function onHint() {
     return;
   }
   save();
+  sfx('hint');
   api.platform.haptic.impact('light');
   tab = 'common';
   renderSlots(false);
@@ -301,6 +370,8 @@ function levelPassed(i) {
       hasNext ? el('button', { class: 'btn', onclick: () => { closeModal(); goLevel(i + 1); } }, T.next) : null,
     ),
   ));
+  sfx('level');
+  for (let k = 0; k < s; k++) later(() => sfx('star', { step: k }), 400 + k * 150);
   for (const [k, star] of [...ui.modal.querySelectorAll('.wd-won-stars .wd-star')].entries()) {
     animate(star, [{ transform: 'scale(0) rotate(-40deg)' }, { transform: 'scale(1.3) rotate(8deg)', offset: 0.6 }, { transform: 'none' }], { duration: 420, delay: 150 + k * 150, easing: 'ease-out', fill: 'backwards' });
   }
@@ -311,6 +382,7 @@ function goLevel(i) {
   progress.current = i;
   tab = 'common';
   save();
+  sfx('click');
   renderAll(true);
 }
 
@@ -384,7 +456,7 @@ function iconButton(icon, label, onclick) {
 function onKeydown(e) {
   if (e.key === 'Escape') {
     if (modalActive) closeModal();
-    else clearWord();
+    else clearByPlayer();
     return;
   }
   if (modalActive || e.ctrlKey || e.metaKey || e.altKey) return;
@@ -410,7 +482,10 @@ export default {
     if (!api) return;
     levels = data;
     progress = isValidProgress(savedProgress, levels) ? savedProgress : newProgress();
-    settings = { skin: SKINS.includes(savedSettings?.skin) ? savedSettings.skin : 'telegram' };
+    settings = {
+      skin: SKINS.includes(savedSettings?.skin) ? savedSettings.skin : 'telegram',
+      sound: savedSettings?.sound !== false,
+    };
     host.dataset.skin = settings.skin;
     report();                      // уровень в меню — сразу, не дожидаясь первого слова
 
@@ -419,8 +494,8 @@ export default {
       progress: el('span', { class: 'wd-progress' }),
       stars: el('span', { class: 'wd-stars' }),
       bar: el('div', { class: 'wd-bar-fill' }),
-      tabCommon: el('button', { class: 'wd-tab', role: 'tab', onclick: () => { tab = 'common'; renderTabs(); } }),
-      tabRare: el('button', { class: 'wd-tab', role: 'tab', onclick: () => { tab = 'rare'; renderTabs(); } }),
+      tabCommon: el('button', { class: 'wd-tab', role: 'tab', onclick: () => { if (tab !== 'common') sfx('click'); tab = 'common'; renderTabs(); } }),
+      tabRare: el('button', { class: 'wd-tab', role: 'tab', onclick: () => { if (tab !== 'rare') sfx('click'); tab = 'rare'; renderTabs(); } }),
       slots: el('div', { class: 'wd-slots' }),
       rare: el('div', { class: 'wd-rare', hidden: true }),
       word: el('div', { class: 'wd-word', onclick: backspace }),
@@ -428,15 +503,17 @@ export default {
       hintBadge: el('span', { class: 'wd-badge' }),
       modal: el('div', { class: 'wd-modal', hidden: true }),
     };
-    ui.clear = el('button', { class: 'wd-action wd-clear', 'aria-label': 'Стереть', onmousedown: (e) => e.preventDefault(), onclick: clearWord }, '✕');
+    ui.clear = el('button', { class: 'wd-action wd-clear', 'aria-label': 'Стереть', onmousedown: (e) => e.preventDefault(), onclick: clearByPlayer }, '✕');
     ui.ok = el('button', { class: 'wd-action wd-ok', 'aria-label': 'Проверить', onmousedown: (e) => e.preventDefault(), onclick: submitWord }, '✓');
     ui.hintBtn = el('button', { class: 'wd-action wd-hint', 'aria-label': T.hint, title: T.hint, onmousedown: (e) => e.preventDefault(), onclick: onHint }, el('span', { class: 'wd-hint-icon' }), ui.hintBadge);
     ui.hintBtn.firstChild.innerHTML = ICONS.hint;
+    ui.soundBtn = soundFeature() ? iconButton(ICONS.soundOn, T.soundOn, toggleSound) : null;
 
     root = el('div', { class: 'wd' },
       el('div', { class: 'wd-header' },
         el('div', { class: 'wd-head-text' }, el('div', { class: 'wd-title' }, T.title), ui.sub),
         el('div', { class: 'wd-actions' },
+          ui.soundBtn,
           iconButton(ICONS.levels, T.levels, showLevels),
           iconButton(ICONS.gear, T.settings.open, showSettings),
         ),
@@ -452,6 +529,7 @@ export default {
     );
     container.append(root);
     document.addEventListener('keydown', onKeydown);
+    renderSoundBtn();
     renderAll(true);
   },
 
