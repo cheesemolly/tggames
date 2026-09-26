@@ -41,3 +41,28 @@ test('длинная линия не улетает в писк: «тик» ша
   ctx.createOscillator = orig;
   assert.ok(Math.max(...seen) < 2500, `самый высокий «тик» ${Math.round(Math.max(...seen))} Гц`);
 });
+
+test('прохождение уровня не «бьёт по ушам»: тише «плиньк» пары, без высоких нот, не больше пяти колокольчиков', () => {
+  const { ctx, created } = fakeContext();
+  const sounds = createSounds(ctx);
+  const peaks = (name) => {
+    const before = created.length;
+    const freqs = [];
+    const orig = ctx.createOscillator;
+    ctx.createOscillator = () => {
+      const o = orig();
+      const at = o.frequency.setValueAtTime;
+      o.frequency.setValueAtTime = (v, t) => { freqs.push(v); at(v, t); };
+      return o;
+    };
+    sounds.play(name, { color: 9, step: 10 });
+    ctx.createOscillator = orig;
+    return { freqs, oscs: created.slice(before).filter((n) => n.kind === 'osc').length };
+  };
+  const cleared = peaks('cleared');
+  // с обертонами колокольчика; у первой версии («ДЗЫНЬ!») самый высокий был ≈ 4400 Гц
+  assert.ok(Math.max(...cleared.freqs) < 2000, `самая высокая частота ${Math.round(Math.max(...cleared.freqs))} Гц`);
+  // колокольчик — 4 генератора (тон и обертоны), тёплый аккорд — по 2 на ноту: 5 × 4 + 3 × 2
+  assert.ok(cleared.oscs <= 26, `генераторов ${cleared.oscs}`);
+});
+
