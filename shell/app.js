@@ -18,6 +18,7 @@ import { renderTop } from './top.js';
 import { openFeedback } from './feedback.js';
 import { setBetaViewer, seesBeta, feature, inBeta, playerView } from './beta.js';
 import { lockPageScroll } from './no-scroll.js';
+import { finishSplash, SEES_BETA_KEY } from './splash.js';
 
 const root = document.getElementById('app');
 lockPageScroll();
@@ -223,6 +224,7 @@ if (!platform.isDesktop) setTimeout(() => offerFullscreen('запрос при �
 if (account.enabled) {
   (async () => {
     const res = await account.signIn();
+    rememberBeta();
     if (!res.ok) {
       if (res.error !== 'network') toast.show(message(res.error), 3000);
       // Подпись не сошлась при заведомо верном токене — редкий случай, сразу показываем причину,
@@ -242,5 +244,20 @@ if (account.enabled) {
     }
     await sync.pull();
     redraw();
-  })().catch((err) => console.error(err));
+  })().catch((err) => console.error(err)).finally(finishSplash);
+} else {
+  finishSplash();
+}
+
+/**
+ * Заставка (shell/splash.js) стартует раньше, чем сервер скажет, владелец ли это. Поэтому видит ли человек бету —
+ * запоминается на устройстве: пока заставка в бете, она покажется ему со следующего запуска.
+ */
+function rememberBeta() {
+  try {
+    if (seesBeta()) localStorage.setItem(SEES_BETA_KEY, '1');
+    else localStorage.removeItem(SEES_BETA_KEY);
+  } catch {
+    // приватный режим — заставка просто не покажется
+  }
 }
