@@ -498,3 +498,113 @@ test('диагностика токена не раскрывает сам то�
     tg.restore();
   }
 });
+
+// ---------- рейтинг ----------
+
+const save = (env, initData, state) => call(env, '/state', {
+  method: 'PUT', initData, payload: { data: JSON.stringify(state), base: Number.MAX_SAFE_INTEGER },
+});
+
+test('рейтинг: места по очкам, при равенстве — кто раньше; в ответе только имя, без id и ника', async () => {
+  const env = createEnv();
+  const masha = await asUser({ ...USER, last_name: 'Иванова' });
+  const petya = await asUser({ id: 43, first_name: 'Петя', username: 'petya_secret' });
+  const vasya = await asUser({ id: 44, first_name: 'Вася' });
+  await save(env, masha, { 'shell:stats:2048': { played: 3, wins: 0, best: 512 } });
+  await save(env, petya, { 'shell:stats:2048': { played: 9, wins: 1, best: 2048 } });
+  await new Promise((r) => setTimeout(r, 5));
+  await save(env, vasya, { 'shell:stats:2048': { played: 1, wins: 0, best: 512 } });
+
+  const res = await call(env, '/top/2048', { initData: vasya });
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.data.rows.map((r) => [r.place, r.name, r.text, r.me]), [
+    [1, 'Петя', 'плитка 2048', false],
+    [2, 'Маша', 'плитка 512', false],     // 512 у Маши раньше, чем у Васи
+    [3, 'Вася', 'плитка 512', true],
+  ]);
+  assert.equal(res.data.total, 3);
+  assert.deepEqual({ place: res.data.me.place, name: res.data.me.name, text: res.data.me.text }, { place: 3, name: 'Вася', text: 'плитка 512' });
+
+  const raw = JSON.stringify(res.data);
+  for (const secret of ['petya_secret', 'masha', 'Иванова', ':43', ':42', ':44', 'tgId', 'user_id', 'username']) {
+    assert.ok(!raw.includes(secret), `в рейтинге не должно быть «${secret}»`);
+  }
+});
+
+test('рейтинг: сводка по играм и профиль игрока по pid — без чужих данных', async () => {
+  const env = createEnv();
+  const masha = await asUser(USER);
+  const petya = await asUser({ id: 43, first_name: 'Петя', username: 'petya_secret' });
+  await save(env, masha, { 'shell:progress:words': 'Уровень 14', 'game:bongo-cat:stats': { hits: 1500 } });
+  await save(env, petya, { 'shell:progress:words': 'Уровень 30', 'shell:stats:sudoku': { played: 5, wins: 3 } });
+
+  const top = await call(env, '/top', { initData: masha });
+  const words = top.data.games.find((g) => g.game === 'words');
+  assert.deepEqual(words.leader, { name: 'Петя', text: 'уровень 30', me: false });
+  assert.deepEqual(words.me, { place: 2, text: 'уровень 14' });
+  assert.equal(words.total, 2);
+  assert.equal(top.data.games.find((g) => g.game === 'sudoku').me, null, 'в судоку Маша не играла');
+  assert.equal(top.data.games.find((g) => g.game === 'bongo-cat').leader.text, '1 500 ударов');
+
+  const pid = (await call(env, '/top/words', { initData: masha })).data.rows.find((r) => r.name === 'Петя').pid;
+  const profile = await call(env, `/top/player/${pid}`, { initData: masha });
+  assert.equal(profile.status, 200);
+  assert.equal(profile.data.name, 'Петя');
+  assert.equal(profile.data.me, false);
+  assert.deepEqual(profile.data.games.map((g) => [g.game, g.text, g.place, g.total]), [
+    ['words', 'уровень 30', 1, 2],
+    ['sudoku', '3 судоку', 1, 1],
+  ]);
+  assert.ok(!JSON.stringify(profile.data).includes('petya_secret'));
+  assert.equal((await call(env, '/top/player/nope', { initData: masha })).status, 404);
+  assert.equal((await call(env, '/top/no-such-game', { initData: masha })).status, 404);
+  assert.equal((await call(env, '/top/words')).status, 401, 'без подписи Telegram — нельзя');
+});
+
+test('рейтинг: заблокированных нет, прогресс до рейтинга досчитывается, правка панели пересчитывает', async () => {
+  const env = createEnv();
+  const masha = await asUser(USER);
+  const petya = await asUser({ id: 43, first_name: 'Петя' });
+  const owner = await asUser(ADMIN);
+  // прогресс, сохранённый до появления рейтинга (в обход /state): рейтинг его досчитает сам
+  const petyaId = (await call(env, '/me', { initData: petya })).data.id;
+  env.DB.prepare('INSERT INTO states (user_id, data, updated_at) VALUES (?, ?, ?)')
+    .bind(petyaId, JSON.stringify({ 'shell:stats:flappy-burger': { played: 4, best: 37 } }), 1).run();
+  await save(env, masha, { 'shell:stats:flappy-burger': { played: 2, best: 12 } });
+
+  let rows = (await call(env, '/top/flappy-burger', { initData: masha })).data.rows;
+  assert.deepEqual(rows.map((r) => [r.name, r.text]), [['Петя', '37 очков'], ['Маша', '12 очков']]);
+
+  await call(env, `/admin/player/${petyaId}/ban`, { method: 'POST', initData: owner, payload: { banned: true } });
+  rows = (await call(env, '/top/flappy-burger', { initData: masha })).data.rows;
+  assert.deepEqual(rows.map((r) => [r.place, r.name]), [[1, 'Маша']], 'заблокированный пропал, Маша первая');
+  await call(env, `/admin/player/${petyaId}/ban`, { method: 'POST', initData: owner, payload: { banned: false } });
+
+  const mashaId = (await call(env, '/me', { initData: masha })).data.id;
+  await call(env, `/admin/player/${mashaId}/state`, {
+    method: 'PUT', initData: owner, payload: { data: JSON.stringify({ 'shell:stats:flappy-burger': { played: 2, best: 99 } }) },
+  });
+  rows = (await call(env, '/top/flappy-burger', { initData: masha })).data.rows;
+  assert.deepEqual(rows.map((r) => [r.name, r.text]), [['Маша', '99 очков'], ['Петя', '37 очков']]);
+
+  await call(env, `/admin/player/${mashaId}`, { method: 'DELETE', initData: owner });
+  rows = (await call(env, '/top/flappy-burger', { initData: petya })).data.rows;
+  assert.deepEqual(rows.map((r) => r.name), ['Петя'], 'удалённый игрок ушёл и из рейтинга');
+});
+
+test('рейтинг: игру в бете видит только владелец', async () => {
+  const lib = await import('../lib.js');
+  const entry = lib.GAMES.find((g) => g.id === 'memory');
+  entry.beta = true;
+  try {
+    const env = createEnv();
+    const masha = await asUser(USER);
+    const owner = await asUser(ADMIN);
+    await save(env, masha, { 'shell:progress:memory': 'Уровень 5' });
+    assert.equal((await call(env, '/top/memory', { initData: masha })).status, 404);
+    assert.ok(!(await call(env, '/top', { initData: masha })).data.games.some((g) => g.game === 'memory'));
+    assert.equal((await call(env, '/top/memory', { initData: owner })).status, 200);
+  } finally {
+    delete entry.beta;
+  }
+});

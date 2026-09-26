@@ -84,6 +84,20 @@ export const account = {
     return this.request('/state', { method: 'PUT', payload: { data, base }, keepalive });
   },
 
+  // ---------- рейтинг (в ответах только имя игрока — без ника и id) ----------
+
+  topSummary() {
+    return this.request('/top');
+  },
+
+  topGame(game) {
+    return this.request(`/top/${encodeURIComponent(game)}`);
+  },
+
+  topPlayer(pid) {
+    return this.request(`/top/player/${encodeURIComponent(pid)}`);
+  },
+
   // ---------- панель владельца ----------
 
   players(query = '', { limit = 50, offset = 0 } = {}) {

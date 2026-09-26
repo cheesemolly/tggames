@@ -242,6 +242,84 @@ function progressLines(state) {
   return lines;
 }
 
+// ---------- рейтинг (лидерборды) ----------
+
+// Рейтинг считается из того же прогресса, что синхронизируется (снимок хранилища игрока), — игры для него
+// ничего не шлют. У каждой игры своя мера успеха (как строка в меню): уровень, рекорд, победы…
+// score(state) — число или null (в рейтинг не попадает), text(n) — как это написать.
+
+/** Русское множественное: plural(3, ['очко', 'очка', 'очков']) → 'очка'. */
+function plural(n, [one, few, many]) {
+  const m10 = n % 10;
+  const m100 = n % 100;
+  if (m10 === 1 && m100 !== 11) return one;
+  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
+  return many;
+}
+
+const digits = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '\u00a0');
+const count = (forms) => (n) => `${digits(n)} ${plural(n, forms)}`;
+const levelText = (n) => `уровень ${digits(n)}`;
+
+/** Номер уровня из строки меню («Уровень 14», «Уровень 4 · Рекорд за уровень: 765»). */
+function levelOf(text) {
+  const m = typeof text === 'string' ? text.match(/Уровень\s+(\d+)/i) : null;
+  return m ? Number(m[1]) : null;
+}
+
+const shellStats = (id, field) => (state) => state?.[`shell:stats:${id}`]?.[field];
+const menuLevel = (id) => (state) => levelOf(state?.[`shell:progress:${id}`]);
+const gameStats = (id, field) => (state) => state?.[`game:${id}:stats`]?.[field];
+
+const POINTS = count(['очко', 'очка', 'очков']);
+const WINS = count(['победа', 'победы', 'побед']);
+
+const BOARDS = {
+  words: { by: 'уровень', score: menuLevel('words'), text: levelText },
+  flags: { by: 'угадано флагов за всё время', score: gameStats('flags', 'correct'), text: count(['флаг', 'флага', 'флагов']) },
+  checkers: { by: 'победы над ботом', score: shellStats('checkers', 'wins'), text: WINS },
+  'flappy-burger': { by: 'рекорд', score: shellStats('flappy-burger', 'best'), text: POINTS },
+  'bubble-shooter': { by: 'уровень', score: menuLevel('bubble-shooter'), text: levelText },
+  snake: { by: 'рекорд в классике', score: shellStats('snake', 'best'), text: POINTS },
+  'brick-blast': { by: 'уровень', score: menuLevel('brick-blast'), text: levelText },
+  loop: { by: 'уровень', score: menuLevel('loop'), text: levelText },
+  'connect-dots': { by: 'лучший уровень', score: shellStats('connect-dots', 'best'), text: levelText },
+  mahjong: { by: 'разобранные раскладки', score: shellStats('mahjong', 'wins'), text: count(['раскладка', 'раскладки', 'раскладок']) },
+  2048: { by: 'лучшая плитка', score: shellStats('2048', 'best'), text: (n) => `плитка ${n}` },
+  boggle: { by: 'уровень', score: menuLevel('boggle'), text: levelText },
+  'block-blast': { by: 'рекорд', score: shellStats('block-blast', 'best'), text: POINTS },
+  sudoku: { by: 'решённые судоку', score: shellStats('sudoku', 'wins'), text: count(['судоку', 'судоку', 'судоку']) },
+  wordle: { by: 'угаданные слова', score: shellStats('wordle', 'wins'), text: count(['слово', 'слова', 'слов']) },
+  memory: { by: 'уровень', score: menuLevel('memory'), text: levelText },
+  'bongo-cat': { by: 'ударов за всё время', score: gameStats('bongo-cat', 'hits'), text: count(['удар', 'удара', 'ударов']) },
+};
+
+const MAX_SCORE = 1e9;   // больше — явно испорченные данные
+
+/** Очки игрока по всем играм рейтинга: { gameId: целое > 0 }. Пустое и мусор — пропускаются. */
+function boardScores(state) {
+  const out = {};
+  for (const [id, board] of Object.entries(BOARDS)) {
+    let value;
+    try {
+      value = board.score(state);
+    } catch {
+      value = null;
+    }
+    if (Number.isInteger(value) && value > 0 && value <= MAX_SCORE) out[id] = value;
+  }
+  return out;
+}
+
+/**
+ * Имя для рейтинга — только имя из Telegram (без фамилии, ника и id: требование владельца, 2026-09-26).
+ * Длинное обрезается, пустое — «Игрок».
+ */
+function boardName(firstName) {
+  const name = String(firstName ?? '').replace(/\s+/g, ' ').trim();
+  return [...name].slice(0, 24).join('') || 'Игрок';
+}
+
 // ---------- оформление сообщений (entities) ----------
 
 /**
@@ -276,6 +354,10 @@ function shiftEntities(entities, cut, textLength) {
 //   GET  /me                      -> { id, tgId, name, username, isAdmin, banned }
 //   GET  /state                   -> { data, updatedAt }
 //   PUT  /state  { data, base }   -> { updatedAt }  |  409 с чужим свежим прогрессом
+// Рейтинг (в ответах только имя игрока и случайный pid — ни id, ни ника, ни tg_id):
+//   GET  /top                     -> { games: [{ game, by, total, leader, me }], mePid } — сводка по всем играм
+//   GET  /top/<игра>              -> { game, by, total, rows: [{ place, name, text, pid, me }], me }
+//   GET  /top/player/<pid>        -> { name, me, games: [{ game, text, place, total }] } — профиль игрока
 // Панель (только для ADMIN_IDS):
 //   GET    /admin/players?q=&limit=&offset=
 //   GET    /admin/player/<id>
@@ -346,7 +428,7 @@ export default {
       // Всё остальное — только для игрока, подтверждённого подписью Telegram.
       const auth = await authorize(request, env);
       if (!auth.ok) return fail(auth.error, auth.error === 'banned' ? 403 : 401, origin);
-      const { player, admin } = auth;
+      const { player, admin, user } = auth;
 
       if (path === '/me' && request.method === 'GET') {
         return json({
@@ -355,7 +437,8 @@ export default {
         }, 200, origin);
       }
       if (path === '/state' && request.method === 'GET') return await getState(env, player, origin);
-      if (path === '/state' && request.method === 'PUT') return await putState(request, env, player, origin);
+      if (path === '/state' && request.method === 'PUT') return await putState(request, env, player, user, origin);
+      if (path === '/top' || path.startsWith('/top/')) return await topRoutes(env, path, player, admin, origin);
 
       if (path.startsWith('/admin/')) {
         if (!admin) return fail('forbidden', 403, origin);
@@ -407,7 +490,7 @@ async function authorize(request, env) {
 
   const admin = isAdmin(user.id, parseAdminIds(env.ADMIN_IDS));
   if (player.banned && !admin) return { ok: false, error: 'banned' };
-  return { ok: true, player, admin };
+  return { ok: true, player, admin, user };
 }
 
 // ---------- прогресс ----------
@@ -417,7 +500,7 @@ async function getState(env, player, origin) {
   return json({ data: row?.data ?? '{}', updatedAt: row?.updated_at ?? 0 }, 200, origin);
 }
 
-async function putState(request, env, player, origin) {
+async function putState(request, env, player, user, origin) {
   const { data, base } = await body(request);
   const bad = validateState(data);
   if (bad) return fail(bad, 400, origin);
@@ -431,6 +514,7 @@ async function putState(request, env, player, origin) {
 
   const stamp = Math.max(Date.now(), stored + 1);
   await saveState(env, player.id, data, stamp);
+  await indexBoard(env, player.id, JSON.parse(data), user?.first_name);
   return json({ updatedAt: stamp }, 200, origin);
 }
 
@@ -439,6 +523,156 @@ function saveState(env, userId, data, stamp) {
     `INSERT INTO states (user_id, data, updated_at) VALUES (?, ?, ?)
      ON CONFLICT(user_id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`,
   ).bind(userId, data, stamp).run();
+}
+
+// ---------- рейтинг ----------
+
+// Таблицы рейтинга обработчик заводит сам (как черновики бота) — вручную в D1 ничего выполнять не нужно.
+// board_players: у игрока случайный pid (по нему открывают профиль) и имя для рейтинга — только имя из
+// Telegram, без фамилии и ника. board_scores: очки по играм (boardScores в lib.js), updated_at — когда
+// достигнуто: при равных очках выше тот, кто успел раньше.
+const boardReady = new WeakSet();
+
+async function ensureBoardTables(env) {
+  if (boardReady.has(env.DB)) return;
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS board_players (
+    user_id INTEGER PRIMARY KEY, pid TEXT NOT NULL UNIQUE, name TEXT NOT NULL)`).run();
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS board_scores (
+    user_id INTEGER NOT NULL, game_id TEXT NOT NULL, value INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+    PRIMARY KEY (user_id, game_id))`).run();
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS board_scores_game ON board_scores(game_id, value DESC)').run();
+  boardReady.add(env.DB);
+}
+
+function randomPid() {
+  const bytes = crypto.getRandomValues(new Uint8Array(9));
+  return [...bytes].map((b) => (b % 36).toString(36)).join('');
+}
+
+/**
+ * Пересчитывает очки игрока из его прогресса. Пишет только то, что изменилось: сохранение идёт каждые
+ * несколько секунд игры, а запись в D1 ограничена. firstName — из подписи Telegram (только при своём заходе).
+ */
+async function indexBoard(env, userId, state, firstName = null) {
+  await ensureBoardTables(env);
+  const known = await env.DB.prepare('SELECT pid, name FROM board_players WHERE user_id = ?').bind(userId).first();
+  if (!known) {
+    let name = firstName;
+    if (name == null) {
+      // до рейтинга имя хранилось вместе с фамилией: берём первое слово
+      const row = await env.DB.prepare('SELECT name FROM users WHERE id = ?').bind(userId).first();
+      name = String(row?.name ?? '').trim().split(/\s+/)[0];
+    }
+    await env.DB.prepare('INSERT OR IGNORE INTO board_players (user_id, pid, name) VALUES (?, ?, ?)')
+      .bind(userId, randomPid(), boardName(name)).run();
+  } else if (firstName != null && boardName(firstName) !== known.name) {
+    await env.DB.prepare('UPDATE board_players SET name = ? WHERE user_id = ?').bind(boardName(firstName), userId).run();
+  }
+
+  const scores = boardScores(state);
+  const old = await env.DB.prepare('SELECT game_id, value FROM board_scores WHERE user_id = ?').bind(userId).all();
+  const before = Object.fromEntries((old.results ?? []).map((r) => [r.game_id, r.value]));
+  const now = Date.now();
+  for (const [game, value] of Object.entries(scores)) {
+    if (before[game] === value) continue;
+    await env.DB.prepare(
+      `INSERT INTO board_scores (user_id, game_id, value, updated_at) VALUES (?, ?, ?, ?)
+       ON CONFLICT(user_id, game_id) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+    ).bind(userId, game, value, now).run();
+  }
+  for (const game of Object.keys(before)) {
+    if (!(game in scores)) await env.DB.prepare('DELETE FROM board_scores WHERE user_id = ? AND game_id = ?').bind(userId, game).run();
+  }
+}
+
+/** Прогресс, сохранённый до появления рейтинга, досчитывается понемногу — при просмотре рейтинга. */
+async function backfillBoard(env, limit = 8) {
+  const rows = await env.DB.prepare(
+    `SELECT s.user_id, s.data FROM states s LEFT JOIN board_players b ON b.user_id = s.user_id
+     WHERE b.user_id IS NULL LIMIT ?`,
+  ).bind(limit).all();
+  for (const row of rows.results ?? []) {
+    let state = {};
+    try {
+      state = JSON.parse(row.data);
+    } catch {
+      // битый прогресс — в рейтинг просто ничего не попадёт
+    }
+    await indexBoard(env, row.user_id, state);
+  }
+}
+
+// Места: по очкам, при равенстве — кто раньше. Заблокированных в рейтинге нет.
+const RANKED = `SELECT b.user_id, b.game_id, b.value,
+    ROW_NUMBER() OVER (PARTITION BY b.game_id ORDER BY b.value DESC, b.updated_at ASC, b.user_id ASC) AS place,
+    COUNT(*) OVER (PARTITION BY b.game_id) AS total
+  FROM board_scores b JOIN users u ON u.id = b.user_id WHERE u.banned = 0`;
+
+const TOP_LIMIT = 50;
+
+async function topRoutes(env, path, player, admin, origin) {
+  await ensureBoardTables(env);
+  await backfillBoard(env);
+  // игры в бете в рейтинге видит только владелец
+  const games = new Set(GAMES.filter((g) => BOARDS[g.id] && (admin || !g.beta)).map((g) => g.id));
+  const text = (game, value) => BOARDS[game].text(value);
+
+  if (path === '/top') {
+    const rows = await env.DB.prepare(
+      `SELECT r.game_id, r.value, r.place, r.total, r.user_id, p.name
+       FROM (${RANKED}) r JOIN board_players p ON p.user_id = r.user_id
+       WHERE r.place = 1 OR r.user_id = ?`,
+    ).bind(player.id).all();
+    const byGame = {};
+    for (const r of rows.results ?? []) {
+      if (!games.has(r.game_id)) continue;
+      const item = byGame[r.game_id] ??= { game: r.game_id, by: BOARDS[r.game_id].by, total: r.total, leader: null, me: null };
+      if (r.place === 1) item.leader = { name: r.name, text: text(r.game_id, r.value), me: r.user_id === player.id };
+      if (r.user_id === player.id) item.me = { place: r.place, text: text(r.game_id, r.value) };
+    }
+    const list = GAMES.filter((g) => games.has(g.id))
+      .map((g) => byGame[g.id] ?? { game: g.id, by: BOARDS[g.id].by, total: 0, leader: null, me: null });
+    const mine = await env.DB.prepare('SELECT pid FROM board_players WHERE user_id = ?').bind(player.id).first();
+    return json({ games: list, mePid: mine?.pid ?? null }, 200, origin);
+  }
+
+  const profile = path.match(/^\/top\/player\/([a-z0-9]{1,32})$/);
+  if (profile) {
+    const who = await env.DB.prepare('SELECT user_id, name FROM board_players WHERE pid = ?').bind(profile[1]).first();
+    if (!who) return fail('no_player', 404, origin);
+    const banned = await env.DB.prepare('SELECT banned FROM users WHERE id = ?').bind(who.user_id).first();
+    if (!banned || banned.banned) return fail('no_player', 404, origin);
+    const rows = await env.DB.prepare(`SELECT game_id, value, place, total FROM (${RANKED}) WHERE user_id = ?`)
+      .bind(who.user_id).all();
+    const found = Object.fromEntries((rows.results ?? []).map((r) => [r.game_id, r]));
+    return json({
+      name: who.name,
+      me: who.user_id === player.id,
+      games: GAMES.filter((g) => games.has(g.id) && found[g.id]).map((g) => ({
+        game: g.id, text: text(g.id, found[g.id].value), place: found[g.id].place, total: found[g.id].total,
+      })),
+    }, 200, origin);
+  }
+
+  const one = path.match(/^\/top\/([a-z0-9-]{1,40})$/);
+  if (!one || !games.has(one[1])) return fail('not_found', 404, origin);
+  const game = one[1];
+  const rows = await env.DB.prepare(
+    `SELECT r.value, r.place, r.total, r.user_id, p.name, p.pid
+     FROM (${RANKED}) r JOIN board_players p ON p.user_id = r.user_id
+     WHERE r.game_id = ? AND (r.place <= ? OR r.user_id = ?) ORDER BY r.place`,
+  ).bind(game, TOP_LIMIT, player.id).all();
+  const list = rows.results ?? [];
+  const mine = list.find((r) => r.user_id === player.id);
+  return json({
+    game,
+    by: BOARDS[game].by,
+    total: list[0]?.total ?? 0,
+    rows: list.filter((r) => r.place <= TOP_LIMIT).map((r) => ({
+      place: r.place, name: r.name, text: text(game, r.value), pid: r.pid, me: r.user_id === player.id,
+    })),
+    me: mine ? { place: mine.place, name: mine.name, text: text(game, mine.value), pid: mine.pid } : null,
+  }, 200, origin);
 }
 
 // ---------- панель владельца ----------
@@ -490,6 +724,7 @@ async function adminRoutes(request, env, path, url, origin) {
     // получит конфликт и применит правку, а не затрёт её своим старым прогрессом.
     const stamp = Date.now() + 1000;
     await saveState(env, id, data, stamp);
+    await indexBoard(env, id, JSON.parse(data));
     return json({ ok: true, updatedAt: stamp }, 200, origin);
   }
 
@@ -500,6 +735,9 @@ async function adminRoutes(request, env, path, url, origin) {
   }
 
   if (!action && request.method === 'DELETE') {
+    await ensureBoardTables(env);
+    await env.DB.prepare('DELETE FROM board_scores WHERE user_id = ?').bind(id).run();
+    await env.DB.prepare('DELETE FROM board_players WHERE user_id = ?').bind(id).run();
     await env.DB.prepare('DELETE FROM states WHERE user_id = ?').bind(id).run();
     await env.DB.prepare('DELETE FROM users WHERE id = ?').bind(id).run();
     return json({ ok: true }, 200, origin);

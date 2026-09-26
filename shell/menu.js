@@ -25,7 +25,7 @@ async function gameInfo(game) {
   return { game, line: menuLine(stats, { menu: game.menu, progress: line, save }), hasSave: save != null };
 }
 
-export async function renderMenu(container, { games, account = null, owner = false }) {
+export async function renderMenu(container, { games, account = null, owner = false, top = false }) {
   // Незаконченные партии считаем заранее — по ним на папке загорается точка «есть что продолжить».
   const savedIds = new Set(
     (await Promise.all(games.map(async (g) => ((await saves.get(g.id)) != null ? g.id : null)))).filter(Boolean),
@@ -52,6 +52,7 @@ export async function renderMenu(container, { games, account = null, owner = fal
     el('div', { class: 'title-rule' }),
     el('p', { class: 'hint' }, 'Выбери игру ниже.'),
     accountRow(account, owner),
+    top && account?.enabled && account.current && topEntry(),
     el('div', { class: 'folder-grid' }, cards),
   ));
 }
@@ -83,6 +84,18 @@ export async function renderFolder(container, { category, games, onBack }) {
       ),
     ))),
   ));
+}
+
+/** Вход в рейтинг (shell/top.js) — карточкой над папками: так его видно сразу. */
+function topEntry() {
+  return el('a', { class: 'top-entry', href: '#/top' },
+    el('span', { class: 'top-entry-cup' }, '🏆'),
+    el('span', { class: 'top-row-main' },
+      el('span', { class: 'top-row-name' }, 'Рейтинг'),
+      el('span', { class: 'top-row-sub' }, 'Кто лучше всех в каждой игре'),
+    ),
+    el('span', { class: 'top-chevron' }, '›'),
+  );
 }
 
 /**

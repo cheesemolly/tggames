@@ -45,6 +45,7 @@ export function renderBeta(container, { games, onBack, onChange }) {
       el('div', { class: 'beta-card-title' }, b.title ?? b.id, since(b)),
       b.note && el('div', { class: 'beta-card-note' }, b.note),
     ),
+    b.open && !asPlayer && el('a', { class: 'account-btn', href: b.open }, 'Открыть'),
   );
 
   container.replaceChildren(el('div', { class: 'scroll beta-screen' },

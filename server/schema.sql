@@ -51,3 +51,22 @@ CREATE TABLE IF NOT EXISTS draft_media (
   file_id    TEXT NOT NULL,
   PRIMARY KEY (admin_id, group_key, message_id)
 );
+
+/* Рейтинг (лидерборды). Обработчик заводит эти таблицы сам (CREATE TABLE IF NOT EXISTS), вручную выполнять
+   не нужно. В рейтинге игрок виден только по имени из Telegram; pid — случайная строка для ссылки на профиль,
+   не связанная ни с id, ни с ником. */
+CREATE TABLE IF NOT EXISTS board_players (
+  user_id INTEGER PRIMARY KEY,
+  pid     TEXT NOT NULL UNIQUE,
+  name    TEXT NOT NULL                   /* только имя, без фамилии и ника */
+);
+
+CREATE TABLE IF NOT EXISTS board_scores (
+  user_id    INTEGER NOT NULL,
+  game_id    TEXT NOT NULL,
+  value      INTEGER NOT NULL,            /* мера игры: уровень, рекорд, победы… (BOARDS в lib.js) */
+  updated_at INTEGER NOT NULL,            /* когда достигнуто: при равных очках выше тот, кто раньше */
+  PRIMARY KEY (user_id, game_id)
+);
+
+CREATE INDEX IF NOT EXISTS board_scores_game ON board_scores(game_id, value DESC);
