@@ -1,84 +1,78 @@
-// Звуки судоку — из общих кирпичиков shared/sfx.js (синтез Web Audio, без файлов).
-// Идея: у каждой цифры своя нота (1 — низкая, 9 — высокая, по пентатонике — любые соседние цифры звучат
-// складно); заполнил строку, столбец или блок — каскад колокольчиков вслед за волной подсветки; цифра
-// закончена (все девять) — «динь» её нотой октавой выше; победа — большая волна и фанфара. Ошибка — мягкие
-// «бумы», заметка — шорох карандаша, ластик — шорох вниз. Всё тихое: судоку — игра спокойная.
-//
-// createSounds(ctx) принимает готовый AudioContext — в тестах подставляется поддельный.
-// play(name, { step }) — step: цифра 1…9 (digit, done, note), число заполненных групп (unit).
+// Звуки судоку — «дзен» (решение владельца, 2026-09-26: «без всяких плиньк, расслабляюще, шорохи карандаша»):
+// ни одного звона и «плипа», только бумага и грифель, а большие события — тёплый аккорд с медленным вдохом.
+//   цифра — штрихи карандаша, у каждой цифры свой рисунок (1 — один штрих, 4 — три коротких, 8 — долгая петля…);
+//   заметка — те же штрихи, мельче и тише; ластик — мягкие проходы туда-обратно; подсказка — шелест листа;
+//   заполнена строка/столбец/блок — тихий тёплый аккорд; победа — долгий аккорд и «выдох» бумаги.
+// Из общих кирпичиков shared/sfx.js. createSounds(ctx) принимает готовый AudioContext — в тестах поддельный.
+// play(name, { step }) — step: цифра 1…9 (digit, note, done), число заполненных групп (unit).
 
-import { createSfx, freqOf, pentaStep } from '../../shared/sfx.js';
+import { createSfx, freqOf } from '../../shared/sfx.js';
 
 export const SOUNDS = [
   'select', 'digit', 'wrong', 'note', 'erase', 'undo', 'unit', 'done',
   'hint', 'page', 'apply', 'empty', 'pause', 'resume', 'fresh', 'win', 'lose', 'click',
 ];
 
-// нота цифры: пентатоника от ля малой октавы — 1 низко, 9 высоко
-const digitFreq = (d) => freqOf(pentaStep(Math.max(1, Math.min(9, d)) - 1) - 3);
+/** Как пишется цифра: длительности штрихов в секундах (примерно по тому, как её ведёт рука). */
+export const DIGIT_STROKES = {
+  1: [0.09],
+  2: [0.07, 0.06],
+  3: [0.05, 0.05],
+  4: [0.05, 0.04, 0.06],
+  5: [0.04, 0.05, 0.06],
+  6: [0.12],
+  7: [0.05, 0.08],
+  8: [0.15],
+  9: [0.07, 0.08],
+};
+
+// ноты тёплых аккордов (до мажор с добавленными: спокойно, без напряжения)
+const C3 = freqOf(-12);
+const chord = (...semitones) => semitones.map((s) => freqOf(s - 12));
 
 export function createSounds(ctx) {
-  const { now, bell, plip, swoosh, thud } = createSfx(ctx, { volume: 0.5 });
+  const { now, grain, pencil, rub, rustle, tock, pad } = createSfx(ctx, { volume: 0.6 });
+  const strokes = (d) => DIGIT_STROKES[Math.max(1, Math.min(9, d))] ?? DIGIT_STROKES[1];
 
   const play = {
-    // выбор клетки — едва слышный щелчок
-    select: (t) => plip(freqOf(19), t, { peak: 0.07, decay: 0.04 }),
-    // верная цифра — её нота
-    digit: (t, { step: d = 5 }) => bell(digitFreq(d), t, { peak: 0.22, decay: 0.55 }),
-    wrong: (t) => {
-      thud(220, t);
-      thud(165, t + 0.12, { decay: 0.24 });
+    // выбор клетки — едва слышное касание бумаги
+    select: (t) => grain(t, 0.018, { f0: 2200, q: 0.8, peak: 0.025, attack: 0.003, release: 0.01 }),
+    // цифра — карандашом
+    digit: (t, { step: d = 5 }) => pencil(t, strokes(d)),
+    // неверная цифра — написана, а под ней глухой низкий «ток» и тихий тёмный аккорд
+    wrong: (t, { step: d = 5 }) => {
+      const len = pencil(t, strokes(d));
+      tock(C3 * 0.75, t + len + 0.04, { peak: 0.14, decay: 0.14 });
+      pad(chord(-3, 0), t + len + 0.04, { peak: 0.03, attack: 0.08, decay: 0.8, cutoff: 700 });
     },
-    // заметка карандашом: короткий шорох и тихая нота цифры
-    note: (t, { step: d = 5 }) => {
-      swoosh(t, 4000, 6000, 0.05, 0.05);
-      plip(digitFreq(d) * 2, t + 0.02, { peak: 0.08, decay: 0.06 });
-    },
-    erase: (t) => swoosh(t, 2200, 500, 0.18, 0.09),
-    undo: (t) => plip(freqOf(7), t, { up: false, peak: 0.16, decay: 0.1 }),
-    // группа заполнена: каскад вверх (две группы разом — длиннее и выше)
-    unit: (t, { step: n = 1 }) => {
-      const notes = n > 1 ? [0, 4, 7, 12, 16, 19, 24] : [0, 4, 7, 12, 16];
-      notes.forEach((s, k) => bell(freqOf(s), t + k * 0.06, { peak: 0.16, decay: 0.6 }));
-    },
-    // цифра закончена — её нота октавой выше и «блёстка»
-    done: (t, { step: d = 5 }) => {
-      bell(digitFreq(d) * 2, t, { peak: 0.2, decay: 0.9 });
-      bell(digitFreq(d) * 3, t + 0.08, { peak: 0.08, decay: 0.6 });
-    },
-    // подсказка открылась: шорох вверх и глиссандо
-    hint: (t) => {
-      swoosh(t, 600, 5000, 0.35, 0.06);
-      [12, 16, 19, 24].forEach((s, k) => bell(freqOf(s), t + 0.08 + k * 0.06, { peak: 0.12, decay: 0.5 }));
-    },
-    // страница подсказки
-    page: (t) => plip(freqOf(14), t, { peak: 0.12, decay: 0.06 }),
-    // «Готово» в подсказке — цифра встала
-    apply: (t) => {
-      bell(freqOf(12), t, { peak: 0.2, decay: 0.6 });
-      bell(freqOf(19), t + 0.08, { peak: 0.14, decay: 0.7 });
-    },
-    // подсказок нет
-    empty: (t) => thud(180, t, { decay: 0.14, slide: 0.9 }),
-    pause: (t) => swoosh(t, 2400, 700, 0.22, 0.06),
-    resume: (t) => swoosh(t, 700, 2400, 0.22, 0.06),
-    // новая партия: цифры появляются волной
-    fresh: (t) => {
-      swoosh(t, 3000, 800, 0.3, 0.06);
-      [0, 7, 12].forEach((s, k) => bell(freqOf(s), t + 0.1 + k * 0.08, { peak: 0.1, decay: 0.4 }));
-    },
-    // победа: длинная волна по всей доске и фанфара
+    // заметка — мелко и тише
+    note: (t, { step: d = 5 }) => pencil(t, strokes(d).map((s) => s * 0.55), { peak: 0.055, gap: 0.02, tone: 4300 }),
+    erase: (t) => rub(t, 3),
+    undo: (t) => rub(t, 2, { peak: 0.06, len: 0.06 }),
+    // группа заполнена — тихий тёплый аккорд (две группы разом — полнее)
+    unit: (t, { step: n = 1 }) => pad(n > 1 ? chord(0, 7, 16, 19) : chord(0, 7, 16), t, { peak: 0.035, attack: 0.25, decay: 1.8 }),
+    // цифра закончена — одна мягкая высокая нота
+    done: (t) => pad(chord(24), t, { peak: 0.03, attack: 0.2, decay: 1.4, cutoff: 1800 }),
+    // подсказка — открываем лист
+    hint: (t) => rustle(t, 0.45, { peak: 0.06 }),
+    page: (t) => rustle(t, 0.22, { peak: 0.045, from: 3500, to: 2200 }),
+    // «Готово» в подсказке — цифру вписали
+    apply: (t) => pencil(t, [0.07, 0.06]),
+    // подсказок нет — глухо
+    empty: (t) => tock(C3, t, { peak: 0.12, decay: 0.12 }),
+    pause: (t) => rustle(t, 0.35, { peak: 0.05, from: 4000, to: 1800 }),
+    resume: (t) => rustle(t, 0.35, { peak: 0.05, from: 1800, to: 4000 }),
+    // новая партия — чистый лист
+    fresh: (t) => rustle(t, 0.6, { peak: 0.07, from: 1500, to: 5000 }),
+    // победа — долгий тёплый аккорд и выдох бумаги
     win: (t) => {
-      for (let k = 0; k < 12; k++) bell(freqOf(pentaStep(k)), t + k * 0.06, { peak: 0.1, decay: 0.5 });
-      [0, 4, 7].forEach((s, k) => bell(freqOf(s + 12), t + 0.75 + k * 0.09, { peak: 0.2, decay: 0.5 }));
-      [0, 4, 7, 12].forEach((s) => bell(freqOf(s + 24), t + 1.05, { peak: 0.13, decay: 1.4 }));
+      pad(chord(0, 4, 7, 11, 14), t, { peak: 0.045, attack: 0.8, decay: 3.5, cutoff: 1600 });
+      rustle(t + 0.2, 1.2, { peak: 0.04, from: 1200, to: 3000 });
     },
-    // поражение: три ноты вниз и «бум»
-    lose: (t) => {
-      [7, 3, 0].forEach((s, k) => bell(freqOf(s - 12), t + k * 0.22, { peak: 0.2, decay: 0.5 }));
-      thud(130, t + 0.66, { peak: 0.22, decay: 0.4, slide: 0.7 });
-    },
-    click: (t) => plip(freqOf(12), t, { peak: 0.12, decay: 0.05 }),
+    // поражение — низкий тихий аккорд вниз
+    lose: (t) => pad(chord(-3, 0, 4), t, { peak: 0.04, attack: 0.4, decay: 2.4, cutoff: 900 }),
+    // окна
+    click: (t) => grain(t, 0.03, { f0: 1800, q: 0.7, peak: 0.035, attack: 0.004, release: 0.02 }),
   };
 
   return {

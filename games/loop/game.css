@@ -201,3 +201,4 @@
 }
 [data-game="loop"] .lp-skin:active .lp-swatch { transform: scale(0.92); }
 [data-game="loop"] .lp-skin[aria-checked="true"] .lp-swatch { outline: 3px solid var(--lp-cur-line); outline-offset: 3px; }
+[data-game="loop"] .lp-muted { opacity: 0.55; }

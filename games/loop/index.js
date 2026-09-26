@@ -2,12 +2,16 @@
 // замкнуты. Без времени, уровни бесконечные. Плитки — круглые (дуги) и квадратные (прямые углы), форма иногда
 // меняется от уровня к уровню (или фиксирована в настройках). Палитра — случайная на каждом уровне или
 // фиксированная (скин). Победа: цвета инвертируются, линии становятся двойным контуром, затем «#N» и новый уровень.
+// Звуки (sounds.js, «дзен») — в бете у владельца: api.feature('loop-sounds'); кнопка в шапке, 'sound' в api.storage.
 
 import { el } from '../../shared/dom.js';
 import { animate, showLayer, hideLayer, reducedMotion } from '../../shared/motion.js';
 import { createToast } from '../../shared/toast.js';
+import { createAudio } from '../../shared/sfx.js';
+import { createSounds } from './sounds.js';
 import {
   newLevel, rotateTile, tileKind, isValidState, emptyStats, recordSolved, isValidStats, SHAPES,
+  currentMasks, tileFits,
 } from './logic.js';
 
 const PALETTES = ['telegram', 'mint', 'sky', 'sand', 'lilac', 'rose', 'lemon', 'coral', 'graphite', 'night'];
@@ -18,6 +22,8 @@ const T = {
   level: (n) => `Уровень ${n}`,
   rules: 'Поворачивай плитки, чтобы замкнуть все линии',
   newField: 'Другое поле',
+  soundOn: 'Выключить звук',
+  soundOff: 'Включить звук',
   stats: { open: 'Статистика', title: 'Статистика', level: 'Уровень', solved: 'Решено', bestLevel: 'Лучший уровень', taps: 'Поворотов', close: 'Закрыть' },
   settings: { open: 'Настройки', title: 'Настройки', shape: 'Форма плиток', palette: 'Палитра', close: 'Закрыть' },
   shapes: { mix: 'Чередовать', round: 'Круглые', square: 'Квадратные' },
@@ -32,6 +38,8 @@ const svgIcon = (body, fill = false) => `<svg viewBox="0 0 24 24" width="22" hei
   + `${body}</svg>`;
 const ICONS = {
   restart: svgIcon('<path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/>'),
+  soundOn: svgIcon('<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/>'),
+  soundOff: svgIcon('<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="m16 9 5 6"/><path d="m21 9-5 6"/>'),
   stats: svgIcon('<rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="7" width="4" height="14" rx="1"/><rect x="17" y="3" width="4" height="18" rx="1"/>', true),
   gear: svgIcon('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/>'),
 };
@@ -48,7 +56,36 @@ let spins = [];                 // повороты плиток для аним
 let busy = false;               // анимация победы / смены уровня
 let modalActive = false;
 let modalToken = 0;
+let soundOn = true;
 const timers = new Set();
+// звук — один AudioContext на всю жизнь страницы, заводится при первом звуке (из касания)
+const audio = createAudio(createSounds);
+
+const soundFeature = () => Boolean(api?.feature?.('loop-sounds'));
+
+function sfx(name, opts) {
+  if (!soundFeature() || !soundOn) return;
+  try {
+    audio.get()?.play(name, opts);
+  } catch (err) {
+    console.warn('звук', name, err);
+  }
+}
+
+function renderSoundBtn() {
+  if (!ui?.soundBtn) return;
+  ui.soundBtn.innerHTML = soundOn ? ICONS.soundOn : ICONS.soundOff;
+  ui.soundBtn.setAttribute('aria-label', soundOn ? T.soundOn : T.soundOff);
+  ui.soundBtn.title = soundOn ? T.soundOn : T.soundOff;
+  ui.soundBtn.classList.toggle('lp-muted', !soundOn);
+}
+
+function toggleSound() {
+  soundOn = !soundOn;
+  api.storage.set('sound', soundOn);
+  renderSoundBtn();
+  sfx('click');
+}
 
 function later(fn, ms) {
   const id = setTimeout(() => {
@@ -152,6 +189,7 @@ function renderBoard() {
 /** Плитки появляются волной от центра с небольшим доворотом. */
 function introTiles() {
   const { rows, cols } = game;
+  sfx('intro');
   [...ui.svg.querySelectorAll('.lp-pop')].forEach((node) => {
     const i = Number(node.dataset.i);
     const d = Math.hypot(Math.floor(i / cols) - (rows - 1) / 2, (i % cols) - (cols - 1) / 2);
@@ -180,6 +218,8 @@ function onPointerDown(e) {
   if (i < 0 || !game.base[i]) return;
   e.preventDefault();
   const solved = rotateTile(game, i);
+  // плитка сошлась со всеми соседями — к «току» добавляется тихий тёплый тон
+  sfx(tileFits(currentMasks(game), game.rows, game.cols, i) ? 'fit' : 'turn', { step: i });
   spins[i] += 1;
   for (const spin of ui.svg.querySelectorAll(`.lp-spin[data-i="${i}"]`)) spin.style.transform = `rotate(${spins[i] * 90}deg)`;
   api.platform.haptic.selection();
@@ -203,6 +243,7 @@ function win() {
   api.platform.haptic.notification('success');
   later(() => {
     if (!ui) return;
+    sfx('win');                                   // вдох вместе с «дыханием» поля
     host.classList.add('lp-won');
     animate(ui.svg, [{ transform: 'scale(1)' }, { transform: 'scale(1.06)' }, { transform: 'scale(1)' }], { duration: 700, easing: 'ease-in-out' });
   }, reducedMotion() ? 0 : 220);
@@ -248,6 +289,7 @@ function newField() {
   const fresh = newLevel(game.level, game, settings, RANDOM_POOL);
   game = { ...fresh, shape: game.shape, palette: game.palette };      // то же оформление, другое поле
   save();
+  sfx('shuffle');
   api.platform.haptic.impact('light');
   animate(ui.svg, [{ opacity: 1 }, { opacity: 0 }], { duration: 160 }).then(() => {
     if (!ui) return;
@@ -259,6 +301,7 @@ function newField() {
 // ---------- окна ----------
 
 function openModal(content) {
+  if (!modalActive) sfx('click');
   modalToken++;
   ui.modal.replaceChildren(content);
   if (!modalActive) showLayer(ui.modal);
@@ -360,10 +403,11 @@ export default {
     api = gameApi;
     host = container;
     toast = createToast();
-    const [saved, savedStats, savedSettings] = await Promise.all([
-      api.storage.get('current'), api.storage.get('stats'), api.storage.get('settings'),
+    const [saved, savedStats, savedSettings, savedSound] = await Promise.all([
+      api.storage.get('current'), api.storage.get('stats'), api.storage.get('settings'), api.storage.get('sound'),
     ]);
     if (!api) return;
+    soundOn = savedSound !== false;
     stats = isValidStats(savedStats) ? savedStats : emptyStats();
     settings = {
       shape: ['mix', ...SHAPES].includes(savedSettings?.shape) ? savedSettings.shape : 'mix',
@@ -376,6 +420,7 @@ export default {
       label: el('div', { class: 'lp-label', hidden: true }),
       modal: el('div', { class: 'lp-modal', hidden: true }),
     };
+    ui.soundBtn = soundFeature() ? iconButton(ICONS.soundOn, T.soundOn, toggleSound) : null;
     ui.board = el('div', { class: 'lp-board' }, ui.svg);
     ui.svg.addEventListener('pointerdown', onPointerDown);
     // iOS Safari приближает страницу по двойному тапу даже с touch-action: manipulation — гасим сам жест
@@ -385,6 +430,7 @@ export default {
       el('div', { class: 'lp-header' },
         el('div', {}, el('div', { class: 'lp-title' }, T.title), ui.sub),
         el('div', { class: 'lp-actions' },
+          ui.soundBtn,
           iconButton(ICONS.restart, T.newField, newField),
           iconButton(ICONS.stats, T.stats.open, showStats),
           iconButton(ICONS.gear, T.settings.open, showSettings),
@@ -395,6 +441,7 @@ export default {
       toast.el,
     );
     container.append(root);
+    renderSoundBtn();
     document.addEventListener('keydown', onKeydown);
 
     const fresh = !isValidState(saved);

@@ -1,8 +1,9 @@
-// Звуки судоку на поддельном AudioContext: каждый звучит, узлы подключены; цифры 1…9 идут вверх.
+// Звуки судоку («дзен») на поддельном AudioContext: каждый звучит, узлы подключены; цифры, заметки и ластик —
+// только шорох бумаги и грифеля, без единого тона (никаких «плиньк» — решение владельца).
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createSounds, SOUNDS } from '../sounds.js';
+import { createSounds, SOUNDS, DIGIT_STROKES } from '../sounds.js';
 import { fakeContext } from '../../../shared/tests/fake-audio.js';
 
 test('каждый звук судоку звучит, все узлы подключены', () => {
@@ -20,21 +21,24 @@ test('каждый звук судоку звучит, все узлы подк�
   }
 });
 
-test('у каждой цифры своя нота: 1 — ниже всех, 9 — выше всех', () => {
-  const { ctx } = fakeContext();
+test('цифры, заметки, ластик, подсказка — только бумага и карандаш, без тона', () => {
+  const { ctx, created } = fakeContext();
   const sounds = createSounds(ctx);
-  const freqs = [1, 2, 3, 4, 5, 6, 7, 8, 9].map((step) => {
-    const seen = [];
-    const orig = ctx.createOscillator;
-    ctx.createOscillator = () => {
-      const o = orig();
-      const at = o.frequency.setValueAtTime;
-      o.frequency.setValueAtTime = (v, t) => { seen.push(v); at(v, t); };
-      return o;
-    };
-    sounds.play('digit', { step });
-    ctx.createOscillator = orig;
-    return seen[0];                    // основной тон колокольчика
-  });
-  for (let i = 1; i < freqs.length; i++) assert.ok(freqs[i] > freqs[i - 1], `цифра ${i + 1} выше цифры ${i}`);
+  for (const name of ['select', 'digit', 'note', 'erase', 'undo', 'hint', 'page', 'apply', 'pause', 'resume', 'fresh', 'click']) {
+    const before = created.length;
+    sounds.play(name, { step: 7 });
+    assert.ok(!created.slice(before).some((n) => n.kind === 'osc'), `${name}: слышен тон — а должен быть только шорох`);
+  }
+});
+
+test('у цифр разный рисунок штрихов: число штрихов — по цифре', () => {
+  const { ctx, created } = fakeContext();
+  const sounds = createSounds(ctx);
+  for (let d = 1; d <= 9; d++) {
+    const before = created.length;
+    sounds.play('digit', { step: d });
+    const noise = created.slice(before).filter((n) => n.kind === 'buffer').length;
+    assert.equal(noise, DIGIT_STROKES[d].length, `цифра ${d}`);
+  }
+  assert.notDeepEqual(DIGIT_STROKES[1], DIGIT_STROKES[8]);
 });

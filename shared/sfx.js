@@ -101,7 +101,89 @@ export function createSfx(ctx, { volume = 0.55 } = {}) {
     g.connect(master);
   }
 
-  return { now, bell, plip, swoosh, thud };
+  // ---------- тихие «дзен»-звуки (судоку, Петля): бумага, карандаш, камень, тёплые аккорды — без звона ----------
+
+  /**
+   * Отрезок шума с плавной огибающей: полосовой фильтр с частотой, которая едет от f0 к f1 (направление штриха).
+   * Основа карандаша, ластика и шелеста.
+   */
+  function grain(t, dur, { f0 = 3000, f1 = f0, q = 1.2, peak = 0.1, attack = 0.008, release = 0.02 } = {}) {
+    const s = ctx.createBufferSource();
+    s.buffer = noise;
+    s.loop = true;
+    s.start(t, Math.random() * 0.8);
+    s.stop(t + dur + release + 0.02);
+    const f = filter('bandpass', f0, q);
+    f.frequency.setValueAtTime(f0, t);
+    f.frequency.linearRampToValueAtTime(f1, t + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(peak, t + attack);
+    g.gain.setValueAtTime(peak, t + Math.max(attack, dur - release));
+    g.gain.linearRampToValueAtTime(0.0001, t + dur + release);
+    s.connect(f);
+    f.connect(g);
+    g.connect(master);
+  }
+
+  /**
+   * Карандаш по бумаге: штрихи грифеля (strokes — длительности в секундах, между ними — отрыв), у каждого
+   * штриха своя высота «шипения» — как будто линия идёт в другую сторону.
+   */
+  function pencil(t, strokes, { peak = 0.09, gap = 0.03, tone = 3400 } = {}) {
+    let at = t;
+    strokes.forEach((dur, k) => {
+      const f0 = tone * (0.85 + Math.random() * 0.3);
+      grain(at, dur, { f0, f1: f0 * (k % 2 ? 0.8 : 1.2), q: 1.6, peak: peak * (0.8 + Math.random() * 0.3), attack: 0.006, release: 0.015 });
+      at += dur + gap;
+    });
+    return at - t;
+  }
+
+  /** Ластик: несколько мягких проходов туда-обратно, ниже и глуше карандаша. */
+  function rub(t, passes = 3, { peak = 0.08, len = 0.07 } = {}) {
+    for (let k = 0; k < passes; k++) {
+      grain(t + k * (len + 0.015), len, { f0: k % 2 ? 1500 : 1100, f1: k % 2 ? 1100 : 1500, q: 0.9, peak, attack: 0.015, release: 0.02 });
+    }
+  }
+
+  /** Шелест листа: широкая полоса шума, медленно нарастает и уходит. */
+  function rustle(t, dur = 0.35, { peak = 0.07, from = 2500, to = 5000 } = {}) {
+    grain(t, dur, { f0: from, f1: to, q: 0.6, peak, attack: dur * 0.3, release: dur * 0.4 });
+  }
+
+  /** Мягкий «ток» — камень или дерево, глухо, без звона (низкий тон с быстрым спадом и подрезанным верхом). */
+  function tock(freq, t, { peak = 0.16, decay = 0.09 } = {}) {
+    const o = osc('sine', freq * 1.4, t, t + decay + 0.05);
+    o.frequency.exponentialRampToValueAtTime(freq, t + 0.03);
+    const f = filter('lowpass', freq * 2.5, 0.5);
+    const g = env(t, peak, decay, 0.004);
+    o.connect(f);
+    f.connect(g);
+    g.connect(master);
+  }
+
+  /**
+   * Тёплый аккорд: синусы с лёгкой расстройкой, медленная атака и долгое затухание через мягкий фильтр —
+   * «вдох», а не удар. freqs — частоты нот.
+   */
+  function pad(freqs, t, { peak = 0.06, attack = 0.35, decay = 2.2, cutoff = 1400 } = {}) {
+    const f = filter('lowpass', cutoff, 0.4);
+    f.connect(master);
+    for (const freq of freqs) {
+      for (const detune of [1, 1.0035]) {
+        const o = osc('sine', freq * detune, t, t + attack + decay + 0.1);
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.linearRampToValueAtTime(peak, t + attack);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + attack + decay);
+        o.connect(g);
+        g.connect(f);
+      }
+    }
+  }
+
+  return { now, bell, plip, swoosh, thud, grain, pencil, rub, rustle, tock, pad };
 }
 
 /**
