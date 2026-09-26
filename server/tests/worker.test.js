@@ -608,3 +608,30 @@ test('рейтинг: игру в бете видит только владел�
     delete entry.beta;
   }
 });
+
+// ---------- особые скины (перки) ----------
+
+test('особые скины: игрок видит только выданные, владелец — все; выдаёт и забирает только владелец', async () => {
+  const env = createEnv();
+  const masha = await asUser(USER);
+  const owner = await asUser(ADMIN);
+  const me = await call(env, '/me', { initData: masha });
+  assert.deepEqual(me.data.perks, [], 'сначала ничего');
+  assert.deepEqual((await call(env, '/me', { initData: owner })).data.perks, ['hedgehog'], 'владельцу — все');
+
+  const id = me.data.id;
+  const denied = await call(env, `/admin/player/${id}/perk`, { method: 'POST', initData: masha, payload: { perk: 'hedgehog', on: true } });
+  assert.equal(denied.status, 403, 'сам себе выдать нельзя');
+
+  const given = await call(env, `/admin/player/${id}/perk`, { method: 'POST', initData: owner, payload: { perk: 'hedgehog', on: true } });
+  assert.deepEqual(given.data.perks, ['hedgehog']);
+  assert.deepEqual((await call(env, '/me', { initData: masha })).data.perks, ['hedgehog']);
+  const card = await call(env, `/admin/player/${id}`, { initData: owner });
+  assert.deepEqual(card.data.perks, ['hedgehog']);
+  assert.ok(card.data.allPerks.hedgehog, 'панели отдаётся список всех перков с названиями');
+
+  assert.equal((await call(env, `/admin/player/${id}/perk`, { method: 'POST', initData: owner, payload: { perk: 'нет-такого', on: true } })).status, 400);
+
+  await call(env, `/admin/player/${id}/perk`, { method: 'POST', initData: owner, payload: { perk: 'hedgehog', on: false } });
+  assert.deepEqual((await call(env, '/me', { initData: masha })).data.perks, [], 'забрали');
+});

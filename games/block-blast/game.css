@@ -421,3 +421,29 @@
 [data-game="block-blast"] .bb-skin:active .bb-swatch { transform: scale(0.92); }
 [data-game="block-blast"] .bb-skin[aria-checked="true"] .bb-swatch { outline: 3px solid var(--bb-accent); outline-offset: 3px; }
 [data-game="block-blast"] .bb-muted { opacity: 0.55; }
+
+/* ---------- особый скин «Ёжик» (перк hedgehog: выдаёт владелец, shell/perks.js) ----------
+   Фото — фоном всей игры, поле — полупрозрачное с размытием, блоки — сиреневые, розовые, мятные.
+   --bb-bg остаётся плотным: из него окна. */
+[data-game="block-blast"][data-skin="hedgehog"], [data-game="block-blast"] [data-skin="hedgehog"] {
+  --bb-bg: #f3ecfb; --bb-surface: #e6dcf5; --bb-text: #2c2242; --bb-hint: #5f5386;
+  --bb-accent: #8a63d2; --bb-accent-text: #ffffff;
+  --bb-board: rgb(72 52 118 / 0.22); --bb-empty: rgb(255 255 255 / 0.26);
+  --bb-c1: #ff7eb6; --bb-c2: #ffa94d; --bb-c3: #ffd43b; --bb-c4: #63d68b;
+  --bb-c5: #4dabf7; --bb-c6: #748ffc; --bb-c7: #a77cf6; --bb-c8: #f783ac;
+}
+.game-root[data-game="block-blast"][data-skin="hedgehog"] {
+  background: linear-gradient(rgb(243 236 251 / 0.35), rgb(243 236 251 / 0.2)),
+    url('../../shared/backgrounds/hedgehog.jpg') center 60% / cover no-repeat, #b9a6e8;
+}
+/* поле без размытия: ёжик сидит ровно под сеткой и должен просвечивать сквозь пустые клетки */
+[data-game="block-blast"][data-skin="hedgehog"] .bb-cell:not([class*="bb-c"]) {
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.35);
+}
+[data-game="block-blast"][data-skin="hedgehog"] .bb-header,
+[data-game="block-blast"][data-skin="hedgehog"] .bb-score {
+  text-shadow: 0 0 8px rgb(255 255 255 / 0.95), 0 0 2px rgb(255 255 255 / 0.9);
+}
+[data-game="block-blast"] .bb-swatch[data-skin="hedgehog"] {
+  background: url('../../shared/backgrounds/hedgehog-thumb.jpg') center / cover;
+}

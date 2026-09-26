@@ -5,6 +5,7 @@
 // Правки прогресса сохраняются с заведомо новой отметкой времени, поэтому устройство игрока
 // при следующем обмене получит их, а не затрёт своим старым прогрессом.
 
+import { feature } from './beta.js';
 import { el } from '../shared/dom.js';
 import { showLayer, hideLayer, shake } from '../shared/motion.js';
 import { account } from '../platform/account.js';
@@ -107,7 +108,7 @@ export function renderAdmin(container, { onBack, toast, api = account }) {
     showCard(res.data);
   }
 
-  function showCard({ player, data, updatedAt }) {
+  function showCard({ player, data, updatedAt, perks = [], allPerks = null }) {
     const parts = splitState(data);
     const jsonBox = el('textarea', { class: 'adm-json', spellcheck: 'false', value: pretty(data) });
 
@@ -139,6 +140,10 @@ export function renderAdmin(container, { onBack, toast, api = account }) {
 
       progressFields.length && el('h3', { class: 'adm-h3' }, 'Строки уровней'),
       ...progressFields.map((f) => f.node),
+
+      // особые скины (в бете: perks) — выдать / забрать; список приходит с сервера (старый воркер его не отдаёт)
+      allPerks && feature('perks') && el('h3', { class: 'adm-h3' }, 'Особые скины'),
+      ...(allPerks && feature('perks') ? Object.entries(allPerks).map(([perk, title]) => perkRow(perk, title)) : []),
 
       el('h3', { class: 'adm-h3' }, 'Весь прогресс (JSON)'),
       parts.broken && el('p', { class: 'error-line' }, 'Прогресс не разобрался как JSON — правь осторожно.'),
@@ -195,6 +200,27 @@ export function renderAdmin(container, { onBack, toast, api = account }) {
         return;
       }
       await send(jsonBox.value);
+    }
+
+    function perkRow(perk, title) {
+      let on = perks.includes(perk);
+      const button = el('button', { class: 'account-btn', onclick: toggle });
+      const paint = () => {
+        button.textContent = on ? 'Забрать' : 'Выдать';
+        button.classList.toggle('adm-perk-on', on);
+      };
+      async function toggle() {
+        const res = await api.setPerk(player.id, perk, !on);
+        if (!res.ok) {
+          toast.show(message(res.error));
+          return;
+        }
+        on = res.data.perks.includes(perk);
+        paint();
+        toast.show(on ? 'Выдано — появится у игрока при следующем запуске' : 'Забрано');
+      }
+      paint();
+      return el('div', { class: 'adm-perk' }, el('span', {}, title), button);
     }
 
     async function send(text) {

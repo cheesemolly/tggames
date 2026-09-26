@@ -14,7 +14,10 @@ import { createFx } from '../../shared/fx.js';
 import { createAudio } from '../../shared/sfx.js';
 import { createSounds } from './sounds.js';
 
-const SKINS = ['telegram', 'classic', 'sky', 'dark', 'wood', 'neon', 'candy'];
+const SKINS = ['telegram', 'classic', 'sky', 'dark', 'wood', 'neon', 'candy', 'hedgehog'];
+// особые скины — только тем, кому выдал владелец (api.perk, shell/perks.js); id скина = id перка
+const PERK_SKINS = ['hedgehog'];
+const availableSkins = () => SKINS.filter((id) => !PERK_SKINS.includes(id) || api?.perk?.(id));
 const T = {
   title: 'Block Blast',
   best: (n) => `Рекорд: ${n}`,
@@ -34,7 +37,7 @@ const T = {
   settings: { open: 'Настройки', title: 'Оформление', close: 'Закрыть' },
   skins: {
     telegram: 'По умолчанию', classic: 'Классика', sky: 'Небо', dark: 'Графит',
-    wood: 'Дерево', neon: 'Неон', candy: 'Конфета',
+    wood: 'Дерево', neon: 'Неон', candy: 'Конфета', hedgehog: 'Ёжик',
   },
 };
 
@@ -518,7 +521,8 @@ function showStats() {
 }
 
 function showSettings() {
-  const buttons = SKINS.map((id) => el('button', {
+  const skins = availableSkins();
+  const buttons = skins.map((id) => el('button', {
     class: 'bb-skin',
     role: 'radio',
     'aria-checked': String(id === settings.skin),
@@ -526,7 +530,7 @@ function showSettings() {
       settings.skin = id;
       host.dataset.skin = id;
       api.storage.set('settings', settings);
-      buttons.forEach((b, k) => b.setAttribute('aria-checked', String(SKINS[k] === id)));
+      buttons.forEach((b, k) => b.setAttribute('aria-checked', String(skins[k] === id)));
     },
   }, el('span', { class: 'bb-swatch', 'data-skin': id }), T.skins[id]));
   openModal(card(T.settings.title, el('div', { class: 'bb-skins', role: 'radiogroup' }, buttons)));
@@ -584,7 +588,7 @@ export default {
     if (!api) return;
     soundOn = savedSound !== false;
     stats = isValidStats(savedStats) ? savedStats : emptyStats();
-    settings = { skin: SKINS.includes(savedSettings?.skin) ? savedSettings.skin : 'telegram' };
+    settings = { skin: availableSkins().includes(savedSettings?.skin) ? savedSettings.skin : 'telegram' };
     host.dataset.skin = settings.skin;
     game = isValidState(savedGame) ? savedGame : newGame();
 

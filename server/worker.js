@@ -8,7 +8,7 @@
 //   APP_URL         — адрес мини-приложения (по умолчанию наш GitHub Pages).
 //
 // Запросы игры (везде заголовок `Authorization: tma <initData>`):
-//   GET  /me                      -> { id, tgId, name, username, isAdmin, banned }
+//   GET  /me                      -> { id, tgId, name, username, isAdmin, banned, perks }
 //   GET  /state                   -> { data, updatedAt }
 //   PUT  /state  { data, base }   -> { updatedAt }  |  409 с чужим свежим прогрессом
 // Рейтинг (в ответах только имя игрока и случайный pid — ни id, ни ника, ни tg_id):
@@ -20,6 +20,7 @@
 //   GET    /admin/player/<id>
 //   PUT    /admin/player/<id>/state  { data }
 //   POST   /admin/player/<id>/ban    { banned }
+//   POST   /admin/player/<id>/perk   { perk, on } — выдать / забрать особый скин (PERKS в lib.js)
 //   DELETE /admin/player/<id>
 //   POST   /admin/broadcast          { text }
 // Бот: POST /bot — вебхук Telegram, проверяется заголовком X-Telegram-Bot-Api-Secret-Token.
@@ -32,6 +33,7 @@
 import {
   checkInitData, diagnoseInitData, validateState, parseAdminIds, isAdmin, displayName,
   publicGames, findGames, startAppLink, progressLines, shiftEntities, GAMES, BOARDS, boardScores, boardName,
+  PERKS, isPerk,
 } from './lib.js';
 
 // Кто может обращаться к обработчику. Свой домен — чтобы чужой сайт не ходил в него от имени игрока.
@@ -95,6 +97,8 @@ export default {
         return json({
           id: player.id, tgId: player.tg_id, name: player.name, username: player.username,
           isAdmin: admin, banned: Boolean(player.banned),
+          // владелец видит все особые скины и так; остальным — выданные в панели
+          perks: admin ? Object.keys(PERKS) : await perksOf(env, player.id),
         }, 200, origin);
       }
       if (path === '/state' && request.method === 'GET') return await getState(env, player, origin);
@@ -336,6 +340,23 @@ async function topRoutes(env, path, player, admin, origin) {
   }, 200, origin);
 }
 
+// ---------- особые скины (перки) ----------
+
+const perksReady = new WeakSet();
+
+async function ensurePerks(env) {
+  if (perksReady.has(env.DB)) return;
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS user_perks (
+    user_id INTEGER NOT NULL, perk TEXT NOT NULL, PRIMARY KEY (user_id, perk))`).run();
+  perksReady.add(env.DB);
+}
+
+async function perksOf(env, userId) {
+  await ensurePerks(env);
+  const rows = await env.DB.prepare('SELECT perk FROM user_perks WHERE user_id = ?').bind(userId).all();
+  return (rows.results ?? []).map((r) => r.perk).filter(isPerk);
+}
+
 // ---------- панель владельца ----------
 
 async function adminRoutes(request, env, path, url, origin) {
@@ -364,7 +385,7 @@ async function adminRoutes(request, env, path, url, origin) {
     return json(await broadcast(env, text.trim()), 200, origin);
   }
 
-  const match = path.match(/^\/admin\/player\/(\d+)(\/state|\/ban)?$/);
+  const match = path.match(/^\/admin\/player\/(\d+)(\/state|\/ban|\/perk)?$/);
   if (!match) return fail('not_found', 404, origin);
   const id = Number(match[1]);
   const action = match[2] ?? '';
@@ -374,7 +395,10 @@ async function adminRoutes(request, env, path, url, origin) {
 
   if (!action && request.method === 'GET') {
     const row = await env.DB.prepare('SELECT data, updated_at FROM states WHERE user_id = ?').bind(id).first();
-    return json({ player: playerRow(player), data: row?.data ?? '{}', updatedAt: row?.updated_at ?? 0 }, 200, origin);
+    return json({
+      player: playerRow(player), data: row?.data ?? '{}', updatedAt: row?.updated_at ?? 0,
+      perks: await perksOf(env, id), allPerks: PERKS,
+    }, 200, origin);
   }
 
   if (action === '/state' && request.method === 'PUT') {
@@ -389,6 +413,15 @@ async function adminRoutes(request, env, path, url, origin) {
     return json({ ok: true, updatedAt: stamp }, 200, origin);
   }
 
+  if (action === '/perk' && request.method === 'POST') {
+    const { perk, on } = await body(request);
+    if (!isPerk(perk)) return fail('bad_perk', 400, origin);
+    await ensurePerks(env);
+    if (on) await env.DB.prepare('INSERT OR IGNORE INTO user_perks (user_id, perk) VALUES (?, ?)').bind(id, perk).run();
+    else await env.DB.prepare('DELETE FROM user_perks WHERE user_id = ? AND perk = ?').bind(id, perk).run();
+    return json({ ok: true, perks: await perksOf(env, id) }, 200, origin);
+  }
+
   if (action === '/ban' && request.method === 'POST') {
     const { banned } = await body(request);
     await env.DB.prepare('UPDATE users SET banned = ? WHERE id = ?').bind(banned ? 1 : 0, id).run();
@@ -396,6 +429,8 @@ async function adminRoutes(request, env, path, url, origin) {
   }
 
   if (!action && request.method === 'DELETE') {
+    await ensurePerks(env);
+    await env.DB.prepare('DELETE FROM user_perks WHERE user_id = ?').bind(id).run();
     await ensureBoardTables(env);
     await env.DB.prepare('DELETE FROM board_scores WHERE user_id = ?').bind(id).run();
     await env.DB.prepare('DELETE FROM board_players WHERE user_id = ?').bind(id).run();

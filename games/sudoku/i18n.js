@@ -47,6 +47,7 @@ export const TEXT = {
       sepia: 'Сепия',
       forest: 'Хвоя',
       night: 'Ночь',
+      hedgehog: 'Ёжик',
     },
     won: (difficulty, time, mistakes, max) => `${difficulty} · ${time} · ошибок: ${mistakes} из ${max}`,
     wonNoLimit: (difficulty, time, mistakes) => `${difficulty} · ${time} · ошибок: ${mistakes}`,

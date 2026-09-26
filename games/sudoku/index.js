@@ -19,7 +19,7 @@ import {
   DIFFICULTIES, MAX_MISTAKES,
   newGame, placeDigit, toggleNote, erase, undo, applyHintDigit, applyHintErase,
   isSolved, isLost, isGiven, isWrong, isLocked, digitCounts, conflicts, isValidState,
-  emptyStats, recordGame, isValidStats, normalizeSettings, defaultSettings, SKINS,
+  emptyStats, recordGame, isValidStats, normalizeSettings, defaultSettings, SKINS, PERK_SKINS,
 } from './logic.js';
 
 const t = TEXT.ru;
@@ -698,6 +698,9 @@ function showStats(initial = game?.difficulty ?? 'easy') {
 
 // ---------- настройки ----------
 
+/** Скины этого игрока: особые (PERK_SKINS) — только выданные владельцем. */
+const availableSkins = () => SKINS.filter((id) => !PERK_SKINS.includes(id) || api?.perk?.(id));
+
 function applySkin() {
   host.dataset.skin = settings.skin;
 }
@@ -727,7 +730,8 @@ function showSettings() {
     },
   });
 
-  const skinButtons = SKINS.map((id) => el('button', {
+  const skins = availableSkins();
+  const skinButtons = skins.map((id) => el('button', {
     class: 'sd-skin',
     role: 'radio',
     'aria-checked': String(id === settings.skin),
@@ -735,7 +739,7 @@ function showSettings() {
       settings.skin = id;
       saveSettings();
       applySkin();
-      skinButtons.forEach((b, k) => b.setAttribute('aria-checked', String(SKINS[k] === id)));
+      skinButtons.forEach((b, k) => b.setAttribute('aria-checked', String(skins[k] === id)));
     },
   }, el('span', { class: 'sd-swatch', 'data-skin': id }), t.skins[id]));
 
@@ -844,6 +848,8 @@ export default {
     if (!api) return;
     soundOn = savedSound !== false;
     settings = normalizeSettings(savedSettings);
+    // особый скин забрали (или он не выдан) — обычный по умолчанию
+    if (!availableSkins().includes(settings.skin)) settings.skin = 'telegram';
     applySkin();
 
     stats = {};
