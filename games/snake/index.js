@@ -17,7 +17,7 @@ import { levelMap, mapTitle, cycleOf, MAP_COUNT } from './levels.js';
 import { createRenderer } from './render.js';
 
 const SKINS = [
-  { id: 'telegram', title: 'Как в Telegram' },
+  { id: 'telegram', title: 'По умолчанию' },
   { id: 'grass', title: 'Лужайка' },
   { id: 'desert', title: 'Пустыня' },
   { id: 'night', title: 'Ночь' },

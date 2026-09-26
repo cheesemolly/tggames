@@ -36,7 +36,7 @@ const T = {
   cancel: 'Отмена',
   stats: { open: 'Статистика', title: 'Статистика', played: 'Сыграно', bestTile: 'Лучшая плитка', wins: 'Собрано 2048', close: 'Закрыть' },
   settings: { open: 'Настройки', title: 'Настройки', size: 'Размер поля', skin: 'Оформление', nextGame: 'Новый размер — со следующей партии.' },
-  skins: { telegram: 'Как в Telegram', classic: 'Классика', dark: 'Графит', ocean: 'Океан', neon: 'Неон', candy: 'Конфета' },
+  skins: { telegram: 'По умолчанию', classic: 'Классика', dark: 'Графит', ocean: 'Океан', neon: 'Неон', candy: 'Конфета' },
 };
 
 const svg = (body, fill = false) => `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" `

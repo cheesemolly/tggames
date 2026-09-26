@@ -40,7 +40,7 @@ const T = {
   cancel: 'Отмена',
   stats: { open: 'Статистика', title: 'Статистика', played: 'Игр', bestRound: 'Лучший уровень', rounds: 'Уровней пройдено', close: 'Закрыть' },
   settings: { open: 'Настройки', title: 'Настройки', timer: 'Таймер', timerDesc: 'Время на уровень. Выключи — играй без спешки, игра не кончится.', skin: 'Оформление', close: 'Закрыть' },
-  skins: { telegram: 'Как в Telegram', classic: 'Классика', neon: 'Неон', paper: 'Бумага', candy: 'Конфета', space: 'Космос' },
+  skins: { telegram: 'По умолчанию', classic: 'Классика', neon: 'Неон', paper: 'Бумага', candy: 'Конфета', space: 'Космос' },
 };
 
 const svgIcon = (body, fill = false) => `<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" `

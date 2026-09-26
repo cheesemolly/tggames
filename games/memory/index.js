@@ -17,7 +17,7 @@ import { monsterSvg, patternSvg, specialSvg, speakerSvg, SPECIAL_INFO, DEFS } fr
 import { createSounds } from './sounds.js';
 
 const SKINS = [
-  { id: 'telegram', title: 'Как в Telegram' },
+  { id: 'telegram', title: 'По умолчанию' },
   { id: 'classic', title: 'Казино' },
   { id: 'night', title: 'Ночь' },
   { id: 'wood', title: 'Дерево' },

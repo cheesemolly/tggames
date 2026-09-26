@@ -41,7 +41,7 @@ const T = {
   stay: 'Искать ещё',
   allDone: 'Все 100 уровней пройдены!',
   settings: { open: 'Настройки', title: 'Настройки', skin: 'Оформление', close: 'Закрыть' },
-  skins: { telegram: 'Как в Telegram', notebook: 'Тетрадь', board: 'Школьная доска' },
+  skins: { telegram: 'По умолчанию', notebook: 'Тетрадь', board: 'Школьная доска' },
   close: 'Закрыть',
 };
 

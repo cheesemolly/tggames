@@ -31,7 +31,7 @@ const T = {
   },
   settings: { open: 'Настройки', title: 'Оформление', close: 'Закрыть' },
   skins: {
-    telegram: 'Как в Telegram', classic: 'Классика', sky: 'Небо', dark: 'Графит',
+    telegram: 'По умолчанию', classic: 'Классика', sky: 'Небо', dark: 'Графит',
     wood: 'Дерево', neon: 'Неон', candy: 'Конфета',
   },
 };

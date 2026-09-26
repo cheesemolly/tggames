@@ -40,7 +40,7 @@ const T = {
     bricks: 'Разбито блоков', shots: 'Бросков', fails: 'Неудач', close: 'Закрыть',
   },
   settings: { open: 'Настройки', title: 'Настройки', skin: 'Оформление', close: 'Закрыть' },
-  skins: { telegram: 'Как в Telegram', classic: 'Классика', neon: 'Неон', candy: 'Конфета', forest: 'Лес', graphite: 'Графит' },
+  skins: { telegram: 'По умолчанию', classic: 'Классика', neon: 'Неон', candy: 'Конфета', forest: 'Лес', graphite: 'Графит' },
 };
 
 const svgIcon = (body, fill = false) => `<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" `
