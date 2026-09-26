@@ -323,7 +323,7 @@ function inputDigit(d) {
   }
   const result = placeDigit(game, selected, d);
   if (result === 'ignored') return;
-  if (result === 'wrong') sfx('wrong');
+  if (result === 'wrong') sfx('wrong', { step: d });
   else {
     sfx('digit', { step: d });
     // все девять цифр на месте — звенит нотой цифры (если это не конец партии — там своя фанфара)

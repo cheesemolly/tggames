@@ -104,6 +104,19 @@ export function isSolved(masks, rows, cols) {
 
 export const currentMasks = (state) => state.base.map((m, i) => rotateMask(m, state.rot[i]));
 
+/** Сошлась ли плитка i со всеми соседями: каждый её конец встречает конец соседа, к краю поля не ведёт. */
+export function tileFits(masks, rows, cols, i) {
+  const m = masks[i];
+  if (!m) return false;
+  const r = Math.floor(i / cols);
+  const c = i % cols;
+  if (m & N && (r === 0 || !(masks[i - cols] & S))) return false;
+  if (m & S && (r === rows - 1 || !(masks[i + cols] & N))) return false;
+  if (m & W && (c === 0 || !(masks[i - 1] & E))) return false;
+  if (m & E && (c === cols - 1 || !(masks[i + 1] & W))) return false;
+  return true;
+}
+
 /** Перемешать: каждая плитка — в случайный поворот; решённым поле не остаётся. */
 export function scramble(base, rows, cols, rng = Math.random) {
   for (;;) {
