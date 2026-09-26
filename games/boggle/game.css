@@ -103,6 +103,7 @@
 }
 [data-game="boggle"] .bo-icon-btn:active { transform: scale(0.92); }
 [data-game="boggle"] .bo-icon-btn:disabled { opacity: 0.4; }
+[data-game="boggle"] .bo-muted { opacity: 0.55; }
 
 [data-game="boggle"] .bo-info {
   display: grid;

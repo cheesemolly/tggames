@@ -7,6 +7,7 @@
 import { el } from '../../shared/dom.js';
 import { animate, showLayer, hideLayer, shake, pop, reducedMotion } from '../../shared/motion.js';
 import { createToast } from '../../shared/toast.js';
+import { createAudio } from '../../shared/sfx.js';
 import { createSounds } from './sounds.js';
 import {
   normalize, target, stars, passed, share, newProgress, levelState, unlockedMax, isUnlocked, submit, hint,
@@ -68,7 +69,8 @@ let toast = null;
 let levels = null;
 let progress = newProgress();
 let settings = { skin: 'telegram', sound: true };
-let audio = null;                   // { ctx, sounds } — один на всю жизнь страницы (iOS ограничивает число AudioContext)
+// звук — один AudioContext на всю жизнь страницы (iOS ограничивает их число), заводится при первом звуке
+const audio = createAudio(createSounds);
 let picked = [];                    // индексы выбранных букв исходного слова
 let tab = 'common';
 let modalActive = false;
@@ -99,27 +101,10 @@ const st = () => levelState(progress, progress.current);
 
 const soundFeature = () => Boolean(api?.feature?.('words-sounds'));
 
-/** AudioContext можно завести только из обработчика нажатия — поэтому лениво, при первом звуке. */
-function ensureAudio() {
-  if (audio) {
-    if (audio.ctx.state === 'suspended') audio.ctx.resume().catch(() => {});
-    return audio;
-  }
-  const Ctx = window.AudioContext ?? window.webkitAudioContext;
-  if (!Ctx) return null;
-  try {
-    const ctx = new Ctx({ latencyHint: 'interactive' });
-    audio = { ctx, sounds: createSounds(ctx) };
-  } catch {
-    return null;
-  }
-  return audio;
-}
-
 function sfx(name, opts) {
   if (!soundFeature() || !settings.sound) return;
   try {
-    ensureAudio()?.sounds.play(name, opts);
+    audio.get()?.play(name, opts);
   } catch (err) {
     console.warn('звук', name, err);
   }

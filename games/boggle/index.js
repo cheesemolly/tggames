@@ -4,10 +4,13 @@
 // Уровни бесконечные, как в «Петле»: все слова найдены — сразу следующее поле, экрана результата нет.
 // Очки считаются за уровень, рекорд — лучший уровень по очкам. Партия, статистика (по размеру поля)
 // и настройки — в api.storage игры.
+// Звуки (sounds.js) — в бете у владельца: api.feature('boggle-sounds'); кнопка в шапке включает и выключает их.
 
 import { el } from '../../shared/dom.js';
 import { animate, showLayer, hideLayer, pop, shake, reducedMotion, EASE_OUT } from '../../shared/motion.js';
 import { createToast } from '../../shared/toast.js';
+import { createAudio } from '../../shared/sfx.js';
+import { createSounds } from './sounds.js';
 import {
   SIZES, DEFAULT_SIZE, WORDS_BY_SIZE, createDictionary, generatePuzzle, snapLine, cellsWord,
   checkSelection, applyWord, bonusPoints, isComplete, newGame, isValidState,
@@ -46,6 +49,8 @@ const T = {
     open: 'Настройки', title: 'Настройки', size: 'Размер поля', skin: 'Оформление', close: 'Закрыть',
     words: (n) => `${WORDS_BY_SIZE[n]} слов`, nextGame: 'Новый размер — со следующей партии.',
   },
+  soundOn: 'Выключить звук',
+  soundOff: 'Включить звук',
   skins: { telegram: 'По умолчанию', classic: 'Кубики', night: 'Ночь', paper: 'Бумага', neon: 'Неон', mint: 'Мята' },
 };
 
@@ -54,6 +59,8 @@ const svg = (body, fill = false) => `<svg viewBox="0 0 24 24" width="20" height=
   + `${body}</svg>`;
 const ICONS = {
   restart: svg('<path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/>'),
+  soundOn: svg('<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/>'),
+  soundOff: svg('<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="m16 9 5 6"/><path d="m21 9-5 6"/>'),
   stats: svg('<rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="7" width="4" height="14" rx="1"/><rect x="17" y="3" width="4" height="18" rx="1"/>', true),
   gear: svg('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/>'),
 };
@@ -82,7 +89,9 @@ let toast = null;
 let dict = null;
 let game = null;
 let stats = {};
-let settings = { size: DEFAULT_SIZE, skin: 'telegram' };
+let settings = { size: DEFAULT_SIZE, skin: 'telegram', sound: true };
+// звук — один AudioContext на всю жизнь страницы, заводится при первом звуке (из касания)
+const audio = createAudio(createSounds);
 let selection = [];
 let pointerId = null;
 let finished = false;
@@ -97,6 +106,36 @@ function later(fn, ms) {
   }, ms);
   timers.add(id);
   return id;
+}
+
+// ---------- звук ----------
+
+const soundFeature = () => Boolean(api?.feature?.('boggle-sounds'));
+
+function sfx(name, opts) {
+  if (!soundFeature() || !settings.sound) return;
+  try {
+    audio.get()?.play(name, opts);
+  } catch (err) {
+    console.warn('звук', name, err);
+  }
+}
+
+function renderSoundBtn() {
+  if (!ui?.soundBtn) return;
+  ui.soundBtn.innerHTML = settings.sound ? ICONS.soundOn : ICONS.soundOff;
+  const label = settings.sound ? T.soundOn : T.soundOff;
+  ui.soundBtn.setAttribute('aria-label', label);
+  ui.soundBtn.title = label;
+  ui.soundBtn.classList.toggle('bo-muted', !settings.sound);
+}
+
+function toggleSound() {
+  settings.sound = !settings.sound;
+  api.storage.set('settings', settings);
+  renderSoundBtn();
+  pop(ui.soundBtn, { from: 0.8, duration: 220 });
+  sfx('click');
 }
 
 function save() {
@@ -221,6 +260,7 @@ function onPointerDown(e) {
     // без захвата движения всё равно придут на поле
   }
   selection = [Math.floor(row) * n + Math.floor(col)];
+  sfx('grab');
   api.platform.haptic.selection();
   renderSelection();
 }
@@ -230,6 +270,9 @@ function onPointerMove(e) {
   const { row, col } = pointToCell(e.clientX, e.clientY);
   const next = snapLine(selection[0], row, col, game.size);
   if (next.length === selection.length && next.at(-1) === selection.at(-1)) return;
+  // линия длиннее — нота выше, короче — та же нота вниз
+  if (next.length >= selection.length) sfx('drag', { step: next.length });
+  else sfx('undrag', { step: selection.length });
   selection = next;
   api.platform.haptic.selection();
   renderSelection();
@@ -255,6 +298,7 @@ function submit(cells) {
     renderInfo();
     if (verdict === 'bank') floatPoints(`+${points}`, cells, verdict);
     if (verdict === 'bank') {
+      sfx('bank', { step: word.length });
       api.platform.haptic.notification('success');
       renderSelection([]);
       renderCapsules();
@@ -268,8 +312,14 @@ function submit(cells) {
     api.platform.haptic.impact('medium');
     renderSelection(cells, 'bonus');
     bonusBanner(word, points);
+    // звук баннера: вступление, по ноте на каждую подпрыгнувшую букву «Бонус!», «монетка» под словом
+    sfx('bonus');
+    const hops = [...T.bonusBanner].length;
+    for (let k = 0; k < hops; k++) later(() => sfx('hop', { step: k }), k * 90 + 150);
+    later(() => sfx('coin'), hops * 90 + 120);
     pop(ui.bonusButton, { from: 0.8 });
   } else {
+    sfx(verdict === 'repeat' ? 'repeat' : 'unknown');
     api.platform.haptic.notification(verdict === 'repeat' ? 'warning' : 'error');
     renderSelection(cells, verdict === 'repeat' ? 'warn' : 'bad');
     if (verdict === 'unknown') shake(ui.current);
@@ -335,6 +385,8 @@ function complete() {
   stats[game.size] = recordGame(stats[game.size], game);
   api.storage.set('stats', stats);
   report();
+  const size = game.size;
+  later(() => sfx('level', { step: size }), 450);    // после колокольчиков последнего слова
   // победная волна по буквам, капсулы пульсируют — потом сразу следующий уровень
   if (!reducedMotion()) {
     const n = game.size;
@@ -346,6 +398,7 @@ function complete() {
   const cleared = game.level;
   later(() => {
     if (!ui) return;
+    sfx('fresh');
     startLevel(cleared + 1);
     toast.show(T.cleared(cleared), 2200);
   }, reducedMotion() ? 0 : 1600);
@@ -405,7 +458,7 @@ function askRestart() {
     el('p', { class: 'bo-note' }, T.restartQuestion),
     el('div', { class: 'bo-card-actions' },
       el('button', { class: 'btn btn-secondary', onclick: closeModal }, T.cancel),
-      el('button', { class: 'btn', onclick: () => { closeModal(); startGame(); } }, T.restart),
+      el('button', { class: 'btn', onclick: () => { closeModal(); sfx('fresh'); startGame(); } }, T.restart),
     ),
   ));
 }
@@ -413,6 +466,7 @@ function askRestart() {
 // ---------- окна ----------
 
 function openModal(content) {
+  if (!modalActive) sfx('click');
   modalToken++;
   ui.modal.replaceChildren(content);
   if (!modalActive) showLayer(ui.modal);
@@ -528,6 +582,7 @@ export default {
     settings = {
       size: SIZES.includes(savedSettings?.size) ? savedSettings.size : DEFAULT_SIZE,
       skin: SKINS.includes(savedSettings?.skin) ? savedSettings.skin : 'telegram',
+      sound: savedSettings?.sound !== false,
     };
     host.dataset.skin = settings.skin;
 
@@ -549,6 +604,7 @@ export default {
       bank: el('div', { class: 'bo-bank' }),
       modal: el('div', { class: 'bo-modal', hidden: true }),
     };
+    ui.soundBtn = soundFeature() ? iconButton(ICONS.soundOn, T.soundOn, toggleSound) : null;
     ui.bonusButton = el('button', { class: 'bo-bonus-btn', onclick: showBonus },
       el('div', { class: 'bo-info-label' }, T.info.bonus), el('div', { class: 'bo-info-value' }, '★ ', ui.bonusCount));
     ui.resize = new ResizeObserver(() => syncCapsules());
@@ -562,6 +618,7 @@ export default {
       el('div', { class: 'bo-header' },
         el('div', {}, el('div', { class: 'bo-title' }, T.title), ui.sub),
         el('div', { class: 'bo-actions' },
+          ui.soundBtn,
           iconButton(ICONS.restart, T.newGame, askRestart),
           iconButton(ICONS.stats, T.stats.open, () => showStats()),
           iconButton(ICONS.gear, T.settings.open, showSettings),
@@ -576,6 +633,7 @@ export default {
     );
     container.append(root);
     document.addEventListener('keydown', onKeydown);
+    renderSoundBtn();
     renderInfo();
 
     await startGame(isValidState(savedGame) && !isComplete(savedGame) ? savedGame : null);
