@@ -101,6 +101,17 @@ export function createSfx(ctx, { volume = 0.55 } = {}) {
     g.connect(master);
   }
 
+  /** «Буп» — круглый пузырёк: тон быстро падает сверху к freq, верх подрезан (мультяшно и мягко). */
+  function bup(freq, t, { peak = 0.3, decay = 0.12, drop = 1.9 } = {}) {
+    const o = osc('sine', freq * drop, t, t + decay + 0.06);
+    o.frequency.exponentialRampToValueAtTime(freq, t + 0.05);
+    const f = filter('lowpass', freq * 4, 0.7);
+    const g = env(t, peak, decay, 0.004);
+    o.connect(f);
+    f.connect(g);
+    g.connect(master);
+  }
+
   // ---------- тихие «дзен»-звуки (судоку, Петля): бумага, карандаш, камень, тёплые аккорды — без звона ----------
 
   /**
@@ -183,7 +194,7 @@ export function createSfx(ctx, { volume = 0.55 } = {}) {
     }
   }
 
-  return { now, bell, plip, swoosh, thud, grain, pencil, rub, rustle, tock, pad };
+  return { now, bell, plip, bup, swoosh, thud, grain, pencil, rub, rustle, tock, pad };
 }
 
 /**

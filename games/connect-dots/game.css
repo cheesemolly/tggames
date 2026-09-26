@@ -332,3 +332,10 @@
 }
 [data-game="connect-dots"] .cd-skin:active .cd-swatch { transform: scale(0.92); }
 [data-game="connect-dots"] .cd-skin[aria-checked="true"] .cd-swatch { outline: 3px solid var(--cd-accent); outline-offset: 3px; }
+[data-game="connect-dots"] .cd-muted { opacity: 0.55; }
+/* четыре кнопки в шапке (со звуком) на узком экране: иначе «Соедини точки» переносится на две строки */
+@media (max-width: 380px) {
+  [data-game="connect-dots"] .cd-actions-4 { gap: 4px; }
+  [data-game="connect-dots"] .cd-actions-4 .cd-icon-btn { width: 32px; height: 32px; }
+  [data-game="connect-dots"] .cd-header:has(.cd-actions-4) .cd-title { font-size: 17px; }
+}
