@@ -3,6 +3,8 @@
 // (размер, правило, картинки — на выбор). Давление — в настройках: спокойно / три ошибки / на время.
 // Пять наборов картинок (sets.js), скины стола и рубашек, бонусы-помощники «Подглядеть» и «Магнит».
 // Правила — logic.js, рисунки — art.js, звуки набора «Звуки» — sounds.js.
+// Звуковые эффекты (карты «перелистываются», effects.js) — в бете у владельца: api.feature('memory-sounds');
+// кнопка звука — пятой в шапке (в нижней панели на 320 px не помещалась), выбор — 'sound' в api.storage.
 
 import { el } from '../../shared/dom.js';
 import { animate, showLayer, hideLayer, reducedMotion, pop, shake } from '../../shared/motion.js';
@@ -15,6 +17,8 @@ import {
 import { SETS, findSet, SOUNDS } from './sets.js';
 import { monsterSvg, patternSvg, specialSvg, speakerSvg, SPECIAL_INFO, DEFS } from './art.js';
 import { createSounds } from './sounds.js';
+import { createEffects } from './effects.js';
+import { createAudio } from '../../shared/sfx.js';
 
 const SKINS = [
   { id: 'telegram', title: 'По умолчанию' },
@@ -44,6 +48,8 @@ const ICONS = {
   peek: svgIcon('<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>'),
   magnet: svgIcon('<path d="M6 3v8a6 6 0 0 0 12 0V3"/><path d="M6 7h4M14 7h4"/><path d="M10 3v8a2 2 0 0 0 4 0V3"/>'),
   restart: svgIcon('<path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/>'),
+  soundOn: svgIcon('<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/>'),
+  soundOff: svgIcon('<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="m16 9 5 6"/><path d="m21 9-5 6"/>'),
 };
 
 let api = null;
@@ -67,6 +73,9 @@ let deal = 0;                    // номер раздачи: таймеры п
 let cardEls = [];
 let tickTimer = 0;
 let lastTick = 0;
+let soundOn = true;
+// эффекты — свой ленивый AudioContext (набор «Звуки» заводит свой, с режимом «играть и в беззвучном»)
+const effects = createAudio(createEffects);
 const timers = new Set();
 
 function later(fn, ms) {
@@ -106,6 +115,33 @@ function ensureAudio() {
   const ctx = new Ctx({ latencyHint: 'interactive' });
   audio = { ctx, sounds: createSounds(ctx) };
   return audio;
+}
+
+const soundFeature = () => Boolean(api?.feature?.('memory-sounds'));
+
+function sfx(name, opts) {
+  if (!soundFeature() || !soundOn) return;
+  try {
+    effects.get()?.play(name, opts);
+  } catch (err) {
+    console.warn('звук', name, err);
+  }
+}
+
+function renderSoundBtn() {
+  if (!ui?.soundBtn) return;
+  ui.soundBtn.innerHTML = soundOn ? ICONS.soundOn : ICONS.soundOff;
+  const label = soundOn ? 'Выключить звук' : 'Включить звук';
+  ui.soundBtn.setAttribute('aria-label', label);
+  ui.soundBtn.title = label;
+  ui.soundBtn.classList.toggle('mm-muted', !soundOn);
+}
+
+function toggleSound() {
+  soundOn = !soundOn;
+  api.storage.set('sound', soundOn);
+  renderSoundBtn();
+  sfx('click');
 }
 
 // ---------- карточки ----------
@@ -261,6 +297,7 @@ function dealIn() {
   const myDeal = deal;
   busy = true;
   const n = cardEls.length;
+  sfx('deal', { step: n });
   if (!reducedMotion()) {
     const cx = (game.cols - 1) / 2;
     const cy = (game.rows - 1) / 2;
@@ -283,9 +320,11 @@ function dealIn() {
   const show = Math.min(2600, 900 + n * 45);
   later(() => {
     if (deal !== myDeal) return;
+    sfx('fan', { step: n });
     cardEls.forEach((node) => node.classList.add('up'));
     later(() => {
       if (deal !== myDeal) return;
+      sfx('fan', { step: n });
       cardEls.forEach((node, i) => { if (!game.open.includes(i)) node.classList.remove('up'); });
       later(() => { if (deal === myDeal) busy = false; }, 350);
     }, show);
@@ -312,8 +351,10 @@ function onCardTap(e) {
   const ev = flip(game, i);
   if (!ev) return;
   started = true;
+  if (ev.closed?.length) sfx('unflip', { step: ev.closed.length });
   for (const k of ev.closed ?? []) setUp(k, false);
   setUp(i, true);
+  sfx('flip');
   api.platform.haptic.selection();
   const card = game.cards[i];
   if (card.face.type === 'sound') playSound(i);
@@ -344,14 +385,17 @@ function onMiss(ev) {
     api.platform.haptic.notification('error');
   }
   if (game.lives != null) bump('.mm-lives', 'bad');
+  const mistake = ev.mistake || game.lives != null;
   later(() => {
     if (deal !== myDeal || !ui) return;
+    if (mistake) sfx('miss');
     cards.forEach((k) => cardEls[k] && shake(cardEls[k], { distance: 5, duration: 300 }));
   }, MATCH_DELAY);
   later(() => {
     if (deal !== myDeal || !ui) return;
     // игрок мог уже открыть следующую — тогда эти закрылись сами
     if (game.closePending && cards.every((k) => game.open.includes(k))) {
+      sfx('unflip', { step: cards.length });
       closeOpen(game);
       cards.forEach((k) => setUp(k, false));
       save();
@@ -373,6 +417,12 @@ function onMatch(ev) {
 
   later(() => {
     if (deal !== myDeal || !ui) return;
+    sfx('match', { step: ev.combo ?? 1 });
+    // бонусные карточки — свой звук поверх
+    if (ev.kinds.includes('gold')) later(() => sfx('gold'), 120);
+    if (ev.kinds.includes('heart')) later(() => sfx('heart'), 150);
+    if (ev.kinds.includes('clock')) later(() => sfx('clock'), 120);
+    if (ev.kinds.includes('joker')) later(() => sfx('joker'), 60);
     flyAway(all, ev);
     renderHud();
     if (ev.combo >= 2 && !ev.booster) showCombo(ev.combo);
@@ -456,10 +506,12 @@ function showCombo(n) {
 function runPeek(done, ms = 1300) {
   const myDeal = deal;
   const hidden = game.cards.map((c, i) => i).filter((i) => !game.cards[i].gone && !game.open.includes(i));
+  sfx('fan', { step: hidden.length });
   hidden.forEach((i) => setUp(i, true));
   host.classList.add('mm-peeking');
   later(() => {
     if (deal !== myDeal || !ui) return;
+    sfx('fan', { step: hidden.length });
     hidden.forEach((i) => { if (!game.open.includes(i)) setUp(i, false); });
     host.classList.remove('mm-peeking');
     later(() => { if (deal === myDeal) done(); }, 350);
@@ -471,6 +523,7 @@ function runVortex(moves, done) {
   const myDeal = deal;
   const before = new Map(moves.map(({ from }) => [from, cardEls[from].getBoundingClientRect()]));
   toast.show('Вихрь! Карточки перемешались', 1600);
+  sfx('shuffle');
   renderBoard();
   if (!reducedMotion()) {
     for (const { from, to } of moves) {
@@ -501,6 +554,7 @@ function useBooster(kind) {
   if (!ev) return;
   boosters = { ...boosters, magnet: boosters.magnet - 1 };
   api.storage.set('boosters', boosters);
+  sfx('magnet');
   started = true;
   for (const k of ev.closed ?? []) setUp(k, false);
   ev.cards.forEach((k) => setUp(k, true));
@@ -516,6 +570,7 @@ function onWin() {
   const stars = starsFor(game);
   stats = recordGame(stats, game, stars);
   api.storage.set('stats', stats);
+  sfx('win');
   api.platform.haptic.notification('success');
   const finished = game;
   let reward = null;
@@ -580,6 +635,7 @@ function onFail(reason) {
   stopTicker();
   stats = recordGame(stats, game, 0);
   api.storage.set('stats', stats);
+  sfx('fail');
   api.platform.haptic.notification('error');
   shake(ui.board, { distance: 8, duration: 420 });
   host.classList.add('mm-failed');
@@ -651,6 +707,7 @@ let dismissible = true;
 
 function openModal(content, { dismissible: canDismiss = true } = {}) {
   dismissible = canDismiss;
+  if (!modalActive) sfx('click');
   ui.modal.replaceChildren(el('div', { class: 'mm-card-modal' }, content));
   if (!modalActive) showLayer(ui.modal);
   modalActive = true;
@@ -815,7 +872,7 @@ export default {
     host = container;
     toast = createToast();
 
-    const keys = ['settings', 'freeCfg', 'stats', 'boosters', 'seenSpecials', 'progress', 'mode', 'level', 'free'];
+    const keys = ['settings', 'freeCfg', 'stats', 'boosters', 'seenSpecials', 'progress', 'mode', 'level', 'free', 'sound'];
     const loaded = Object.fromEntries(await Promise.all(keys.map(async (k) => [k, await api.storage.get(k)])));
     if (!api) return;
     settings = { ...settings, ...(loaded.settings ?? {}) };
@@ -830,6 +887,7 @@ export default {
     seenSpecials = Array.isArray(loaded.seenSpecials) ? loaded.seenSpecials : [];
     level = Number.isInteger(loaded.progress?.level) && loaded.progress.level >= 1 ? loaded.progress.level : 1;
     mode = loaded.mode === 'free' ? 'free' : 'levels';
+    soundOn = loaded.sound !== false;
 
     const iconBtn = (icon, label, onclick) => {
       const b = el('button', { class: 'mm-icon-btn', 'aria-label': label, title: label, onclick });
@@ -861,6 +919,7 @@ export default {
     ui.timer.append(ui.timerFill, ui.timerText);
     ui.peekBtn = booster(ICONS.peek, 'Подглядеть', ui.peekCount, () => useBooster('peek'));
     ui.magnetBtn = booster(ICONS.magnet, 'Магнит', ui.magnetCount, () => useBooster('magnet'));
+    ui.soundBtn = soundFeature() ? iconBtn(ICONS.soundOn, 'Выключить звук', toggleSound) : null;
     const defs = el('div', { class: 'mm-defs' });
     defs.innerHTML = DEFS;
     ui.boardWrap.append(ui.board, ui.combo, defs);
@@ -868,7 +927,8 @@ export default {
     container.replaceChildren(el('div', { class: 'mm' },
       el('header', { class: 'mm-header' },
         el('div', { class: 'mm-head-text' }, ui.title, ui.sub),
-        el('div', { class: 'mm-actions' },
+        el('div', { class: ui.soundBtn ? 'mm-actions mm-actions-5' : 'mm-actions' },
+          ui.soundBtn,
           ui.modeBtn,
           iconBtn(ICONS.stats, 'Статистика', openStats),
           iconBtn(ICONS.gear, 'Настройки', openSettings),
@@ -889,9 +949,12 @@ export default {
     fx = createFx(ui.boardWrap, 'mm-fx');
     ui.boardWrap.append(fx.canvas);
     ui.board.addEventListener('click', onCardTap);
+    renderSoundBtn();
     ui.resize = new ResizeObserver(() => layout());
     ui.resize.observe(ui.boardWrap);
     host.dataset.skin = settings.skin;
+    // нижняя панель помещается на 320 px (в бете: memory-bar-fit) — раньше «Заново» уезжала за край
+    host.classList.toggle('mm-bar-fit', Boolean(api.feature?.('memory-bar-fit')));
 
     const saved = mode === 'levels' ? loaded.level : loaded.free;
     const resumable = isValidState(saved) && !saved.done && !saved.failed && saved.mode === mode

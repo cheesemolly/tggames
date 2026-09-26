@@ -429,3 +429,18 @@
 [data-game="memory"] .mm-legend-row { display: flex; align-items: center; gap: 10px; font-size: 14px; }
 [data-game="memory"] .mm-legend-icon { flex: none; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 8px; background: #fbfbfd; box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.1); }
 [data-game="memory"] .mm-legend-icon svg { width: 26px; height: 26px; }
+[data-game="memory"] .mm-muted { opacity: 0.55; }
+/* пять кнопок в шапке (со звуком) на узком экране — чуть меньше, иначе не помещаются */
+@media (max-width: 380px) {
+  [data-game="memory"] .mm-actions-5 { gap: 4px; }
+  [data-game="memory"] .mm-actions-5 .mm-icon-btn { width: 32px; height: 32px; }
+}
+/* нижняя панель на узком экране (в бете: memory-bar-fit): «Подглядеть» и «Магнит» с подписями не сжимались,
+   и кнопка «Заново» уезжала за край на 320 px — теперь они компактнее, а на самых узких без значка */
+@media (max-width: 380px) {
+  [data-game="memory"].mm-bar-fit .mm-booster { min-width: 0; padding: 6px 8px; gap: 4px; font-size: 13px; }
+  [data-game="memory"].mm-bar-fit .mm-booster-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
+@media (max-width: 350px) {
+  [data-game="memory"].mm-bar-fit .mm-booster svg { display: none; }
+}
