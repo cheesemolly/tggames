@@ -2,11 +2,14 @@
 // заметки, отмена, стирание и продвинутые подсказки с объяснением приёма.
 // Сетки — из проверенного банка (puzzles.json), каждая партия — случайное перемешивание сетки.
 // Партия и статистика (по сложностям) — в api.storage игры: 'current', 'stats', 'lastDifficulty'.
+// Звуки (sounds.js) — в бете у владельца: api.feature('sudoku-sounds'); кнопка в шапке, 'sound' в api.storage.
 
 import { el } from '../../shared/dom.js';
 import { formatDuration } from '../../shared/format.js';
 import { animate, showLayer, hideLayer, flipSize, pop, shake, reducedMotion, EASE_OUT } from '../../shared/motion.js';
 import { createToast } from '../../shared/toast.js';
+import { createAudio } from '../../shared/sfx.js';
+import { createSounds } from './sounds.js';
 import { PEERS, ROW_OF, COL_OF, UNITS, UNITS_OF, parseGrid, bit } from './grid.js';
 import { countSolutions } from './solver.js';
 import { transformPair } from './generator.js';
@@ -32,6 +35,8 @@ const ICONS = {
   pause: svg('<rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/>', true),
   play: svg('<path d="M7 4.5v15a1 1 0 0 0 1.5.9l12-7.5a1 1 0 0 0 0-1.8l-12-7.5A1 1 0 0 0 7 4.5Z"/>', true),
   plus: svg('<path d="M12 5v14M5 12h14"/>'),
+  soundOn: svg('<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/>'),
+  soundOff: svg('<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="m16 9 5 6"/><path d="m21 9-5 6"/>'),
   stats: svg('<rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="7" width="4" height="14" rx="1"/><rect x="17" y="3" width="4" height="18" rx="1"/>', true),
   gear: svg('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/>'),
 };
@@ -68,7 +73,10 @@ let toast = null;
 let modalActive = false;  // окно открыто (во время анимации закрытия уже false)
 let modalToken = 0;
 let hintToken = 0;
+let soundOn = true;
 const timers = new Set();
+// звук — один AudioContext на всю жизнь страницы, заводится при первом звуке (из нажатия)
+const audio = createAudio(createSounds);
 
 function later(fn, ms) {
   const id = setTimeout(() => {
@@ -80,6 +88,35 @@ function later(fn, ms) {
 }
 
 // ---------- время и сохранение ----------
+
+// ---------- звук ----------
+
+const soundFeature = () => Boolean(api?.feature?.('sudoku-sounds'));
+
+function sfx(name, opts) {
+  if (!soundFeature() || !soundOn) return;
+  try {
+    audio.get()?.play(name, opts);
+  } catch (err) {
+    console.warn('звук', name, err);
+  }
+}
+
+function renderSoundBtn() {
+  if (!ui?.soundBtn) return;
+  ui.soundBtn.innerHTML = soundOn ? ICONS.soundOn : ICONS.soundOff;
+  ui.soundBtn.setAttribute('aria-label', soundOn ? t.soundOn : t.soundOff);
+  ui.soundBtn.title = soundOn ? t.soundOn : t.soundOff;
+  ui.soundBtn.classList.toggle('sd-muted', !soundOn);
+}
+
+function toggleSound() {
+  soundOn = !soundOn;
+  api.storage.set('sound', soundOn);
+  renderSoundBtn();
+  pop(ui.soundBtn, { from: 0.8, duration: 220 });
+  sfx('click');
+}
 
 function elapsed() {
   return game.elapsedMs + (runningSince === null ? 0 : performance.now() - runningSince);
@@ -249,7 +286,9 @@ function completedUnits(i) {
 
 function unitWave(i) {
   const done = completedUnits(i);
-  if (done.length) wave(new Set(done.flatMap((u) => UNITS[u])), i);
+  if (!done.length) return;
+  wave(new Set(done.flatMap((u) => UNITS[u])), i);
+  later(() => sfx('unit', { step: done.length }), 120);   // каскад — вслед за волной подсветки
 }
 
 /** Счётчик «подпрыгивает» (и при желании вспыхивает цветом). */
@@ -265,6 +304,7 @@ function bump(node, color = null) {
 
 function select(i) {
   if (!canPlay()) return;
+  if (i !== selected) sfx('select');
   selected = i;
   api.platform.haptic.selection();
   renderBoard();
@@ -274,6 +314,7 @@ function inputDigit(d) {
   if (!canPlay() || selected < 0) return;
   if (notesMode) {
     if (toggleNote(game, selected, d)) {
+      sfx('note', { step: d });
       api.platform.haptic.selection();
       save();
       renderBoard(game.notes[selected] & bit(d) ? { cell: selected, kind: 'note', digit: d } : null);
@@ -282,6 +323,12 @@ function inputDigit(d) {
   }
   const result = placeDigit(game, selected, d);
   if (result === 'ignored') return;
+  if (result === 'wrong') sfx('wrong');
+  else {
+    sfx('digit', { step: d });
+    // все девять цифр на месте — звенит нотой цифры (если это не конец партии — там своя фанфара)
+    if (digitCounts(game)[d] === 9 && !isSolved(game)) later(() => sfx('done', { step: d }), 180);
+  }
   if (result === 'wrong') api.platform.haptic.notification('error');
   else api.platform.haptic.impact('light');
   save();
@@ -302,6 +349,7 @@ function inputDigit(d) {
 function onErase() {
   if (!canPlay() || selected < 0) return;
   if (erase(game, selected)) {
+    sfx('erase');
     save();
     renderAll();
   }
@@ -315,6 +363,7 @@ function onUndo() {
     return;
   }
   selected = cell;
+  sfx('undo');
   save();
   renderInfo();
   renderControls();
@@ -342,6 +391,7 @@ function finishGame(won) {
   // Сначала анимация (победа — волна по всей доске, поражение — тряска), потом экран результата.
   if (won) wave(ui.cells.map((_, i) => i), origin, { step: 45, duration: 600 });
   else shake(ui.board, { distance: 8, duration: 450 });
+  sfx(won ? 'win' : 'lose');
   later(() => report(won, { difficulty, mistakes, score, time }), reducedMotion() ? 0 : won ? 1300 : 650);
 }
 
@@ -401,12 +451,14 @@ function onVisibility() {
 function onHint() {
   if (!canPlay()) return;
   if (game.hintsLeft <= 0) {
+    sfx('empty');
     showToast(t.noHints);
     return;
   }
   const found = buildHint(game.values, game.solution);
   if (!found) return;
   game.hintsLeft--;
+  sfx('hint');
   hint = { ...found, page: 0 };
   selected = found.action.cell;
   save();
@@ -454,6 +506,7 @@ function renderHintPanel() {
 function setHintPage(n) {
   if (!hint || n < 0 || n >= hint.pages.length || n === hint.page) return;
   hint.page = n;
+  sfx('page');
   renderHintPanel();
   renderBoard();
   api.platform.haptic.selection();
@@ -499,6 +552,7 @@ function applyHint() {
   if (action.kind === 'erase') applyHintErase(game, action.cell);
   else applyHintDigit(game, action.cell, action.digit);
   selected = action.cell;
+  sfx('apply');
   api.platform.haptic.impact('medium');
   closeHint();
   save();
@@ -511,6 +565,7 @@ function applyHint() {
 
 /** Открыть окно; если окно уже открыто — только заменить содержимое (без повторной анимации). */
 function openModal(content) {
+  if (!modalActive) sfx('click');
   modalToken++;
   ui.modal.replaceChildren(content);
   if (!modalActive) showLayer(ui.modal);
@@ -579,6 +634,7 @@ async function startNew(difficulty) {
   hint = null;
   selected = game.values.findIndex((v) => !v);
   runningSince = null;
+  sfx('fresh');
   startClock();
   api.storage.set('lastDifficulty', difficulty);
   save();
@@ -782,10 +838,11 @@ export default {
     api = gameApi;
     host = container;
     toast = createToast();
-    const [savedGame, savedStats, savedSettings] = await Promise.all([
-      api.storage.get('current'), api.storage.get('stats'), api.storage.get('settings'),
+    const [savedGame, savedStats, savedSettings, savedSound] = await Promise.all([
+      api.storage.get('current'), api.storage.get('stats'), api.storage.get('settings'), api.storage.get('sound'),
     ]);
     if (!api) return;
+    soundOn = savedSound !== false;
     settings = normalizeSettings(savedSettings);
     applySkin();
 
@@ -797,12 +854,13 @@ export default {
       title: el('div', { class: 'sd-title' }, t.title),
       sub: el('div', { class: 'sd-sub' }),
       info: { difficulty: infoValue(), mistakes: infoValue(), score: infoValue(), time: infoValue() },
-      pauseButton: el('button', { class: 'sd-icon-btn sd-pause-btn', onclick: () => setPaused(!paused) }),
+      // пауза и продолжение со звуком — только по кнопке (сама пауза бывает и при сворачивании, и под окнами)
+      pauseButton: el('button', { class: 'sd-icon-btn sd-pause-btn', onclick: () => { if (game && !finished) sfx(paused ? 'resume' : 'pause'); setPaused(!paused); } }),
       board: el('div', { class: 'sd-board', role: 'grid' }),
       hintLayer: el('div', { class: 'sd-hint-layer', 'aria-hidden': 'true' }),
       cells: [],
       pauseCover: el('div', { class: 'sd-pause-cover', hidden: true },
-        el('button', { class: 'btn sd-resume', onclick: () => (paused ? setPaused(false) : showPauseCover(false)) }, t.resume)),
+        el('button', { class: 'btn sd-resume', onclick: () => { sfx('resume'); if (paused) setPaused(false); else showPauseCover(false); } }, t.resume)),
       notesBadge: el('span', { class: 'sd-badge sd-badge-pill' }),
       hintBadge: el('span', { class: 'sd-badge sd-badge-count' }),
       pad: el('div', { class: 'sd-pad' }),
@@ -810,6 +868,7 @@ export default {
       hintPanel: el('div', { class: 'sd-hint', hidden: true }),
       modal: el('div', { class: 'sd-modal', hidden: true }),
     };
+    ui.soundBtn = soundFeature() ? iconButton(ICONS.soundOn, t.soundOn, toggleSound) : null;
     ui.tools = {
       undo: toolButton('undo', ICONS.undo, onUndo),
       erase: toolButton('erase', ICONS.erase, onErase),
@@ -856,6 +915,7 @@ export default {
       el('div', { class: 'sd-header' },
         el('div', { class: 'sd-heading' }, ui.title, ui.sub),
         el('div', { class: 'sd-actions' },
+          ui.soundBtn,
           iconButton(ICONS.plus, t.newGame, () => { if (!hint) showPicker(Boolean(game)); }),
           iconButton(ICONS.stats, t.stats.open, () => showStats()),
           iconButton(ICONS.gear, t.settings.open, showSettings),
@@ -874,6 +934,7 @@ export default {
       toast.el,
     );
     container.append(root);
+    renderSoundBtn();
     document.addEventListener('keydown', onKeydown);
     document.addEventListener('visibilitychange', onVisibility);
     const tick = setInterval(() => {

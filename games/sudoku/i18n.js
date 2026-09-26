@@ -11,6 +11,8 @@ export const TEXT = {
     pause: 'Пауза',
     resume: 'Продолжить',
     newGame: 'Новая игра',
+    soundOn: 'Выключить звук',
+    soundOff: 'Включить звук',
     newGameWarning: 'Текущая партия будет потеряна.',
     cancel: 'Отмена',
     loading: 'Загрузка…',
