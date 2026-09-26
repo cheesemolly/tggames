@@ -10,7 +10,7 @@ import { sceneMarkup, HIT_POINT } from './art.js';
 import { createSynth } from './sounds.js';
 import {
   INSTRUMENTS, findInstrument, padForCode, SONGS, songKeys, songPhrases, followSong, expectedNote,
-  emptyStats, isValidStats, recordHit, progressLine,
+  emptyStats, isValidStats, recordHit, progressLine, octavePads, octaveKey,
 } from './logic.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -23,6 +23,7 @@ const ICONS = {
   songs: svgIcon('<path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/>'),
   stats: svgIcon('<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'),
   help: svgIcon('<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14"/><path d="M12 17.5h.01"/>'),
+  rotate: svgIcon('<rect x="7" y="2" width="10" height="16" rx="2"/><path d="M11 15h2"/><path d="M20 13a8 8 0 0 1-6 7.7"/><path d="M16.5 19.8 14 20.7l.8 2.3"/>'),
 };
 
 let api = null;
@@ -41,6 +42,12 @@ const lifting = { left: 0, right: 0, mouth: 0 };   // таймер «подъё�
 const pointers = new Map();      // pointerId → { instrument, pad, at }
 const keysHeld = new Map();      // code → { instrument, pad, at }
 const timers = new Set();
+// Две октавы и альбомный вид (в бете 'bongo-octaves'): octaves — выбор игрока для вертикального экрана (1 или 2),
+// rotated — игра повёрнута кнопкой, landscape — сейчас альбомная раскладка (повёрнута или экран и так широкий).
+const OCTAVE_INSTRUMENTS = ['keyboard', 'marimba'];
+let octaves = 1;
+let rotated = false;
+let landscape = false;
 
 function later(fn, ms) {
   const id = setTimeout(() => {
@@ -49,6 +56,14 @@ function later(fn, ms) {
   }, ms);
   timers.add(id);
   return id;
+}
+
+const octavesOn = () => Boolean(api?.feature?.('bongo-octaves'));
+
+/** Клавиши инструмента на экране: у пианино и маримбы в режиме октав — полная октава или две (в альбомном виде — две). */
+function padsOf(id) {
+  if (octavesOn() && OCTAVE_INSTRUMENTS.includes(id)) return octavePads(id, landscape ? 2 : octaves);
+  return findInstrument(id).pads;
 }
 
 // ---------- звук ----------
@@ -143,7 +158,8 @@ function shakeInstrument(instrument, pad) {
     const drum = inst.querySelector(`.bc-drum[data-pad="${pad.id}"]`);
     if (drum) animate(drum, [{ transform: 'translateY(0)' }, { transform: 'translateY(4px) scaleY(0.985)' }, { transform: 'none' }], { duration: 140 });
   } else if (instrument === 'keyboard' || instrument === 'marimba') {
-    inst.querySelector(`.bc-key[data-note="${pad.note}"]`)?.classList.add('down');
+    // на рисунке 10 клавиш: ноты выше «ля» и вторая октава нажимают ближайшую нарисованную
+    inst.querySelector(`.bc-key[data-note="${Math.min(pad.note % 12, 9)}"]`)?.classList.add('down');
   } else {
     const swing = inst.querySelector('.bc-swing');
     if (swing) {
@@ -158,7 +174,7 @@ function shakeInstrument(instrument, pad) {
 
 function releaseKeyVisual(instrument, pad) {
   if (instrument !== 'keyboard' && instrument !== 'marimba') return;
-  ui.scene.querySelector(`.bc-inst[data-inst="${instrument}"] .bc-key[data-note="${pad.note}"]`)?.classList.remove('down');
+  ui.scene.querySelector(`.bc-inst[data-inst="${instrument}"] .bc-key[data-note="${Math.min(pad.note % 12, 9)}"]`)?.classList.remove('down');
 }
 
 // ---------- удар ----------
@@ -214,7 +230,7 @@ function onPadDown(e) {
   if (!padEl) return;
   e.preventDefault();
   const instrument = findInstrument(padEl.dataset.inst);
-  const pad = instrument?.pads.find((p) => p.id === padEl.dataset.pad);
+  const pad = instrument && padsOf(instrument.id).find((p) => p.id === padEl.dataset.pad);
   if (!pad) return;
   try { padEl.setPointerCapture(e.pointerId); } catch { /* синтетические указатели не захватываются */ }
   markPad(padEl, true);
@@ -232,7 +248,12 @@ function onPadUp(e) {
 
 function onKeyDown(e) {
   if (!ui || modalActive || e.ctrlKey || e.metaKey || e.altKey) return;
-  const hit = padForCode(e.code);
+  let hit = padForCode(e.code);
+  if (octavesOn()) {
+    // «-» «=» (у маримбы «[» «]») — ля♯ и си, с Shift — октавой выше
+    const k = octaveKey(e.code, e.shiftKey);
+    if (k) hit = { instrument: k.instrument, pad: padsOf(k.instrument).find((p) => p.note === k.note) ?? octavePads(k.instrument, 2)[k.note] };
+  }
   if (!hit) return;
   e.preventDefault();
   if (e.repeat || keysHeld.has(e.code)) return;             // зажатая клавиша не «строчит», как и на bongo.cat
@@ -266,7 +287,7 @@ function releaseAll() {
 
 function renderPads() {
   const instrument = findInstrument(current);
-  const pads = instrument.pads;
+  const pads = padsOf(current);
   const pad = (p, extra = '') => el('button', {
     class: `bc-pad ${extra}`.trim(),
     'data-inst': instrument.id,
@@ -277,20 +298,29 @@ function renderPads() {
     el('span', { class: 'bc-pad-key' }, p.label),
   );
 
-  let body;
-  if (pads.length === 10) {
-    // как настоящая клавиатура: 6 белых клавиш, 4 чёрные сверху между ними
-    const whites = pads.filter((p) => !p.black);
-    const blacks = pads.filter((p) => p.black);
-    body = el('div', { class: `bc-piano ${instrument.id === 'marimba' ? 'bc-piano-marimba' : ''}`.trim() },
+  // как настоящая клавиатура: белые клавиши, чёрные сверху между ними (--whites — сколько белых в ряду)
+  const piano = (list) => {
+    const whites = list.filter((p) => !p.black);
+    const blacks = list.filter((p) => p.black);
+    const node = el('div', { class: `bc-piano ${instrument.id === 'marimba' ? 'bc-piano-marimba' : ''} ${whites.length > 7 ? 'bc-piano-dense' : ''}`.trim() },
       el('div', { class: 'bc-piano-whites' }, whites.map((p) => pad(p, 'bc-pad-white'))),
       el('div', { class: 'bc-piano-blacks' }, blacks.map((p) => {
         const before = whites.findIndex((w) => w.note > p.note);
-        const node = pad(p, 'bc-pad-black');
-        node.style.setProperty('--at', before);
-        return node;
+        const key = pad(p, 'bc-pad-black');
+        key.style.setProperty('--at', before < 0 ? whites.length : before);
+        return key;
       })),
     );
+    node.style.setProperty('--whites', whites.length);
+    return node;
+  };
+
+  let body;
+  if (OCTAVE_INSTRUMENTS.includes(instrument.id)) {
+    // две октавы на вертикальном экране — два ряда, верхняя октава сверху (идея игрока); в альбомном — один ряд
+    body = pads.length === 24 && !landscape
+      ? el('div', { class: 'bc-piano-rows' }, piano(pads.slice(12)), piano(pads.slice(0, 12)))
+      : piano(pads);
   } else {
     body = el('div', { class: `bc-big bc-big-${pads.length}` }, pads.map((p) => pad(p, `bc-pad-big bc-pad-${instrument.id}`)));
   }
@@ -299,14 +329,71 @@ function renderPads() {
 }
 
 function renderChips() {
-  ui.chips.replaceChildren(...INSTRUMENTS.map((inst) => el('button', {
+  const chips = INSTRUMENTS.map((inst) => el('button', {
     class: `bc-chip ${inst.id === current ? 'on' : ''}`.trim(),
     onclick: () => {
       ensureAudio();
       selectInstrument(inst.id);
     },
-  }, inst.title)));
+  }, inst.title));
+  if (octavesOn() && OCTAVE_INSTRUMENTS.includes(current) && !landscape) {
+    chips.push(el('button', {
+      class: `bc-chip bc-chip-oct ${octaves === 2 ? 'on' : ''}`.trim(),
+      'aria-pressed': String(octaves === 2),
+      onclick: () => {
+        octaves = octaves === 2 ? 1 : 2;
+        api.storage.set('octaves', octaves);
+        api.platform.haptic.selection();
+        renderChips();
+        renderPads();
+        if (!reducedMotion()) animate(ui.pads, [{ opacity: 0.4, transform: 'scale(0.98)' }, { opacity: 1, transform: 'none' }], { duration: 200, easing: 'ease-out' });
+      },
+    }, '2 октавы'));
+  }
+  ui.chips.replaceChildren(...chips);
 }
+
+/**
+ * Раскладка: альбомная — если игру повернули кнопкой или экран и так шире, чем выше (телефон боком, окно на ПК).
+ * Поворот — вся игра разворачивается на 90° (держать телефон боком); animated — плавно, из маленькой картинки.
+ */
+function applyLayout(animated = false) {
+  if (!ui || !host) return;
+  const W = host.clientWidth, H = host.clientHeight;
+  const wide = W > H;
+  if (wide) rotated = false;                          // телефон и так боком — поворачивать нечего
+  const was = ui.root.classList.contains('bc-rot');
+  landscape = octavesOn() && (rotated || wide);
+  host.classList.toggle('bc-host-rot', rotated);
+  ui.root.classList.toggle('bc-rot', rotated);
+  ui.root.classList.toggle('bc-land', landscape);
+  if (rotated) {
+    ui.root.style.setProperty('--rot-w', `${H}px`);
+    ui.root.style.setProperty('--rot-h', `${W}px`);
+  }
+  if (ui.rotateBtn) {
+    ui.rotateBtn.hidden = wide;
+    ui.rotateBtn.setAttribute('aria-pressed', String(rotated));
+  }
+  renderChips();
+  renderPads();
+  if (animated && was !== rotated && !reducedMotion() && H > 0) {
+    const k = (W / H).toFixed(3);
+    animate(ui.root, rotated
+      ? [{ transform: `translate(-50%, -50%) rotate(0deg) scale(${k})`, opacity: 0.35 }, { transform: 'translate(-50%, -50%) rotate(90deg) scale(1)', opacity: 1 }]
+      : [{ transform: `rotate(90deg) scale(${k})`, opacity: 0.35 }, { transform: 'none', opacity: 1 }],
+    { duration: 480, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' });
+  }
+}
+
+function toggleRotate() {
+  releaseAll();
+  rotated = !rotated;
+  api.platform.haptic.impact('medium');
+  applyLayout(true);
+}
+
+const onResize = () => applyLayout(false);
 
 function selectInstrument(id, { quiet = false } = {}) {
   if (id === current && !quiet) return;
@@ -441,8 +528,9 @@ function openHelp() {
     el('p', { class: 'bc-muted' }, 'С клавиатуры компьютера — как на bongo.cat:'),
     el('div', { class: 'bc-help' },
       line('Бонго', ['A', 'D']),
-      line('Пианино', ['1', '…', '0']),
-      line('Маримба', ['Q', '…', 'P']),
+      line('Пианино', octavesOn() ? ['1', '…', '0', '-', '='] : ['1', '…', '0']),
+      line('Маримба', octavesOn() ? ['Q', '…', 'P', '[', ']'] : ['Q', '…', 'P']),
+      ...(octavesOn() ? [line('Октавой выше', ['Shift', '+', 'клавиша'])] : []),
       line('Тарелка', ['C']),
       line('Бубен', ['B']),
       line('Колокольчик', ['F']),
@@ -465,7 +553,10 @@ export default {
     host = container;
     toast = createToast();
 
-    const [savedStats, savedInstrument] = await Promise.all([api.storage.get('stats'), api.storage.get('instrument')]);
+    const [savedStats, savedInstrument, savedOctaves] = await Promise.all([
+      api.storage.get('stats'), api.storage.get('instrument'), api.storage.get('octaves'),
+    ]);
+    octaves = savedOctaves === 2 ? 2 : 1;
     if (!api) return;                              // успели закрыть, пока читали
     stats = isValidStats(savedStats) ? { songs: 0, ...savedStats } : emptyStats();
     current = findInstrument(savedInstrument) && !findInstrument(savedInstrument).voice ? savedInstrument : 'bongo';
@@ -487,24 +578,26 @@ export default {
       chips: el('div', { class: 'bc-chips' }),
       songBar: el('div', { class: 'bc-songbar', hidden: true }),
       pads: el('div', { class: 'bc-pads' }),
+      rotateBtn: octavesOn() ? iconBtn(ICONS.rotate, 'Повернуть: альбомный вид, две октавы', () => toggleRotate()) : null,
       modal: el('div', { class: 'bc-modal', hidden: true, onclick: (e) => { if (e.target === ui.modal) closeModal(); } }),
     };
 
-    container.replaceChildren(el('div', { class: 'bc' },
+    ui.root = el('div', { class: 'bc' },
       el('header', { class: 'bc-header' },
         el('div', {}, el('div', { class: 'bc-title' }, 'Bongo Cat'), ui.sub),
         el('div', { class: 'bc-actions' },
+          ui.rotateBtn,
           iconBtn(ICONS.songs, 'Мелодии', openSongs),
           iconBtn(ICONS.stats, 'Статистика', openStats),
           iconBtn(ICONS.help, 'Как играть', openHelp),
         ),
       ),
       ui.stage,
-      ui.chips,
-      ui.songBar,
+      el('div', { class: 'bc-side' }, ui.chips, ui.songBar),
       ui.pads,
       ui.modal,
-    ), toast.el);
+    );
+    container.replaceChildren(ui.root, toast.el);
 
     ui.pads.addEventListener('pointerdown', onPadDown);
     ui.pads.addEventListener('pointerup', onPadUp);
@@ -515,10 +608,10 @@ export default {
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
     window.addEventListener('blur', releaseAll);
+    window.addEventListener('resize', onResize);
 
     showInstrument(current);
-    renderChips();
-    renderPads();
+    applyLayout(false);
     if (!reducedMotion()) {
       animate(ui.scene.querySelector('.bc-cat'), [{ transform: 'translateY(40px)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 420, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' });
     }
@@ -533,6 +626,11 @@ export default {
     window.removeEventListener('keydown', onKeyDown);
     window.removeEventListener('keyup', onKeyUp);
     window.removeEventListener('blur', releaseAll);
+    window.removeEventListener('resize', onResize);
+    host?.classList.remove('bc-host-rot');
+    octaves = 1;
+    rotated = false;
+    landscape = false;
     for (const id of timers) clearTimeout(id);
     timers.clear();
     audio?.ctx.close().catch(() => {});
