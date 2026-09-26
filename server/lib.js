@@ -247,8 +247,6 @@ export function progressLines(state) {
  */
 export const SERVER_BETA = [
   // >>> серверная бета
-  'feedback',
-  'welcome',
   // <<< конец серверной беты
 ];
 
