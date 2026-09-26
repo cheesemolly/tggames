@@ -332,3 +332,9 @@
 [data-game="brick-blast"] .bk-lvl-current { box-shadow: inset 0 0 0 2px var(--bk-accent); }
 [data-game="brick-blast"] .bk-lvl-locked { opacity: 0.35; cursor: default; font-size: 12px; }
 [data-game="brick-blast"] .bk-lvl-done { position: absolute; top: 2px; right: 5px; font-size: 10px; color: #3dbb4a; }
+[data-game="brick-blast"] .bk-muted { opacity: 0.55; }
+/* пять кнопок в шапке (со звуком) на узком экране — чуть меньше */
+@media (max-width: 380px) {
+  [data-game="brick-blast"] .bk-actions-5 { gap: 4px; }
+  [data-game="brick-blast"] .bk-actions-5 .bk-icon-btn { width: 32px; height: 32px; }
+}
