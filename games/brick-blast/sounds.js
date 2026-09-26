@@ -1,9 +1,11 @@
-// Звуки Brick Blast — аркадные (просьба владельца, 2026-09-26), из shared/sfx.js.
-//   бросок — «фьють» очереди шариков; удар о блок — короткий «тик» (высота гуляет по пентатонике, чтобы
-//   сотни ударов звучали россыпью, а не пулемётом; в игре — не чаще раза в 45 мс); блок разбит — «поп»,
-//   крепкие блоки ниже и сочнее; лазер — «пью» вниз; «×3» — перелив вверх; «разброс» — «боинг»;
-//   «вернуть шарики» — шорох вниз; ряд сдвинулся — глухой «дум»; блоки у дна — тревожное «пи-пу»;
-//   уровень пройден — фанфара; проигрыш — ноты вниз.
+// Звуки Brick Blast — в духе Block Blast (владелец, 2026-09-26: «brick blast — говно, надо сделать как в block blast,
+// лазеры звучат ужасно»). Первая версия была на 8-битных «чипах» (квадратная волна) — писклявая, лазер «пью»
+// резал уши. Теперь те же мягкие кирпичики, что у Block Blast (shared/sfx.js): «тук», «поп», «плип», шорох, колокольчик —
+// и ни одной квадратной волны (тест следит).
+//   бросок — «плип» и шорох; удар о блок — тихий деревянный «тук» (высота гуляет; в игре — не чаще раза в 45 мс);
+//   блок разбит — «поп», крепкий блок ниже и сочнее; лазер — мягкий «вжух» и глухой «поп»; «×3» — три «плипа» вверх;
+//   «разброс» — «буп» вверх; «вернуть шарики» — шорох вниз; ряд сдвинулся — глухой «тук»; блоки у дна — два низких «бупа»;
+//   уровень пройден — «плипы» и колокольчики; проигрыш — глухие «тук» вниз.
 // createSounds(ctx) принимает готовый AudioContext — в тестах подставляется поддельный.
 // play(name, { step }) — step: прочность разбитого блока (break).
 
@@ -12,40 +14,45 @@ import { createSfx, freqOf, pentaStep } from '../../shared/sfx.js';
 export const SOUNDS = ['shoot', 'hit', 'break', 'laser', 'triple', 'scatter', 'recall', 'shift', 'danger', 'win', 'lose', 'click'];
 
 export function createSounds(ctx) {
-  const { now, chip, bup, bell, swoosh, thud } = createSfx(ctx, { volume: 0.5 });
-  const pick = (list) => list[Math.floor(Math.random() * list.length)];
+  const { now, plip, bup, tock, bell, swoosh, grain, thud } = createSfx(ctx, { volume: 0.55 });
 
   const play = {
     shoot: (t) => {
-      swoosh(t, 900, 2600, 0.14, 0.05);
-      chip(freqOf(0), t, { dur: 0.08, slideTo: freqOf(12), type: 'triangle', peak: 0.06 });
+      plip(freqOf(0), t, { peak: 0.12, decay: 0.07 });
+      swoosh(t, 700, 2200, 0.16, 0.04);
     },
-    // удар: короткий «тик» треугольной волной
-    hit: (t) => chip(freqOf(pentaStep(pick([5, 6, 7, 8, 9]))), t, { dur: 0.025, type: 'triangle', peak: 0.05 }),
-    // разбит: «поп»; прочнее блок — ниже и громче
+    // удар о блок: тихий деревянный «тук»
+    hit: (t) => tock(260 + Math.random() * 120, t, { peak: 0.09, decay: 0.045 }),
+    // разбит: «поп», крепче блок — ниже и сочнее
     break: (t, { step: hp = 10 }) => {
       const tier = Math.max(0, Math.min(4, Math.floor(hp / 40)));
-      bup(freqOf(12 - tier * 3) * (0.95 + Math.random() * 0.1), t, { peak: 0.14 + tier * 0.02, decay: 0.08 + tier * 0.02, drop: 1.8 });
+      bup(freqOf(pentaStep(6 - tier) - 5) * (0.95 + Math.random() * 0.1), t, { peak: 0.12 + tier * 0.02, decay: 0.07 + tier * 0.015, drop: 1.6 });
     },
-    laser: (t) => chip(freqOf(24), t, { dur: 0.16, slideTo: freqOf(5), peak: 0.045 }),
-    triple: (t) => [0, 4, 7, 12, 16].forEach((s, k) => chip(freqOf(s + 7), t + k * 0.05, { dur: 0.06, peak: 0.05 })),
-    scatter: (t) => chip(freqOf(-5), t, { dur: 0.18, slideTo: freqOf(7), type: 'triangle', peak: 0.08 }),
-    recall: (t) => swoosh(t, 2400, 600, 0.25, 0.07),
-    shift: (t) => thud(110, t, { peak: 0.16, decay: 0.14, slide: 0.8 }),
-    // опасно: блоки у дна
+    // лазер: мягкий «вжух» по линии и глухой «поп»
+    laser: (t) => {
+      swoosh(t, 600, 2400, 0.2, 0.05);
+      bup(freqOf(-7), t + 0.05, { peak: 0.1, decay: 0.08, drop: 1.5 });
+    },
+    triple: (t) => [0, 4, 7].forEach((s, k) => plip(freqOf(s), t + k * 0.08, { peak: 0.12, decay: 0.07 })),
+    scatter: (t) => bup(freqOf(-5), t, { peak: 0.14, decay: 0.1, drop: 0.6 }),
+    recall: (t) => swoosh(t, 2200, 600, 0.24, 0.06),
+    shift: (t) => tock(170, t, { peak: 0.14, decay: 0.09 }),
     danger: (t) => {
-      chip(freqOf(7), t, { dur: 0.1, peak: 0.05 });
-      chip(freqOf(0), t + 0.13, { dur: 0.14, peak: 0.05 });
+      bup(freqOf(-12), t, { peak: 0.16, decay: 0.12, drop: 1.3 });
+      bup(freqOf(-12), t + 0.18, { peak: 0.14, decay: 0.12, drop: 1.3 });
     },
     win: (t) => {
-      [0, 4, 7, 12].forEach((s, k) => chip(freqOf(s), t + k * 0.08, { dur: 0.07, peak: 0.05 }));
-      [0, 4, 7, 12].forEach((s) => bell(freqOf(s + 12), t + 0.34, { peak: 0.1, decay: 1 }));
+      [0, 4, 7].forEach((s, k) => plip(freqOf(s), t + k * 0.08, { peak: 0.12, decay: 0.07 }));
+      [0, 4, 7, 12].forEach((s) => bell(freqOf(s), t + 0.3, { peak: 0.09, decay: 1.2 }));
     },
     lose: (t) => {
-      [7, 3, 0].forEach((s, k) => chip(freqOf(s - 5), t + k * 0.18, { dur: 0.15, slideTo: freqOf(s - 6), peak: 0.05 }));
-      thud(110, t + 0.55, { peak: 0.2, decay: 0.35, slide: 0.7 });
+      for (let k = 0; k < 5; k++) tock(250 - k * 25, t + k * 0.16, { peak: 0.13, decay: 0.09 });
+      thud(100, t + 0.85, { peak: 0.18, decay: 0.4, slide: 0.7 });
     },
-    click: (t) => chip(freqOf(12), t, { dur: 0.03, peak: 0.035 }),
+    click: (t) => {
+      tock(300, t, { peak: 0.06, decay: 0.03 });
+      grain(t, 0.012, { f0: 2400, q: 0.9, peak: 0.02, attack: 0.002, release: 0.01 });
+    },
   };
 
   return {

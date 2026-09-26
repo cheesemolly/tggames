@@ -32,3 +32,29 @@ test('у каждого из 6 цветов своя нота; комбо бог
   const sizes = [1, 2, 3, 4].map(size);
   for (let i = 1; i < sizes.length; i++) assert.ok(sizes[i] > sizes[i - 1], `ступень ${i + 1}: ${sizes}`);
 });
+
+test('«Мега-комбо» не режет уши: без шипящего шума и без высоких нот; отскок — глухой «тук»', () => {
+  const { ctx, created } = fakeContext();
+  const sounds = createSounds(ctx);
+  const probe = (name, opts) => {
+    const freqs = [];
+    const orig = ctx.createOscillator;
+    ctx.createOscillator = () => {
+      const o = orig();
+      const at = o.frequency.setValueAtTime;
+      o.frequency.setValueAtTime = (v, t) => { freqs.push(v); at(v, t); };
+      return o;
+    };
+    const before = created.length;
+    sounds.play(name, opts);
+    ctx.createOscillator = orig;
+    return { freqs, noise: created.slice(before).filter((n) => n.kind === 'buffer').length };
+  };
+  const mega = probe('combo', { tier: 4 });
+  assert.equal(mega.noise, 0, 'без шума');
+  // с обертонами колокольчика (×4,2); у первой версии было ≈ 8800 Гц
+  assert.ok(Math.max(...mega.freqs) < 3000, `самая высокая ${Math.round(Math.max(...mega.freqs))} Гц`);
+  const bounce = probe('bounce');
+  assert.ok(bounce.freqs.every((f) => f < 400), `отскок: ${bounce.freqs.map(Math.round)}`);
+});
+

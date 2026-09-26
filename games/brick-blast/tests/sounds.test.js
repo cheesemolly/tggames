@@ -20,7 +20,18 @@ test('каждый звук Brick Blast звучит, все узлы подкл
   }
 });
 
-test('удар о блок — один короткий тихий «тик» (ударов сотни), разбитый блок крепче — ниже', () => {
+test('как в Block Blast: ни одной квадратной (8-битной) волны — лазер и остальное мягкие', () => {
+  const { ctx, created } = fakeContext();
+  const sounds = createSounds(ctx);
+  for (const name of SOUNDS) {
+    const before = created.length;
+    sounds.play(name, { step: 100 });
+    const types = created.slice(before).filter((n) => n.kind === 'osc').map((n) => n.type);
+    assert.ok(!types.includes('square'), `${name}: квадратная волна`);
+  }
+});
+
+test('удар о блок — один короткий тихий «тук» (ударов сотни), разбитый блок крепче — ниже', () => {
   const { ctx, created } = fakeContext();
   const sounds = createSounds(ctx);
   const before = created.length;
