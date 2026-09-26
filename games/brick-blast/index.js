@@ -7,6 +7,8 @@ import { el } from '../../shared/dom.js';
 import { animate, showLayer, hideLayer, shake, pop, reducedMotion, EASE_OUT } from '../../shared/motion.js';
 import { createToast } from '../../shared/toast.js';
 import { createFx } from '../../shared/fx.js';
+import { createAudio } from '../../shared/sfx.js';
+import { createSounds } from './sounds.js';
 import {
   COLS, ROWS, BALL_R, POWER_R, MIN_ANGLE, newLevel, startTurn, step, recall, endTurn, danger, tracePath, aimAngle,
   polygon, progress, isValidState, normalizeState, emptyStats, isValidStats, LASER_LIFE, LASERS,
@@ -48,6 +50,8 @@ const svgIcon = (body, fill = false) => `<svg viewBox="0 0 24 24" width="22" hei
   + `${body}</svg>`;
 const ICONS = {
   restart: svgIcon('<path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/>'),
+  soundOn: svgIcon('<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/>'),
+  soundOff: svgIcon('<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="m16 9 5 6"/><path d="m21 9-5 6"/>'),
   stats: svgIcon('<rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="7" width="4" height="14" rx="1"/><rect x="17" y="3" width="4" height="18" rx="1"/>', true),
   gear: svgIcon('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/>'),
   levels: svgIcon('<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>'),
@@ -87,6 +91,41 @@ let lastHaptic = 0;
 let dprNow = 1;
 const sprites = new Map();         // цвет → готовая картинка шарика
 let fieldCache = null;             // фон поля, нарисованный заранее
+let soundOn = true;
+const soundAt = {};                // когда звучал каждый частый звук — удары, осколки, лазеры
+// звуки (в бете: api.feature('brick-blast-sounds')) — один AudioContext на страницу, заводится при первом звуке
+const audio = createAudio(createSounds);
+
+const soundFeature = () => Boolean(api?.feature?.('brick-blast-sounds'));
+
+/** gap — не чаще раза в gap мс (шариков сотня, ударов за кадр десятки: иначе треск). */
+function sfx(name, opts, gap = 0) {
+  if (!soundFeature() || !soundOn) return;
+  const t = performance.now();
+  if (gap && t - (soundAt[name] ?? -Infinity) < gap) return;
+  soundAt[name] = t;
+  try {
+    audio.get()?.play(name, opts);
+  } catch (err) {
+    console.warn('звук', name, err);
+  }
+}
+
+function renderSoundBtn() {
+  if (!ui?.soundBtn) return;
+  ui.soundBtn.innerHTML = soundOn ? ICONS.soundOn : ICONS.soundOff;
+  const label = soundOn ? 'Выключить звук' : 'Включить звук';
+  ui.soundBtn.setAttribute('aria-label', label);
+  ui.soundBtn.title = label;
+  ui.soundBtn.classList.toggle('bk-muted', !soundOn);
+}
+
+function toggleSound() {
+  soundOn = !soundOn;
+  api.storage.set('sound', soundOn);
+  renderSoundBtn();
+  sfx('click');
+}
 let holding = null;                // палец зажат во время полёта — ускорение ×2 (id касания)
 const timers = new Set();
 
@@ -580,22 +619,29 @@ function handleEvents() {
   burstsThisFrame = 0;
   canvasOffset = null;
   for (const e of sim.events) {
-    if (e.type === 'hit') flashes.set(e.id, now);
-    else if (e.type === 'break') {
+    if (e.type === 'hit') {
+      flashes.set(e.id, now);
+      sfx('hit', null, 45);
+    } else if (e.type === 'break') {
       flashes.delete(e.id);
+      sfx('break', { step: e.max }, 55);
       stats.bricks += 1;
       burstAt(e.c + 0.5, e.r + 0.5, tierColor(e.max));
       if (now - lastHaptic > 60) {
         api.platform.haptic.impact('light');
         lastHaptic = now;
       }
-    } else if (e.type === 'laser') lasers.set(e.axis === 'h' ? `h:${e.r}` : `v:${e.c}`, now);
+    } else if (e.type === 'laser') {
+      lasers.set(e.axis === 'h' ? `h:${e.r}` : `v:${e.c}`, now);
+      sfx('laser', null, 120);
+    } else if (e.type === 'scatter') sfx('scatter', null, 150);
     else if (e.type === 'expire') {
       powerBorn.set(-e.id, -Infinity);            // гаснущее кольцо не «впрыгивает» заново
       fading.push({ p: { ...e, id: -e.id, born: -Infinity }, t: now });
     }
     else if (e.type === 'spawn') powerBorn.delete(e.id);
     else if (e.type === 'triple') {
+      sfx('triple');
       toast.show(T.triple, 1800);
       api.platform.haptic.notification('success');
     }
@@ -631,6 +677,7 @@ function shoot() {
   phase = 'fly';
   stats.shots += 1;
   ui.bottom.dataset.mode = 'fly';
+  sfx('shoot');
   api.platform.haptic.impact('medium');
   kick();
 }
@@ -657,7 +704,11 @@ function finishTurn() {
   ui.bottom.dataset.mode = 'aim';
   syncSlider();
   save();
-  if (danger(game)) api.platform.haptic.notification('warning');
+  sfx('shift');
+  if (danger(game)) {
+    later(() => sfx('danger'), 200);
+    api.platform.haptic.notification('warning');
+  }
   kick();
 }
 
@@ -671,6 +722,7 @@ function won() {
   pending = newLevel(done.level + 1);
   pending.x = done.x;
   save();                                          // следующий уровень сохранён сразу, на экране — пройденный
+  sfx('win');
   api.platform.haptic.notification('success');
   renderProgress(1);
   later(() => {
@@ -716,6 +768,7 @@ function lost() {
   stats.fails += 1;
   api.storage.set('stats', stats);
   const failed = game.level;
+  sfx('lose');
   api.platform.haptic.notification('error');
   shake(ui.canvas, { distance: 8, duration: 450 });
   // «Ещё раз» на экране результата начнёт этот же уровень заново
@@ -868,12 +921,14 @@ function onSliderUp(e) {
 function onRecall() {
   if (phase !== 'fly' || !sim) return;
   recall(sim);
+  sfx('recall');
   api.platform.haptic.impact('light');
 }
 
 // ---------- окна ----------
 
 function openModal(content) {
+  if (!modalActive) sfx('click');
   modalToken++;
   ui.modal.replaceChildren(content);
   if (!modalActive) showLayer(ui.modal);
@@ -994,10 +1049,11 @@ export default {
     api = gameApi;
     host = container;
     toast = createToast();
-    const [saved, savedStats, savedSettings] = await Promise.all([
-      api.storage.get('current'), api.storage.get('stats'), api.storage.get('settings'),
+    const [saved, savedStats, savedSettings, savedSound] = await Promise.all([
+      api.storage.get('current'), api.storage.get('stats'), api.storage.get('settings'), api.storage.get('sound'),
     ]);
     if (!api) return;
+    soundOn = savedSound !== false;
     stats = isValidStats(savedStats) ? savedStats : emptyStats();
     settings = { skin: SKINS.includes(savedSettings?.skin) ? savedSettings.skin : 'telegram' };
     host.dataset.skin = settings.skin;
@@ -1010,6 +1066,7 @@ export default {
       modal: el('div', { class: 'bk-modal', hidden: true }),
     };
     ui.ctx = ui.canvas.getContext('2d');
+    ui.soundBtn = soundFeature() ? iconButton(ICONS.soundOn, 'Выключить звук', toggleSound) : null;
     ui.percent = el('div', { class: 'bk-percent' }, '0%');
     ui.wrap = el('div', { class: 'bk-wrap' }, ui.canvas);
     ui.track = el('div', { class: 'bk-track' }, el('div', { class: 'bk-track-line' }), ui.knob);
@@ -1035,7 +1092,8 @@ export default {
     root = el('div', { class: 'bk' },
       el('div', { class: 'bk-header' },
         el('div', {}, el('div', { class: 'bk-title' }, T.title), ui.sub),
-        el('div', { class: 'bk-actions' },
+        el('div', { class: ui.soundBtn ? 'bk-actions bk-actions-5' : 'bk-actions' },
+          ui.soundBtn,
           iconButton(ICONS.levels, T.levels, showLevels),
           iconButton(ICONS.restart, T.newLevel, askRestart),
           iconButton(ICONS.stats, T.stats.open, showStats),
@@ -1049,6 +1107,7 @@ export default {
       toast.el,
     );
     container.append(root);
+    renderSoundBtn();
     // зажал экран во время полёта (не на кнопке) — шарики летят вдвое быстрее, отпустил — как было
     root.addEventListener('pointerdown', (e) => {
       if (phase !== 'fly' || modalActive || e.target.closest('button')) return;

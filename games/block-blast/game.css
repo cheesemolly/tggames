@@ -420,3 +420,4 @@
 }
 [data-game="block-blast"] .bb-skin:active .bb-swatch { transform: scale(0.92); }
 [data-game="block-blast"] .bb-skin[aria-checked="true"] .bb-swatch { outline: 3px solid var(--bb-accent); outline-offset: 3px; }
+[data-game="block-blast"] .bb-muted { opacity: 0.55; }

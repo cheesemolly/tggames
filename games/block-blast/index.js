@@ -11,6 +11,8 @@ import {
   newGame, isValidState, emptyStats, recordGame, isValidStats,
 } from './logic.js';
 import { createFx } from '../../shared/fx.js';
+import { createAudio } from '../../shared/sfx.js';
+import { createSounds } from './sounds.js';
 
 const SKINS = ['telegram', 'classic', 'sky', 'dark', 'wood', 'neon', 'candy'];
 const T = {
@@ -41,6 +43,8 @@ const svg = (body, fill = false) => `<svg viewBox="0 0 24 24" width="20" height=
   + `${body}</svg>`;
 const ICONS = {
   restart: svg('<path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/>'),
+  soundOn: svg('<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/>'),
+  soundOff: svg('<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="m16 9 5 6"/><path d="m21 9-5 6"/>'),
   stats: svg('<rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="7" width="4" height="14" rx="1"/><rect x="17" y="3" width="4" height="18" rx="1"/>', true),
   gear: svg('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/>'),
 };
@@ -64,6 +68,36 @@ let shownScore = 0;
 let scoreRaf = 0;
 let modalActive = false;
 let modalToken = 0;
+let soundOn = true;
+// звуки (в бете: api.feature('block-blast-sounds')) — один AudioContext на страницу, заводится при первом звуке
+const audio = createAudio(createSounds);
+
+const soundFeature = () => Boolean(api?.feature?.('block-blast-sounds'));
+
+function sfx(name, opts) {
+  if (!soundFeature() || !soundOn) return;
+  try {
+    audio.get()?.play(name, opts);
+  } catch (err) {
+    console.warn('звук', name, err);
+  }
+}
+
+function renderSoundBtn() {
+  if (!ui?.soundBtn) return;
+  ui.soundBtn.innerHTML = soundOn ? ICONS.soundOn : ICONS.soundOff;
+  const label = soundOn ? 'Выключить звук' : 'Включить звук';
+  ui.soundBtn.setAttribute('aria-label', label);
+  ui.soundBtn.title = label;
+  ui.soundBtn.classList.toggle('bb-muted', !soundOn);
+}
+
+function toggleSound() {
+  soundOn = !soundOn;
+  api.storage.set('sound', soundOn);
+  renderSoundBtn();
+  sfx('click');
+}
 const timers = new Set();
 
 function later(fn, ms) {
@@ -202,6 +236,7 @@ function onPointerDown(e, slot) {
     // без захвата тоже работает: движения ловит корень игры
   }
   drag = { slot, piece, shape, cs, node, pointerId: e.pointerId, anchor: null, w: shape.cols * cs, h: shape.rows * cs };
+  sfx('pick');
   api.platform.haptic.selection();
   moveDrag(localPoint(e));
   animate(node, [{ transform: 'scale(0.55)' }, { transform: 'scale(1)' }], { duration: 140, easing: EASE_OUT });
@@ -249,6 +284,7 @@ function onPointerUp(e) {
 
 /** Отпустили мимо — фигура улетает обратно в лоток. */
 function returnToTray(current) {
+  sfx('back');
   renderBoard();
   const slot = ui.slots[current.slot].getBoundingClientRect();
   const nodeRect = current.node.getBoundingClientRect();
@@ -291,6 +327,7 @@ function commitMove(slot, r, c) {
     renderTray();
     return;
   }
+  sfx('place', { step: ev.cells.length });
   api.platform.haptic.impact(ev.lines ? 'medium' : 'light');
 
   // Сначала показываем поле с поставленной фигурой и ещё не сгоревшими линиями.
@@ -322,6 +359,7 @@ function commitMove(slot, r, c) {
 function afterMove() {
   if (trayEmpty(game)) {
     game.tray = dealTray(game.board);
+    sfx('deal');
     renderTray({ entering: true });
   } else {
     renderTray();
@@ -359,6 +397,8 @@ function playClear(ev) {
   if (ev.lines >= 3) level += 1;            // 3+ линии разом — на уровень выше
   if (ev.allClear) level = 4;               // чистое поле — всегда максимум
   level = Math.min(4, level);
+  sfx(ev.allClear ? 'allclear' : 'clear', { step: ev.combo, level, lines: ev.lines });
+  if (ev.allClear) sfx('clear', { step: ev.combo, level, lines: ev.lines });
   const rootRect = root.getBoundingClientRect();
   const board = ui.board.getBoundingClientRect();
   const cs = board.width / SIZE;
@@ -419,6 +459,7 @@ function gameOver() {
   stats = recordGame(stats, game);
   api.storage.set('stats', stats);
   toast.show(T.noMoves, 1400);
+  sfx('over');
   api.platform.haptic.notification('error');
 
   // клетки гаснут волной сверху вниз
@@ -437,6 +478,7 @@ function gameOver() {
 // ---------- окна ----------
 
 function openModal(content) {
+  if (!modalActive) sfx('click');
   modalToken++;
   ui.modal.replaceChildren(content);
   if (!modalActive) showLayer(ui.modal);
@@ -536,10 +578,11 @@ export default {
     api = gameApi;
     host = container;
     toast = createToast();
-    const [savedGame, savedStats, savedSettings] = await Promise.all([
-      api.storage.get('current'), api.storage.get('stats'), api.storage.get('settings'),
+    const [savedGame, savedStats, savedSettings, savedSound] = await Promise.all([
+      api.storage.get('current'), api.storage.get('stats'), api.storage.get('settings'), api.storage.get('sound'),
     ]);
     if (!api) return;
+    soundOn = savedSound !== false;
     stats = isValidStats(savedStats) ? savedStats : emptyStats();
     settings = { skin: SKINS.includes(savedSettings?.skin) ? savedSettings.skin : 'telegram' };
     host.dataset.skin = settings.skin;
@@ -556,6 +599,7 @@ export default {
       modal: el('div', { class: 'bb-modal', hidden: true }),
     };
     ui.board.append(...ui.cells);
+    ui.soundBtn = soundFeature() ? iconButton(ICONS.soundOn, 'Выключить звук', toggleSound) : null;
     ui.frame = el('div', { class: 'bb-frame', 'data-glow': '0' }, ui.board);
     shownScore = game.score;
 
@@ -563,6 +607,7 @@ export default {
       el('div', { class: 'bb-header' },
         el('div', {}, el('div', { class: 'bb-title' }, T.title), ui.sub),
         el('div', { class: 'bb-actions' },
+          ui.soundBtn,
           iconButton(ICONS.restart, T.newGame, askRestart),
           iconButton(ICONS.stats, T.stats.open, showStats),
           iconButton(ICONS.gear, T.settings.open, showSettings),
@@ -577,6 +622,7 @@ export default {
       toast.el,
     );
     container.append(root);
+    renderSoundBtn();
     fx = createFx(root, 'bb-fx');
     root.append(fx.canvas);
     root.addEventListener('pointermove', onPointerMove);

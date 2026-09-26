@@ -11,6 +11,8 @@ import { el } from '../../shared/dom.js';
 import { showLayer, hideLayer, pop as popIn, animate, reducedMotion } from '../../shared/motion.js';
 import { createToast } from '../../shared/toast.js';
 import { createFx } from '../../shared/fx.js';
+import { createAudio } from '../../shared/sfx.js';
+import { createSounds } from './sounds.js';
 import {
   R, ROW_H, WIDTH, VIEW_ROWS, FIELD_H, SHOOTER_DY, COLORS, STONE, SPEED, STEP, BONUS_KINDS, REWARD_EVERY,
   rowCols, cellX, cellY, cloneGrid, isStone, isLocked, colorOf, snapCell, countColored,
@@ -87,7 +89,48 @@ let pendingNext = null;         // следующий уровень: сохра
 const timers = new Set();
 let animT = 0;                  // время для анимаций бонусных шаров (фитиль, перелив, пламя)
 const trail = createTrail();    // след летящего бонуса: дым, радуга, пламя
-let lastFly = null;             // где был бонус в прошлом кадре — след тянется отрезками
+let lastFly = null;
+let soundOn = true;
+const soundAt = {};                // когда звучал частый звук (отскоки, треск огня)
+// звуки (в бете: api.feature('bubble-sounds')) — один AudioContext на страницу, заводится при первом звуке
+const audio = createAudio(createSounds);
+
+const soundFeature = () => Boolean(api?.feature?.('bubble-sounds'));
+
+function sfx(name, opts, gap = 0) {
+  if (!soundFeature() || !soundOn) return;
+  const t = performance.now();
+  if (gap && t - (soundAt[name] ?? -Infinity) < gap) return;
+  soundAt[name] = t;
+  try {
+    audio.get()?.play(name, opts);
+  } catch (err) {
+    console.warn('звук', name, err);
+  }
+}
+
+const SOUND_ON = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" '
+  + 'stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4V5Z"/>'
+  + '<path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>';
+const SOUND_OFF = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" '
+  + 'stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4V5Z"/>'
+  + '<path d="m16 9 5 6"/><path d="m21 9-5 6"/></svg>';
+
+function renderSoundBtn() {
+  if (!ui?.soundBtn) return;
+  ui.soundBtn.innerHTML = soundOn ? SOUND_ON : SOUND_OFF;
+  const label = soundOn ? 'Выключить звук' : 'Включить звук';
+  ui.soundBtn.setAttribute('aria-label', label);
+  ui.soundBtn.title = label;
+  ui.soundBtn.classList.toggle('bs-muted', !soundOn);
+}
+
+function toggleSound() {
+  soundOn = !soundOn;
+  api.storage.set('sound', soundOn);
+  renderSoundBtn();
+  sfx('click');
+}             // где был бонус в прошлом кадре — след тянется отрезками
 
 const later = (fn, ms) => {
   const id = setTimeout(() => {
@@ -620,6 +663,8 @@ function step(dt) {
   if (flying) {
     flying.progress += (dt * SPEED) / STEP;
     const index = Math.min(flying.path.length - 1, Math.floor(flying.progress));
+    // пролетели точку отскока от стены — «тинь»
+    for (let i = (flying.index ?? 0) + 1; i <= index; i++) if (flying.path[i]?.bounce && !flying.path[i - 1]?.bounce) sfx('bounce', null, 60);
     flying.index = index;
     flying.point = flying.path[index];
     if (typeof flying.value === 'string' && !reducedMotion()) {
@@ -683,6 +728,7 @@ function onPointerDown(e) {
   if (Math.hypot(p.x - NEXT_X, p.y - (SHOOTER_DY + 0.12)) < 0.9) {
     if (!game.armed && swap(game)) {
       swapT = 0;
+      sfx('swap');
       api.platform.haptic.selection();
       save();
     }
@@ -730,6 +776,8 @@ function fire(angle) {
   if (!res) return;
   busy = true;
   view = before;
+  if (res.kind === 'rainbow') sfx('rainbow');
+  else sfx('shoot', { color: typeof value === 'number' ? value : 0 });
   api.platform.haptic.impact('light');
   renderBonuses();
 
@@ -763,6 +811,7 @@ function burnCell(r, c) {
   const v = view.grid[r][c];
   if (v === null) return;
   view.grid[r][c] = null;
+  sfx('burn', null, 50);
   popAt(r, c, v, 'fire');
 }
 
@@ -779,6 +828,7 @@ function popAt(r, c, value, kind = 'pop') {
 function land(res, value) {
   const [ir, ic] = res.cell ?? [null, null];
   if (res.cell && res.kind === 'ball') view.grid[ir][ic] = value;
+  if (res.kind === 'ball' && !res.popped.length) sfx('stick', { color: typeof value === 'number' ? value : 0 });
   if (res.kind === 'bomb' && res.cell) shockwave(ir, ic);
 
   // волна: ближние лопаются первыми
@@ -793,12 +843,14 @@ function land(res, value) {
       const v = view?.grid[r][c] ?? (kind === 'pop' && r === ir && c === ic ? value : null);
       if (!view) return;
       view.grid[r][c] = null;
+      if (kind !== 'blast') sfx('pop', { step: i });
       popAt(r, c, v ?? value, kind === 'blast' ? 'fire' : 'pop');
       if (i % 3 === 0) api.platform.haptic.impact('light');
     }, i * gap);
   });
 
   // цепи слетают сразу
+  if (res.unlocked.length) later(() => sfx('chain'), 60);
   for (const [r, c] of res.unlocked) {
     later(() => {
       if (!view) return;
@@ -827,6 +879,7 @@ function land(res, value) {
 
 function shockwave(r, c) {
   popping.push({ x: cellX(r, c), y: cellY(r), value: 'bomb', color: '#ffd34d', kind: 'blast', t: 0 });
+  sfx('bomb');
   api.platform.haptic.impact('heavy');
   ui.wrap.classList.remove('bs-shake');
   void ui.wrap.offsetWidth;
@@ -845,6 +898,7 @@ function dropLoose(res) {
     });
   }
   if (res.dropped.length) {
+    sfx('drop', { step: res.dropped.length });
     const [r, c] = res.dropped[Math.floor(res.dropped.length / 2)];
     floaters.push({ x: cellX(r, c), y: cellY(r), text: `+${res.dropped.length * 20}`, t: 0 });
   }
@@ -881,6 +935,7 @@ function finishShot(res) {
  */
 function showCombo(n) {
   const tier = n >= 9 ? 4 : n >= 6 ? 3 : n >= 4 ? 2 : 1;
+  sfx('combo', { tier });
   ui.combo.className = `bs-combo bs-combo-t${tier}`;
   ui.comboText.textContent = tier === 4 ? T.megaCombo(n) : T.combo(n);
   ui.combo.hidden = false;
@@ -932,6 +987,7 @@ function showCombo(n) {
 function rewardFx(kind) {
   const b = ui?.bonus[kind];
   if (!b) return;
+  sfx('reward');
   popIn(b.btn, { from: 0.6, duration: 360 });
   const rect = b.btn.getBoundingClientRect();
   const base = root.getBoundingClientRect();
@@ -990,6 +1046,7 @@ function onBonus(kind) {
   }
   const wasArmed = game.armed === kind;
   if (!arm(game, kind)) return;
+  sfx(wasArmed ? 'disarm' : 'arm');
   api.platform.haptic.selection();
   renderBonuses();
   if (!wasArmed) toast.show(T.bonusHelp[kind], 1600);
@@ -1007,9 +1064,11 @@ function endGame(outcome) {
     pendingNext = newLevel(game.level + 1);
     api.storage.set('current', pendingNext);                 // выход посреди окна не теряет прогресс
     api.progress(T.level(game.level + 1));
+    sfx('win');
     showWin();
     return;
   }
+  sfx('lose');
   api.storage.remove('current');
   api.finish({
     outcome: 'lose',
@@ -1065,12 +1124,14 @@ function startLevel(level, saved = null, fresh = null) {
   save();
   // уровень «спускается» сверху при появлении
   if (!reducedMotion() && !saved) scrollAnim = { from: game.scroll + 4, to: game.scroll, t: 0 };
+  if (!saved) sfx('level');
   draw();
 }
 
 // ---------- окна ----------
 
 function openModal(content) {
+  if (!modalActive) sfx('click');
   ui.modal.replaceChildren(content);
   if (!modalActive) showLayer(ui.modal);
   modalActive = true;
@@ -1146,10 +1207,11 @@ export default {
     api = gameApi;
     host = container;
     toast = createToast();
-    const [savedGame, savedStats, savedSettings] = await Promise.all([
-      api.storage.get('current'), api.storage.get('stats'), api.storage.get('settings'),
+    const [savedGame, savedStats, savedSettings, savedSound] = await Promise.all([
+      api.storage.get('current'), api.storage.get('stats'), api.storage.get('settings'), api.storage.get('sound'),
     ]);
     if (!api) return;
+    soundOn = savedSound !== false;
     stats = isValidStats(savedStats) ? savedStats : emptyStats();
     settings = { skin: SKINS.includes(savedSettings?.skin) ? savedSettings.skin : 'classic' };
     host.dataset.skin = settings.skin;
@@ -1170,6 +1232,7 @@ export default {
       bonus: Object.fromEntries(BONUS_KINDS.map((k) => [k, bonusButton(k)])),
     };
     ui.combo = el('div', { class: 'bs-combo', hidden: true }, el('div', { class: 'bs-combo-rays' }), ui.comboText);
+    ui.soundBtn = soundFeature() ? el('button', { class: 'bs-gear', onclick: toggleSound }) : null;
     ui.charge = el('div', { class: 'bs-charge' }, el('div', { class: 'bs-pips' }, ui.pips), el('div', { class: 'bs-charge-label' }, T.charge));
     ui.wrap = el('div', { class: 'bs-wrap' }, canvas, ui.combo);
 
@@ -1181,6 +1244,7 @@ export default {
     root = el('div', { class: 'bs' },
       el('div', { class: 'bs-top' },
         gear,
+        ui.soundBtn,
         el('div', { class: 'bs-bar' }, ui.barFill),
         ui.percent,
         el('div', { class: 'bs-score' }, el('div', { class: 'bs-score-label' }, T.score), ui.score),
@@ -1192,6 +1256,7 @@ export default {
       toast.el,
     );
     container.append(root);
+    renderSoundBtn();
     fx = createFx(root, 'bs-fx');
     root.append(fx.canvas);
     document.addEventListener('keydown', onKeydown);

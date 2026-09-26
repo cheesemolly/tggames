@@ -421,3 +421,4 @@
 
 /* невидимый элемент: через него Canvas узнаёт цвета скина */
 [data-game="bubble-shooter"] .bs-probe { position: absolute; width: 0; height: 0; opacity: 0; pointer-events: none; }
+[data-game="bubble-shooter"] .bs-muted { opacity: 0.55; }
