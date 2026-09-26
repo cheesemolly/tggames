@@ -210,3 +210,4 @@
 [data-game="flags"] .fl-hard-item { display: flex; align-items: center; gap: 10px; font-size: 14px; }
 [data-game="flags"] .fl-hard-item img { width: 36px; height: 27px; border-radius: 3px; object-fit: cover; box-shadow: 0 0 0 1px color-mix(in srgb, var(--tg-theme-hint-color) 30%, transparent); }
 [data-game="flags"] .fl-hard-item span { flex: 1; }
+[data-game="flags"] .fl-muted { opacity: 0.55; }
