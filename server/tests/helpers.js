@@ -64,12 +64,13 @@ export function createEnv(extra = {}) {
 }
 
 /** Подменяет fetch: запросы к Bot API не уходят наружу, а собираются в массив. */
-export function captureTelegram() {
+export function captureTelegram(reply = () => ({ ok: true })) {
   const calls = [];
   const original = globalThis.fetch;
   globalThis.fetch = async (url, init) => {
-    calls.push({ method: String(url).split('/').pop(), payload: JSON.parse(init.body) });
-    return new Response('{"ok":true}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+    const call = { method: String(url).split('/').pop(), payload: JSON.parse(init.body) };
+    calls.push(call);
+    return new Response(JSON.stringify(reply(call)), { status: 200, headers: { 'Content-Type': 'application/json' } });
   };
   return {
     calls,

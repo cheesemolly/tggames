@@ -168,6 +168,49 @@ test('бот: /start и подсказка отвечают кнопкой «И�
   }
 });
 
+test('бот: приветствие с гифкой — в бете только владельцу, file_id запоминается, без гифки — текст', async () => {
+  const env = createEnv();
+  let fail = false;
+  const tg = captureTelegram(({ method }) => (method === 'sendAnimation'
+    ? (fail ? { ok: false, description: 'wrong file' } : { ok: true, result: { animation: { file_id: 'GIF1' } } })
+    : { ok: true }));
+  try {
+    const start = (who) => call(env, '/bot', {
+      method: 'POST',
+      headers: { 'X-Telegram-Bot-Api-Secret-Token': env.WEBHOOK_SECRET },
+      payload: { message: { chat: { id: who.id }, from: { id: who.id }, text: '/start' } },
+    });
+
+    // игрок, пока 'welcome' в серверной бете, — старый текст
+    await start(USER);
+    assert.equal(tg.calls.at(-1).method, 'sendMessage');
+    assert.doesNotMatch(tg.calls.at(-1).payload.text, /Рейтинг/);
+
+    // владелец — гифка с сайта, подпись про рейтинг, кнопка «Играть»
+    await start(ADMIN);
+    const first = tg.calls.at(-1);
+    assert.equal(first.method, 'sendAnimation');
+    assert.equal(first.payload.animation, new URL('media/welcome.mp4', env.APP_URL).href);
+    assert.match(first.payload.caption, /Рейтинг/);
+    assert.equal(first.payload.reply_markup.inline_keyboard[0][0].web_app.url, env.APP_URL);
+
+    // второй раз — уже по file_id, без скачивания
+    await start(ADMIN);
+    assert.equal(tg.calls.at(-1).payload.animation, 'GIF1');
+
+    // Telegram не принял файл — приветствие уходит текстом, запомненный file_id забывается
+    fail = true;
+    await start(ADMIN);
+    assert.equal(tg.calls.at(-1).method, 'sendMessage');
+    assert.match(tg.calls.at(-1).payload.text, /Рейтинг/);
+    fail = false;
+    await start(ADMIN);
+    assert.equal(tg.calls.at(-1).payload.animation, new URL('media/welcome.mp4', env.APP_URL).href);
+  } finally {
+    tg.restore();
+  }
+});
+
 test('бот: /me рассказывает прогресс', async () => {
   const env = createEnv();
   const masha = await asUser(USER);
