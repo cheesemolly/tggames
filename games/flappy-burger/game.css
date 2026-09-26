@@ -96,3 +96,4 @@
 [data-game="flappy-burger"] .fb-stat { padding: 10px; border-radius: 12px; background: var(--tg-theme-bg-color); text-align: center; }
 [data-game="flappy-burger"] .fb-stat-value { font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; }
 [data-game="flappy-burger"] .fb-stat-label { font-size: 12px; color: var(--tg-theme-hint-color); }
+[data-game="flappy-burger"] .fb-muted { opacity: 0.55; }

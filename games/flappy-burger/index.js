@@ -7,6 +7,8 @@
 import { el } from '../../shared/dom.js';
 import { showLayer, hideLayer, pop, reducedMotion } from '../../shared/motion.js';
 import { createToast } from '../../shared/toast.js';
+import { createAudio } from '../../shared/sfx.js';
+import { createSounds } from './sounds.js';
 import {
   W, H, GROUND, PLAY_H, BURGER_X, BURGER_W, BURGER_H, MAX_FALL, FLAP, OB_W, WALL_EXTRA,
   newGame, step, flap, launch, sceneAt, obstacleRects, emptyStats, recordGame, isValidStats,
@@ -26,6 +28,11 @@ const T = {
 };
 
 const svgIcon = (body) => `<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="currentColor">${body}</svg>`;
+// значок звука — контуром (svgIcon здесь рисует заливкой)
+const strokeIcon = (body) => '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" '
+  + `stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
+const ICON_SOUND_ON = strokeIcon('<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/>');
+const ICON_SOUND_OFF = strokeIcon('<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="m16 9 5 6"/><path d="m21 9-5 6"/>');
 const ICON_STATS = svgIcon('<rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="7" width="4" height="14" rx="1"/><rect x="17" y="3" width="4" height="18" rx="1"/>');
 
 let api = null;
@@ -46,6 +53,36 @@ let scorePopT = -1;
 let modalActive = false;
 let modalToken = 0;
 let title = null;                  // заставка: { logo, canvas, ctx, t, leaveT } — пока на экране
+let soundOn = true;
+// звуки (8-бит, в бете: api.feature('flappy-sounds')) — один AudioContext на страницу, заводится при первом звуке
+const audio = createAudio(createSounds);
+
+const soundFeature = () => Boolean(api?.feature?.('flappy-sounds'));
+
+function sfx(name, opts) {
+  if (!soundFeature() || !soundOn) return;
+  try {
+    audio.get()?.play(name, opts);
+  } catch (err) {
+    console.warn('звук', name, err);
+  }
+}
+
+function renderSoundBtn() {
+  if (!ui?.soundBtn) return;
+  ui.soundBtn.innerHTML = soundOn ? ICON_SOUND_ON : ICON_SOUND_OFF;
+  const label = soundOn ? 'Выключить звук' : 'Включить звук';
+  ui.soundBtn.setAttribute('aria-label', label);
+  ui.soundBtn.title = label;
+  ui.soundBtn.classList.toggle('fb-muted', !soundOn);
+}
+
+function toggleSound() {
+  soundOn = !soundOn;
+  api.storage.set('sound', soundOn);
+  renderSoundBtn();
+  sfx('click');
+}
 const TITLE_LEAVE = 0.5;           // с, заставка уезжает вверх
 const timers = new Set();
 
@@ -890,16 +927,20 @@ function crumbs(n, colors, speed) {
 function onEvent(e) {
   if (e === 'score') {
     scorePopT = game.t;
+    sfx('score', { step: game.score });
     api.platform.haptic.selection();
   } else if (e === 'gate') {
     const toStreet = sceneAt(game, game.dist + BURGER_X) === 'street';
+    sfx(toStreet ? 'street' : 'kitchen');
     toast.show(toStreet ? T.street : T.kitchen, 1400);
   } else if (e === 'hit') {
+    sfx('hit');
     flashT = game.t;
     shakeT = game.t;
     api.platform.haptic.notification('error');
     crumbs(14, ['#e89a3c', '#58c24a', '#ffd23f', '#5a2e1a', '#fff3c4'], 90);
   } else if (e === 'over') {
+    sfx('over');
     if (flashT < 0) {
       flashT = game.t;
       shakeT = game.t;
@@ -916,6 +957,7 @@ function onFlap() {
     title.leaveT = game.t;
     if (reducedMotion()) title = null;
     launch(game);
+    sfx('start');
     ui.hint.classList.add('fb-hint-hide');
     api.platform.haptic.impact('light');
     kick();
@@ -923,6 +965,7 @@ function onFlap() {
   }
   if (game.phase === 'ready') ui.hint.classList.add('fb-hint-hide');
   if (flap(game)) {
+    sfx('flap');
     api.platform.haptic.impact('light');
     crumbs(3, ['#fff3c4', '#58c24a', '#e89a3c'], 30);
     kick();
@@ -936,6 +979,7 @@ function gameOver() {
   const isBest = score > stats.best;
   stats = recordGame(stats, game);
   api.storage.set('stats', stats);
+  if (isBest && score > 0) later(() => sfx('best'), 850);   // после «ва-ваа» падения
   ui.sub.textContent = T.best(stats.best);
   later(() => api?.finish({
     outcome: 'lose', title: T.over, score, locale: 'ru', message: T.result(score) + (isBest && score > 0 ? ' — новый рекорд!' : ''),
@@ -946,6 +990,7 @@ function gameOver() {
 // ---------- окна ----------
 
 function openModal(content) {
+  if (!modalActive) sfx('click');
   modalToken++;
   ui.modal.replaceChildren(content);
   if (!modalActive) showLayer(ui.modal);
@@ -999,8 +1044,9 @@ export default {
     api = gameApi;
     host = container;
     toast = createToast();
-    const savedStats = await api.storage.get('stats');
+    const [savedStats, savedSound] = await Promise.all([api.storage.get('stats'), api.storage.get('sound')]);
     if (!api) return;
+    soundOn = savedSound !== false;
     stats = isValidStats(savedStats) ? savedStats : emptyStats();
 
     ui = {
@@ -1018,11 +1064,13 @@ export default {
     ui.stage = el('div', { class: 'fb-stage' }, ui.canvas, ui.hint);
     const statsButton = el('button', { class: 'fb-icon-btn', 'aria-label': T.stats.open, title: T.stats.open, onclick: showStats });
     statsButton.innerHTML = ICON_STATS;
+    ui.soundBtn = soundFeature() ? el('button', { class: 'fb-icon-btn', onclick: toggleSound }) : null;
+    renderSoundBtn();
 
     root = el('div', { class: 'fb' },
       el('div', { class: 'fb-header' },
         el('div', {}, el('div', { class: 'fb-title' }, T.title), ui.sub),
-        el('div', { class: 'fb-actions' }, statsButton),
+        el('div', { class: 'fb-actions' }, ui.soundBtn, statsButton),
       ),
       ui.stage,
       ui.modal,
