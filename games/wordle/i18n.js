@@ -11,6 +11,8 @@ export const TEXT = {
     enter: 'Enter',
     erase: 'Delete',
     language: 'Language',
+    soundOn: 'Mute sounds',
+    soundOff: 'Turn sounds on',
     stats: {
       open: 'Statistics',
       title: 'Statistics',
@@ -32,6 +34,8 @@ export const TEXT = {
     enter: 'Ввести',
     erase: 'Стерти',
     language: 'Мова',
+    soundOn: 'Вимкнути звук',
+    soundOff: 'Увімкнути звук',
     stats: {
       open: 'Статистика',
       title: 'Статистика',
@@ -53,6 +57,8 @@ export const TEXT = {
     enter: 'Ввод',
     erase: 'Стереть',
     language: 'Язык',
+    soundOn: 'Выключить звук',
+    soundOff: 'Включить звук',
     stats: {
       open: 'Статистика',
       title: 'Статистика',

@@ -267,4 +267,5 @@
 [data-game="wordle"] .wd-lang { transition: background-color 0.2s ease, color 0.2s ease; }
 [data-game="wordle"] .wd-icon-btn { transition: transform 0.1s ease; }
 [data-game="wordle"] .wd-icon-btn:active { transform: scale(0.92); }
+[data-game="wordle"] .wd-muted { opacity: 0.55; }
 [data-game="wordle"] .wd-dist-bar { transform-origin: left center; }
