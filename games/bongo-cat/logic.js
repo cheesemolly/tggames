@@ -62,6 +62,49 @@ for (const instrument of INSTRUMENTS) {
  */
 export const padForCode = (code) => BY_CODE.get(code) ?? BY_ALT.get(code) ?? null;
 
+// ---------- две октавы (в бете 'bongo-octaves'; просьба игрока-музыканта, 2026-09-26) ----------
+// Пианино и маримба: полная октава — 12 клавиш до «си» (на bongo.cat их 10, до «ля»), по желанию — две.
+// С клавиатуры: ряд цифр (или Q…P) + «-» «=» (или «[» «]») — первая октава, с Shift — вторая.
+
+const NAMES_12 = ['до', 'до♯', 'ре', 'ре♯', 'ми', 'фа', 'фа♯', 'соль', 'соль♯', 'ля', 'ля♯', 'си'];
+const BLACK_12 = new Set([1, 3, 6, 8, 10]);
+const ROW_KEYS = {
+  keyboard: { labels: [...DIGITS, '-', '='], codes: [...DIGITS.map((d) => `Digit${d}`), 'Minus', 'Equal'] },
+  marimba: { labels: [...LETTERS, '[', ']'], codes: [...LETTERS.map((l) => `Key${l}`), 'BracketLeft', 'BracketRight'] },
+};
+
+/**
+ * Клавиши пианино или маримбы на 1 или 2 октавы: ноты 0…11 (…23), id — n<нота> (как у обычных, чтобы
+ * подсказка мелодии находила клавишу). Лапа: одна октава — нижняя половина левой; две — нижняя октава левой.
+ */
+export function octavePads(instrumentId, octaves = 1) {
+  const row = ROW_KEYS[instrumentId];
+  if (!row) return null;
+  return Array.from({ length: 12 * octaves }, (_, note) => {
+    const k = note % 12, up = note >= 12;
+    return {
+      id: `n${note}`,
+      label: up ? `⇧${row.labels[k]}` : row.labels[k],
+      code: row.codes[k],
+      shift: up,
+      note,
+      name: NAMES_12[k],
+      black: BLACK_12.has(k),
+      paw: (octaves === 2 ? note < 12 : note < 6) ? 'left' : 'right',
+    };
+  });
+}
+
+/** Клавиша компьютера → { instrument, note } для пианино и маримбы в режиме октав (Shift — октавой выше). */
+export function octaveKey(code, shift) {
+  for (const [instrument, row] of Object.entries(ROW_KEYS)) {
+    let k = row.codes.indexOf(code);
+    if (k < 0 && instrument === 'keyboard' && code.startsWith('Numpad')) k = DIGITS.indexOf(code.slice(6));
+    if (k >= 0) return { instrument, note: k + (shift ? 12 : 0) };
+  }
+  return null;
+}
+
 /** Частота ноты: 0 — до первой октавы (C4), дальше по полутонам. */
 export const noteFreq = (semitone, octave = 0) => 261.6256 * 2 ** (semitone / 12 + octave);
 

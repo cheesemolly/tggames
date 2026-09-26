@@ -158,3 +158,27 @@ test('каждый инструмент звучит и все его узлы �
     }
   }
 });
+
+test('две октавы: 12 и 24 клавиши, чёрные на своих местах, лапы делят клавиатуру пополам', async () => {
+  const { octavePads, octaveKey, noteFreq } = await import('../logic.js');
+  for (const inst of ['keyboard', 'marimba']) {
+    const one = octavePads(inst, 1);
+    const two = octavePads(inst, 2);
+    assert.equal(one.length, 12);
+    assert.equal(two.length, 24);
+    assert.equal(two.filter((p) => !p.black).length, 14, '14 белых на две октавы');
+    assert.deepEqual(one.filter((p) => p.black).map((p) => p.note), [1, 3, 6, 8, 10]);
+    assert.equal(new Set(two.map((p) => p.id)).size, 24);
+    assert.equal(two[0].id, 'n0', 'id как у обычных клавиш — подсказка мелодии находит');
+    assert.equal(two.filter((p) => p.paw === 'left').length, 12);
+    assert.equal(one.filter((p) => p.paw === 'left').length, 6);
+    assert.equal(two[23].name, 'си');
+  }
+  assert.equal(octavePads('bongo', 2), null);
+  assert.deepEqual(octaveKey('Minus', false), { instrument: 'keyboard', note: 10 });
+  assert.deepEqual(octaveKey('Digit1', true), { instrument: 'keyboard', note: 12 });
+  assert.deepEqual(octaveKey('Numpad5', false), { instrument: 'keyboard', note: 4 });
+  assert.deepEqual(octaveKey('BracketRight', true), { instrument: 'marimba', note: 23 });
+  assert.equal(octaveKey('KeyA', false), null, 'бонго — как раньше');
+  assert.ok(Math.abs(noteFreq(23) - 987.77) < 0.1, 'си второй октавы');
+});

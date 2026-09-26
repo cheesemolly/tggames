@@ -270,7 +270,7 @@
 
 /* пианино и маримба: 6 белых во всю высоту, 4 чёрных сверху между ними */
 [data-game="bongo-cat"] .bc-piano { position: relative; flex: 1; }
-[data-game="bongo-cat"] .bc-piano-whites { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 5px; }
+[data-game="bongo-cat"] .bc-piano-whites { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(var(--whites, 6), minmax(0, 1fr)); gap: 5px; }
 [data-game="bongo-cat"] .bc-piano-blacks { position: absolute; inset: 0 0 auto; height: 55%; pointer-events: none; }
 [data-game="bongo-cat"] .bc-pad-white {
   justify-content: flex-end;
@@ -286,8 +286,8 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  width: calc((100% - 25px) / 6 * 0.62);
-  left: calc((100% + 5px) / 6 * var(--at) - (100% - 25px) / 6 * 0.31 - 2.5px);
+  width: calc((100% - (var(--whites, 6) - 1) * 5px) / var(--whites, 6) * 0.62);
+  left: calc((100% + 5px) / var(--whites, 6) * var(--at) - (100% - (var(--whites, 6) - 1) * 5px) / var(--whites, 6) * 0.31 - 2.5px);
   pointer-events: auto;
   justify-content: flex-end;
   padding-bottom: 8px;
@@ -303,6 +303,45 @@
 [data-game="bongo-cat"] .bc-pad-white .bc-pad-name { font-size: 13px; }
 [data-game="bongo-cat"] .bc-piano-marimba .bc-pad-white:not(.pressed) { background: color-mix(in srgb, var(--bc-bar) 20%, var(--bc-white-key)); }
 [data-game="bongo-cat"] .bc-piano-marimba .bc-pad-black:not(.pressed) { background: color-mix(in srgb, var(--bc-bar) 35%, var(--bc-black-key)); }
+
+/* ---------- две октавы и альбомный вид (в бете 'bongo-octaves') ---------- */
+[data-game="bongo-cat"] .bc-piano-rows { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+[data-game="bongo-cat"] .bc-piano-rows .bc-piano { flex: 1; }
+[data-game="bongo-cat"] .bc-piano-dense .bc-pad-white .bc-pad-name { font-size: 11px; }
+[data-game="bongo-cat"] .bc-piano-dense .bc-pad-black .bc-pad-name { display: none; }
+[data-game="bongo-cat"] .bc-piano-dense .bc-pad-key { font-size: 10px; padding: 0 3px; }
+[data-game="bongo-cat"] .bc-piano-rows .bc-pad-white { padding-bottom: 6px; }
+[data-game="bongo-cat"] .bc-piano-rows .bc-pad-name { font-size: 11px; }
+[data-game="bongo-cat"] .bc-piano-rows .bc-pad-black .bc-pad-name { display: none; }
+[data-game="bongo-cat"] .bc-chip-oct { box-shadow: inset 0 0 0 1.5px var(--bc-accent); }
+[data-game="bongo-cat"] .bc-side { display: contents; }
+[data-game="bongo-cat"] .bc-icon-btn[hidden] { display: none; }
+
+/* альбомный вид: сцена слева, инструменты справа, клавиатура на всю ширину внизу */
+[data-game="bongo-cat"] .bc.bc-land {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) minmax(0, 44%);
+  grid-template-areas: "head head" "stage side" "pads pads";
+  gap: 6px 12px;
+}
+[data-game="bongo-cat"] .bc-land .bc-header { grid-area: head; }
+[data-game="bongo-cat"] .bc-land .bc-stage { grid-area: stage; min-height: 0; max-height: none; margin: 0; }
+[data-game="bongo-cat"] .bc-land .bc-side { grid-area: side; display: flex; flex-direction: column; justify-content: center; gap: 8px; min-height: 0; overflow: auto; }
+[data-game="bongo-cat"] .bc-land .bc-pads { grid-area: pads; min-height: 0; max-height: none; }
+
+/* повёрнута кнопкой: вся игра на 90° по часовой — телефон держат боком */
+.game-root[data-game="bongo-cat"].bc-host-rot { position: relative; padding: 0; }
+[data-game="bongo-cat"] .bc.bc-rot {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: var(--rot-w);
+  height: var(--rot-h);
+  padding: 8px 12px;
+  box-sizing: border-box;
+  transform: translate(-50%, -50%) rotate(90deg);
+}
 
 /* ---------- окна ---------- */
 [data-game="bongo-cat"] .bc-modal {
