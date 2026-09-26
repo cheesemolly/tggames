@@ -78,6 +78,13 @@ CREATE TABLE IF NOT EXISTS user_perks (
   PRIMARY KEY (user_id, perk)
 );
 
+/* Файлы, которые бот уже отправлял (гифка приветствия): адрес на сайте → file_id Telegram.
+   Обработчик заводит таблицу сам. */
+CREATE TABLE IF NOT EXISTS bot_files (
+  url     TEXT PRIMARY KEY,
+  file_id TEXT NOT NULL
+);
+
 /* Обратная связь: /report в боте и кнопка «Обратная связь» в приложении. Обработчик заводит таблицу сам. */
 CREATE TABLE IF NOT EXISTS reports (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,

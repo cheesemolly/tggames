@@ -252,8 +252,24 @@ function progressLines(state) {
 const SERVER_BETA = [
   // >>> серверная бета
   'feedback',
+  'welcome',
   // <<< конец серверной беты
 ];
+
+// ---------- приветствие (/start) ----------
+
+/** Старое приветствие — у игроков, пока 'welcome' в серверной бете. */
+const START_TEXT = 'Привет! Здесь набор небольших игр: слова, головоломки, аркады.\n'
+  + 'Прогресс сохраняется за твоим аккаунтом Telegram — можно играть с любого устройства.';
+
+/** Новое приветствие — подпись к гифке с геймплеем (media/welcome.mp4 на сайте). */
+const WELCOME_TEXT = 'Привет! Это AnyGame — игры прямо в Telegram: слова, головоломки, аркады, шашки, '
+  + 'викторина и музыка.\n\n'
+  + '🏆 Рейтинг: занимай первые места и бей рекорды друзей.\n'
+  + '☁️ Прогресс сохраняется за твоим аккаунтом Telegram — играй с любого устройства.';
+
+/** Путь к гифке приветствия относительно адреса мини-приложения (APP_URL). */
+const WELCOME_MEDIA = 'media/welcome.mp4';
 
 // ---------- обратная связь (/report) ----------
 
@@ -793,6 +809,41 @@ async function submitReport(env, { player, user, text, source, copy = null }) {
   return { ok: true };
 }
 
+// ---------- приветствие с гифкой (/start) ----------
+
+const botFilesReady = new WeakSet();
+
+/** Файлы, которые бот уже отправлял: адрес → file_id Telegram (повторно с сайта не скачивается). */
+async function ensureBotFiles(env) {
+  if (botFilesReady.has(env.DB)) return;
+  await env.DB.prepare('CREATE TABLE IF NOT EXISTS bot_files (url TEXT PRIMARY KEY, file_id TEXT NOT NULL)').run();
+  botFilesReady.add(env.DB);
+}
+
+/**
+ * Гифка с геймплеем + приветствие + «Играть». Первый раз Telegram сам скачивает файл с сайта (APP_URL),
+ * его file_id запоминается. Не вышло (файла нет, сайт недоступен) — просто текст: приветствие не теряется.
+ */
+async function sendWelcome(env, chatId) {
+  const url = new URL(WELCOME_MEDIA, appUrl(env)).href;
+  await ensureBotFiles(env);
+  const known = await env.DB.prepare('SELECT file_id FROM bot_files WHERE url = ?').bind(url).first();
+  const res = await api(env, 'sendAnimation', {
+    chat_id: chatId, animation: known?.file_id ?? url, caption: WELCOME_TEXT, reply_markup: playButton(env),
+  });
+  const data = await res.json().catch(() => null);
+  if (data?.ok) {
+    const id = data.result?.animation?.file_id ?? data.result?.document?.file_id;
+    if (id && id !== known?.file_id) {
+      await env.DB.prepare('INSERT INTO bot_files (url, file_id) VALUES (?, ?) '
+        + 'ON CONFLICT(url) DO UPDATE SET file_id = excluded.file_id').bind(url, id).run();
+    }
+    return;
+  }
+  if (known) await env.DB.prepare('DELETE FROM bot_files WHERE url = ?').bind(url).run();
+  await api(env, 'sendMessage', { chat_id: chatId, text: WELCOME_TEXT, reply_markup: playButton(env) });
+}
+
 // ---------- особые скины (перки) ----------
 
 const perksReady = new WeakSet();
@@ -973,12 +1024,8 @@ async function botWebhook(request, env, ctx) {
   const admin = isAdmin(tgId, parseAdminIds(env.ADMIN_IDS));
 
   if (command === '/start') {
-    await api(env, 'sendMessage', {
-      chat_id: chatId,
-      text: 'Привет! Здесь набор небольших игр: слова, головоломки, аркады.\n'
-        + 'Прогресс сохраняется за твоим аккаунтом Telegram — можно играть с любого устройства.',
-      reply_markup: playButton(env),
-    });
+    if (betaOpen('welcome', admin)) await sendWelcome(env, chatId);
+    else await api(env, 'sendMessage', { chat_id: chatId, text: START_TEXT, reply_markup: playButton(env) });
     return new Response('ok');
   }
 
