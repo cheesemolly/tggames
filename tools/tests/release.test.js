@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-import { clearBetaList, unflagGames, unflagServerBeta, devlog } from '../release.js';
+import { clearBetaList, removeBetaEntries, unflagGames, unflagServerBeta, devlog } from '../release.js';
 
 const SAMPLE = `export const BETA = [
   // >>> список беты (tools/release.js очищает всё между этими строками)
@@ -70,3 +70,16 @@ test('релиз убирает выпущенные id из серверной 
   assert.ok(/>>> серверная бета[\s\S]*<<< конец серверной беты/.test(real));
 });
 
+
+test('частичный релиз (--only) убирает из беты только эти записи, остальные остаются и читаются', async () => {
+  const real = readFileSync(new URL('../../shell/beta.js', import.meta.url), 'utf8');
+  const { BETA } = await import('../../shell/beta.js');
+  const [first, second] = BETA.map((b) => b.id);
+  const next = removeBetaEntries(real, [first]);
+  const load = (src) => new Function(`${src.replace(/export const /g, 'const ').replace(/export function /g, 'function ')}; return BETA;`)();
+  const left = load(next).map((b) => b.id);
+  assert.deepEqual(left, BETA.map((b) => b.id).filter((id) => id !== first));
+  assert.ok(left.includes(second));
+  assert.ok(/>>> список беты[\s\S]*<<< конец списка беты/.test(next), 'метки на месте');
+  assert.equal(removeBetaEntries(real, ['нет-такого']), real, 'чужой id ничего не меняет');
+});
