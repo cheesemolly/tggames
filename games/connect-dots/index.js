@@ -4,11 +4,14 @@
 // Уровни бесконечные: поле растёт до 8×8, с 6-го уровня — стены, с 10-го — тоннели.
 // Таймер на уровень (в настройках отключается); время вышло — игра окончена.
 // Партия, статистика и настройки — в api.storage игры.
+// Звуки (sounds.js) — в бете у владельца: api.feature('connect-dots-sounds'); кнопка в шапке, 'sound' в api.storage.
 
 import { el } from '../../shared/dom.js';
 import { animate, showLayer, hideLayer, shake, pop, reducedMotion, EASE_OUT } from '../../shared/motion.js';
 import { createToast } from '../../shared/toast.js';
 import { createFx } from '../../shared/fx.js';
+import { createAudio } from '../../shared/sfx.js';
+import { createSounds } from './sounds.js';
 import {
   levelParams, checkPaths, startAt, stepTo, emptyPaths, newGame, nextRound, applyHint,
   isValidState, emptyStats, isValidStats, isAdjacent, axisOf,
@@ -35,6 +38,8 @@ const T = {
   resultTitle: 'Время вышло',
   result: (rounds) => `Пройдено уровней: ${rounds}`,
   newGame: 'Новая игра',
+  soundOn: 'Выключить звук',
+  soundOff: 'Включить звук',
   restartQuestion: 'Начать заново с первого уровня?',
   restart: 'Начать заново',
   cancel: 'Отмена',
@@ -48,6 +53,8 @@ const svgIcon = (body, fill = false) => `<svg viewBox="0 0 24 24" width="22" hei
   + `${body}</svg>`;
 const ICONS = {
   restart: svgIcon('<path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/>'),
+  soundOn: svgIcon('<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/>'),
+  soundOff: svgIcon('<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="m16 9 5 6"/><path d="m21 9-5 6"/>'),
   stats: svgIcon('<rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="7" width="4" height="14" rx="1"/><rect x="17" y="3" width="4" height="18" rx="1"/>', true),
   gear: svgIcon('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/>'),
   reset: svgIcon('<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/>'),
@@ -64,6 +71,10 @@ let game = null;
 let bank = null;                // банк уровней levels.json (грузится один раз)
 let stats = emptyStats();
 let settings = { timer: true, skin: 'telegram' };
+let soundOn = true;
+let lastTickSec = null;      // последние секунды таймера тикают — по разу в секунду
+// звук — один AudioContext на всю жизнь страницы, заводится при первом звуке (из касания)
+const audio = createAudio(createSounds);
 let drawing = null;             // { color, pointerId }
 let busy = false;               // анимация перехода между уровнями
 let over = false;
@@ -83,6 +94,35 @@ function later(fn, ms) {
 
 const cssVar = (name) => getComputedStyle(host).getPropertyValue(name).trim();
 const colorVar = (color) => `var(--cd-c${(color % COLORS) + 1})`;
+
+// ---------- звук ----------
+
+const soundFeature = () => Boolean(api?.feature?.('connect-dots-sounds'));
+
+function sfx(name, opts) {
+  if (!soundFeature() || !soundOn) return;
+  try {
+    audio.get()?.play(name, opts);
+  } catch (err) {
+    console.warn('звук', name, err);
+  }
+}
+
+function renderSoundBtn() {
+  if (!ui?.soundBtn) return;
+  ui.soundBtn.innerHTML = soundOn ? ICONS.soundOn : ICONS.soundOff;
+  ui.soundBtn.setAttribute('aria-label', soundOn ? T.soundOn : T.soundOff);
+  ui.soundBtn.title = soundOn ? T.soundOn : T.soundOff;
+  ui.soundBtn.classList.toggle('cd-muted', !soundOn);
+}
+
+function toggleSound() {
+  soundOn = !soundOn;
+  api.storage.set('sound', soundOn);
+  renderSoundBtn();
+  pop(ui.soundBtn, { from: 0.8, duration: 220 });
+  sfx('click');
+}
 
 function save() {
   if (!game || over) return;
@@ -125,6 +165,11 @@ function renderTimer() {
 function tick() {
   if (!game || over || runningSince === null) return;
   renderTimer();
+  const sec = Math.ceil(timeLeft() / 1000);
+  if (sec >= 1 && sec <= 5 && sec !== lastTickSec) {
+    lastTickSec = sec;
+    sfx('tick', { step: sec });
+  }
   if (timeLeft() <= 0) timeUp();
 }
 
@@ -272,6 +317,7 @@ function onPointerDown(e) {
   }
   drawing = { color: started.color, pointerId: e.pointerId };
   game.paths = started.paths;
+  sfx('grab', { color: started.color });
   api.platform.haptic.selection();
   renderBoard();
 }
@@ -281,6 +327,8 @@ function onPointerMove(e) {
   const target = cellAt(e);
   if (target < 0) return;
   const n = game.level.size;
+  const color = drawing.color;
+  let heard = null;            // за одно движение пальца — один звук (последнее событие), иначе треск
   // палец мог перескочить через клетки — идём к нему по шагу, сначала по большей оси
   for (let guard = 0; guard < 2 * n; guard++) {
     const path = game.paths[drawing.color];
@@ -300,6 +348,7 @@ function onPointerMove(e) {
     if (!result || result.event === 'blocked') break;
     const { paths, event } = result;
     game.paths = paths;
+    if (event !== 'blocked') heard = event;
     if (event === 'connect') {
       api.platform.haptic.impact('medium');
       renderBoard();
@@ -313,6 +362,11 @@ function onPointerMove(e) {
     if (event === 'cut') api.platform.haptic.impact('light');
     else api.platform.haptic.selection();
   }
+  if (heard) {
+    const length = game.paths[color].length;
+    const name = { append: 'step', back: 'back', cut: 'cut', connect: 'connect' }[heard];
+    if (name) sfx(name, { color, step: length });
+  }
   renderBoard();
 }
 
@@ -324,6 +378,7 @@ function onPointerUp(e) {
   const check = checkPaths(game.level, game.paths);
   if (check.complete) roundCleared();
   else if (check.valid && check.connected.every(Boolean)) {
+    sfx('unfilled');
     toast.show(T.fillAll, 2200);
     shake(ui.board, { distance: 4, duration: 300 });
   }
@@ -337,6 +392,7 @@ function roundCleared() {
   stats.bestRound = Math.max(stats.bestRound, game.round);
   stats.rounds += 1;
   api.storage.set('stats', stats);
+  sfx('cleared', { step: game.level.dots.length });
   api.platform.haptic.notification('success');
   renderInfo();
   pop(ui.best, { from: 0.8 });
@@ -377,6 +433,9 @@ function roundCleared() {
 
 /** Новый уровень: поле впрыгивает, точки появляются по очереди. */
 function introRound() {
+  lastTickSec = null;
+  // пары точек впрыгивают — у каждой свой «буп» (вершина прыжка — 70% из 320 мс)
+  (game?.level.dots ?? []).forEach((_, k) => later(() => sfx('intro', { step: k }), 120 + k * 70 + 220));
   animate(ui.svg, [{ transform: 'scale(0.9)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 260, easing: EASE_OUT });
   [...ui.svg.querySelectorAll('.cd-dot')].forEach((dot, k) => animate(dot, [
     { transform: 'scale(0)' }, { transform: 'scale(1.2)', offset: 0.7 }, { transform: 'scale(1)' },
@@ -399,6 +458,7 @@ function timeUp() {
   api.storage.remove('current');
   stats.played += 1;
   api.storage.set('stats', stats);
+  sfx('timeup');
   api.platform.haptic.notification('error');
   toast.show(T.timeUp, 1500);
   shake(ui.board, { distance: 8, duration: 450 });
@@ -415,6 +475,7 @@ function onReset() {
   if (!game || busy || over) return;
   if (game.paths.every((p) => p.length <= 1)) return;
   game.paths = emptyPaths(game.level);
+  sfx('reset');
   api.platform.haptic.impact('light');
   animate(ui.svg.querySelector('.cd-paths'), [{ opacity: 1 }, { opacity: 0 }], { duration: 180 }).then(() => ui && renderBoard());
   save();
@@ -428,6 +489,7 @@ function onHint() {
   }
   const color = applyHint(game);
   if (color < 0) return;
+  sfx('hint', { color });
   api.platform.haptic.impact('medium');
   renderBoard();
   renderInfo();
@@ -445,6 +507,7 @@ function onHint() {
 // ---------- окна ----------
 
 function openModal(content) {
+  if (!modalActive) sfx('click');
   modalToken++;
   ui.modal.replaceChildren(content);
   if (!modalActive) showLayer(ui.modal);
@@ -572,12 +635,14 @@ export default {
     api = gameApi;
     host = container;
     toast = createToast();
-    const [savedGame, savedStats, savedSettings, levels] = await Promise.all([
+    const [savedGame, savedStats, savedSettings, levels, savedSound] = await Promise.all([
       api.storage.get('current'), api.storage.get('stats'), api.storage.get('settings'),
       bank ?? fetch(new URL('./levels.json', import.meta.url)).then((r) => r.json()),
+      api.storage.get('sound'),
     ]);
     bank = levels;
     if (!api) return;
+    soundOn = savedSound !== false;
     stats = isValidStats(savedStats) ? savedStats : emptyStats();
     settings = {
       timer: typeof savedSettings?.timer === 'boolean' ? savedSettings.timer : true,
@@ -599,6 +664,7 @@ export default {
     ui.wrap = el('div', { class: 'cd-wrap' }, ui.board);
     ui.timer = el('div', { class: 'cd-timer' },
       el('span', { class: 'cd-timer-icon' }, '⏱'), el('div', { class: 'cd-timer-track' }, ui.timerFill), ui.timerLabel);
+    ui.soundBtn = soundFeature() ? iconButton(ICONS.soundOn, T.soundOn, toggleSound) : null;
     ui.hintButton = toolButton(ICONS.hint, T.tools.hint, onHint, ui.hintBadge);
     ui.svg.addEventListener('pointerdown', onPointerDown);
     ui.svg.addEventListener('pointermove', onPointerMove);
@@ -608,7 +674,8 @@ export default {
     root = el('div', { class: 'cd' },
       el('div', { class: 'cd-header' },
         el('div', {}, el('div', { class: 'cd-title' }, T.title), ui.sub),
-        el('div', { class: 'cd-actions' },
+        el('div', { class: ui.soundBtn ? 'cd-actions cd-actions-4' : 'cd-actions' },
+          ui.soundBtn,
           iconButton(ICONS.restart, T.newGame, askRestart),
           iconButton(ICONS.stats, T.stats.open, showStats),
           iconButton(ICONS.gear, T.settings.open, showSettings),
@@ -623,6 +690,7 @@ export default {
       toast.el,
     );
     container.append(root);
+    renderSoundBtn();
     fx = createFx(root, 'cd-fx');
     root.append(fx.canvas);
     document.addEventListener('keydown', onKeydown);
