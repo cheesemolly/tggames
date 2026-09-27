@@ -258,3 +258,17 @@ test('общий рейтинг: очки за места и порядок пр
   const tie = overallRanking([row(1, 'a', 2, 9), row(2, 'b', 2, 3)], games);
   assert.deepEqual(tie.map((p) => p.user_id), [2, 1], 'при полном равенстве выше тот, кто набрал раньше');
 });
+
+test('рейтинг без разработчика: места пересчитаны; ник для поиска', async () => {
+  const { withoutUsers, parseUsername } = await import('../lib.js');
+  const rows = [
+    { user_id: 7, game_id: 'a', place: 1, total: 3 }, { user_id: 1, game_id: 'a', place: 2, total: 3 },
+    { user_id: 2, game_id: 'a', place: 3, total: 3 }, { user_id: 7, game_id: 'b', place: 1, total: 1 },
+  ];
+  assert.deepEqual(withoutUsers(rows, new Set([7])).map((r) => [r.user_id, r.game_id, r.place, r.total]), [[1, 'a', 1, 2], [2, 'a', 2, 2]]);
+  assert.equal(withoutUsers(rows, new Set()), rows);
+  assert.equal(parseUsername('@Cheese_Molly'), 'cheese_molly');
+  assert.equal(parseUsername('https://t.me/abcd'), 'abcd');
+  assert.equal(parseUsername('t.me/abcd'), 'abcd');
+  for (const bad of ['', '@', 'abc', 'a b c d', '<script>', 'x'.repeat(33), 'имя_игрока']) assert.equal(parseUsername(bad), null, bad);
+});

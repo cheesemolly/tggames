@@ -16,7 +16,10 @@
 //                                    играм; overall (в бете 'leaderboard-overall') — общий рейтинг: { total, rows:
 //                                    [{ place, name, pid, points, firsts, games, me }], me } — очки за места (lib.js)
 //   GET  /top/<игра>              -> { game, by, total, rows: [{ place, name, text, pid, me }], me }
-//   GET  /top/player/<pid>        -> { name, me, games: [{ game, text, place, total, points? }], overall? } — профиль
+//   GET  /top/player/<pid>        -> { name, me, games: [{ game, text, place, total, points? }], overall?, admin?,
+//                                    outside? } — профиль (разработчик — вне мест, но с бейджем admin: 'leaderboard-no-admin')
+//   POST /top/find  { username }  -> { pid } — поиск игрока по @нику, только точное совпадение ('player-search');
+//                                    сам ник в ответ не попадает
 // Панель (только для ADMIN_IDS):
 //   GET    /admin/players?q=&limit=&offset=
 //   GET    /admin/player/<id>
@@ -36,7 +39,7 @@
 import {
   checkInitData, timingSafeEqual, validateState, parseAdminIds, isAdmin, displayName,
   publicGames, findGames, startAppLink, progressLines, shiftEntities, GAMES, BOARDS, boardScores, boardName,
-  PERKS, isPerk, SERVER_BETA, overallPoints, overallRanking, REPORT_MAX, REPORT_PER_HOUR, reportMessage, START_TEXT, WELCOME_TEXT, WELCOME_MEDIA,
+  PERKS, isPerk, SERVER_BETA, overallPoints, overallRanking, withoutUsers, parseUsername, REPORT_MAX, REPORT_PER_HOUR, reportMessage, START_TEXT, WELCOME_TEXT, WELCOME_MEDIA,
 } from './lib.js';
 
 // Кто может обращаться к обработчику. Свой домен — чтобы чужой сайт не ходил в него от имени игрока.
@@ -103,7 +106,7 @@ export default {
       }
       if (path === '/state' && request.method === 'GET') return await getState(env, player, origin);
       if (path === '/state' && request.method === 'PUT') return await putState(request, env, player, user, origin);
-      if (path === '/top' || path.startsWith('/top/')) return await topRoutes(env, path, player, admin, origin);
+      if (path === '/top' || path.startsWith('/top/')) return await topRoutes(request, env, path, player, admin, origin);
       if (path === '/report' && request.method === 'POST') {
         if (!betaOpen('feedback', admin)) return fail('not_found', 404, origin);
         const { text } = await body(request);
@@ -298,7 +301,7 @@ async function backfillBoard(env, limit = 8) {
 }
 
 // Места: по очкам, при равенстве — кто раньше. Заблокированных и убранных владельцем в рейтинге нет.
-const RANKED = `SELECT b.user_id, b.game_id, b.value, b.updated_at, p.name, p.pid,
+const RANKED = `SELECT b.user_id, b.game_id, b.value, b.updated_at, u.tg_id, p.name, p.pid,
     ROW_NUMBER() OVER (PARTITION BY b.game_id ORDER BY b.value DESC, b.updated_at ASC, b.user_id ASC) AS place,
     COUNT(*) OVER (PARTITION BY b.game_id) AS total
   FROM board_scores b JOIN users u ON u.id = b.user_id JOIN board_players p ON p.user_id = b.user_id
@@ -317,9 +320,29 @@ async function rankedRows(env) {
   return rows;
 }
 
-async function topRoutes(env, path, player, admin, origin) {
+// поиск по нику: не чаще FIND_PER_MINUTE в минуту от игрока (в памяти обработчика — мягкая защита от перебора ников)
+const FIND_PER_MINUTE = 12;
+const findLog = new Map();
+
+function findAllowed(userId, now = Date.now()) {
+  const recent = (findLog.get(userId) ?? []).filter((t) => now - t < 60 * 1000);
+  if (recent.length >= FIND_PER_MINUTE) return false;
+  recent.push(now);
+  findLog.set(userId, recent);
+  if (findLog.size > 5000) findLog.clear();
+  return true;
+}
+
+async function topRoutes(request, env, path, player, admin, origin) {
   await ensureBoardTables(env);
-  const all = await rankedRows(env);
+  const ranked = await rankedRows(env);
+  // разработчик тестирует игры и иначе стоит везде первым — в местах его нет (в бете 'leaderboard-no-admin'),
+  // профиль по-прежнему открывается, с бейджем admin
+  const adminIds = parseAdminIds(env.ADMIN_IDS);
+  const noAdmin = betaOpen('leaderboard-no-admin', admin);
+  const isOwnerRow = (r) => adminIds.includes(Number(r.tg_id));
+  const all = noAdmin ? withoutUsers(ranked, new Set(ranked.filter(isOwnerRow).map((r) => r.user_id))) : ranked;
+  const outside = noAdmin && admin;   // смотрит сам разработчик: его мест нет — экран так и скажет
   // игры в бете в рейтинге видит только владелец
   const games = new Set(GAMES.filter((g) => BOARDS[g.id] && (admin || !g.beta)).map((g) => g.id));
   const text = (game, value) => BOARDS[game].text(value);
@@ -339,7 +362,7 @@ async function topRoutes(env, path, player, admin, origin) {
     const list = GAMES.filter((g) => games.has(g.id))
       .map((g) => byGame[g.id] ?? { game: g.id, by: BOARDS[g.id].by, total: 0, leader: null, me: null });
     const mine = await env.DB.prepare('SELECT pid FROM board_players WHERE user_id = ?').bind(player.id).first();
-    const out = { games: list, mePid: mine?.pid ?? null };
+    const out = { games: list, mePid: mine?.pid ?? null, ...(outside && { outside: true }) };
     if (withOverall) {
       const ranking = overall();
       const me = ranking.find((p) => p.user_id === player.id);
@@ -348,12 +371,35 @@ async function topRoutes(env, path, player, admin, origin) {
     return json(out, 200, origin);
   }
 
+  if (path === '/top/find') {
+    if (!betaOpen('player-search', admin)) return fail('not_found', 404, origin);
+    if (request.method !== 'POST') return fail('not_found', 404, origin);
+    const username = parseUsername((await body(request)).username);
+    if (!username) return fail('bad_username', 400, origin);
+    if (!findAllowed(player.id)) return fail('too_many', 429, origin);
+    const found = await env.DB.prepare(
+      `SELECT p.pid FROM users u JOIN board_players p ON p.user_id = u.id
+       WHERE lower(u.username) = ? AND u.banned = 0 AND p.hidden = 0 LIMIT 1`,
+    ).bind(username).first();
+    return found ? json({ pid: found.pid }, 200, origin) : fail('no_player', 404, origin);
+  }
+
   const profile = path.match(/^\/top\/player\/([a-z0-9]{1,32})$/);
   if (profile) {
     const who = await env.DB.prepare('SELECT user_id, name, hidden FROM board_players WHERE pid = ?').bind(profile[1]).first();
     if (!who || who.hidden) return fail('no_player', 404, origin);
-    const banned = await env.DB.prepare('SELECT banned FROM users WHERE id = ?').bind(who.user_id).first();
+    const banned = await env.DB.prepare('SELECT banned, tg_id FROM users WHERE id = ?').bind(who.user_id).first();
     if (!banned || banned.banned) return fail('no_player', 404, origin);
+    const ownerProfile = noAdmin && adminIds.includes(Number(banned.tg_id));
+    if (ownerProfile) {
+      // разработчик вне мест: результаты видны, мест и очков нет
+      const own = Object.fromEntries(ranked.filter((r) => r.user_id === who.user_id).map((r) => [r.game_id, r]));
+      return json({
+        name: who.name, me: who.user_id === player.id, admin: true, outside: true,
+        games: GAMES.filter((g) => games.has(g.id) && own[g.id]).map((g) => ({ game: g.id, text: text(g.id, own[g.id].value), place: null, total: null })),
+        ...(withOverall && { overall: null }),
+      }, 200, origin);
+    }
     const found = Object.fromEntries(all.filter((r) => r.user_id === who.user_id).map((r) => [r.game_id, r]));
     const out = {
       name: who.name,
@@ -385,6 +431,7 @@ async function topRoutes(env, path, player, admin, origin) {
       place: r.place, name: r.name, text: text(game, r.value), pid: r.pid, me: r.user_id === player.id,
     })),
     me: mine ? { place: mine.place, name: mine.name, text: text(game, mine.value), pid: mine.pid } : null,
+    ...(outside && { outside: true }),
   }, 200, origin);
 }
 

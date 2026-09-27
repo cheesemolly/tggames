@@ -17,6 +17,22 @@
 export const BETA = [
   // >>> список беты (tools/release.js очищает всё между этими строками)
   {
+    id: 'leaderboard-no-admin',
+    kind: 'feature',
+    title: 'Разработчик вне рейтинга',
+    note: 'разработчик больше не занимает места в рейтинге (тестирует игры); его профиль открывается с бейджем admin',
+    open: '#/top',
+    since: '2026-09-27',
+  },
+  {
+    id: 'player-search',
+    kind: 'feature',
+    title: 'Поиск игроков',
+    note: 'в рейтинге можно найти игрока по @нику и открыть его профиль (сам ник в профиле не показывается)',
+    open: '#/top',
+    since: '2026-09-27',
+  },
+  {
     id: 'leaderboard-overall',
     kind: 'feature',
     title: 'Общий рейтинг',

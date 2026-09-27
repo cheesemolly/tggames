@@ -805,6 +805,42 @@ h1, h2 { margin: 0 0 8px; line-height: 1.2; }
 .top-overall-value { display: flex; flex-wrap: wrap; justify-content: center; column-gap: 8px; font-size: 17px; font-weight: 800; }
 .top-overall-points { color: var(--tg-theme-hint-color); font-weight: 650; }
 .top-row-sub-in { animation: top-sub-in 320ms ease-out; }
+
+/* поиск игрока по @нику (в бете 'player-search') и бейдж разработчика ('leaderboard-no-admin') */
+.top-search { margin: 0 0 12px; }
+.top-search-row { display: flex; gap: 8px; }
+.top-search-input {
+  flex: 1;
+  width: 0;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 35%, transparent);
+  background: var(--tg-theme-secondary-bg-color);
+  color: var(--tg-theme-text-color);
+  font: inherit;
+  font-size: 16px;               /* меньше — iOS приближает страницу при фокусе */
+  transition: border-color 0.2s ease;
+}
+.top-search-input:focus { outline: none; border-color: var(--tg-theme-button-color); }
+.top-search .account-btn { flex: none; }
+.top-search .account-btn:disabled { opacity: 0.6; }
+.top-search-note { margin: 6px 2px 0; font-size: 13px; }
+.top-outside { text-align: center; margin: 0 0 12px; font-size: 13px; }
+.top-admin {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  vertical-align: middle;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  background: color-mix(in srgb, var(--cat-arcade) 16%, transparent);
+  color: var(--cat-arcade);
+  border: 1px solid color-mix(in srgb, var(--cat-arcade) 50%, transparent);
+  animation: top-pop 420ms cubic-bezier(0.3, 1.6, 0.5, 1) 200ms backwards;
+}
 @keyframes top-sub-in { from { opacity: 0; transform: translateY(4px); } }
 
 /* панель владельца: особые скины игрока (shell/perks.js) */

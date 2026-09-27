@@ -793,6 +793,79 @@ test('общий рейтинг: очки за места во всех игра
   }
 });
 
+test('рейтинг: разработчик вне мест, профиль с бейджем admin; поиск по нику — только точный, без ника в ответе', async () => {
+  const lib = await import('../lib.js');
+  const wasBeta = [...lib.SERVER_BETA];
+  lib.SERVER_BETA.splice(0, lib.SERVER_BETA.length, 'leaderboard-no-admin', 'player-search', 'leaderboard-overall');
+  try {
+    const env = createEnv();
+    const owner = await asUser(ADMIN);
+    const masha = await asUser(USER);
+    const petya = await asUser({ id: 43, first_name: 'Петя', username: 'Petya_Secret' });
+    const vasya = await asUser({ id: 44, first_name: 'Вася', username: 'vasya_banned' });
+    await save(env, owner, { 'shell:progress:words': 'Уровень 99', 'shell:stats:sudoku': { played: 9, wins: 9 } });
+    await save(env, masha, { 'shell:progress:words': 'Уровень 14' });
+    await save(env, petya, { 'shell:progress:words': 'Уровень 30' });
+    await save(env, vasya, { 'shell:progress:words': 'Уровень 5' });
+    const names = async (who, game = 'words') => (await call(env, `/top/${game}`, { initData: who })).data.rows.map((r) => [r.place, r.name]);
+
+    // в бете: игроки видят разработчика на месте, поиска у них нет
+    assert.deepEqual(await names(masha), [[1, 'Владелец'], [2, 'Петя'], [3, 'Маша'], [4, 'Вася']]);
+    assert.equal((await call(env, '/top/find', { method: 'POST', initData: masha, payload: { username: 'petya_secret' } })).status, 404);
+
+    // владелец: себя в местах не видит, места остальных пересчитаны; «ты вне рейтинга»
+    assert.deepEqual(await names(owner), [[1, 'Петя'], [2, 'Маша'], [3, 'Вася']]);
+    const ownTable = await call(env, '/top/words', { initData: owner });
+    assert.equal(ownTable.data.total, 3);
+    assert.equal(ownTable.data.outside, true);
+    assert.equal((await call(env, '/top/sudoku', { initData: owner })).data.rows.length, 0, 'в судоку играл только он');
+    const summary = await call(env, '/top', { initData: owner });
+    assert.equal(summary.data.outside, true);
+    assert.deepEqual(summary.data.games.find((g) => g.game === 'words').leader, { name: 'Петя', text: 'уровень 30', me: false });
+    assert.ok(!summary.data.overall.rows.some((r) => r.name === 'Владелец'));
+    const ownProfile = await call(env, `/top/player/${summary.data.mePid}`, { initData: owner });
+    assert.equal(ownProfile.data.admin, true);
+    assert.equal(ownProfile.data.outside, true);
+    assert.deepEqual(ownProfile.data.games.map((g) => [g.game, g.text, g.place]), [['words', 'уровень 99', null], ['sudoku', '9 судоку', null]]);
+    assert.equal(ownProfile.data.overall, null);
+
+    // поиск: @ник, в любом регистре, ссылкой t.me; в ответе только pid
+    const petyaPid = (await call(env, '/top/words', { initData: owner })).data.rows.find((r) => r.name === 'Петя').pid;
+    for (const q of ['@petya_secret', 'PETYA_SECRET', 'https://t.me/Petya_Secret', ' petya_secret ']) {
+      const found = await call(env, '/top/find', { method: 'POST', initData: owner, payload: { username: q } });
+      assert.equal(found.status, 200, q);
+      assert.deepEqual(found.data, { pid: petyaPid });
+    }
+    assert.equal((await call(env, '/top/find', { method: 'POST', initData: owner, payload: { username: 'petya_secre' } })).status, 404, 'только точное совпадение');
+    assert.equal((await call(env, '/top/find', { method: 'POST', initData: owner, payload: { username: '<b>x</b>' } })).status, 400);
+    assert.equal((await call(env, '/top/find', { initData: owner })).status, 404, 'только POST');
+
+    // заблокированного и убранного из рейтинга не найти
+    const vasyaId = (await call(env, '/me', { initData: vasya })).data.id;
+    await call(env, `/admin/player/${vasyaId}/ban`, { method: 'POST', initData: owner, payload: { banned: true } });
+    assert.equal((await call(env, '/top/find', { method: 'POST', initData: owner, payload: { username: 'vasya_banned' } })).status, 404);
+
+    // после релиза — у всех: разработчика в местах нет, найти его можно, в профиле бейдж
+    lib.SERVER_BETA.splice(0, lib.SERVER_BETA.length);
+    assert.deepEqual(await names(masha), [[1, 'Петя'], [2, 'Маша']]);
+    const ownerFound = await call(env, '/top/find', { method: 'POST', initData: masha, payload: { username: '@owner' } });
+    const seen = await call(env, `/top/player/${ownerFound.data.pid}`, { initData: masha });
+    assert.equal(seen.data.admin, true);
+    assert.equal(seen.data.me, false);
+    assert.equal((await call(env, '/top', { initData: masha })).data.outside, undefined);
+    const petyaSeen = await call(env, `/top/player/${petyaPid}`, { initData: masha });
+    assert.equal(petyaSeen.data.admin, undefined);
+    assert.ok(!JSON.stringify(petyaSeen.data).toLowerCase().includes('petya_secret'), 'ника в профиле нет');
+
+    // перебор ников — не чаще 12 в минуту
+    const codes = [];
+    for (let k = 0; k < 14; k++) codes.push((await call(env, '/top/find', { method: 'POST', initData: petya, payload: { username: `user_${k}` } })).status);
+    assert.deepEqual(codes.slice(10), [404, 404, 429, 429]);
+  } finally {
+    lib.SERVER_BETA.splice(0, lib.SERVER_BETA.length, ...wasBeta);
+  }
+});
+
 test('рейтинг: игру в бете видит только владелец', async () => {
   const lib = await import('../lib.js');
   const entry = lib.GAMES.find((g) => g.id === 'memory');

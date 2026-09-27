@@ -111,6 +111,11 @@ export const account = {
     return this.request(`/top/${game}`);
   },
 
+  /** Поиск игрока по @нику (только точное совпадение) → { pid }. Ник проверяет и сервер. */
+  findPlayer(username) {
+    return this.request('/top/find', { method: 'POST', payload: { username } });
+  },
+
   topPlayer(pid) {
     if (!/^[a-z0-9]{1,32}$/.test(String(pid))) return Promise.resolve({ ok: false, error: 'no_player' });
     return this.request(`/top/player/${pid}`);

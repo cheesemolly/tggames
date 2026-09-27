@@ -3,19 +3,21 @@
 //                         с общим рейтингом (в бете 'leaderboard-overall') — две вкладки: #/top — «Общий»
 //                         (сумма очков за места во всех играх, считает сервер), #/top/games — «По играм»;
 //   #/top/<игра>        — таблица игры: пьедестал из трёх и список до 50-го места (твоё — всегда видно);
-//   #/top/player/<pid>  — профиль игрока: его места во всех играх.
+//   #/top/player/<pid>  — профиль игрока: его места во всех играх. Разработчик (в бете 'leaderboard-no-admin') мест
+//                         не занимает, в профиле у него бейдж admin; найти игрока можно по @нику (в бете 'player-search').
+//                         Сам ник нигде не показывается — поиск только открывает профиль.
 // Игрок виден только по имени из Telegram — ни ника, ни id (требование владельца, 2026-09-26): их нет
 // даже в ответе сервера, профиль открывается по случайному pid. Мера успеха у каждой игры своя (уровень,
 // рекорд, победы…) — её и текст («уровень 14», «37 очков») считает сервер (BOARDS в server/lib.js).
 //
-// source — откуда брать данные: { summary(), game(id), player(pid) } → { ok, data, error }.
+// source — откуда брать данные: { summary(), game(id), player(pid), find(username) } → { ok, data, error }.
 // В приложении это запросы аккаунта, на проверочной странице — подставные данные.
 
 import { el } from '../shared/dom.js';
 import { GAME_ICONS } from './icons.js';
 import { categoryOfGame } from './categories.js';
 import { message } from '../platform/errors.js';
-import { showLayer, hideLayer } from '../shared/motion.js';
+import { showLayer, hideLayer, pop, shake } from '../shared/motion.js';
 
 const MEDALS = ['🥇', '🥈', '🥉'];
 
@@ -68,7 +70,7 @@ function head({ back, backLabel, title, hint, style = '' }) {
   );
 }
 
-export async function renderTop(container, { route, games, source, onBack, overall = false }) {
+export async function renderTop(container, { route, games, source, onBack, overall = false, search = false }) {
   const titleOf = (id) => games.find((g) => g.id === id)?.title ?? id;
   const screen = el('div', { class: 'scroll top-screen' });
   container.replaceChildren(screen);
@@ -94,7 +96,7 @@ export async function renderTop(container, { route, games, source, onBack, overa
       const p = res.data;
       const medals = p.games.filter((g) => g.place <= 3).length;
       // с общим рейтингом сервер отдаёт очки за каждую игру — сверху те, что дали больше (видно, где подняться)
-      const withPoints = overall && 'overall' in p;
+      const withPoints = overall && 'overall' in p && !p.outside;
       const list = withPoints ? [...p.games].sort((a, b) => b.points - a.points || a.place - b.place) : p.games;
       show(
         el('div', { class: 'folder-head' },
@@ -102,7 +104,10 @@ export async function renderTop(container, { route, games, source, onBack, overa
         ),
         el('div', { class: 'top-profile' },
           avatar(p.name, 'top-avatar-lg'),
-          el('div', { class: 'top-profile-name' }, p.name, p.me && el('span', { class: 'top-you' }, 'это ты')),
+          el('div', { class: 'top-profile-name' }, p.name,
+            p.admin && el('span', { class: 'top-admin' }, 'admin'),
+            p.me && el('span', { class: 'top-you' }, 'это ты')),
+          p.outside && el('p', { class: 'hint top-outside' }, 'Разработчик — в рейтинге не участвует.'),
           withPoints && el('a', { class: 'top-overall-card', href: '#/top' },
             el('span', { class: 'top-overall-label' }, 'Общий рейтинг'),
             p.overall
@@ -111,7 +116,7 @@ export async function renderTop(container, { route, games, source, onBack, overa
                 el('span', { class: 'top-overall-points' }, pointsText(p.overall.points)))
               : el('span', { class: 'top-overall-value' }, 'пока без места'),
           ),
-          el('div', { class: 'top-profile-sum' },
+          !p.outside && el('div', { class: 'top-profile-sum' },
             stat(p.games.length, 'в рейтинге'),
             stat(p.games.filter((g) => g.place === 1).length, 'первых мест'),
             stat(medals, 'в тройке'),
@@ -119,7 +124,7 @@ export async function renderTop(container, { route, games, source, onBack, overa
         ),
         list.length
           ? el('div', { class: 'top-list' }, list.map((g, i) => el('a', {
-            class: `top-row${g.place <= 3 ? ' top-row-medal' : ''}`,
+            class: `top-row${g.place && g.place <= 3 ? ' top-row-medal' : ''}`,
             href: `#/top/${encodeURIComponent(g.game)}`,
             style: `--i: ${i}; ${catStyle(g.game)}`,
           },
@@ -128,7 +133,7 @@ export async function renderTop(container, { route, games, source, onBack, overa
               el('span', { class: 'top-row-name' }, titleOf(g.game)),
               el('span', { class: 'top-row-sub' }, withPoints ? `${g.text} · +${pointsText(g.points)}` : g.text),
             ),
-            el('span', { class: 'top-place' }, MEDALS[g.place - 1] ?? `${g.place}`),
+            g.place && el('span', { class: 'top-place' }, MEDALS[g.place - 1] ?? `${g.place}`),
           )))
           : el('p', { class: 'hint top-empty' }, 'Пока ни в одной игре нет результата.'),
         el('p', { class: 'hint top-privacy' }, 'В рейтинге видно только имя — без ника и id.'),
@@ -180,7 +185,8 @@ export async function renderTop(container, { route, games, source, onBack, overa
         rest.length > 0 && el('div', { class: 'top-list' }, rest.map(row)),
         meOutside && el('div', { class: 'top-gap' }, '···'),
         meOutside && el('div', { class: 'top-list' }, row({ ...b.me, me: true }, 0)),
-        !b.me && b.rows.length > 0 && el('p', { class: 'hint top-empty' }, 'Тебя здесь пока нет — сыграй, и место появится.'),
+        b.outside && el('p', { class: 'hint top-empty' }, 'Тебя здесь нет: разработчик в рейтинге не участвует.'),
+        !b.me && !b.outside && b.rows.length > 0 && el('p', { class: 'hint top-empty' }, 'Тебя здесь пока нет — сыграй, и место появится.'),
       );
     };
     return load();
@@ -198,10 +204,12 @@ export async function renderTop(container, { route, games, source, onBack, overa
     el('a', { class: `top-tab${tab === 'overall' ? ' on' : ''}`, href: '#/top', role: 'tab', 'aria-selected': String(tab === 'overall') }, 'Общий'),
     el('a', { class: `top-tab${tab === 'games' ? ' on' : ''}`, href: '#/top/games', role: 'tab', 'aria-selected': String(tab === 'games') }, 'По играм'),
   );
+  const searchForm = search && findForm(source);
   const load = async () => {
     loading([header, tabs]);
     const res = await source.summary();
     if (!res.ok) return failed([header, tabs], res, load);
+    const outsideNote = res.data.outside && el('p', { class: 'hint top-outside' }, 'Ты разработчик — в рейтинге не участвуешь, но профиль открывается.');
     const meLink = res.data.mePid && el('a', { class: 'account-row top-me-link', href: `#/top/player/${encodeURIComponent(res.data.mePid)}` },
       el('span', { class: 'account-name' }, overall ? 'Мой профиль: общее место и места в играх' : 'Мой профиль: места во всех играх'),
       el('span', { class: 'account-btn' }, 'Открыть'),
@@ -248,7 +256,7 @@ export async function renderTop(container, { route, games, source, onBack, overa
       }, 'Как считаются очки');
       const podium = o.rows.slice(0, 3);
       return show(
-        header, tabs, meLink, howBtn, how,
+        header, tabs, searchForm, outsideNote, meLink, howBtn, how,
         o.rows.length === 0
           ? el('p', { class: 'hint top-empty' }, 'Здесь пока никого — сыграй первым!')
           : el('div', { class: 'top-podium' },
@@ -266,7 +274,7 @@ export async function renderTop(container, { route, games, source, onBack, overa
         o.rows.length > 3 && el('div', { class: 'top-list' }, o.rows.slice(3).map(row)),
         meOutside && el('div', { class: 'top-gap' }, '···'),
         meOutside && el('div', { class: 'top-list' }, row({ ...o.me, me: true }, 0)),
-        !o.me && o.rows.length > 0 && el('p', { class: 'hint top-empty' }, 'Тебя здесь пока нет — сыграй в любую игру, и место появится.'),
+        !o.me && !res.data.outside && o.rows.length > 0 && el('p', { class: 'hint top-empty' }, 'Тебя здесь пока нет — сыграй в любую игру, и место появится.'),
       );
     }
 
@@ -274,6 +282,8 @@ export async function renderTop(container, { route, games, source, onBack, overa
     show(
       header,
       tabs,
+      searchForm,
+      outsideNote,
       meLink,
       el('div', { class: 'top-list' }, list.map((g, i) => el('a', {
         class: 'top-row top-game', href: `#/top/${encodeURIComponent(g.game)}`, style: `--i: ${i}; ${catStyle(g.game)}`,
@@ -286,7 +296,7 @@ export async function renderTop(container, { route, games, source, onBack, overa
             : 'Пока никого — будь первым'),
           el('span', { class: 'top-row-sub top-row-mine' }, g.me
             ? `Ты: ${placeText(g.me.place, g.total)} · ${g.me.text}`
-            : 'Тебя здесь пока нет'),
+            : res.data.outside ? 'Ты вне рейтинга' : 'Тебя здесь пока нет'),
         ),
         el('span', { class: 'top-chevron' }, '›'),
       ))),
@@ -299,6 +309,57 @@ export async function renderTop(container, { route, games, source, onBack, overa
 export function overallLine(summary) {
   const me = summary?.overall?.me;
   return me ? `Ты: ${placeText(me.place, 0)} · ${pointsText(me.points)}` : null;
+}
+
+/**
+ * Поиск игрока по @нику (в бете 'player-search'): поле вверху экрана — экранная клавиатура его не закрывает;
+ * своя кнопка «Найти» + Enter; кнопка не забирает фокус (иначе клавиатура на iOS закрылась бы). Найден — профиль.
+ */
+function findForm(source) {
+  const input = el('input', {
+    class: 'top-search-input', type: 'text', placeholder: '@ник игрока', maxlength: '64',
+    autocomplete: 'off', autocapitalize: 'off', autocorrect: 'off', spellcheck: false, enterkeyhint: 'search',
+    'aria-label': 'Ник игрока в Telegram',
+  });
+  const note = el('p', { class: 'hint top-search-note', hidden: true });
+  const button = el('button', { class: 'account-btn', type: 'submit', onmousedown: (e) => e.preventDefault() }, 'Найти');
+  let busy = false;
+  const say = (text) => {
+    note.textContent = text;
+    note.hidden = false;
+    pop(note, { from: 0.9 });
+  };
+  const form = el('form', {
+    class: 'top-search', novalidate: true,
+    onsubmit: async (e) => {
+      e.preventDefault();
+      if (busy) return;
+      const raw = input.value.trim().replace(/^(https?:\/\/)?(t\.me|telegram\.me)\//i, '').replace(/^@/, '');
+      if (!/^[a-z0-9_]{4,32}$/i.test(raw)) {
+        shake(form);
+        say(raw ? 'Ник — латиница, цифры и «_», от 4 символов' : 'Впиши @ник игрока в Telegram');
+        input.focus();
+        return;
+      }
+      busy = true;
+      button.disabled = true;
+      const res = await source.find(raw.toLowerCase());
+      busy = false;
+      button.disabled = false;
+      if (res.ok && res.data?.pid) {
+        input.blur();
+        location.hash = `#/top/player/${encodeURIComponent(res.data.pid)}`;
+        return;
+      }
+      shake(form);
+      say(res.error === 'no_player' || res.error === 'not_found' ? 'Игрок с таким ником не найден' : message(res.error));
+    },
+  },
+    el('div', { class: 'top-search-row' }, input, button),
+    note,
+  );
+  input.addEventListener('input', () => { note.hidden = true; });
+  return form;
 }
 
 function stat(value, label) {

@@ -104,7 +104,9 @@ function show(route) {
         summary: () => account.topSummary(),
         game: (id) => account.topGame(id),
         player: (pid) => account.topPlayer(pid),
+        find: (username) => account.findPlayer(username),
       },
+      search: feature('player-search'),
       onBack: () => backFrom(route),
     }).catch((err) => console.error(err));
     return;

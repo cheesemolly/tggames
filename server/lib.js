@@ -248,6 +248,8 @@ export function progressLines(state) {
  */
 export const SERVER_BETA = [
   // >>> серверная бета
+  'leaderboard-no-admin',
+  'player-search',
   'leaderboard-overall',
   // <<< конец серверной беты
 ];
@@ -449,6 +451,35 @@ export function overallRanking(rows, games) {
   return [...by.values()]
     .sort((a, b) => b.points - a.points || b.firsts - a.firsts || b.podiums - a.podiums || a.at - b.at || a.user_id - b.user_id)
     .map(({ at, ...p }, i) => ({ ...p, place: i + 1 }));
+}
+
+/**
+ * Места без части игроков (в бете 'leaderboard-no-admin': разработчик тестирует игры и иначе стоит везде первым).
+ * rows — места по играм (как из RANKED); у оставшихся места и total в каждой игре пересчитываются по порядку.
+ */
+export function withoutUsers(rows, skip) {
+  if (!skip.size) return rows;
+  const byGame = new Map();
+  for (const r of rows) {
+    if (skip.has(r.user_id)) continue;
+    if (!byGame.has(r.game_id)) byGame.set(r.game_id, []);
+    byGame.get(r.game_id).push(r);
+  }
+  const out = [];
+  for (const list of byGame.values()) {
+    list.sort((a, b) => a.place - b.place);
+    list.forEach((r, i) => out.push({ ...r, place: i + 1, total: list.length }));
+  }
+  return out;
+}
+
+/**
+ * Ник для поиска игрока (в бете 'player-search'): «@nick», «nick», «t.me/nick» → «nick» в нижнем регистре, иначе null.
+ * У Telegram ник — латиница, цифры и «_», 4–32 символа (старые бывают короче пяти).
+ */
+export function parseUsername(text) {
+  const raw = String(text ?? '').trim().replace(/^(https?:\/\/)?(t\.me|telegram\.me)\//i, '').replace(/^@/, '');
+  return /^[a-z0-9_]{4,32}$/i.test(raw) ? raw.toLowerCase() : null;
 }
 
 /**
