@@ -438,6 +438,30 @@ h1, h2 { margin: 0 0 8px; line-height: 1.2; }
 .adm-h3 { margin: 14px 0 8px; font-size: 15px; }
 .adm-field { display: grid; gap: 4px; margin-bottom: 8px; }
 .adm-field-name { font-size: 13px; color: var(--tg-theme-hint-color); }
+/* «Игры и подсказки» (в бете 'admin-game-fields') */
+.adm-game {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--tg-theme-secondary-bg-color);
+}
+.adm-game-title { font-weight: 700; }
+.adm-game .adm-num { background: var(--tg-theme-bg-color); border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 35%, transparent); }
+.adm-gfield { display: grid; grid-template-columns: minmax(0, 1fr) 96px; align-items: center; gap: 4px 10px; }
+.adm-gfield-label { font-size: 14px; }
+.adm-gfield-run {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 6px;
+  font-size: 11px;
+  vertical-align: 1px;
+  color: var(--tg-theme-hint-color);
+  border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 45%, transparent);
+}
+.adm-gfield-note { grid-column: 1 / -1; font-size: 12px; color: var(--tg-theme-hint-color); }
 .adm-nums { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
 .adm-num {
   width: 100%;

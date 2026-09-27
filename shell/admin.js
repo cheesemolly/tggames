@@ -10,9 +10,14 @@ import { el } from '../shared/dom.js';
 import { showLayer, hideLayer, shake } from '../shared/motion.js';
 import { account } from '../platform/account.js';
 import { message } from '../platform/errors.js';
+import { games as REGISTRY } from './registry.js';
+import { gameFieldsOf, applyGameFields } from './admin-fields.js';
 
 const STATS_PREFIX = 'shell:stats:';
 const PROGRESS_PREFIX = 'shell:progress:';
+
+/** Название игры вместо id (в бете 'admin-game-fields'; у игроков панели нет — это только для владельца). */
+const gameTitle = (id) => (feature('admin-game-fields') ? REGISTRY.find((g) => g.id === id)?.title ?? id : id);
 
 const date = (ms) => (ms ? new Date(ms).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' }) : '—');
 
@@ -119,14 +124,32 @@ export function renderAdmin(container, { onBack, toast, api = account }) {
         value: value[field] === null || value[field] === undefined ? '' : String(value[field]),
         placeholder: { played: 'сыграно', wins: 'побед', best: 'рекорд' }[field],
       }));
-      return { game, inputs, node: el('div', { class: 'adm-field' }, el('span', { class: 'adm-field-name' }, game), el('div', { class: 'adm-nums' }, inputs)) };
+      return { game, inputs, node: el('div', { class: 'adm-field' }, el('span', { class: 'adm-field-name' }, gameTitle(game)), el('div', { class: 'adm-nums' }, inputs)) };
     });
 
     // Строки уровней («Уровень 14») — их показывает меню.
     const progressFields = parts.progress.map(({ game, value }) => {
       const input = el('input', { class: 'field', type: 'text', value });
-      return { game, input, node: el('div', { class: 'adm-field' }, el('span', { class: 'adm-field-name' }, game), input) };
+      return { game, input, node: el('div', { class: 'adm-field' }, el('span', { class: 'adm-field-name' }, gameTitle(game)), input) };
     });
+
+    // Игры и подсказки (в бете 'admin-game-fields'): подсказки, бонусы, уровни, счётчики рейтинга — shell/admin-fields.js
+    const gameGroups = feature('admin-game-fields') && !parts.broken ? gameFieldsOf(parts.data) : [];
+    const gameInputs = [];
+    const gameNodes = gameGroups.map((group) => el('div', { class: 'adm-game' },
+      el('span', { class: 'adm-game-title' }, gameTitle(group.game)),
+      group.fields.map((f) => {
+        const input = el('input', {
+          class: 'adm-num', type: 'number', inputmode: 'numeric', min: String(f.min), max: String(f.max), step: '1', value: String(f.value),
+        });
+        gameInputs.push({ id: f.id, input });
+        return el('label', { class: 'adm-gfield' },
+          el('span', { class: 'adm-gfield-label' }, f.label, f.run && el('span', { class: 'adm-gfield-run' }, 'текущая партия')),
+          input,
+          f.note && el('span', { class: 'adm-gfield-note' }, f.note),
+        );
+      }),
+    ));
 
     const card = el('div', { class: 'adm-card' },
       el('button', { class: 'overlay-close', onclick: close, 'aria-label': 'Закрыть' }, '✕'),
@@ -137,6 +160,10 @@ export function renderAdmin(container, { onBack, toast, api = account }) {
 
       statFields.length && el('h3', { class: 'adm-h3' }, 'Статистика по играм'),
       ...statFields.map((f) => f.node),
+
+      gameNodes.length > 0 && el('h3', { class: 'adm-h3' }, 'Игры и подсказки'),
+      gameNodes.length > 0 && el('p', { class: 'hint' }, 'Уйдёт игроку при следующем запуске. «Текущая партия» — только в начатой; новая начнётся как обычно.'),
+      ...gameNodes,
 
       progressFields.length && el('h3', { class: 'adm-h3' }, 'Строки уровней'),
       ...progressFields.map((f) => f.node),
@@ -171,7 +198,7 @@ export function renderAdmin(container, { onBack, toast, api = account }) {
 
     /** Собрать правки полей обратно в прогресс и отправить. */
     async function saveFields() {
-      const next = { ...parts.data };
+      let next = { ...parts.data };
       for (const { game, inputs } of statFields) {
         const stats = { ...next[STATS_PREFIX + game] };
         for (const input of inputs) {
@@ -189,6 +216,15 @@ export function renderAdmin(container, { onBack, toast, api = account }) {
         const value = input.value.trim();
         if (value) next[PROGRESS_PREFIX + game] = value;
         else delete next[PROGRESS_PREFIX + game];
+      }
+      if (gameInputs.length) {
+        const res = applyGameFields(next, Object.fromEntries(gameInputs.map(({ id, input }) => [id, input.value])));
+        if (!res.ok) {
+          shake(card);
+          toast.show(`${gameTitle(res.game)}, «${res.label}»: целое число от ${res.min} до ${res.max}`);
+          return;
+        }
+        next = res.data;
       }
       await send(JSON.stringify(next));
     }

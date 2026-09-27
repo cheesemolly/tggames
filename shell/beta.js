@@ -17,6 +17,14 @@
 export const BETA = [
   // >>> список беты (tools/release.js очищает всё между этими строками)
   {
+    id: 'admin-game-fields',
+    kind: 'feature',
+    title: 'Панель: игры и подсказки',
+    note: 'в карточке игрока — понятные поля: подсказки, бонусы, уровни, отмены хода, счётчики рейтинга; названия игр вместо id',
+    open: '#/admin',
+    since: '2026-09-27',
+  },
+  {
     id: 'leaderboard-no-admin',
     kind: 'feature',
     title: 'Разработчик вне рейтинга',
