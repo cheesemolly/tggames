@@ -146,13 +146,16 @@ function toggleSound() {
 
 // ---------- карточки ----------
 
+const escapeHtml = (text) => String(text ?? '').replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+
 function frontMarkup(card, i) {
   const f = card.face;
   switch (f.type) {
     case 'monster': return monsterSvg(f);
     case 'pattern': return patternSvg(f, `${deal}-${i}`);
-    case 'emoji': return `<span class="mm-emoji">${f.ch}</span>`;
-    case 'word': return `<span class="mm-word" style="--len:${f.word.length}">${f.word}</span>`;
+    // сохранение синхронизируется с сервером — строки из него в разметку только экранированными
+    case 'emoji': return `<span class="mm-emoji">${escapeHtml(f.ch)}</span>`;
+    case 'word': return `<span class="mm-word" style="--len:${Number(String(f.word).length) || 0}">${escapeHtml(f.word)}</span>`;
     case 'sound': return `<span class="mm-speaker">${speakerSvg()}</span>`;
     case 'special': return `<span class="mm-special">${specialSvg(f.kind)}</span>`;
     default: return '';

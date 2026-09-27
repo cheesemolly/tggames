@@ -18,4 +18,5 @@ export const ERRORS = {
   server: 'Ошибка на сервере. Попробуй позже',
 };
 
-export const message = (code) => ERRORS[code] ?? ERRORS.server;
+// hasOwn: код приходит с сервера — «__proto__» и т.п. не должны достать свойство объекта
+export const message = (code) => (Object.hasOwn(ERRORS, code) ? ERRORS[code] : ERRORS.server);

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {
   checkInitData, diagnoseInitData, dataCheckString, validateState, parseAdminIds, isAdmin, displayName,
   timingSafeEqual, MAX_STATE_BYTES, INIT_DATA_MAX_AGE_MS,
-  GAMES, findGames, startAppLink, progressLines, shiftEntities,
+  GAMES, findGames, startAppLink, progressLines, shiftEntities, boardScores, boardName, reportMessage,
 } from '../lib.js';
 import { makeInitData, TOKEN, USER } from './helpers.js';
 
@@ -142,9 +142,35 @@ test('ссылка на мини-приложение и строки прогр
     'Маджонг: сыграно 2',
     '2048: сыграно 5, рекорд 512',
     'Wordle: сыграно 12 · Стрик: 3',
-    'old-game: сыграно 1',
-  ]);
+  ], 'неизвестные игры (ключи пишет клиент) не показываются');
   assert.deepEqual(progressLines({}), []);
+  // строка прогресса от клиента не становится ссылкой, упоминанием или простынёй
+  const [evil] = progressLines({ 'shell:progress:words': 'Уровень 5 заходи на evil.com @scam https://x.y/z' + 'а'.repeat(100) });
+  assert.doesNotMatch(evil, /[.@/]/, 'ни точки, ни @, ни / — ссылкой это не станет');
+  assert.ok(evil.length <= 'Слова из слова: '.length + 60);
+});
+
+test('рейтинг: неправдоподобные очки не попадают, побед не больше сыгранных, 2048 — степень двойки', () => {
+  const ok = boardScores({
+    'shell:progress:words': 'Уровень 40',
+    'shell:stats:2048': { played: 3, best: 1024 },
+    'shell:stats:sudoku': { played: 10, wins: 7 },
+  });
+  assert.deepEqual(ok, { words: 40, 2048: 1024, sudoku: 7 });
+  const fake = boardScores({
+    'shell:progress:words': 'Уровень 99999',
+    'shell:stats:2048': { played: 3, best: 1000 },
+    'shell:stats:sudoku': { played: 2, wins: 50 },
+    'shell:stats:snake': { played: 1, best: 999999999 },
+  });
+  assert.deepEqual(fake, {});
+  assert.equal(boardName('Ма‮ша​'), 'Маша', 'служебные символы направления текста вырезаны');
+});
+
+test('отзыв владельцу: после экранирования влезает в сообщение Telegram', () => {
+  const note = reportMessage({ name: 'Маша', username: 'masha', tgId: 42, text: '<'.repeat(1000), source: 'bot' });
+  assert.ok(note.length < 4096, `длина ${note.length}`);
+  assert.match(note, /&lt;/);
 });
 
 test('оформление: сдвиг разметки на вырезанную команду', () => {

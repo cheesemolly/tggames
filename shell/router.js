@@ -6,8 +6,18 @@
 //   #/beta          — вкладка «Бета»: что обкатывается у владельца до релиза (shell/beta.js)
 //   #/top           — рейтинг: сводка; #/top/<игра> — таблица игры; #/top/player/<pid> — профиль игрока
 
+/** decodeURIComponent без исключения: ссылка вида #/game/%E0 иначе роняла приложение на старте. */
+const decode = (text) => {
+  try {
+    return decodeURIComponent(text);
+  } catch {
+    return '';
+  }
+};
+
 export function currentRoute() {
   const [section, id, sub] = location.hash.replace(/^#\/?/, '').split('/');
+  const decodeURIComponent = decode;
   if (section === 'game' && id) return { name: 'game', id: decodeURIComponent(id) };
   if (section === 'folder' && id) return { name: 'folder', id: decodeURIComponent(id) };
   if (section === 'admin') return { name: 'admin' };

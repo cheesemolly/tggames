@@ -108,7 +108,7 @@ export function renderAdmin(container, { onBack, toast, api = account }) {
     showCard(res.data);
   }
 
-  function showCard({ player, data, updatedAt, perks = [], allPerks = null }) {
+  function showCard({ player, data, updatedAt, perks = [], allPerks = null, boardHidden = false }) {
     const parts = splitState(data);
     const jsonBox = el('textarea', { class: 'adm-json', spellcheck: 'false', value: pretty(data) });
 
@@ -157,6 +157,8 @@ export function renderAdmin(container, { onBack, toast, api = account }) {
         el('button', { class: 'btn btn-secondary', onclick: toggleBan }, player.banned ? 'Разблокировать' : 'Заблокировать'),
         el('button', { class: 'btn btn-danger', onclick: removePlayer }, 'Удалить'),
       ),
+      // подделанные очки: игрок уходит из рейтинга, играть и сохраняться может как раньше
+      el('div', { class: 'adm-actions' }, boardButton()),
     );
 
     const layer = el('div', { class: 'overlay' }, card);
@@ -227,6 +229,24 @@ export function renderAdmin(container, { onBack, toast, api = account }) {
       const res = await api.savePlayerState(player.id, text);
       toast.show(res.ok ? 'Прогресс игрока сохранён' : message(res.error));
       if (res.ok) close();
+    }
+
+    function boardButton() {
+      let hidden = boardHidden;
+      const button = el('button', { class: 'btn btn-secondary', onclick: toggle });
+      const paint = () => { button.textContent = hidden ? 'Вернуть в рейтинг' : 'Убрать из рейтинга'; };
+      async function toggle() {
+        const res = await api.hideFromBoard(player.id, !hidden);
+        if (!res.ok) {
+          toast.show(message(res.error));
+          return;
+        }
+        hidden = res.data.boardHidden;
+        paint();
+        toast.show(hidden ? 'Убран из рейтинга' : 'Снова в рейтинге');
+      }
+      paint();
+      return button;
     }
 
     async function toggleBan() {

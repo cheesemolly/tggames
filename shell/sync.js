@@ -129,6 +129,10 @@ export function createSync({ account, onMessage = () => {}, delay = SYNC_DELAY, 
           return;
         }
         if (res.error === 'network') return;      // сеть моргнула, попробуем со следующим изменением
+        if (res.error === 'too_many') {           // сервер пускает сохранения раз в пару секунд — повторим сами
+          dirty = true;
+          return;
+        }
         if (res.error === 'expired' || res.error === 'bad_signature') {
           onMessage('Сессия устарела — перезапусти игру');
           return;

@@ -529,20 +529,126 @@ test('проверка живости и неизвестный путь', async
   assert.equal((await call(env, '/нет-такого', { initData: await asUser(USER) })).status, 404);
 });
 
-test('диагностика токена не раскрывает сам токен', async () => {
+// ---------- защита (аудит 2026-09-27) ----------
+
+test('отладочные адреса убраны: /whoami и /debug/initdata ничего не рассказывают', async () => {
+  const env = createEnv();
+  for (const path of ['/whoami', '/debug/initdata']) {
+    const res = await call(env, path);
+    assert.notEqual(res.status, 200);
+    assert.equal(res.data.bot, undefined);
+    assert.equal(res.data.admins, undefined);
+  }
+});
+
+test('вебхук: без заданного секрета не принимается ничего', async () => {
+  const env = createEnv({ WEBHOOK_SECRET: '' });
+  const tg = captureTelegram();
+  try {
+    const res = await call(env, '/bot', {
+      method: 'POST',
+      headers: { 'X-Telegram-Bot-Api-Secret-Token': '' },
+      payload: { message: { chat: { id: ADMIN.id }, from: { id: ADMIN.id }, text: '/broadcast фишинг' } },
+    });
+    assert.equal(res.status, 403);
+    assert.equal(tg.calls.length, 0);
+  } finally {
+    tg.restore();
+  }
+});
+
+test('сохранения прогресса — не чаще раза в пару секунд', async () => {
+  const env = createEnv({ STATE_MIN_GAP_MS: '60000' });
+  const masha = await asUser(USER);
+  const put = () => call(env, '/state', { method: 'PUT', initData: masha, payload: { data: '{"a":1}', base: Number.MAX_SAFE_INTEGER } });
+  assert.equal((await put()).status, 200);
+  const second = await put();
+  assert.equal(second.status, 429);
+  assert.equal(second.data.error, 'too_many');
+});
+
+test('панель владельца — только со свежей подписью (не старше двух часов)', async () => {
+  const env = createEnv();
+  const stale = await makeInitData(TOKEN, ADMIN, { authDate: Date.now() - 3 * 60 * 60 * 1000 });
+  const res = await call(env, '/admin/players', { initData: stale });
+  assert.equal(res.status, 401);
+  assert.equal(res.data.error, 'expired');
+  assert.equal((await call(env, '/admin/players', { initData: await asUser(ADMIN) })).status, 200);
+  assert.equal((await call(env, '/me', { initData: stale })).status, 200, 'игроку сутки — как раньше');
+});
+
+test('убрать из рейтинга: игрок пропадает из таблиц и профиля, прогресс цел; вернуть — снова там', async () => {
+  const env = createEnv();
+  const owner = await asUser(ADMIN);
+  const masha = await asUser(USER);
+  const petya = await asUser({ id: 43, first_name: 'Петя' });
+  const state = (level) => ({ 'shell:progress:words': `Уровень ${level}` });
+  await call(env, '/state', { method: 'PUT', initData: masha, payload: { data: JSON.stringify(state(90)), base: 0 } });
+  await call(env, '/state', { method: 'PUT', initData: petya, payload: { data: JSON.stringify(state(10)), base: 0 } });
+  const mashaId = (await call(env, '/me', { initData: masha })).data.id;
+  let top = await call(env, '/top/words', { initData: petya });
+  assert.equal(top.data.rows[0].name, 'Маша');
+  const pid = top.data.rows[0].pid;
+
+  const hide = await call(env, `/admin/player/${mashaId}/board`, { method: 'POST', initData: owner, payload: { hidden: true } });
+  assert.equal(hide.status, 200);
+  top = await call(env, '/top/words', { initData: petya });
+  assert.deepEqual(top.data.rows.map((r) => r.name), ['Петя']);
+  assert.equal((await call(env, `/top/player/${pid}`, { initData: petya })).status, 404);
+  assert.equal((await call(env, `/admin/player/${mashaId}`, { initData: owner })).data.boardHidden, true);
+  assert.equal((await call(env, '/state', { initData: masha })).data.data, JSON.stringify(state(90)), 'прогресс не тронут');
+
+  await call(env, `/admin/player/${mashaId}/board`, { method: 'POST', initData: owner, payload: { hidden: false } });
+  top = await call(env, '/top/words', { initData: petya });
+  assert.deepEqual(top.data.rows.map((r) => r.name), ['Маша', 'Петя']);
+  assert.equal((await call(env, '/admin/player/1/board', { method: 'POST', initData: masha, payload: { hidden: true } })).status, 403);
+});
+
+test('бот в группе: команды владельца только в личке, обычный текст — без ответа; правки не выполняются', async () => {
   const env = createEnv();
   const tg = captureTelegram();
-  globalThis.fetch = async () => new Response(
-    JSON.stringify({ ok: true, result: { username: 'anygametg_bot', first_name: 'AnyGame' } }),
-    { status: 200, headers: { 'Content-Type': 'application/json' } },
-  );
   try {
-    const res = await call(env, '/whoami');
-    assert.equal(res.status, 200);
-    assert.equal(res.data.bot, '@anygametg_bot');
-    assert.equal(res.data.tokenTrimmed, true);
-    assert.equal(res.data.admins, 1);
-    assert.doesNotMatch(JSON.stringify(res.data), /TEST-TOKEN/, 'сам токен наружу не уходит');
+    const post = (payload) => call(env, '/bot', { method: 'POST', headers: { 'X-Telegram-Bot-Api-Secret-Token': env.WEBHOOK_SECRET }, payload });
+    const group = { id: -100, type: 'supergroup' };
+    await post({ message: { message_id: 1, chat: group, from: { id: ADMIN.id }, text: '/broadcast всем' } });
+    assert.match(tg.calls.at(-1).payload.text, /только в личке/);
+    assert.equal(tg.calls.filter((c) => c.payload.text === 'всем').length, 0, 'предпросмотр в группу не ушёл');
+
+    tg.calls.length = 0;
+    await post({ message: { message_id: 2, chat: group, from: { id: USER.id }, text: 'привет всем' } });
+    assert.equal(tg.calls.length, 0, 'на обычный текст в группе бот молчит');
+
+    await post({ message: { message_id: 3, chat: group, from: { id: USER.id }, text: '/start' } });
+    assert.ok(tg.calls.length > 0, '/start в группе работает');
+
+    tg.calls.length = 0;
+    await post({ edited_message: { message_id: 4, chat: { id: USER.id, type: 'private' }, from: { id: USER.id }, text: '/report исправил отзыв' } });
+    assert.equal(tg.calls.length, 0, 'правка сообщения — не новая команда');
+  } finally {
+    tg.restore();
+  }
+});
+
+test('заблокированный игрок не может писать отзывы; удаление игрока чистит следы рассылок', async () => {
+  const { env, say, press } = await botEnv();
+  const owner = await asUser(ADMIN);
+  const mashaId = (await call(env, '/me', { initData: await asUser(USER) })).data.id;
+  const tg = captureTelegram(({ method }) => (method === 'sendMessage' ? { ok: true, result: { message_id: 77 } } : { ok: true }));
+  try {
+    await call(env, `/admin/player/${mashaId}/ban`, { method: 'POST', initData: owner, payload: { banned: true } });
+    await say(USER.id, { text: '/report хочу бильярд' });
+    assert.match(tg.calls.at(-1).payload.text, /недоступны/);
+    assert.equal(tg.calls.filter((c) => c.payload.chat_id === ADMIN.id).length, 0, 'владельцу ничего не пришло');
+    await call(env, `/admin/player/${mashaId}/ban`, { method: 'POST', initData: owner, payload: { banned: false } });
+
+    // рассылка → номера записаны, в том числе у Маши
+    await say(ADMIN.id, { text: '/broadcast привет' });
+    const [send] = lastButtons(tg);
+    await press(ADMIN.id, send);
+    const count = async () => (await env.DB.prepare('SELECT COUNT(*) AS n FROM sent_messages WHERE chat_id = ?').bind(USER.id).first()).n;
+    assert.equal(await count(), 1);
+    assert.equal((await call(env, `/admin/player/${mashaId}`, { method: 'DELETE', initData: owner })).status, 200);
+    assert.equal(await count(), 0, 'номера сообщений удалённого игрока стёрты');
   } finally {
     tg.restore();
   }

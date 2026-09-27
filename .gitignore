@@ -3,3 +3,19 @@ example/
 
 # локальная база сервера аккаунтов (server/dev-server.js)
 server/dev.sqlite
+
+# страховка на будущее (аудит 2026-09-27): секреты, локальные базы и служебные файлы не должны попасть
+# ни в репозиторий, ни на сайт (GitHub Pages отдаёт всё, что в репозитории)
+.env
+.env.*
+.dev.vars
+wrangler.toml
+.wrangler/
+node_modules/
+*.log
+*.sqlite
+*.sqlite-*
+*.db
+.DS_Store
+Thumbs.db
+desktop.ini

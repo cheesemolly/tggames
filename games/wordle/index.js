@@ -496,7 +496,7 @@ export default {
     container.append(root);
     document.addEventListener('keydown', onKeydown);
 
-    await selectLang(LANGUAGES[savedLang] ? savedLang : defaultLang(api.platform.user?.language_code));
+    await selectLang(Object.hasOwn(LANGUAGES, savedLang) ? savedLang : defaultLang(api.platform.user?.language_code));
   },
 
   getState() {

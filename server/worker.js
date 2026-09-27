@@ -32,7 +32,7 @@
 //   t.me/<бот>?startapp=<id игры>: она открывает главное мини-приложение сразу на этой игре.
 
 import {
-  checkInitData, diagnoseInitData, validateState, parseAdminIds, isAdmin, displayName,
+  checkInitData, timingSafeEqual, validateState, parseAdminIds, isAdmin, displayName,
   publicGames, findGames, startAppLink, progressLines, shiftEntities, GAMES, BOARDS, boardScores, boardName,
   PERKS, isPerk, SERVER_BETA, REPORT_MAX, REPORT_PER_HOUR, reportMessage, START_TEXT, WELCOME_TEXT, WELCOME_MEDIA,
 } from './lib.js';
@@ -45,6 +45,10 @@ const ALLOWED_ORIGINS = [
 ];
 
 const DEFAULT_APP_URL = 'https://cheesemolly.github.io/tggames/';
+const OWNER_COMMANDS = ['/broadcast', '/silentbroadcast', '/message', '/unsend', '/edit', '/cancel'];
+const SEEN_EVERY_MS = 5 * 60 * 1000;      // «последний заход» пишется в базу не чаще
+const STATE_MIN_GAP_MS = 1500;            // сохранения прогресса — не чаще (защита лимита записи D1)
+const ADMIN_MAX_AGE_MS = 2 * 60 * 60 * 1000;   // подпись владельца для панели — не старше двух часов
 const BROADCAST_LIMIT = 2000;          // предохранитель: больше за один раз не рассылаем
 const ALBUM_WAIT_MS = 1500;            // картинки альбома приходят по одной: ждём, пока придут все
 const CAPTION_LIMIT = 1024;            // подпись к фото в Telegram
@@ -79,15 +83,8 @@ export default {
     try {
       if (path === '/bot' && request.method === 'POST') return await botWebhook(request, env, ctx);
       if (path === '/') return json({ ok: true, service: 'tggames' }, 200, origin);
-      // Диагностика: какому боту принадлежит токен в настройках. Сам токен не раскрывается —
-      // видно только имя бота. Нужна, когда мини-апп открыт одним ботом, а токен лежит от другого.
-      if (path === '/whoami') return await whoami(env, origin);
-      // Диагностика входа: почему не сошлась подпись. Данные игрока наружу не отдаёт.
-      if (path === '/debug/initdata') {
-        const header = request.headers.get('Authorization') ?? '';
-        const initData = header.startsWith('tma ') ? header.slice(4).trim() : '';
-        return json(await diagnoseInitData(initData, env.BOT_TOKEN), 200, origin);
-      }
+      // /whoami и /debug/initdata (диагностика входа, 2026-09-23) убраны после аудита 2026-09-27: вход давно
+      // работает, а открытые всем адреса выдавали лишнее (число админов, длину токена) и дёргали Telegram.
 
       // Всё остальное — только для игрока, подтверждённого подписью Telegram.
       const auth = await authorize(request, env);
@@ -114,6 +111,8 @@ export default {
 
       if (path.startsWith('/admin/')) {
         if (!admin) return fail('forbidden', 403, origin);
+        // панель — только со свежей подписью: утёкшая строка входа владельца не должна сутки открывать панель
+        if (Date.now() - auth.authDate > ADMIN_MAX_AGE_MS) return fail('expired', 401, origin);
         return await adminRoutes(request, env, path, url, origin);
       }
 
@@ -154,7 +153,9 @@ async function authorize(request, env) {
     ).bind(user.id, name, user.username ?? null, now, now).first();
     // Пустую запись прогресса не заводим: иначе первое же сохранение новичка (он шлёт base = 0)
     // упиралось бы в «конфликт» и лишний раз ходило на сервер.
-  } else {
+  } else if (player.name !== name || player.username !== (user.username ?? null)
+    || now - player.last_seen_at > SEEN_EVERY_MS) {
+    // запись в D1 ограничена: «последний заход» обновляем не на каждый запрос, а раз в несколько минут
     await env.DB.prepare('UPDATE users SET name = ?, username = ?, last_seen_at = ? WHERE id = ?')
       .bind(name, user.username ?? null, now, player.id).run();
     player = { ...player, name, username: user.username ?? null, last_seen_at: now };
@@ -162,7 +163,8 @@ async function authorize(request, env) {
 
   const admin = isAdmin(user.id, parseAdminIds(env.ADMIN_IDS));
   if (player.banned && !admin) return { ok: false, error: 'banned' };
-  return { ok: true, player, admin, user };
+  const authDate = Number(new URLSearchParams(initData).get('auth_date')) * 1000;
+  return { ok: true, player, admin, user, authDate };
 }
 
 // ---------- прогресс ----------
@@ -183,6 +185,11 @@ async function putState(request, env, player, user, origin) {
   if (typeof base === 'number' && stored > base) {
     return json({ conflict: true, data: row.data, updatedAt: stored }, 409, origin);
   }
+
+  // не чаще раза в пару секунд: иначе циклом можно выбрать дневной лимит записи D1 (аудит 2026-09-27).
+  // Клиент на «too_many» просто повторит позже (shell/sync.js).
+  const since = Date.now() - stored;
+  if (row && since >= 0 && since < Number(env.STATE_MIN_GAP_MS ?? STATE_MIN_GAP_MS)) return fail('too_many', 429, origin);
 
   const stamp = Math.max(Date.now(), stored + 1);
   await saveState(env, player.id, data, stamp);
@@ -213,8 +220,19 @@ async function ensureBoardTables(env) {
     user_id INTEGER NOT NULL, game_id TEXT NOT NULL, value INTEGER NOT NULL, updated_at INTEGER NOT NULL,
     PRIMARY KEY (user_id, game_id))`).run();
   await env.DB.prepare('CREATE INDEX IF NOT EXISTS board_scores_game ON board_scores(game_id, value DESC)').run();
+  // «убрать из рейтинга» (панель владельца) — столбец добавлен позже
+  try {
+    await env.DB.prepare('ALTER TABLE board_players ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0').run();
+  } catch {
+    // уже есть
+  }
   boardReady.add(env.DB);
 }
+
+// Рейтинг считается окном по всей таблице — дорого на каждый просмотр. Готовый список держится в памяти
+// обработчика TOP_CACHE_MS; своё изменение очков или правка владельца сбрасывают его сразу.
+const topCache = new WeakMap();
+const dropTopCache = (env) => topCache.delete(env.DB);
 
 function randomPid() {
   const bytes = crypto.getRandomValues(new Uint8Array(9));
@@ -247,13 +265,16 @@ async function indexBoard(env, userId, state, firstName = null) {
   const now = Date.now();
   for (const [game, value] of Object.entries(scores)) {
     if (before[game] === value) continue;
+    dropTopCache(env);
     await env.DB.prepare(
       `INSERT INTO board_scores (user_id, game_id, value, updated_at) VALUES (?, ?, ?, ?)
        ON CONFLICT(user_id, game_id) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
     ).bind(userId, game, value, now).run();
   }
   for (const game of Object.keys(before)) {
-    if (!(game in scores)) await env.DB.prepare('DELETE FROM board_scores WHERE user_id = ? AND game_id = ?').bind(userId, game).run();
+    if (game in scores) continue;
+    dropTopCache(env);
+    await env.DB.prepare('DELETE FROM board_scores WHERE user_id = ? AND game_id = ?').bind(userId, game).run();
   }
 }
 
@@ -274,29 +295,36 @@ async function backfillBoard(env, limit = 8) {
   }
 }
 
-// Места: по очкам, при равенстве — кто раньше. Заблокированных в рейтинге нет.
-const RANKED = `SELECT b.user_id, b.game_id, b.value,
+// Места: по очкам, при равенстве — кто раньше. Заблокированных и убранных владельцем в рейтинге нет.
+const RANKED = `SELECT b.user_id, b.game_id, b.value, p.name, p.pid,
     ROW_NUMBER() OVER (PARTITION BY b.game_id ORDER BY b.value DESC, b.updated_at ASC, b.user_id ASC) AS place,
     COUNT(*) OVER (PARTITION BY b.game_id) AS total
-  FROM board_scores b JOIN users u ON u.id = b.user_id WHERE u.banned = 0`;
+  FROM board_scores b JOIN users u ON u.id = b.user_id JOIN board_players p ON p.user_id = b.user_id
+  WHERE u.banned = 0 AND p.hidden = 0`;
 
 const TOP_LIMIT = 50;
+const TOP_CACHE_MS = 60 * 1000;
+
+/** Весь рейтинг (все игры, все места) — из памяти, если свежий. */
+async function rankedRows(env) {
+  const cached = topCache.get(env.DB);
+  if (cached && Date.now() - cached.at < TOP_CACHE_MS) return cached.rows;
+  await backfillBoard(env);
+  const rows = (await env.DB.prepare(RANKED).all()).results ?? [];
+  topCache.set(env.DB, { at: Date.now(), rows });
+  return rows;
+}
 
 async function topRoutes(env, path, player, admin, origin) {
   await ensureBoardTables(env);
-  await backfillBoard(env);
+  const all = await rankedRows(env);
   // игры в бете в рейтинге видит только владелец
   const games = new Set(GAMES.filter((g) => BOARDS[g.id] && (admin || !g.beta)).map((g) => g.id));
   const text = (game, value) => BOARDS[game].text(value);
 
   if (path === '/top') {
-    const rows = await env.DB.prepare(
-      `SELECT r.game_id, r.value, r.place, r.total, r.user_id, p.name
-       FROM (${RANKED}) r JOIN board_players p ON p.user_id = r.user_id
-       WHERE r.place = 1 OR r.user_id = ?`,
-    ).bind(player.id).all();
     const byGame = {};
-    for (const r of rows.results ?? []) {
+    for (const r of all.filter((x) => x.place === 1 || x.user_id === player.id)) {
       if (!games.has(r.game_id)) continue;
       const item = byGame[r.game_id] ??= { game: r.game_id, by: BOARDS[r.game_id].by, total: r.total, leader: null, me: null };
       if (r.place === 1) item.leader = { name: r.name, text: text(r.game_id, r.value), me: r.user_id === player.id };
@@ -310,13 +338,11 @@ async function topRoutes(env, path, player, admin, origin) {
 
   const profile = path.match(/^\/top\/player\/([a-z0-9]{1,32})$/);
   if (profile) {
-    const who = await env.DB.prepare('SELECT user_id, name FROM board_players WHERE pid = ?').bind(profile[1]).first();
-    if (!who) return fail('no_player', 404, origin);
+    const who = await env.DB.prepare('SELECT user_id, name, hidden FROM board_players WHERE pid = ?').bind(profile[1]).first();
+    if (!who || who.hidden) return fail('no_player', 404, origin);
     const banned = await env.DB.prepare('SELECT banned FROM users WHERE id = ?').bind(who.user_id).first();
     if (!banned || banned.banned) return fail('no_player', 404, origin);
-    const rows = await env.DB.prepare(`SELECT game_id, value, place, total FROM (${RANKED}) WHERE user_id = ?`)
-      .bind(who.user_id).all();
-    const found = Object.fromEntries((rows.results ?? []).map((r) => [r.game_id, r]));
+    const found = Object.fromEntries(all.filter((r) => r.user_id === who.user_id).map((r) => [r.game_id, r]));
     return json({
       name: who.name,
       me: who.user_id === player.id,
@@ -329,12 +355,8 @@ async function topRoutes(env, path, player, admin, origin) {
   const one = path.match(/^\/top\/([a-z0-9-]{1,40})$/);
   if (!one || !games.has(one[1])) return fail('not_found', 404, origin);
   const game = one[1];
-  const rows = await env.DB.prepare(
-    `SELECT r.value, r.place, r.total, r.user_id, p.name, p.pid
-     FROM (${RANKED}) r JOIN board_players p ON p.user_id = r.user_id
-     WHERE r.game_id = ? AND (r.place <= ? OR r.user_id = ?) ORDER BY r.place`,
-  ).bind(game, TOP_LIMIT, player.id).all();
-  const list = rows.results ?? [];
+  const list = all.filter((r) => r.game_id === game && (r.place <= TOP_LIMIT || r.user_id === player.id))
+    .sort((a, b) => a.place - b.place);
   const mine = list.find((r) => r.user_id === player.id);
   return json({
     game,
@@ -377,9 +399,16 @@ async function submitReport(env, { player, user, text, source, copy = null }) {
     .bind(user.id, now - 60 * 60 * 1000).first();
   if ((recent?.n ?? 0) >= REPORT_PER_HOUR) return { ok: false, error: 'too_many' };
   const name = [user.first_name, user.last_name].filter(Boolean).join(' ').trim();
-  await env.DB.prepare(
+  const added = await env.DB.prepare(
     'INSERT INTO reports (tg_id, user_id, name, username, text, source, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
   ).bind(user.id, player?.id ?? null, name, user.username ?? null, clean, source, now).run();
+  // два запроса одновременно оба прошли бы проверку выше — пересчёт после записи закрывает эту щель
+  const after = await env.DB.prepare('SELECT COUNT(*) AS n FROM reports WHERE tg_id = ? AND created_at > ?')
+    .bind(user.id, now - 60 * 60 * 1000).first();
+  if ((after?.n ?? 0) > REPORT_PER_HOUR) {
+    await env.DB.prepare('DELETE FROM reports WHERE id = ?').bind(added.meta?.last_row_id ?? -1).run();
+    return { ok: false, error: 'too_many' };
+  }
   const note = reportMessage({ name, username: user.username, tgId: user.id, text: clean, source });
   for (const adminId of parseAdminIds(env.ADMIN_IDS)) {
     await api(env, 'sendMessage', { chat_id: adminId, text: note, parse_mode: 'HTML' });
@@ -468,7 +497,7 @@ async function adminRoutes(request, env, path, url, origin) {
     return json(await broadcast(env, text.trim()), 200, origin);
   }
 
-  const match = path.match(/^\/admin\/player\/(\d+)(\/state|\/ban|\/perk)?$/);
+  const match = path.match(/^\/admin\/player\/(\d+)(\/state|\/ban|\/perk|\/board)?$/);
   if (!match) return fail('not_found', 404, origin);
   const id = Number(match[1]);
   const action = match[2] ?? '';
@@ -478,10 +507,27 @@ async function adminRoutes(request, env, path, url, origin) {
 
   if (!action && request.method === 'GET') {
     const row = await env.DB.prepare('SELECT data, updated_at FROM states WHERE user_id = ?').bind(id).first();
+    await ensureBoardTables(env);
+    const board = await env.DB.prepare('SELECT hidden FROM board_players WHERE user_id = ?').bind(id).first();
     return json({
       player: playerRow(player), data: row?.data ?? '{}', updatedAt: row?.updated_at ?? 0,
-      perks: await perksOf(env, id), allPerks: PERKS,
+      perks: await perksOf(env, id), allPerks: PERKS, boardHidden: Boolean(board?.hidden),
     }, 200, origin);
+  }
+
+  // убрать из рейтинга (подделанные очки) или вернуть — прогресс игрока не трогается
+  if (action === '/board' && request.method === 'POST') {
+    const { hidden } = await body(request);
+    await ensureBoardTables(env);
+    const known = await env.DB.prepare('SELECT 1 FROM board_players WHERE user_id = ?').bind(id).first();
+    if (!known) {
+      await env.DB.prepare('INSERT OR IGNORE INTO board_players (user_id, pid, name, hidden) VALUES (?, ?, ?, ?)')
+        .bind(id, randomPid(), boardName(String(player.name).split(/\s+/)[0]), hidden ? 1 : 0).run();
+    } else {
+      await env.DB.prepare('UPDATE board_players SET hidden = ? WHERE user_id = ?').bind(hidden ? 1 : 0, id).run();
+    }
+    dropTopCache(env);
+    return json({ ok: true, boardHidden: Boolean(hidden) }, 200, origin);
   }
 
   if (action === '/state' && request.method === 'PUT') {
@@ -508,6 +554,7 @@ async function adminRoutes(request, env, path, url, origin) {
   if (action === '/ban' && request.method === 'POST') {
     const { banned } = await body(request);
     await env.DB.prepare('UPDATE users SET banned = ? WHERE id = ?').bind(banned ? 1 : 0, id).run();
+    dropTopCache(env);
     return json({ ok: true, banned: Boolean(banned) }, 200, origin);
   }
 
@@ -521,7 +568,19 @@ async function adminRoutes(request, env, path, url, origin) {
     // отзывы тоже: политика конфиденциальности (privacy.html) обещает удалить всё, что связано с игроком
     await ensureReports(env);
     await env.DB.prepare('DELETE FROM reports WHERE tg_id = ?').bind(player.tg_id).run();
+    // следы в рассылках: номера сообщений в его чате, личные сообщения ему (их черновики с его именем)
+    await ensureDraftTables(env);
+    for (const table of ['sent_messages', 'unsend_done', 'draft_anchor']) {
+      await env.DB.prepare(`DELETE FROM ${table} WHERE chat_id = ?`).bind(player.tg_id).run();
+    }
+    const personal = (await env.DB.prepare("SELECT admin_id, group_key FROM drafts WHERE kind = 'message' AND target = ?")
+      .bind(player.tg_id).all()).results ?? [];
+    for (const d of personal) {
+      await env.DB.prepare('DELETE FROM draft_media WHERE admin_id = ? AND group_key = ?').bind(d.admin_id, d.group_key).run();
+    }
+    await env.DB.prepare("DELETE FROM drafts WHERE kind = 'message' AND target = ?").bind(player.tg_id).run();
     await env.DB.prepare('DELETE FROM users WHERE id = ?').bind(id).run();
+    dropTopCache(env);
     return json({ ok: true }, 200, origin);
   }
 
@@ -538,25 +597,6 @@ const playerRow = (p) => ({
   banned: Boolean(p.banned),
   stateAt: p.state_at ?? null,
 });
-
-/** Спрашивает у Telegram, чей это токен: сверить с тем ботом, который открывает мини-апп. */
-async function whoami(env, origin) {
-  if (!env.BOT_TOKEN) return json({ ok: false, error: 'no_bot_token' }, 200, origin);
-  try {
-    const res = await fetch(`https://api.telegram.org/bot${env.BOT_TOKEN}/getMe`);
-    const data = await res.json();
-    if (!data.ok) return json({ ok: false, error: data.description ?? 'bad_token' }, 200, origin);
-    return json({
-      ok: true,
-      bot: data.result.username ? `@${data.result.username}` : data.result.first_name,
-      tokenLength: env.BOT_TOKEN.length,
-      tokenTrimmed: env.BOT_TOKEN === env.BOT_TOKEN.trim(),   // лишние пробелы при вставке ломают подпись
-      admins: parseAdminIds(env.ADMIN_IDS).length,
-    }, 200, origin);
-  } catch {
-    return json({ ok: false, error: 'telegram_unreachable' }, 200, origin);
-  }
-}
 
 // ---------- бот ----------
 
@@ -576,7 +616,9 @@ const playButton = (env) => ({
 
 async function botWebhook(request, env, ctx) {
   // Telegram шлёт этот заголовок, если вебхук поставлен с secret_token. Так чужой запрос не пройдёт.
-  if (env.WEBHOOK_SECRET && request.headers.get('X-Telegram-Bot-Api-Secret-Token') !== env.WEBHOOK_SECRET) {
+  // без секрета вебхук не работает вовсе: иначе любой мог бы прислать «сообщение от владельца» (аудит 2026-09-27)
+  const given = request.headers.get('X-Telegram-Bot-Api-Secret-Token') ?? '';
+  if (!env.WEBHOOK_SECRET || !timingSafeEqual(given, env.WEBHOOK_SECRET)) {
     return new Response('forbidden', { status: 403 });
   }
   const update = await body(request);
@@ -588,7 +630,9 @@ async function botWebhook(request, env, ctx) {
     await onButton(update.callback_query, env, ctx);
     return new Response('ok');
   }
-  const message = update.message ?? update.edited_message;
+  // правки старых сообщений не выполняются заново (иначе правка /report — новый отзыв, а у владельца правка
+  // любого сообщения во время /edit стала бы новым текстом рассылки)
+  const message = update.message;
   const chatId = message?.chat?.id;
   const tgId = message?.from?.id;
   const raw = message?.text ?? message?.caption ?? '';
@@ -605,8 +649,19 @@ async function botWebhook(request, env, ctx) {
   const entities = message?.entities ?? message?.caption_entities ?? [];
   const admin = isAdmin(tgId, parseAdminIds(env.ADMIN_IDS));
 
+  // Бот живёт и в группах. Команды владельца — только в личке (иначе предпросмотр рассылки ушёл бы в группу),
+  // а обычный текст в группе — не повод отвечать справкой.
+  const privateChat = message.chat?.type === 'private' || message.chat?.type == null;
+  if (!privateChat) {
+    if (OWNER_COMMANDS.includes(command)) {
+      await api(env, 'sendMessage', { chat_id: chatId, text: 'Эта команда работает только в личке с ботом.' });
+      return new Response('ok');
+    }
+    if (!command) return new Response('ok');
+  }
+
   // /edit: следующее сообщение владельца без команды — новый текст выбранной рассылки; /cancel — передумал
-  if (admin && (command === '/cancel' || (!command && !media.length))) {
+  if (admin && privateChat && (command === '/cancel' || (!command && !media.length))) {
     await ensureDraftTables(env);
     if (command === '/cancel') {
       await env.DB.prepare('DELETE FROM bot_pending WHERE admin_id = ?').bind(tgId).run();
@@ -622,6 +677,13 @@ async function botWebhook(request, env, ctx) {
     return new Response('ok');
   }
 
+  if (command === '/report' && betaOpen('feedback', admin) && !admin) {
+    const banned = await env.DB.prepare('SELECT banned FROM users WHERE tg_id = ?').bind(tgId).first();
+    if (banned?.banned) {
+      await api(env, 'sendMessage', { chat_id: chatId, text: 'Отзывы сейчас недоступны.' });
+      return new Response('ok');
+    }
+  }
   if (command === '/report' && betaOpen('feedback', admin)) {
     if (!rest && !media.length) {
       await api(env, 'sendMessage', { chat_id: chatId, text: 'Напиши после команды, что хочешь сказать. Например:\n/report добавьте бильярд' });

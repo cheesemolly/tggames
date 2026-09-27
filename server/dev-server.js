@@ -48,6 +48,6 @@ createServer(async (req, res) => {
   const response = await worker.fetch(request, env);
   res.writeHead(response.status, Object.fromEntries(response.headers));
   res.end(Buffer.from(await response.arrayBuffer()));
-}).listen(port, () => {
+}).listen(port, '127.0.0.1', () => {
   console.log(`сервер аккаунтов: http://127.0.0.1:${port}  (база ${file})`);
 });

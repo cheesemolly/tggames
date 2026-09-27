@@ -211,12 +211,20 @@ export function startAppLink(botUsername, param = '') {
  * Строки «Судоку: сыграно 3, рекорд 450» из сохранённого прогресса (снимок хранилища игрока).
  * Порядок — как в списке игр; варианты игры (ключи вида `2048:4`) не перечисляются.
  */
+/**
+ * Строку прогресса пишет клиент — в сообщениях бота она не должна становиться ссылкой, упоминанием или простынёй:
+ * только буквы, цифры и простая пунктуация (без точек, «/» и @ — из них Telegram делает ссылки), до 60 символов.
+ */
+export function cleanProgress(text) {
+  return String(text ?? '').replace(/[^\p{L}\p{N} :·,()№+×%«»!?-]/gu, '').replace(/\s+/g, ' ').trim().slice(0, 60);
+}
+
 export function progressLines(state) {
   const lines = [];
-  const known = new Set(GAMES.map((g) => g.id));
   const describe = (id, title, best) => {
     const stats = state?.[`shell:stats:${id}`];
-    const line = state?.[`shell:progress:${id}`];
+    const raw = state?.[`shell:progress:${id}`];
+    const line = typeof raw === 'string' ? cleanProgress(raw) : '';
     const parts = [];
     if (stats?.played) {
       const hasBest = best !== false && stats.best !== null && stats.best !== undefined;
@@ -226,15 +234,8 @@ export function progressLines(state) {
     if (typeof line === 'string' && line) parts.push(line);
     if (parts.length) lines.push(`${title}: ${parts.join(' · ')}`);
   };
+  // только игры из списка: ключи неизвестных игр пишет клиент — показывать их нельзя (аудит 2026-09-27)
   for (const g of GAMES) describe(g.id, g.title, g.best);
-  // игры, которых нет в списке (например, удалённые), — под своим id, чтобы ничего не терялось
-  for (const key of Object.keys(state ?? {})) {
-    const m = key.match(/^shell:(?:stats|progress):([^:]+)$/);
-    if (m && !known.has(m[1])) {
-      known.add(m[1]);
-      describe(m[1], m[1]);
-    }
-  }
   return lines;
 }
 
@@ -278,7 +279,11 @@ const escHtml = (text) => String(text ?? '').replace(/&/g, '&amp;').replace(/</g
 export function reportMessage({ name, username, tgId, text, source }) {
   const who = `${escHtml(name || 'Без имени')}${username ? ` (@${escHtml(username)})` : ''}, id ${tgId}`;
   const reply = username ? `/message @${escHtml(username)} текст` : `/message ${tgId} текст`;
-  return `📝 <b>Отзыв</b> ${source === 'app' ? 'из приложения' : 'в боте'}\n${who}\n\n${escHtml(text)}\n\n`
+  // после экранирования текст длиннее («<» → «&lt;»): 1000 символов могли вырасти за предел Telegram (4096),
+  // и отзыв молча не доходил — режем по символам исходника, пока экранированный не влезет
+  let body = escHtml(text);
+  for (let n = [...String(text)].length; body.length > 3500 && n > 0; n -= 50) body = `${escHtml([...String(text)].slice(0, n).join(''))}…`;
+  return `📝 <b>Отзыв</b> ${source === 'app' ? 'из приложения' : 'в боте'}\n${who}\n\n${body}\n\n`
     + `<i>Ответить: ${reply}</i>`;
 }
 
@@ -373,7 +378,31 @@ export const BOARDS = {
 
 const MAX_SCORE = 1e9;   // больше — явно испорченные данные
 
-/** Очки игрока по всем играм рейтинга: { gameId: целое > 0 }. Пустое и мусор — пропускаются. */
+/**
+ * Правдоподобные потолки (аудит 2026-09-27: прогресс присылает клиент, одним запросом можно было встать первым
+ * везде). Выше — очки в рейтинг не идут. Не защита от аккуратной подделки — для неё в панели «убрать из рейтинга».
+ */
+export const BOARD_LIMITS = {
+  words: 100,                 // уровней в игре 100
+  flags: 1e6, checkers: 1e5, 'flappy-burger': 1e4, 'bubble-shooter': 1e4, snake: 1e5, 'brick-blast': 1e4,
+  loop: 1e5, 'connect-dots': 1e4, mahjong: 1e5, 2048: 131072, boggle: 1e6, 'block-blast': 1e7, sudoku: 1e5,
+  wordle: 1e5, memory: 1e4, 'bongo-cat': 1e8,
+};
+// побед не может быть больше сыгранных партий
+const WINS_FROM = { checkers: 'checkers', mahjong: 'mahjong', sudoku: 'sudoku', wordle: 'wordle' };
+
+function plausible(id, value, state) {
+  if (value > (BOARD_LIMITS[id] ?? MAX_SCORE)) return false;
+  if (id === '2048' && (value < 4 || (value & (value - 1)) !== 0)) return false;   // плитка — степень двойки
+  const wins = WINS_FROM[id];
+  if (wins) {
+    const played = state?.[`shell:stats:${wins}`]?.played;
+    if (!Number.isInteger(played) || value > played) return false;
+  }
+  return true;
+}
+
+/** Очки игрока по всем играм рейтинга: { gameId: целое > 0 }. Пустое, мусор и неправдоподобное — пропускаются. */
 export function boardScores(state) {
   const out = {};
   for (const [id, board] of Object.entries(BOARDS)) {
@@ -383,7 +412,7 @@ export function boardScores(state) {
     } catch {
       value = null;
     }
-    if (Number.isInteger(value) && value > 0 && value <= MAX_SCORE) out[id] = value;
+    if (Number.isInteger(value) && value > 0 && value <= MAX_SCORE && plausible(id, value, state)) out[id] = value;
   }
   return out;
 }
@@ -393,7 +422,8 @@ export function boardScores(state) {
  * Длинное обрезается, пустое — «Игрок».
  */
 export function boardName(firstName) {
-  const name = String(firstName ?? '').replace(/\s+/g, ' ').trim();
+  // без служебных символов (переворот направления текста и т.п. — ими можно «подделать» чужое имя)
+  const name = String(firstName ?? '').replace(/[\p{Cc}\p{Cf}]/gu, '').replace(/\s+/g, ' ').trim();
   return [...name].slice(0, 24).join('') || 'Игрок';
 }
 

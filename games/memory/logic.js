@@ -365,11 +365,18 @@ export function newLevel(level, settings, rng = Math.random) {
 
 // ---------- сохранение и статистика ----------
 
+// Рисунок карточки из сохранения (оно синхронизируется с сервером) — только известного вида, а поля — числа
+// или короткие строки без символов разметки: из них собирается SVG карточки.
+const FACE_TYPES = ['monster', 'pattern', 'emoji', 'word', 'sound', 'special'];
+const safeFace = (f) => Boolean(f) && typeof f === 'object' && FACE_TYPES.includes(f.type)
+  && Object.values(f).every((v) => (typeof v === 'number' ? Number.isFinite(v)
+    : typeof v === 'string' ? v.length <= 40 && !/[<>"'&]/.test(v) : typeof v === 'boolean'));
+
 export function isValidState(s) {
   if (!s || typeof s !== 'object' || s.v !== 1) return false;
   if (!findSize(`${s.cols}x${s.rows}`) || ![2, 3].includes(s.group)) return false;
   if (!Array.isArray(s.cards) || s.cards.length !== s.cols * s.rows) return false;
-  if (!s.cards.every((c) => c && Number.isInteger(c.key) && typeof c.kind === 'string' && c.face && typeof c.gone === 'boolean')) return false;
+  if (!s.cards.every((c) => c && Number.isInteger(c.key) && typeof c.kind === 'string' && safeFace(c.face) && typeof c.gone === 'boolean')) return false;
   if (!Array.isArray(s.open) || !s.open.every((k) => Number.isInteger(k) && s.cards[k] && !s.cards[k].gone)) return false;
   if (!PRESSURES.includes(s.pressure)) return false;
   return Number.isInteger(s.moves) && Number.isInteger(s.mistakes) && Number.isInteger(s.score);

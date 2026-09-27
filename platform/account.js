@@ -76,11 +76,6 @@ export const account = {
     return res;
   },
 
-  /** Почему не сошлась подпись: сервер перебирает способы подсчёта и говорит, какой подходит. */
-  diagnose() {
-    return this.request('/debug/initdata');
-  },
-
   fetchState() {
     return this.request('/state');
   },
@@ -100,12 +95,15 @@ export const account = {
     return this.request('/top');
   },
 
+  // в адрес — только то, что может быть id игры или pid (иначе «..» в пути уводил бы запрос на другой адрес)
   topGame(game) {
-    return this.request(`/top/${encodeURIComponent(game)}`);
+    if (!/^[a-z0-9-]{1,40}$/.test(String(game))) return Promise.resolve({ ok: false, error: 'not_found' });
+    return this.request(`/top/${game}`);
   },
 
   topPlayer(pid) {
-    return this.request(`/top/player/${encodeURIComponent(pid)}`);
+    if (!/^[a-z0-9]{1,32}$/.test(String(pid))) return Promise.resolve({ ok: false, error: 'no_player' });
+    return this.request(`/top/player/${pid}`);
   },
 
   // ---------- панель владельца ----------
@@ -126,6 +124,11 @@ export const account = {
 
   setPerk(id, perk, on) {
     return this.request(`/admin/player/${id}/perk`, { method: 'POST', payload: { perk, on } });
+  },
+
+  /** Убрать из рейтинга (подделанные очки) или вернуть; прогресс не трогается. */
+  hideFromBoard(id, hidden) {
+    return this.request(`/admin/player/${id}/board`, { method: 'POST', payload: { hidden } });
   },
 
   banPlayer(id, banned) {

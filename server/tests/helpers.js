@@ -59,6 +59,7 @@ export function createEnv(extra = {}) {
     ADMIN_IDS: String(ADMIN.id),
     WEBHOOK_SECRET: 'webhook-secret',            // в заголовки HTTP кириллицу класть нельзя
     APP_URL: 'https://example.test/tggames/',
+    STATE_MIN_GAP_MS: '0',                       // в тестах сохранения идут подряд; частота — в отдельном тесте
     ...extra,
   };
 }
