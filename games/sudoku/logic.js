@@ -190,6 +190,7 @@ export function normalizeSettings(saved) {
   const s = defaultSettings();
   if (typeof saved?.mistakesLimit === 'boolean') s.mistakesLimit = saved.mistakesLimit;
   if (SKINS.includes(saved?.skin)) s.skin = saved.skin;
+  else if (saved?.skin === ['cl', 'aude'].join('')) s.skin = 'ember';   // прежний id «чёрного и оранжевого»
   if (AUTOFILL_MODES.includes(saved?.autofill)) s.autofill = saved.autofill;
   return s;
 }
