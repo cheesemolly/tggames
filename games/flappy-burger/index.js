@@ -878,7 +878,10 @@ function resize() {
 function loop(now) {
   raf = 0;
   if (!ui || !game) return;
-  const dt = Math.min(1 / 30, (now - lastFrame) / 1000 || 0);
+  // метка кадра бывает раньше performance.now() из kick() — время уходило в минус, и заставки с летающим
+  // бургером падали на кадре крыла с номером −1 (игра не запускалась). В бете: api.feature('flappy-logo-fix')
+  const raw = Math.min(1 / 30, (now - lastFrame) / 1000 || 0);
+  const dt = api?.feature?.('flappy-logo-fix') ? Math.max(0, raw) : raw;
   lastFrame = now;
   if (title) {
     title.t += dt;
