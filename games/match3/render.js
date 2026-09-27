@@ -607,7 +607,6 @@ export function createRenderer({ board, fx, host, getGoalTarget = () => null }) 
   let shakeT = 0;
   let selected = -1;
   let hintPair = null;
-  let armed = null;                // бонус, ждущий клетку
   let raf = 0;
   let timer = 0;
   let last = performance.now();
@@ -873,13 +872,8 @@ export function createRenderer({ board, fx, host, getGoalTarget = () => null }) 
       if (b.hp) view.block[b.i] = { ...(prev ?? { t: b.t }), hp: b.hp };
       else {
         view.block[b.i] = null;
-        if (prev) {
-          const { x, y } = posOf(b.i);
-          if (b.t === 'crate' || b.t === 'steel') fly({ k: 'box' }, b.i, 'box');
-          if (b.t === 'slime') fly({ k: 'slime' }, b.i, 'slime');
-          void x;
-          void y;
-        }
+        if (prev && (b.t === 'crate' || b.t === 'steel')) fly({ k: 'box' }, b.i, 'box');
+        if (prev && b.t === 'slime') fly({ k: 'slime' }, b.i, 'slime');
       }
     }
     if (ph.blocks.length) sounds(ph.blocks.some((b) => b.t === 'slime') ? 'slime' : ph.blocks.some((b) => b.t === 'steel') ? 'steel' : 'crate');
@@ -905,9 +899,7 @@ export function createRenderer({ board, fx, host, getGoalTarget = () => null }) 
       const pos = posOf(r.i);
       const dist = originPts.length ? Math.min(...originPts.map((o) => Math.hypot(o.x - pos.x, o.y - pos.y))) : 0;
       const delay = Math.min(260, dist * 32);
-      if (r.into && createdAt.has(r.i)) continue;
-      const target = [...createdAt.values()].find((c) => r.into || false);
-      void target;
+      if (r.into && createdAt.has(r.i)) continue;      // на этом месте рождается спецфишка
       jobs.push(tween(200, (k) => {
         v.s = k < 0.35 ? 1 + k * 0.7 : Math.max(0, 1.25 * (1 - (k - 0.35) / 0.65));
         v.a = k < 0.6 ? 1 : 1 - (k - 0.6) / 0.4;
@@ -920,9 +912,6 @@ export function createRenderer({ board, fx, host, getGoalTarget = () => null }) 
         if (r.c !== undefined) fly(r, r.i, 'color');
       }, reducedMotion() ? 0 : delay + 60);
     }
-    // фишки, из которых рождается спецфишка, стягиваются к ней
-    const merging = ph.removed.filter((r) => !createdAt.has(r.i) || !r.into);
-    void merging;
     for (const c of ph.created) {
       const group = ph.removed.filter((r) => r.into && r.i === c.i);
       for (const r of group) view.pieces.delete(r.id);
@@ -976,8 +965,8 @@ export function createRenderer({ board, fx, host, getGoalTarget = () => null }) 
     }
     for (const sp of ph.spawns) {
       const to = posOf(sp.to);
-      const from = { x: to.x, y: -sp.depth - 0.1 + (to.y - (to.y - 0)) * 0 };
       // появляется над верхней клеткой своего столбца
+      const from = { x: to.x, y: 0 };
       let top = 0;
       for (let r = 0; r < state.rows; r++) if (view.cells[r * state.cols + to.x]) { top = r; break; }
       from.y = top - sp.depth;
@@ -1353,9 +1342,6 @@ export function createRenderer({ board, fx, host, getGoalTarget = () => null }) 
         f.onDone?.();
       }
     }
-    const busy = tweens.length || particles.length || rings.length || flights.length || shakeT > 0;
-    // живые фишки (пропеллер, призма, бомба, слизь, выбор, подсказка) — кадры всегда, пока экран на месте
-    void busy;
   }
 
   // ---------- наружу ----------
@@ -1378,10 +1364,6 @@ export function createRenderer({ board, fx, host, getGoalTarget = () => null }) 
     hint(pair) {
       hintPair = pair;
       kick();
-    },
-    arm(kind) {
-      armed = kind;
-      void armed;
     },
     /** Центр клетки в координатах страницы (для всплывающих «+очки»). */
     cellPoint(i) {

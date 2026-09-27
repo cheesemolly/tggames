@@ -62,7 +62,6 @@ const ICONS = {
 };
 
 let api = null;
-let host = null;
 let root = null;
 let ui = null;
 let toast = null;
@@ -720,7 +719,6 @@ export default {
 
   async init(container, gameApi) {
     api = gameApi;
-    host = container;
     toast = createToast();
     const [savedProgress, savedRun, savedSound] = await Promise.all([
       api.storage.get('progress'), api.storage.get('run'), api.storage.get('sound'),
@@ -773,7 +771,7 @@ export default {
     map?.destroy();
     toast?.dispose();
     root?.remove();
-    api = host = root = ui = toast = game = spec = renderer = map = progress = null;
+    api = root = ui = toast = game = spec = renderer = map = progress = null;
     busy = modalActive = false;
     selected = -1;
     armed = null;

@@ -39,8 +39,6 @@ function board(rows, extra = {}) {
   return s;
 }
 
-const kinds = (s) => s.pieces.map((p) => (p ? p.k : '.'));
-
 test('совпадения: линии, квадрат, «Г»; что за спецфишка рождается', () => {
   const g = (rows) => findMatches(board(rows)).map((m) => specialFor(m));
   assert.deepEqual(g(['111', '234', '342']), [null], 'три в ряд — просто лопаются');
@@ -256,5 +254,4 @@ test('звуки: каждый подключён и не падает', () => {
   }
   const dangling = created.filter((n) => n.kind !== 'compressor' && n.kind !== 'gain' && n.connections === 0);
   assert.equal(dangling.length, 0, 'все узлы подключены');
-  void kinds;
 });
