@@ -28,6 +28,7 @@ export const GAME_ICONS = {
     + '<path d="M6 11.5h2.5M6 15h2.5M16 8h2.5M16 11.5h2.5" opacity="0.7"/>'),
   match3: svg('<circle cx="6" cy="7" r="3"/><circle cx="12" cy="7" r="3"/><circle cx="18" cy="7" r="3"/>'
     + '<path d="M9 14.5 12 12l3 2.5-3 5.5Z"/><path d="M3.5 17h5M15.5 17h5" opacity="0.5"/>'),
+  tictactoe: svg('<path d="M9 3v18M15 3v18M3 9h18M3 15h18" opacity="0.45"/><path d="m4.5 4.5 3 3m0-3-3 3"/><circle cx="12" cy="12" r="1.6"/><path d="m16.5 16.5 3 3m0-3-3 3"/>'),
   memory: svg('<rect x="3" y="4" width="8" height="10" rx="1.8"/><rect x="13" y="10" width="8" height="10" rx="1.8"/>'
     + '<path d="M5.5 7.5l3 3M8.5 7.5l-3 3" opacity="0.55"/><circle cx="17" cy="15" r="2.2" fill="currentColor" stroke="none"/>'),
   2048: svg('<rect x="3" y="3" width="18" height="18" rx="3"/>'

@@ -129,6 +129,13 @@ export const games = [
     menu: { progress: 'replace' },                       // «Ударов: 1 234» — партий и побед нет
   },
   {
+    id: 'tictactoe',
+    title: 'Крестики-нолики',
+    load: () => import('../games/tictactoe/index.js'),
+    css: new URL('../games/tictactoe/game.css', import.meta.url),
+    menu: { best: false },                               // «Сыграно · Побед» — рекорда нет
+  },
+  {
     id: 'match3',
     title: 'Три в ряд',
     load: () => import('../games/match3/index.js'),

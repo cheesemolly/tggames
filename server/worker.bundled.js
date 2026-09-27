@@ -189,6 +189,7 @@ const GAMES = [
   { id: 'wordle', title: 'Wordle', emoji: '🟩', about: 'угадай слово из пяти букв: русский, украинский, английский', best: false },
   { id: 'memory', title: 'Мемори', emoji: '🃏', about: 'найди пары одинаковых карточек' },
   { id: 'bongo-cat', title: 'Bongo Cat', emoji: '🐱', about: 'кот играет на инструментах, разучи мелодию' },
+  { id: 'tictactoe', title: 'Крестики-нолики', emoji: '❌', about: 'классика 3×3 и гомоку — пять в ряд на большом поле', beta: true },
   { id: 'match3', title: 'Три в ряд', emoji: '💎', about: 'меняй фишки местами и собирай по три — 100 уровней с боссами', beta: true },
 ];
 
@@ -390,6 +391,7 @@ const BOARDS = {
   wordle: { by: 'угаданные слова', score: shellStats('wordle', 'wins'), text: count(['слово', 'слова', 'слов']) },
   memory: { by: 'уровень', score: menuLevel('memory'), text: levelText },
   'bongo-cat': { by: 'ударов за всё время', score: gameStats('bongo-cat', 'hits'), text: count(['удар', 'удара', 'ударов']) },
+  tictactoe: { by: 'победы над ботом', score: shellStats('tictactoe', 'wins'), text: WINS },
   // «Три в ряд»: сколько уровней пройдено (звёзд в игре нет)
   match3: { by: 'пройденные уровни', score: match3Levels, text: count(['уровень пройден', 'уровня пройдено', 'уровней пройдено']) },
 };
@@ -406,9 +408,10 @@ const BOARD_LIMITS = {
   loop: 1e5, 'connect-dots': 1e4, mahjong: 1e5, 2048: 131072, boggle: 1e6, 'block-blast': 1e7, sudoku: 1e5,
   wordle: 1e5, memory: 1e4, 'bongo-cat': 1e8,
   match3: 100,                // уровней в игре 100
+  tictactoe: 1e5,
 };
 // побед не может быть больше сыгранных партий
-const WINS_FROM = { checkers: 'checkers', mahjong: 'mahjong', sudoku: 'sudoku', wordle: 'wordle' };
+const WINS_FROM = { checkers: 'checkers', mahjong: 'mahjong', sudoku: 'sudoku', wordle: 'wordle', tictactoe: 'tictactoe' };
 
 function plausible(id, value, state) {
   if (value > (BOARD_LIMITS[id] ?? MAX_SCORE)) return false;

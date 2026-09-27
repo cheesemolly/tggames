@@ -31,7 +31,7 @@ export const categories = [
     title: 'Настольные',
     hint: 'Против бота',
     color: '--cat-board',
-    games: ['checkers'],
+    games: ['checkers', 'tictactoe'],
   },
   {
     id: 'quiz',

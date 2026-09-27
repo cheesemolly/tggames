@@ -1,0 +1,241 @@
+/*
+ * Крестики-нолики. Доска — SVG; цвета — переменные скина (--tt-*): «По умолчанию» — из темы Telegram,
+ * остальные — свои палитры (для обеих тем одинаковые: это «картинка» доски). Окна — в цветах темы.
+ */
+
+[data-game="tictactoe"], [data-game="tictactoe"] [data-skin="telegram"] {
+  --tt-bg: var(--tg-theme-secondary-bg-color);
+  --tt-line: color-mix(in srgb, var(--tg-theme-hint-color) 70%, transparent);
+  --tt-x: var(--tg-theme-button-color);
+  --tt-o: color-mix(in srgb, var(--tg-theme-text-color) 80%, var(--tg-theme-hint-color));
+  --tt-win: color-mix(in srgb, var(--tg-theme-button-color) 70%, var(--tg-theme-text-color));
+  --tt-last: color-mix(in srgb, var(--tg-theme-button-color) 16%, transparent);
+  --tt-accent: var(--tg-theme-button-color);
+  --tt-accent-text: var(--tg-theme-button-text-color);
+  --toast-top: 120px;
+}
+[data-game="tictactoe"][data-skin="paper"], [data-game="tictactoe"] [data-skin="paper"] {
+  --tt-bg: #fdfcf5; --tt-line: #9cc0e6; --tt-x: #2146c7; --tt-o: #d6336c; --tt-win: #e03131; --tt-last: rgba(33, 70, 199, 0.08);
+  --tt-accent: #2146c7; --tt-accent-text: #fff;
+}
+[data-game="tictactoe"][data-skin="chalk"], [data-game="tictactoe"] [data-skin="chalk"] {
+  --tt-bg: #2e4a3a; --tt-line: rgba(255, 255, 255, 0.5); --tt-x: #fbfbf6; --tt-o: #ffe58a; --tt-win: #ff9aa8; --tt-last: rgba(255, 255, 255, 0.1);
+  --tt-accent: #4f7a5f; --tt-accent-text: #fff;
+}
+[data-game="tictactoe"][data-skin="neon"], [data-game="tictactoe"] [data-skin="neon"] {
+  --tt-bg: #0b0b1f; --tt-line: #2c2c62; --tt-x: #ff3cac; --tt-o: #2bd2ff; --tt-win: #f7ff3c; --tt-last: rgba(255, 255, 255, 0.07);
+  --tt-accent: #7b4dff; --tt-accent-text: #fff;
+}
+[data-game="tictactoe"][data-skin="go"], [data-game="tictactoe"] [data-skin="go"] {
+  --tt-bg: #d9a760; --tt-line: #5b3a17; --tt-x: #161616; --tt-o: #f5f5f0; --tt-win: #d43d3d; --tt-last: #e23b3b;
+  --tt-accent: #a86a2c; --tt-accent-text: #fff;
+}
+[data-game="tictactoe"][data-skin="candy"], [data-game="tictactoe"] [data-skin="candy"] {
+  --tt-bg: #ffe6f1; --tt-line: #ffb6d3; --tt-x: #20bfa0; --tt-o: #9b5cf6; --tt-win: #ff4f98; --tt-last: rgba(255, 79, 152, 0.12);
+  --tt-accent: #ff5f98; --tt-accent-text: #fff;
+}
+
+/* ---------- раскладка ---------- */
+
+.game-root[data-game="tictactoe"] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+  user-select: none;
+  -webkit-user-select: none;
+}
+[data-game="tictactoe"] .btn { background: var(--tt-accent); color: var(--tt-accent-text); }
+[data-game="tictactoe"] .btn-secondary { background: var(--tg-theme-secondary-bg-color); color: var(--tg-theme-text-color); }
+[data-game="tictactoe"] .tt { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
+[data-game="tictactoe"] .tt-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 4px; }
+[data-game="tictactoe"] .tt-head-text { min-width: 0; }
+[data-game="tictactoe"] .tt-title { font-size: 18px; font-weight: 700; line-height: 1.2; white-space: nowrap; }
+[data-game="tictactoe"] .tt-sub { font-size: 13px; color: var(--tg-theme-hint-color); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+[data-game="tictactoe"] .tt-actions { display: flex; gap: 6px; flex: none; }
+[data-game="tictactoe"] .tt-icon-btn {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: var(--tg-theme-secondary-bg-color);
+  color: var(--tg-theme-text-color);
+  font: inherit;
+  cursor: pointer;
+  transition: transform 0.12s ease, opacity 0.2s ease;
+}
+[data-game="tictactoe"] .tt-icon-btn:active { transform: scale(0.9); }
+[data-game="tictactoe"] .tt-icon-btn:disabled { opacity: 0.35; }
+@media (max-width: 420px) {
+  [data-game="tictactoe"] .tt-icon-btn { width: 32px; height: 32px; }
+  [data-game="tictactoe"] .tt-actions { gap: 5px; }
+}
+@media (max-width: 360px) {
+  /* узко: в плашках только знаки — место статусу хода */
+  [data-game="tictactoe"] .tt-pill-name { display: none; }
+  [data-game="tictactoe"] .tt-pill { justify-content: center; padding: 8px; }
+  [data-game="tictactoe"] .tt-icon-btn { width: 30px; height: 30px; }
+  [data-game="tictactoe"] .tt-actions { gap: 4px; }
+  [data-game="tictactoe"] .tt-title { font-size: 15px; }
+}
+
+/* чей ход */
+[data-game="tictactoe"] .tt-bar { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; }
+[data-game="tictactoe"] .tt-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 12px;
+  border-radius: 14px;
+  background: var(--tg-theme-secondary-bg-color);
+  border: 2px solid transparent;
+  transition: border-color 0.25s ease, transform 0.25s ease, opacity 0.25s ease;
+  opacity: 0.6;
+}
+[data-game="tictactoe"] .tt-pill-o { flex-direction: row-reverse; text-align: right; }
+[data-game="tictactoe"] .tt-pill.on { opacity: 1; border-color: var(--tt-accent); transform: scale(1.03); }
+[data-game="tictactoe"] .tt-pill-mark { font-size: 20px; font-weight: 900; line-height: 1; }
+[data-game="tictactoe"] .tt-pill-x .tt-pill-mark { color: var(--tt-x); }
+[data-game="tictactoe"] .tt-pill-o .tt-pill-mark { color: var(--tt-o); }
+[data-game="tictactoe"] .tt-pill-name { font-weight: 700; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+[data-game="tictactoe"] .tt-bar-mid { display: grid; justify-items: center; }
+[data-game="tictactoe"] .tt-status { font-weight: 700; font-size: 14px; text-align: center; }
+[data-game="tictactoe"] .tt-status.tt-thinking { animation: tt-blink 1s ease-in-out infinite; }
+@keyframes tt-blink { 50% { opacity: 0.45; } }
+[data-game="tictactoe"] .tt-score { font-size: 12px; color: var(--tg-theme-hint-color); font-variant-numeric: tabular-nums; }
+
+/* доска */
+[data-game="tictactoe"] .tt-wrap { position: relative; flex: 1; min-height: 0; display: grid; place-items: center; }
+[data-game="tictactoe"] .tt-board { width: 100%; height: 100%; max-height: 100%; touch-action: none; cursor: pointer; }
+[data-game="tictactoe"][data-skin="neon"] .tt-board { filter: drop-shadow(0 0 5px rgba(123, 77, 255, 0.45)); }
+[data-game="tictactoe"] .tt-bg { fill: var(--tt-bg); }
+[data-game="tictactoe"] .tt-grid line, [data-game="tictactoe"] .tt-grid path { stroke: var(--tt-line); stroke-linecap: round; }
+[data-game="tictactoe"] .tt-star { fill: var(--tt-line); }
+[data-game="tictactoe"] .tt-mark path { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+[data-game="tictactoe"] .tt-x path { stroke: var(--tt-x); }
+[data-game="tictactoe"] .tt-o path { stroke: var(--tt-o); }
+[data-game="tictactoe"][data-skin="chalk"] .tt-mark path { opacity: 0.93; }
+[data-game="tictactoe"] .tt-stone-shadow { fill: rgba(0, 0, 0, 0.28); }
+[data-game="tictactoe"] .tt-x .tt-stone { fill: var(--tt-x); }
+[data-game="tictactoe"] .tt-o .tt-stone { fill: var(--tt-o); stroke: rgba(0, 0, 0, 0.25); stroke-width: 0.03; }
+[data-game="tictactoe"] .tt-stone-shine { fill: #fff; opacity: 0.35; }
+[data-game="tictactoe"] .tt-o .tt-stone-shine { opacity: 0.9; }
+[data-game="tictactoe"] .tt-ghost { opacity: 0.35; pointer-events: none; }
+[data-game="tictactoe"] .tt-last-cell { fill: var(--tt-last); }
+[data-game="tictactoe"] .tt-last-dot { fill: var(--tt-last); }
+[data-game="tictactoe"] .tt-win { stroke: var(--tt-win); stroke-linecap: round; opacity: 0.9; }
+[data-game="tictactoe"] .tt-winmark { animation: tt-winmark 0.5s ease-in-out 0.35s 3; }
+@keyframes tt-winmark { 50% { opacity: 0.45; } }
+
+/* «перо»: штрих прорисовывается (pathLength = 1) */
+[data-game="tictactoe"] .tt-draw { stroke-dasharray: 1; stroke-dashoffset: 1; animation: tt-draw 0.2s ease-out forwards; }
+[data-game="tictactoe"] .tt-draw-2 { animation-delay: 0.13s; }
+[data-game="tictactoe"] .tt-win.tt-draw { animation-duration: 0.45s; animation-delay: 0.15s; }
+@keyframes tt-draw { to { stroke-dashoffset: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  [data-game="tictactoe"] .tt-draw { stroke-dashoffset: 0; animation: none; }
+}
+
+[data-game="tictactoe"] .tt-hint { text-align: center; font-size: 13px; color: var(--tg-theme-hint-color); margin-top: -4px; }
+
+/* ---------- окна ---------- */
+
+[data-game="tictactoe"] .tt-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.45);
+}
+[data-game="tictactoe"] .tt-card {
+  width: min(360px, 100%);
+  max-height: 100%;
+  overflow: auto;
+  padding: 16px;
+  border-radius: 18px;
+  background: var(--tg-theme-bg-color);
+  color: var(--tg-theme-text-color);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.3);
+}
+[data-game="tictactoe"] .tt-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+[data-game="tictactoe"] .tt-card h2 { margin: 0; font-size: 20px; }
+[data-game="tictactoe"] .tt-section { margin: 12px 0 6px; font-size: 13px; font-weight: 700; color: var(--tg-theme-hint-color); text-transform: uppercase; letter-spacing: 0.04em; }
+[data-game="tictactoe"] .tt-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 6px; }
+[data-game="tictactoe"] .tt-option {
+  display: grid;
+  gap: 2px;
+  padding: 10px;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  background: var(--tg-theme-secondary-bg-color);
+  color: var(--tg-theme-text-color);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.2s ease;
+}
+[data-game="tictactoe"] .tt-option span { font-size: 12px; color: var(--tg-theme-hint-color); }
+[data-game="tictactoe"] .tt-option[aria-checked="true"] { border-color: var(--tt-accent); }
+[data-game="tictactoe"] .tt-option-sm { text-align: center; padding: 8px 6px; }
+[data-game="tictactoe"] .tt-play { width: 100%; margin-top: 14px; }
+[data-game="tictactoe"] .tt-btns { display: flex; gap: 8px; margin-top: 12px; }
+[data-game="tictactoe"] .tt-btns .btn { flex: 1; }
+[data-game="tictactoe"] .tt-result-mark { font-size: 64px; font-weight: 900; text-align: center; line-height: 1.1; color: var(--tt-accent); }
+[data-game="tictactoe"] .tt-friend-score { text-align: center; color: var(--tg-theme-hint-color); font-size: 14px; }
+
+[data-game="tictactoe"] .tt-stat-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+[data-game="tictactoe"] .tt-tile { display: grid; justify-items: center; padding: 10px; border-radius: 12px; background: var(--tg-theme-secondary-bg-color); }
+[data-game="tictactoe"] .tt-tile b { font-size: 22px; }
+[data-game="tictactoe"] .tt-tile span { font-size: 12px; color: var(--tg-theme-hint-color); }
+[data-game="tictactoe"] .tt-stats-table { display: grid; gap: 4px; }
+[data-game="tictactoe"] .tt-stats-row { display: grid; grid-template-columns: 1.3fr 1fr 1fr 1fr; gap: 4px; align-items: center; padding: 6px 8px; border-radius: 10px; background: var(--tg-theme-secondary-bg-color); text-align: center; }
+[data-game="tictactoe"] .tt-stats-row span:first-child { text-align: left; }
+[data-game="tictactoe"] .tt-stats-head { background: none; font-size: 12px; color: var(--tg-theme-hint-color); }
+
+[data-game="tictactoe"] .tt-skins { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+[data-game="tictactoe"] .tt-skin {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 8px 4px;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  background: var(--tg-theme-secondary-bg-color);
+  color: var(--tg-theme-text-color);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+[data-game="tictactoe"] .tt-skin[aria-checked="true"] { border-color: var(--tt-accent); }
+[data-game="tictactoe"] .tt-swatch {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 64px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--tt-bg);
+  box-shadow: inset 0 0 0 1px var(--tt-line);
+  font-weight: 900;
+  font-size: 18px;
+  font-style: normal;
+}
+[data-game="tictactoe"] .tt-swatch i { font-style: normal; }
+[data-game="tictactoe"] .tt-sw-x { color: var(--tt-x); }
+[data-game="tictactoe"] .tt-sw-o { color: var(--tt-o); }
+[data-game="tictactoe"] .tt-skin[data-skin="go"] .tt-sw-x, [data-game="tictactoe"] .tt-skin[data-skin="go"] .tt-sw-o {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--tt-x);
+}
+[data-game="tictactoe"] .tt-skin[data-skin="go"] .tt-sw-o { background: var(--tt-o); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25); }
+[data-game="tictactoe"] .tt-toggle { display: flex; align-items: center; gap: 10px; margin-top: 14px; font-size: 14px; }
+[data-game="tictactoe"] .tt-toggle input { width: 20px; height: 20px; accent-color: var(--tt-accent); }
