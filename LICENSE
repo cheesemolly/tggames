@@ -38,10 +38,13 @@ These are not owned by the copyright holder; their own licenses and notices appl
     Dictionary of Russian Vocabulary" by O. N. Lyashevskaya and S. A. Sharov (2009).
   - games/wordle/words/*.json — word lists compiled from publicly available sources; they belong to
     their respective owners.
+  - games/chess/engine.js — the piece-square table values follow the "Simplified Evaluation
+    Function" by Tomasz Michniewski, published on the Chess Programming Wiki
+    (https://www.chessprogramming.org/Simplified_Evaluation_Function).
   - The Telegram Web App script is loaded from telegram.org at runtime and is not part of this
     repository.
 
-The rules and mechanics of well-known game genres (2048, sudoku, mahjong solitaire, checkers,
+The rules and mechanics of well-known game genres (2048, sudoku, mahjong solitaire, checkers, chess,
 Wordle-style word games, snake and others) are not claimed. This license protects this particular
 implementation: its code, graphics, sounds, texts and data.
 

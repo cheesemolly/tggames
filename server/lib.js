@@ -187,6 +187,7 @@ export const GAMES = [
   { id: 'bongo-cat', title: 'Bongo Cat', emoji: '🐱', about: 'кот играет на инструментах, разучи мелодию' },
   { id: 'tictactoe', title: 'Крестики-нолики', emoji: '❌', about: 'классика 3×3 и гомоку — пять в ряд на большом поле', beta: true },
   { id: 'match3', title: 'Три в ряд', emoji: '💎', about: 'меняй фишки местами и собирай по три — 100 уровней с боссами', beta: true },
+  { id: 'chess', title: 'Шахматы', emoji: '♟️', about: 'против бота: семь уровней, от новичка до полной силы', beta: true },
 ];
 
 const fold = (text) => String(text ?? '').toLowerCase().replace(/ё/g, 'е').trim();
@@ -390,6 +391,7 @@ export const BOARDS = {
   tictactoe: { by: 'победы над ботом', score: shellStats('tictactoe', 'wins'), text: WINS },
   // «Три в ряд»: сколько уровней пройдено (звёзд в игре нет)
   match3: { by: 'пройденные уровни', score: match3Levels, text: count(['уровень пройден', 'уровня пройдено', 'уровней пройдено']) },
+  chess: { by: 'победы над ботом', score: shellStats('chess', 'wins'), text: WINS },
 };
 
 const MAX_SCORE = 1e9;   // больше — явно испорченные данные
@@ -405,9 +407,10 @@ export const BOARD_LIMITS = {
   wordle: 1e5, memory: 1e4, 'bongo-cat': 1e8,
   match3: 100,                // уровней в игре 100
   tictactoe: 1e5,
+  chess: 1e5,
 };
 // побед не может быть больше сыгранных партий
-const WINS_FROM = { checkers: 'checkers', mahjong: 'mahjong', sudoku: 'sudoku', wordle: 'wordle', tictactoe: 'tictactoe' };
+const WINS_FROM = { checkers: 'checkers', mahjong: 'mahjong', sudoku: 'sudoku', wordle: 'wordle', tictactoe: 'tictactoe', chess: 'chess' };
 
 function plausible(id, value, state) {
   if (value > (BOARD_LIMITS[id] ?? MAX_SCORE)) return false;

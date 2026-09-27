@@ -142,4 +142,11 @@ export const games = [
     css: new URL('../games/match3/game.css', import.meta.url),
     menu: { progress: 'replace' },                       // «Уровень 12 · ★ 30»
   },
+  {
+    id: 'chess',
+    title: 'Шахматы',
+    load: () => import('../games/chess/index.js'),
+    css: new URL('../games/chess/game.css', import.meta.url),
+    menu: { best: false },                               // «Сыграно · Побед» — рекорда нет
+  },
 ];

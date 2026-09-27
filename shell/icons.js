@@ -35,6 +35,8 @@ export const GAME_ICONS = {
     + '<path d="M9.2 9.6a2.8 2.8 0 0 1 5.6.2c0 2.4-5.6 3.6-5.6 6.2h5.8"/>'),
 
   // Настольные
+  chess: svg('<path d="M6.5 20.5h11"/><path d="M8.5 20.5c-.3-2.6.6-4.4 2.4-6.3-1.5.5-2.9.3-3.8-.8l.1-1.5 2.6-3.6c.8-1.3 1.9-2.2 3.4-2.6l.9-1.6 1 1.9c2.4 1.4 3.5 4.9 3.2 10.6l-.3 4.2"/>'
+    + '<circle cx="12.3" cy="9" r="0.9" fill="currentColor" stroke="none"/>'),
   checkers: svg('<rect x="3" y="3" width="18" height="18" rx="3"/>'
     + '<circle cx="8.6" cy="8.6" r="2.4" fill="currentColor" stroke="none"/>'
     + '<circle cx="15.4" cy="15.4" r="2.4"/><path d="M3 12h18" opacity="0.35"/>'),
