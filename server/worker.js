@@ -19,8 +19,9 @@
 //   GET  /top/player/<pid>        -> { name, me, games: [{ game, text, place, total, points? }], overall?, admin?,
 //                                    outside? } — профиль (разработчик — вне мест, но с бейджем admin: 'leaderboard-no-admin')
 //   POST /top/find  { username }  -> { pid } — поиск игрока по @нику, только точное совпадение; сам ник в ответ не попадает
-//   POST /top/suggest { q }       -> { players: [{ pid, name, username }] } — автодополнение: до 10 игроков, чей @ник
-//                                    начинается с q (в бете 'player-suggest'); здесь ник виден — privacy.html это описывает
+//   POST /top/suggest { q }       -> { players: [{ pid, name, username }] } — автодополнение: до 10 игроков, у кого @ник
+//                                    или имя начинается с q, кириллица тоже (в бете 'player-suggest'); здесь ник виден —
+//                                    privacy.html это описывает
 // Панель (только для ADMIN_IDS):
 //   GET    /admin/players?q=&limit=&offset=
 //   GET    /admin/player/<id>
@@ -40,7 +41,7 @@
 import {
   checkInitData, timingSafeEqual, validateState, parseAdminIds, isAdmin, displayName,
   publicGames, findGames, startAppLink, progressLines, shiftEntities, GAMES, BOARDS, boardScores, boardName,
-  PERKS, isPerk, SERVER_BETA, overallPoints, overallRanking, withoutUsers, parseUsername, REPORT_MAX, REPORT_PER_HOUR, reportMessage, START_TEXT, WELCOME_TEXT, WELCOME_MEDIA,
+  PERKS, isPerk, SERVER_BETA, overallPoints, overallRanking, withoutUsers, parseUsername, matchPlayers, REPORT_MAX, REPORT_PER_HOUR, reportMessage, START_TEXT, WELCOME_TEXT, WELCOME_MEDIA,
 } from './lib.js';
 
 // Кто может обращаться к обработчику. Свой домен — чтобы чужой сайт не ходил в него от имени игрока.
@@ -159,9 +160,11 @@ async function authorize(request, env) {
     ).bind(user.id, name, user.username ?? null, now, now).first();
     // Пустую запись прогресса не заводим: иначе первое же сохранение новичка (он шлёт base = 0)
     // упиралось бы в «конфликт» и лишний раз ходило на сервер.
+    searchCache.delete(env.DB);          // новичка сразу можно найти поиском
   } else if (player.name !== name || player.username !== (user.username ?? null)
     || now - player.last_seen_at > SEEN_EVERY_MS) {
     // запись в D1 ограничена: «последний заход» обновляем не на каждый запрос, а раз в несколько минут
+    if (player.name !== name || player.username !== (user.username ?? null)) searchCache.delete(env.DB);
     await env.DB.prepare('UPDATE users SET name = ?, username = ?, last_seen_at = ? WHERE id = ?')
       .bind(name, user.username ?? null, now, player.id).run();
     player = { ...player, name, username: user.username ?? null, last_seen_at: now };
@@ -238,7 +241,12 @@ async function ensureBoardTables(env) {
 // Рейтинг считается окном по всей таблице — дорого на каждый просмотр. Готовый список держится в памяти
 // обработчика TOP_CACHE_MS; своё изменение очков или правка владельца сбрасывают его сразу.
 const topCache = new WeakMap();
-const dropTopCache = (env) => topCache.delete(env.DB);
+// список для подсказок поиска (все игроки: имя, ник, pid) — тоже из памяти, сбрасывается вместе с рейтингом
+const searchCache = new WeakMap();
+const dropTopCache = (env) => {
+  topCache.delete(env.DB);
+  searchCache.delete(env.DB);
+};
 
 function randomPid() {
   const bytes = crypto.getRandomValues(new Uint8Array(9));
@@ -356,6 +364,22 @@ async function ensureBoardPid(env, userId) {
   return (await env.DB.prepare('SELECT pid FROM board_players WHERE user_id = ?').bind(userId).first())?.pid ?? null;
 }
 
+/** Все, кого можно найти поиском (не заблокированы, не убраны из рейтинга): имя как в рейтинге, ник, pid. */
+async function searchable(env) {
+  const cached = searchCache.get(env.DB);
+  if (cached && Date.now() - cached.at < TOP_CACHE_MS) return cached.rows;
+  const rows = ((await env.DB.prepare(
+    `SELECT u.id, u.username, u.name AS full_name, u.last_seen_at AS seen, p.pid, p.name AS board_name
+     FROM users u LEFT JOIN board_players p ON p.user_id = u.id WHERE u.banned = 0 AND COALESCE(p.hidden, 0) = 0`,
+  ).all()).results ?? []).map((r) => ({
+    id: r.id, username: r.username, pid: r.pid, seen: r.seen,
+    // у кого записи в рейтинге ещё нет — первое слово имени (фамилию не показываем и по ней не ищем)
+    name: r.board_name ?? boardName(String(r.full_name ?? '').trim().split(/\s+/)[0]),
+  }));
+  searchCache.set(env.DB, { at: Date.now(), rows });
+  return rows;
+}
+
 async function topRoutes(request, env, path, player, admin, origin) {
   await ensureBoardTables(env);
   const ranked = await rankedRows(env);
@@ -418,19 +442,13 @@ async function topRoutes(request, env, path, player, admin, origin) {
 
   if (path === '/top/suggest') {
     if (!betaOpen('player-suggest', admin) || request.method !== 'POST') return fail('not_found', 404, origin);
-    const q = String((await body(request)).q ?? '').trim().replace(/^@/, '').toLowerCase();
-    if (!/^[a-z0-9_]{1,32}$/.test(q)) return json({ players: [] }, 200, origin);
+    const q = String((await body(request)).q ?? '').slice(0, 64);
+    if (!q.trim()) return json({ players: [] }, 200, origin);
     if (!allowed(suggestLog, SUGGEST_PER_MINUTE, player.id)) return fail('too_many', 429, origin);
-    // «_» в LIKE — любой символ: экранируем. Сначала точное совпадение, потом кто заходил недавно
-    const rows = (await env.DB.prepare(
-      `SELECT u.id, u.username, u.name, p.pid, p.name AS board_name FROM users u LEFT JOIN board_players p ON p.user_id = u.id
-       WHERE u.username IS NOT NULL AND lower(u.username) LIKE ? ESCAPE '\\' AND u.banned = 0 AND COALESCE(p.hidden, 0) = 0
-       ORDER BY (lower(u.username) = ?) DESC, u.last_seen_at DESC LIMIT 10`,
-    ).bind(`${q.replace(/_/g, '\\_')}%`, q).all()).results ?? [];
     const players = [];
-    for (const r of rows) {
-      const pid = r.pid ?? await ensureBoardPid(env, r.id);
-      if (pid) players.push({ pid, name: r.board_name ?? boardName(String(r.name ?? '').trim().split(/\s+/)[0]), username: r.username });
+    for (const c of matchPlayers(await searchable(env), q)) {
+      const pid = c.pid ?? await ensureBoardPid(env, c.id);
+      if (pid) players.push({ pid, name: c.name, username: c.username ?? null });
     }
     return json({ players }, 200, origin);
   }

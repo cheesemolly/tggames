@@ -319,12 +319,13 @@ export function overallLine(summary) {
  */
 function findForm(source) {
   const input = el('input', {
-    class: 'top-search-input', type: 'text', placeholder: '@ник игрока', maxlength: '64',
+    class: 'top-search-input', type: 'text', placeholder: source.suggest ? 'Имя или @ник игрока' : '@ник игрока', maxlength: '64',
     autocomplete: 'off', autocapitalize: 'off', autocorrect: 'off', spellcheck: false, enterkeyhint: 'search',
     'aria-label': 'Ник игрока в Telegram',
   });
   const note = el('p', { class: 'hint top-search-note', hidden: true });
-  // автодополнение (в бете 'player-suggest'): «D» → до 10 ников на «D», «Da» — точнее; пауза 0,2 с между буквами
+  // автодополнение (в бете 'player-suggest'): «D» → до 10 игроков, у кого ник или имя на «D», «Da» — точнее;
+  // кириллица тоже («Мар» → Марина); пауза 0,2 с между буквами
   const list = el('div', { class: 'top-suggest', role: 'listbox', hidden: true });
   let suggestions = [];
   let asked = 0;
@@ -346,7 +347,7 @@ function findForm(source) {
     suggestions = res.ok ? res.data.players ?? [] : [];
     if (!suggestions.length) {
       list.hidden = true;
-      list.replaceChildren(el('p', { class: 'hint top-suggest-empty' }, res.ok ? 'Никого с таким началом ника' : message(res.error)));
+      list.replaceChildren(el('p', { class: 'hint top-suggest-empty' }, res.ok ? 'Никого не нашлось' : message(res.error)));
       list.hidden = false;
       return;
     }
@@ -358,7 +359,7 @@ function findForm(source) {
       avatar(p.name),
       el('span', { class: 'top-row-main' },
         el('span', { class: 'top-row-name' }, p.name),
-        el('span', { class: 'top-row-sub' }, `@${p.username}`),
+        p.username && el('span', { class: 'top-row-sub' }, `@${p.username}`),
       ),
     )));
     list.hidden = false;
@@ -367,12 +368,12 @@ function findForm(source) {
     input.addEventListener('input', () => {
       clearTimeout(timer);
       const q = input.value.trim().replace(/^@/, '');
-      if (!/^[a-z0-9_]{1,32}$/i.test(q)) {
+      if (!q || q.length > 32) {
         asked++;
         hideList();
         return;
       }
-      timer = setTimeout(() => suggest(q.toLowerCase()), 200);
+      timer = setTimeout(() => suggest(q), 200);
     });
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') hideList();
@@ -393,7 +394,7 @@ function findForm(source) {
       const raw = input.value.trim().replace(/^(https?:\/\/)?(t\.me|telegram\.me)\//i, '').replace(/^@/, '');
       // Enter при подсказках: ник совпал целиком — его профиль, иначе первый из списка
       if (suggestions.length) {
-        const exact = suggestions.find((p) => p.username.toLowerCase() === raw.toLowerCase());
+        const exact = suggestions.find((p) => [p.username, p.name].some((v) => v && v.toLowerCase() === raw.toLowerCase()));
         open((exact ?? suggestions[0]).pid);
         return;
       }

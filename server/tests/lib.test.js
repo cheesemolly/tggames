@@ -272,3 +272,21 @@ test('рейтинг без разработчика: места пересчи�
   assert.equal(parseUsername('t.me/abcd'), 'abcd');
   for (const bad of ['', '@', 'abc', 'a b c d', '<script>', 'x'.repeat(33), 'имя_игрока']) assert.equal(parseUsername(bad), null, bad);
 });
+
+test('поиск игроков: имя и ник, кириллица, ё = е, порядок', async () => {
+  const { matchPlayers, foldSearch } = await import('../lib.js');
+  assert.equal(foldSearch('  @ЁЖИК  Иван '), 'ежик иван');
+  const c = [
+    { id: 1, name: 'Марина', username: 'mrn', seen: 1 },
+    { id: 2, name: 'Мария', username: null, seen: 5 },
+    { id: 3, name: 'Ann', username: 'marik', seen: 9 },
+    { id: 4, name: 'Анна Мария', username: 'anna', seen: 2 },
+    { id: 5, name: 'мар', username: 'x_y', seen: 0 },
+  ];
+  const ids = (q) => matchPlayers(c, q).map((p) => p.id);
+  assert.deepEqual(ids('мар'), [5, 2, 4, 1], 'имя целиком — первым, дальше начало имени (любого слова) по свежести');
+  assert.deepEqual(ids('mar'), [3], 'латиница — по нику');
+  assert.deepEqual(ids('@MRN'), [1]);
+  assert.deepEqual(ids(''), []);
+  assert.equal(matchPlayers(Array.from({ length: 30 }, (_, i) => ({ id: i, name: 'Дима', username: null })), 'д').length, 10);
+});

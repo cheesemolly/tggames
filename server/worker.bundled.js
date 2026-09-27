@@ -484,6 +484,33 @@ function parseUsername(text) {
   return /^[a-z0-9_]{4,32}$/i.test(raw) ? raw.toLowerCase() : null;
 }
 
+/** Для поиска игроков: нижний регистр любой письменности (кириллица тоже), ё = е, без «@» и лишних пробелов. */
+const foldSearch = (text) => String(text ?? '').normalize('NFKC').toLowerCase().replace(/ё/g, 'е')
+  .replace(/\s+/g, ' ').trim().replace(/^@/, '');
+
+/**
+ * Подсказки поиска (в бете 'player-suggest'): игроки, у кого @ник или имя (любое его слово) начинается с набранного.
+ * Имя — то, что видно в рейтинге (без фамилии: по ней искать нельзя). Порядок: ник или имя совпали целиком, потом
+ * начало ника, потом начало имени; внутри — кто заходил недавно. candidates: [{ id, name, username, seen }].
+ * SQL тут не годится: lower() и LIKE в SQLite без учёта регистра только для латиницы — «марина» не нашла бы «Марину».
+ */
+function matchPlayers(candidates, query, limit = 10) {
+  const q = foldSearch(query);
+  if (!q || q.length > 32) return [];
+  const scored = [];
+  for (const c of candidates) {
+    const nick = foldSearch(c.username);
+    const name = foldSearch(c.name);
+    let rank = -1;
+    if ((nick && nick === q) || name === q) rank = 0;
+    else if (nick.startsWith(q)) rank = 1;
+    else if (name.startsWith(q) || name.split(' ').some((w) => w.startsWith(q))) rank = 2;
+    if (rank >= 0) scored.push({ c, rank });
+  }
+  scored.sort((a, b) => a.rank - b.rank || (b.c.seen ?? 0) - (a.c.seen ?? 0) || a.c.id - b.c.id);
+  return scored.slice(0, limit).map((x) => x.c);
+}
+
 /**
  * Имя для рейтинга — только имя из Telegram (без фамилии, ника и id: требование владельца, 2026-09-26).
  * Длинное обрезается, пустое — «Игрок».
@@ -536,8 +563,9 @@ function shiftEntities(entities, cut, textLength) {
 //   GET  /top/player/<pid>        -> { name, me, games: [{ game, text, place, total, points? }], overall?, admin?,
 //                                    outside? } — профиль (разработчик — вне мест, но с бейджем admin: 'leaderboard-no-admin')
 //   POST /top/find  { username }  -> { pid } — поиск игрока по @нику, только точное совпадение; сам ник в ответ не попадает
-//   POST /top/suggest { q }       -> { players: [{ pid, name, username }] } — автодополнение: до 10 игроков, чей @ник
-//                                    начинается с q (в бете 'player-suggest'); здесь ник виден — privacy.html это описывает
+//   POST /top/suggest { q }       -> { players: [{ pid, name, username }] } — автодополнение: до 10 игроков, у кого @ник
+//                                    или имя начинается с q, кириллица тоже (в бете 'player-suggest'); здесь ник виден —
+//                                    privacy.html это описывает
 // Панель (только для ADMIN_IDS):
 //   GET    /admin/players?q=&limit=&offset=
 //   GET    /admin/player/<id>
@@ -671,9 +699,11 @@ async function authorize(request, env) {
     ).bind(user.id, name, user.username ?? null, now, now).first();
     // Пустую запись прогресса не заводим: иначе первое же сохранение новичка (он шлёт base = 0)
     // упиралось бы в «конфликт» и лишний раз ходило на сервер.
+    searchCache.delete(env.DB);          // новичка сразу можно найти поиском
   } else if (player.name !== name || player.username !== (user.username ?? null)
     || now - player.last_seen_at > SEEN_EVERY_MS) {
     // запись в D1 ограничена: «последний заход» обновляем не на каждый запрос, а раз в несколько минут
+    if (player.name !== name || player.username !== (user.username ?? null)) searchCache.delete(env.DB);
     await env.DB.prepare('UPDATE users SET name = ?, username = ?, last_seen_at = ? WHERE id = ?')
       .bind(name, user.username ?? null, now, player.id).run();
     player = { ...player, name, username: user.username ?? null, last_seen_at: now };
@@ -750,7 +780,12 @@ async function ensureBoardTables(env) {
 // Рейтинг считается окном по всей таблице — дорого на каждый просмотр. Готовый список держится в памяти
 // обработчика TOP_CACHE_MS; своё изменение очков или правка владельца сбрасывают его сразу.
 const topCache = new WeakMap();
-const dropTopCache = (env) => topCache.delete(env.DB);
+// список для подсказок поиска (все игроки: имя, ник, pid) — тоже из памяти, сбрасывается вместе с рейтингом
+const searchCache = new WeakMap();
+const dropTopCache = (env) => {
+  topCache.delete(env.DB);
+  searchCache.delete(env.DB);
+};
 
 function randomPid() {
   const bytes = crypto.getRandomValues(new Uint8Array(9));
@@ -868,6 +903,22 @@ async function ensureBoardPid(env, userId) {
   return (await env.DB.prepare('SELECT pid FROM board_players WHERE user_id = ?').bind(userId).first())?.pid ?? null;
 }
 
+/** Все, кого можно найти поиском (не заблокированы, не убраны из рейтинга): имя как в рейтинге, ник, pid. */
+async function searchable(env) {
+  const cached = searchCache.get(env.DB);
+  if (cached && Date.now() - cached.at < TOP_CACHE_MS) return cached.rows;
+  const rows = ((await env.DB.prepare(
+    `SELECT u.id, u.username, u.name AS full_name, u.last_seen_at AS seen, p.pid, p.name AS board_name
+     FROM users u LEFT JOIN board_players p ON p.user_id = u.id WHERE u.banned = 0 AND COALESCE(p.hidden, 0) = 0`,
+  ).all()).results ?? []).map((r) => ({
+    id: r.id, username: r.username, pid: r.pid, seen: r.seen,
+    // у кого записи в рейтинге ещё нет — первое слово имени (фамилию не показываем и по ней не ищем)
+    name: r.board_name ?? boardName(String(r.full_name ?? '').trim().split(/\s+/)[0]),
+  }));
+  searchCache.set(env.DB, { at: Date.now(), rows });
+  return rows;
+}
+
 async function topRoutes(request, env, path, player, admin, origin) {
   await ensureBoardTables(env);
   const ranked = await rankedRows(env);
@@ -930,19 +981,13 @@ async function topRoutes(request, env, path, player, admin, origin) {
 
   if (path === '/top/suggest') {
     if (!betaOpen('player-suggest', admin) || request.method !== 'POST') return fail('not_found', 404, origin);
-    const q = String((await body(request)).q ?? '').trim().replace(/^@/, '').toLowerCase();
-    if (!/^[a-z0-9_]{1,32}$/.test(q)) return json({ players: [] }, 200, origin);
+    const q = String((await body(request)).q ?? '').slice(0, 64);
+    if (!q.trim()) return json({ players: [] }, 200, origin);
     if (!allowed(suggestLog, SUGGEST_PER_MINUTE, player.id)) return fail('too_many', 429, origin);
-    // «_» в LIKE — любой символ: экранируем. Сначала точное совпадение, потом кто заходил недавно
-    const rows = (await env.DB.prepare(
-      `SELECT u.id, u.username, u.name, p.pid, p.name AS board_name FROM users u LEFT JOIN board_players p ON p.user_id = u.id
-       WHERE u.username IS NOT NULL AND lower(u.username) LIKE ? ESCAPE '\\' AND u.banned = 0 AND COALESCE(p.hidden, 0) = 0
-       ORDER BY (lower(u.username) = ?) DESC, u.last_seen_at DESC LIMIT 10`,
-    ).bind(`${q.replace(/_/g, '\\_')}%`, q).all()).results ?? [];
     const players = [];
-    for (const r of rows) {
-      const pid = r.pid ?? await ensureBoardPid(env, r.id);
-      if (pid) players.push({ pid, name: r.board_name ?? boardName(String(r.name ?? '').trim().split(/\s+/)[0]), username: r.username });
+    for (const c of matchPlayers(await searchable(env), q)) {
+      const pid = c.pid ?? await ensureBoardPid(env, c.id);
+      if (pid) players.push({ pid, name: c.name, username: c.username ?? null });
     }
     return json({ players }, 200, origin);
   }

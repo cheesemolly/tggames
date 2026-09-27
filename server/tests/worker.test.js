@@ -902,8 +902,20 @@ test('поиск игроков: подсказки по началу ника, 
     assert.deepEqual(await nicks('da_'), ['da_x'], '«_» — сам символ, а не «любой»');
     assert.equal((await nicks('dan'))[0], 'Dan', 'точное совпадение — первым');
     assert.deepEqual(await nicks('<b>'), []);
+    assert.deepEqual(await nicks('   '), []);
     const dasha = (await suggest('dasha')).data.players[0];
     assert.equal(dasha.name, 'Даша', 'только имя, без фамилии');
+
+    // по имени, кириллицей (владелец: «Марину найти не могу»), ё = е, без ника тоже; по фамилии — нет
+    await make('mrn_2000', 'Марина');
+    await call(env, '/me', { initData: await asUser({ id: id++, first_name: 'Ёжик' }) });   // без @ника
+    const names = async (q) => (await suggest(q)).data.players.map((p) => p.name);
+    assert.deepEqual(await names('мар'), ['Марина']);
+    assert.deepEqual(await names('МАРИНА'), ['Марина']);
+    assert.deepEqual(await names('еж'), ['Ёжик']);
+    assert.equal((await suggest('ёж')).data.players[0].username, null);
+    assert.deepEqual(await names('Петрова'), [], 'по фамилии не ищем');
+    assert.deepEqual(await names('даш'), ['Даша']);
 
     // у ganj прогресса нет — раньше «Игрок не найден», теперь профиль открывается
     const found = await call(env, '/top/find', { method: 'POST', initData: owner, payload: { username: 'ganj' } });
