@@ -128,4 +128,11 @@ export const games = [
     css: new URL('../games/bongo-cat/game.css', import.meta.url),
     menu: { progress: 'replace' },                       // «Ударов: 1 234» — партий и побед нет
   },
+  {
+    id: 'match3',
+    title: 'Три в ряд',
+    load: () => import('../games/match3/index.js'),
+    css: new URL('../games/match3/game.css', import.meta.url),
+    menu: { progress: 'replace' },                       // «Уровень 12 · ★ 30»
+  },
 ];

@@ -185,6 +185,7 @@ export const GAMES = [
   { id: 'wordle', title: 'Wordle', emoji: '🟩', about: 'угадай слово из пяти букв: русский, украинский, английский', best: false },
   { id: 'memory', title: 'Мемори', emoji: '🃏', about: 'найди пары одинаковых карточек' },
   { id: 'bongo-cat', title: 'Bongo Cat', emoji: '🐱', about: 'кот играет на инструментах, разучи мелодию' },
+  { id: 'match3', title: 'Три в ряд', emoji: '💎', about: 'меняй фишки местами и собирай по три — 100 уровней с боссами', beta: true },
 ];
 
 const fold = (text) => String(text ?? '').toLowerCase().replace(/ё/g, 'е').trim();
@@ -353,6 +354,13 @@ export function boggleWords(state) {
   return total;
 }
 
+/** Звёзды «Три в ряд» из прогресса игры (game:match3:progress.stars — 100 чисел 0–3). */
+export function match3Stars(state) {
+  const stars = state?.['game:match3:progress']?.stars;
+  if (!Array.isArray(stars)) return null;
+  return stars.reduce((sum, v) => sum + (Number.isInteger(v) && v >= 0 && v <= 3 ? v : 0), 0);
+}
+
 const POINTS = count(['очко', 'очка', 'очков']);
 const WINS = count(['победа', 'победы', 'побед']);
 
@@ -374,6 +382,8 @@ export const BOARDS = {
   wordle: { by: 'угаданные слова', score: shellStats('wordle', 'wins'), text: count(['слово', 'слова', 'слов']) },
   memory: { by: 'уровень', score: menuLevel('memory'), text: levelText },
   'bongo-cat': { by: 'ударов за всё время', score: gameStats('bongo-cat', 'hits'), text: count(['удар', 'удара', 'ударов']) },
+  // «Три в ряд»: звёзды за все уровни (до 3 за уровень) — честнее номера уровня: видно и прохождение, и качество
+  match3: { by: 'звёзды за уровни', score: match3Stars, text: count(['звезда', 'звезды', 'звёзд']) },
 };
 
 const MAX_SCORE = 1e9;   // больше — явно испорченные данные
@@ -387,6 +397,7 @@ export const BOARD_LIMITS = {
   flags: 1e6, checkers: 1e5, 'flappy-burger': 1e4, 'bubble-shooter': 1e4, snake: 1e5, 'brick-blast': 1e4,
   loop: 1e5, 'connect-dots': 1e4, mahjong: 1e5, 2048: 131072, boggle: 1e6, 'block-blast': 1e7, sudoku: 1e5,
   wordle: 1e5, memory: 1e4, 'bongo-cat': 1e8,
+  match3: 300,                // 100 уровней × 3 звезды
 };
 // побед не может быть больше сыгранных партий
 const WINS_FROM = { checkers: 'checkers', mahjong: 'mahjong', sudoku: 'sudoku', wordle: 'wordle' };
