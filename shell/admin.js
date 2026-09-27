@@ -44,7 +44,8 @@ export function splitState(text) {
 }
 
 // api — по умолчанию настоящий аккаунт; параметром он передаётся только в проверках интерфейса.
-export function renderAdmin(container, { onBack, toast, api = account }) {
+// onOwnSave(text, updatedAt) — владелец сохранил СВОЙ прогресс: оболочка кладёт его и на это устройство (sync.adopt).
+export function renderAdmin(container, { onBack, toast, api = account, onOwnSave = null }) {
   let list = [];
   let query = '';
 
@@ -162,7 +163,7 @@ export function renderAdmin(container, { onBack, toast, api = account }) {
       ...statFields.map((f) => f.node),
 
       gameNodes.length > 0 && el('h3', { class: 'adm-h3' }, 'Игры и подсказки'),
-      gameNodes.length > 0 && el('p', { class: 'hint' }, 'Уйдёт игроку при следующем запуске. «Текущая партия» — только в начатой; новая начнётся как обычно.'),
+      gameNodes.length > 0 && el('p', { class: 'hint' }, 'Уйдёт игроку при следующем запуске. Если он прямо сейчас в этой игре, она может затереть правку своим сохранением — правь, когда не играет. Свой прогресс ложится и на это устройство сразу. «Текущая партия» — только в начатой; новая начнётся как обычно.'),
       ...gameNodes,
 
       progressFields.length && el('h3', { class: 'adm-h3' }, 'Строки уровней'),
@@ -263,6 +264,7 @@ export function renderAdmin(container, { onBack, toast, api = account }) {
 
     async function send(text) {
       const res = await api.savePlayerState(player.id, text);
+      if (res.ok && onOwnSave && player.id === api.current?.id) await onOwnSave(text, res.data.updatedAt);
       toast.show(res.ok ? 'Прогресс игрока сохранён' : message(res.error));
       if (res.ok) close();
     }

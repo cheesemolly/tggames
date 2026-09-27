@@ -118,7 +118,7 @@ function show(route) {
       return;
     }
     platform.backButton.show();
-    renderAdmin(screen, { onBack: goToMenu, toast });
+    renderAdmin(screen, { onBack: goToMenu, toast, onOwnSave: (text, updatedAt) => sync.adopt(text, updatedAt) });
     return;
   }
 

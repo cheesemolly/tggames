@@ -209,6 +209,24 @@ export function createSync({ account, onMessage = () => {}, delay = SYNC_DELAY, 
     afterRegister(updatedAt) {
       writeBase(updatedAt ?? 0);
     },
+    /**
+     * Прогресс этого же игрока только что записан на сервер в обход устройства (владелец правит себя в панели):
+     * кладём его и сюда. Иначе устройство держало бы старую копию — игра открылась бы со старыми значениями,
+     * а следующее её сохранение затёрло бы правку на сервере (видео владельца, 2026-09-27: подсказки 0 → 999
+     * в панели, в «Словах» всё равно 0).
+     */
+    async adopt(text, updatedAt) {
+      stop();
+      applying = true;
+      try {
+        restore(JSON.parse(text));
+      } finally {
+        applying = false;
+      }
+      writeBase(updatedAt);
+      writeDirty(false);
+      await afterRestore();
+    },
     /** Выход: локальный прогресс остаётся как гостевой, отметка синхронизации сбрасывается. */
     reset() {
       stop();
