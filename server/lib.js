@@ -248,6 +248,7 @@ export function progressLines(state) {
  */
 export const SERVER_BETA = [
   // >>> серверная бета
+  'player-suggest',
   // <<< конец серверной беты
 ];
 

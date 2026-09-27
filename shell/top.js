@@ -107,7 +107,7 @@ export async function renderTop(container, { route, games, source, onBack, overa
           el('div', { class: 'top-profile-name' }, p.name,
             p.admin && el('span', { class: 'top-admin' }, 'admin'),
             p.me && el('span', { class: 'top-you' }, 'это ты')),
-          p.outside && el('p', { class: 'hint top-outside' }, 'Разработчик — в рейтинге не участвует.'),
+          p.outside && el('p', { class: 'hint top-outside' }, 'Не участвует в рейтинге.'),
           withPoints && el('a', { class: 'top-overall-card', href: '#/top' },
             el('span', { class: 'top-overall-label' }, 'Общий рейтинг'),
             p.overall
@@ -194,11 +194,13 @@ export async function renderTop(container, { route, games, source, onBack, overa
 
   // ---------- сводка ----------
   const tab = overall && route.game === 'games' ? 'games' : 'overall';
+  // с автодополнением (в бете 'player-suggest') ник виден в подсказках поиска — в таблицах по-прежнему только имя
+  const privacy = source.suggest ? 'В таблицах — только имя, ник виден лишь в поиске.' : 'Видно только имя — без ника и id.';
   const header = head({
     back: onBack, backLabel: 'Все игры', title: 'Рейтинг', style: '--cat: var(--cat-words)',
     hint: overall && tab === 'overall'
-      ? 'Очки за места во всех играх. Видно только имя — без ника и id.'
-      : 'Места игроков в каждой игре. Видно только имя — без ника и id.',
+      ? `Очки за места во всех играх. ${privacy}`
+      : `Места игроков в каждой игре. ${privacy}`,
   });
   const tabs = overall && el('div', { class: 'top-tabs', role: 'tablist' },
     el('a', { class: `top-tab${tab === 'overall' ? ' on' : ''}`, href: '#/top', role: 'tab', 'aria-selected': String(tab === 'overall') }, 'Общий'),
@@ -322,6 +324,60 @@ function findForm(source) {
     'aria-label': 'Ник игрока в Telegram',
   });
   const note = el('p', { class: 'hint top-search-note', hidden: true });
+  // автодополнение (в бете 'player-suggest'): «D» → до 10 ников на «D», «Da» — точнее; пауза 0,2 с между буквами
+  const list = el('div', { class: 'top-suggest', role: 'listbox', hidden: true });
+  let suggestions = [];
+  let asked = 0;
+  let timer = 0;
+  const hideList = () => {
+    suggestions = [];
+    list.hidden = true;
+    list.replaceChildren();
+  };
+  const open = (pid) => {
+    input.blur();
+    hideList();
+    location.hash = `#/top/player/${encodeURIComponent(pid)}`;
+  };
+  const suggest = async (q) => {
+    const ticket = ++asked;
+    const res = await source.suggest(q);
+    if (ticket !== asked || !input.isConnected) return;            // пока ждали, набрали дальше
+    suggestions = res.ok ? res.data.players ?? [] : [];
+    if (!suggestions.length) {
+      list.hidden = true;
+      list.replaceChildren(el('p', { class: 'hint top-suggest-empty' }, res.ok ? 'Никого с таким началом ника' : message(res.error)));
+      list.hidden = false;
+      return;
+    }
+    list.replaceChildren(...suggestions.map((p, i) => el('button', {
+      class: 'top-suggest-row', type: 'button', role: 'option', style: `--i: ${i}`,
+      onmousedown: (e) => e.preventDefault(),
+      onclick: () => open(p.pid),
+    },
+      avatar(p.name),
+      el('span', { class: 'top-row-main' },
+        el('span', { class: 'top-row-name' }, p.name),
+        el('span', { class: 'top-row-sub' }, `@${p.username}`),
+      ),
+    )));
+    list.hidden = false;
+  };
+  if (source.suggest) {
+    input.addEventListener('input', () => {
+      clearTimeout(timer);
+      const q = input.value.trim().replace(/^@/, '');
+      if (!/^[a-z0-9_]{1,32}$/i.test(q)) {
+        asked++;
+        hideList();
+        return;
+      }
+      timer = setTimeout(() => suggest(q.toLowerCase()), 200);
+    });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') hideList();
+    });
+  }
   const button = el('button', { class: 'account-btn', type: 'submit', onmousedown: (e) => e.preventDefault() }, 'Найти');
   let busy = false;
   const say = (text) => {
@@ -335,6 +391,12 @@ function findForm(source) {
       e.preventDefault();
       if (busy) return;
       const raw = input.value.trim().replace(/^(https?:\/\/)?(t\.me|telegram\.me)\//i, '').replace(/^@/, '');
+      // Enter при подсказках: ник совпал целиком — его профиль, иначе первый из списка
+      if (suggestions.length) {
+        const exact = suggestions.find((p) => p.username.toLowerCase() === raw.toLowerCase());
+        open((exact ?? suggestions[0]).pid);
+        return;
+      }
       if (!/^[a-z0-9_]{4,32}$/i.test(raw)) {
         shake(form);
         say(raw ? 'Ник — латиница, цифры и «_», от 4 символов' : 'Впиши @ник игрока в Telegram');
@@ -356,6 +418,7 @@ function findForm(source) {
     },
   },
     el('div', { class: 'top-search-row' }, input, button),
+    list,
     note,
   );
   input.addEventListener('input', () => { note.hidden = true; });

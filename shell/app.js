@@ -105,6 +105,7 @@ function show(route) {
         game: (id) => account.topGame(id),
         player: (pid) => account.topPlayer(pid),
         find: (username) => account.findPlayer(username),
+        suggest: feature('player-suggest') ? (q) => account.suggestPlayers(q) : null,
       },
       search: feature('player-search'),
       onBack: () => backFrom(route),

@@ -116,6 +116,11 @@ export const account = {
     return this.request('/top/find', { method: 'POST', payload: { username } });
   },
 
+  /** Автодополнение поиска: до 10 игроков, чей @ник начинается с q → { players: [{ pid, name, username }] }. */
+  suggestPlayers(q) {
+    return this.request('/top/suggest', { method: 'POST', payload: { q } });
+  },
+
   topPlayer(pid) {
     if (!/^[a-z0-9]{1,32}$/.test(String(pid))) return Promise.resolve({ ok: false, error: 'no_player' });
     return this.request(`/top/player/${pid}`);

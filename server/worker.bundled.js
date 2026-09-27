@@ -252,6 +252,7 @@ function progressLines(state) {
  */
 const SERVER_BETA = [
   // >>> серверная бета
+  'player-suggest',
   // <<< конец серверной беты
 ];
 
@@ -534,8 +535,9 @@ function shiftEntities(entities, cut, textLength) {
 //   GET  /top/<игра>              -> { game, by, total, rows: [{ place, name, text, pid, me }], me }
 //   GET  /top/player/<pid>        -> { name, me, games: [{ game, text, place, total, points? }], overall?, admin?,
 //                                    outside? } — профиль (разработчик — вне мест, но с бейджем admin: 'leaderboard-no-admin')
-//   POST /top/find  { username }  -> { pid } — поиск игрока по @нику, только точное совпадение ('player-search');
-//                                    сам ник в ответ не попадает
+//   POST /top/find  { username }  -> { pid } — поиск игрока по @нику, только точное совпадение; сам ник в ответ не попадает
+//   POST /top/suggest { q }       -> { players: [{ pid, name, username }] } — автодополнение: до 10 игроков, чей @ник
+//                                    начинается с q (в бете 'player-suggest'); здесь ник виден — privacy.html это описывает
 // Панель (только для ADMIN_IDS):
 //   GET    /admin/players?q=&limit=&offset=
 //   GET    /admin/player/<id>
@@ -833,15 +835,37 @@ async function rankedRows(env) {
 
 // поиск по нику: не чаще FIND_PER_MINUTE в минуту от игрока (в памяти обработчика — мягкая защита от перебора ников)
 const FIND_PER_MINUTE = 12;
+const SUGGEST_PER_MINUTE = 90;     // автодополнение — запрос на каждую букву (с паузой 0,2 с в приложении)
 const findLog = new Map();
+const suggestLog = new Map();
 
-function findAllowed(userId, now = Date.now()) {
-  const recent = (findLog.get(userId) ?? []).filter((t) => now - t < 60 * 1000);
-  if (recent.length >= FIND_PER_MINUTE) return false;
+function allowed(log, limit, userId, now = Date.now()) {
+  const recent = (log.get(userId) ?? []).filter((t) => now - t < 60 * 1000);
+  if (recent.length >= limit) return false;
   recent.push(now);
-  findLog.set(userId, recent);
-  if (findLog.size > 5000) findLog.clear();
+  log.set(userId, recent);
+  if (log.size > 5000) log.clear();
   return true;
+}
+const findAllowed = (userId) => allowed(findLog, FIND_PER_MINUTE, userId);
+
+/**
+ * pid игрока для профиля. Запись в рейтинге заводится при сохранении прогресса — у того, кто ещё ничего не
+ * сохранял, её нет, и поиск его не находил (владелец, 2026-09-27: «не ищет ganj, хотя такой игрок есть»).
+ * Заводим сейчас: из сохранённого прогресса, если он есть, иначе пустую.
+ */
+async function ensureBoardPid(env, userId) {
+  const known = await env.DB.prepare('SELECT pid FROM board_players WHERE user_id = ?').bind(userId).first();
+  if (known) return known.pid;
+  const row = await env.DB.prepare('SELECT data FROM states WHERE user_id = ?').bind(userId).first();
+  let state = {};
+  try {
+    state = JSON.parse(row?.data ?? '{}');
+  } catch {
+    // битый прогресс — просто без очков
+  }
+  await indexBoard(env, userId, state);
+  return (await env.DB.prepare('SELECT pid FROM board_players WHERE user_id = ?').bind(userId).first())?.pid ?? null;
 }
 
 async function topRoutes(request, env, path, player, admin, origin) {
@@ -888,11 +912,39 @@ async function topRoutes(request, env, path, player, admin, origin) {
     const username = parseUsername((await body(request)).username);
     if (!username) return fail('bad_username', 400, origin);
     if (!findAllowed(player.id)) return fail('too_many', 429, origin);
+    if (betaOpen('player-suggest', admin)) {
+      // и тех, кто ещё ничего не сохранял: запись в рейтинге заводится сейчас
+      const found = await env.DB.prepare(
+        `SELECT u.id FROM users u LEFT JOIN board_players p ON p.user_id = u.id
+         WHERE lower(u.username) = ? AND u.banned = 0 AND COALESCE(p.hidden, 0) = 0 LIMIT 1`,
+      ).bind(username).first();
+      const pid = found && await ensureBoardPid(env, found.id);
+      return pid ? json({ pid }, 200, origin) : fail('no_player', 404, origin);
+    }
     const found = await env.DB.prepare(
       `SELECT p.pid FROM users u JOIN board_players p ON p.user_id = u.id
        WHERE lower(u.username) = ? AND u.banned = 0 AND p.hidden = 0 LIMIT 1`,
     ).bind(username).first();
     return found ? json({ pid: found.pid }, 200, origin) : fail('no_player', 404, origin);
+  }
+
+  if (path === '/top/suggest') {
+    if (!betaOpen('player-suggest', admin) || request.method !== 'POST') return fail('not_found', 404, origin);
+    const q = String((await body(request)).q ?? '').trim().replace(/^@/, '').toLowerCase();
+    if (!/^[a-z0-9_]{1,32}$/.test(q)) return json({ players: [] }, 200, origin);
+    if (!allowed(suggestLog, SUGGEST_PER_MINUTE, player.id)) return fail('too_many', 429, origin);
+    // «_» в LIKE — любой символ: экранируем. Сначала точное совпадение, потом кто заходил недавно
+    const rows = (await env.DB.prepare(
+      `SELECT u.id, u.username, u.name, p.pid, p.name AS board_name FROM users u LEFT JOIN board_players p ON p.user_id = u.id
+       WHERE u.username IS NOT NULL AND lower(u.username) LIKE ? ESCAPE '\\' AND u.banned = 0 AND COALESCE(p.hidden, 0) = 0
+       ORDER BY (lower(u.username) = ?) DESC, u.last_seen_at DESC LIMIT 10`,
+    ).bind(`${q.replace(/_/g, '\\_')}%`, q).all()).results ?? [];
+    const players = [];
+    for (const r of rows) {
+      const pid = r.pid ?? await ensureBoardPid(env, r.id);
+      if (pid) players.push({ pid, name: r.board_name ?? boardName(String(r.name ?? '').trim().split(/\s+/)[0]), username: r.username });
+    }
+    return json({ players }, 200, origin);
   }
 
   const profile = path.match(/^\/top\/player\/([a-z0-9]{1,32})$/);

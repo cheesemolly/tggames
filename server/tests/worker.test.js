@@ -866,6 +866,57 @@ test('рейтинг: разработчик вне мест, профиль с 
   }
 });
 
+test('поиск игроков: подсказки по началу ника, находятся и те, кто ещё ничего не сохранял', async () => {
+  const lib = await import('../lib.js');
+  const wasBeta = [...lib.SERVER_BETA];
+  lib.SERVER_BETA.splice(0, lib.SERVER_BETA.length, 'player-suggest');
+  try {
+    const env = createEnv();
+    const owner = await asUser(ADMIN);
+    const masha = await asUser(USER);
+    let id = 100;
+    const make = async (username, first_name = username) => {
+      const initData = await asUser({ id: id++, first_name, username });
+      await call(env, '/me', { initData });   // зашёл — и всё, прогресса нет (как ganj)
+      return initData;
+    };
+    await make('Dan', 'Даня');
+    await make('dana');
+    await make('dasha_1', 'Даша Петрова');
+    await make('da_x');
+    await make('dax1');
+    const banned = await make('dark');
+    await make('ganj');
+    for (let k = 0; k < 12; k++) await make(`dd${k}xx`);
+    const bannedId = (await call(env, '/me', { initData: banned })).data.id;
+    await call(env, `/admin/player/${bannedId}/ban`, { method: 'POST', initData: owner, payload: { banned: true } });
+
+    const suggest = async (q, who = owner) => call(env, '/top/suggest', { method: 'POST', initData: who, payload: { q } });
+    const nicks = async (q) => (await suggest(q)).data.players.map((p) => p.username);
+
+    assert.equal((await suggest('d', masha)).status, 404, 'в бете — только владелец');
+    assert.equal((await nicks('d')).length, 10, 'не больше 10');
+    assert.ok(!(await nicks('d')).includes('dark'), 'заблокированного нет');
+    assert.deepEqual((await nicks('da')).sort(), ['Dan', 'da_x', 'dana', 'dasha_1', 'dax1']);
+    assert.deepEqual(await nicks('@DAS'), ['dasha_1'], 'регистр и @ не важны');
+    assert.deepEqual(await nicks('da_'), ['da_x'], '«_» — сам символ, а не «любой»');
+    assert.equal((await nicks('dan'))[0], 'Dan', 'точное совпадение — первым');
+    assert.deepEqual(await nicks('<b>'), []);
+    const dasha = (await suggest('dasha')).data.players[0];
+    assert.equal(dasha.name, 'Даша', 'только имя, без фамилии');
+
+    // у ganj прогресса нет — раньше «Игрок не найден», теперь профиль открывается
+    const found = await call(env, '/top/find', { method: 'POST', initData: owner, payload: { username: 'ganj' } });
+    assert.equal(found.status, 200);
+    const profile = await call(env, `/top/player/${found.data.pid}`, { initData: owner });
+    assert.equal(profile.data.name, 'ganj');
+    assert.deepEqual(profile.data.games, []);
+    assert.equal((await nicks('ganj'))[0], 'ganj');
+  } finally {
+    lib.SERVER_BETA.splice(0, lib.SERVER_BETA.length, ...wasBeta);
+  }
+});
+
 test('рейтинг: игру в бете видит только владелец', async () => {
   const lib = await import('../lib.js');
   const entry = lib.GAMES.find((g) => g.id === 'memory');

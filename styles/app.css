@@ -850,6 +850,33 @@ h1, h2 { margin: 0 0 8px; line-height: 1.2; }
 .top-search .account-btn { flex: none; }
 .top-search .account-btn:disabled { opacity: 0.6; }
 .top-search-note { margin: 6px 2px 0; font-size: 13px; }
+.top-suggest {
+  display: grid;
+  gap: 2px;
+  margin-top: 6px;
+  padding: 4px;
+  border-radius: 14px;
+  background: var(--tg-theme-secondary-bg-color);
+  border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 25%, transparent);
+  animation: top-sub-in 180ms ease-out;
+}
+.top-suggest-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: var(--tg-theme-text-color);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  animation: top-sub-in 200ms ease-out backwards;
+  animation-delay: calc(var(--i, 0) * 25ms);
+}
+.top-suggest-row:active, .top-suggest-row:hover { background: color-mix(in srgb, var(--tg-theme-button-color) 12%, transparent); }
+.top-suggest-empty { margin: 6px 8px; font-size: 13px; }
 .top-outside { text-align: center; margin: 0 0 12px; font-size: 13px; }
 .top-admin {
   display: inline-block;
