@@ -252,7 +252,6 @@ function progressLines(state) {
  */
 const SERVER_BETA = [
   // >>> серверная бета
-  'player-suggest',
   // <<< конец серверной беты
 ];
 
@@ -489,9 +488,10 @@ const foldSearch = (text) => String(text ?? '').normalize('NFKC').toLowerCase().
   .replace(/\s+/g, ' ').trim().replace(/^@/, '');
 
 /**
- * Подсказки поиска (в бете 'player-suggest'): игроки, у кого @ник или имя (любое его слово) начинается с набранного.
- * Имя — то, что видно в рейтинге (без фамилии: по ней искать нельзя). Порядок: ник или имя совпали целиком, потом
- * начало ника, потом начало имени; внутри — кто заходил недавно. candidates: [{ id, name, username, seen }].
+ * Подсказки поиска: игроки, у кого имя (любое его слово) начинается с набранного, или @ник совпал ЦЕЛИКОМ.
+ * @ник нигде не показывается и по его началу не ищется (владелец, 2026-09-27: «НЕ ПАЛИ @ ИГРОКА») — иначе ник можно
+ * было бы подобрать по буквам. Имя — то, что видно в рейтинге (без фамилии: по ней искать нельзя). Порядок: ник или
+ * имя совпали целиком, потом начало имени; внутри — кто заходил недавно. candidates: [{ id, name, username, seen }].
  * SQL тут не годится: lower() и LIKE в SQLite без учёта регистра только для латиницы — «марина» не нашла бы «Марину».
  */
 function matchPlayers(candidates, query, limit = 10) {
@@ -503,8 +503,7 @@ function matchPlayers(candidates, query, limit = 10) {
     const name = foldSearch(c.name);
     let rank = -1;
     if ((nick && nick === q) || name === q) rank = 0;
-    else if (nick.startsWith(q)) rank = 1;
-    else if (name.startsWith(q) || name.split(' ').some((w) => w.startsWith(q))) rank = 2;
+    else if (name.startsWith(q) || name.split(' ').some((w) => w.startsWith(q))) rank = 1;
     if (rank >= 0) scored.push({ c, rank });
   }
   scored.sort((a, b) => a.rank - b.rank || (b.c.seen ?? 0) - (a.c.seen ?? 0) || a.c.id - b.c.id);
@@ -563,9 +562,8 @@ function shiftEntities(entities, cut, textLength) {
 //   GET  /top/player/<pid>        -> { name, me, games: [{ game, text, place, total, points? }], overall?, admin?,
 //                                    outside? } — профиль (разработчик — вне мест, но с бейджем admin: 'leaderboard-no-admin')
 //   POST /top/find  { username }  -> { pid } — поиск игрока по @нику, только точное совпадение; сам ник в ответ не попадает
-//   POST /top/suggest { q }       -> { players: [{ pid, name, username }] } — автодополнение: до 10 игроков, у кого @ник
-//                                    или имя начинается с q, кириллица тоже (в бете 'player-suggest'); здесь ник виден —
-//                                    privacy.html это описывает
+//   POST /top/suggest { q }       -> { players: [{ pid, name }] } — автодополнение: до 10 игроков, у кого имя
+//                                    начинается с q (кириллица тоже) или @ник совпал целиком; сам ник в ответ не попадает
 // Панель (только для ADMIN_IDS):
 //   GET    /admin/players?q=&limit=&offset=
 //   GET    /admin/player/<id>
@@ -987,7 +985,7 @@ async function topRoutes(request, env, path, player, admin, origin) {
     const players = [];
     for (const c of matchPlayers(await searchable(env), q)) {
       const pid = c.pid ?? await ensureBoardPid(env, c.id);
-      if (pid) players.push({ pid, name: c.name, username: c.username ?? null });
+      if (pid) players.push({ pid, name: c.name });
     }
     return json({ players }, 200, origin);
   }

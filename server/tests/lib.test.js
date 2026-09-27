@@ -285,7 +285,8 @@ test('поиск игроков: имя и ник, кириллица, ё = е, 
   ];
   const ids = (q) => matchPlayers(c, q).map((p) => p.id);
   assert.deepEqual(ids('мар'), [5, 2, 4, 1], 'имя целиком — первым, дальше начало имени (любого слова) по свежести');
-  assert.deepEqual(ids('mar'), [3], 'латиница — по нику');
+  assert.deepEqual(ids('mar'), [], 'по началу ника не ищем');
+  assert.deepEqual(ids('marik'), [3], 'ник — только целиком');
   assert.deepEqual(ids('@MRN'), [1]);
   assert.deepEqual(ids(''), []);
   assert.equal(matchPlayers(Array.from({ length: 30 }, (_, i) => ({ id: i, name: 'Дима', username: null })), 'д').length, 10);

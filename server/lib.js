@@ -248,7 +248,6 @@ export function progressLines(state) {
  */
 export const SERVER_BETA = [
   // >>> серверная бета
-  'player-suggest',
   // <<< конец серверной беты
 ];
 
@@ -485,9 +484,10 @@ export const foldSearch = (text) => String(text ?? '').normalize('NFKC').toLower
   .replace(/\s+/g, ' ').trim().replace(/^@/, '');
 
 /**
- * Подсказки поиска (в бете 'player-suggest'): игроки, у кого @ник или имя (любое его слово) начинается с набранного.
- * Имя — то, что видно в рейтинге (без фамилии: по ней искать нельзя). Порядок: ник или имя совпали целиком, потом
- * начало ника, потом начало имени; внутри — кто заходил недавно. candidates: [{ id, name, username, seen }].
+ * Подсказки поиска: игроки, у кого имя (любое его слово) начинается с набранного, или @ник совпал ЦЕЛИКОМ.
+ * @ник нигде не показывается и по его началу не ищется (владелец, 2026-09-27: «НЕ ПАЛИ @ ИГРОКА») — иначе ник можно
+ * было бы подобрать по буквам. Имя — то, что видно в рейтинге (без фамилии: по ней искать нельзя). Порядок: ник или
+ * имя совпали целиком, потом начало имени; внутри — кто заходил недавно. candidates: [{ id, name, username, seen }].
  * SQL тут не годится: lower() и LIKE в SQLite без учёта регистра только для латиницы — «марина» не нашла бы «Марину».
  */
 export function matchPlayers(candidates, query, limit = 10) {
@@ -499,8 +499,7 @@ export function matchPlayers(candidates, query, limit = 10) {
     const name = foldSearch(c.name);
     let rank = -1;
     if ((nick && nick === q) || name === q) rank = 0;
-    else if (nick.startsWith(q)) rank = 1;
-    else if (name.startsWith(q) || name.split(' ').some((w) => w.startsWith(q))) rank = 2;
+    else if (name.startsWith(q) || name.split(' ').some((w) => w.startsWith(q))) rank = 1;
     if (rank >= 0) scored.push({ c, rank });
   }
   scored.sort((a, b) => a.rank - b.rank || (b.c.seen ?? 0) - (a.c.seen ?? 0) || a.c.id - b.c.id);

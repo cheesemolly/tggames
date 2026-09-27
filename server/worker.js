@@ -19,9 +19,8 @@
 //   GET  /top/player/<pid>        -> { name, me, games: [{ game, text, place, total, points? }], overall?, admin?,
 //                                    outside? } — профиль (разработчик — вне мест, но с бейджем admin: 'leaderboard-no-admin')
 //   POST /top/find  { username }  -> { pid } — поиск игрока по @нику, только точное совпадение; сам ник в ответ не попадает
-//   POST /top/suggest { q }       -> { players: [{ pid, name, username }] } — автодополнение: до 10 игроков, у кого @ник
-//                                    или имя начинается с q, кириллица тоже (в бете 'player-suggest'); здесь ник виден —
-//                                    privacy.html это описывает
+//   POST /top/suggest { q }       -> { players: [{ pid, name }] } — автодополнение: до 10 игроков, у кого имя
+//                                    начинается с q (кириллица тоже) или @ник совпал целиком; сам ник в ответ не попадает
 // Панель (только для ADMIN_IDS):
 //   GET    /admin/players?q=&limit=&offset=
 //   GET    /admin/player/<id>
@@ -448,7 +447,7 @@ async function topRoutes(request, env, path, player, admin, origin) {
     const players = [];
     for (const c of matchPlayers(await searchable(env), q)) {
       const pid = c.pid ?? await ensureBoardPid(env, c.id);
-      if (pid) players.push({ pid, name: c.name, username: c.username ?? null });
+      if (pid) players.push({ pid, name: c.name });
     }
     return json({ players }, 200, origin);
   }

@@ -194,8 +194,7 @@ export async function renderTop(container, { route, games, source, onBack, overa
 
   // ---------- сводка ----------
   const tab = overall && route.game === 'games' ? 'games' : 'overall';
-  // с автодополнением (в бете 'player-suggest') ник виден в подсказках поиска — в таблицах по-прежнему только имя
-  const privacy = source.suggest ? 'В таблицах — только имя, ник виден лишь в поиске.' : 'Видно только имя — без ника и id.';
+  const privacy = 'Видно только имя — без ника и id.';
   const header = head({
     back: onBack, backLabel: 'Все игры', title: 'Рейтинг', style: '--cat: var(--cat-words)',
     hint: overall && tab === 'overall'
@@ -324,8 +323,8 @@ function findForm(source) {
     'aria-label': 'Ник игрока в Telegram',
   });
   const note = el('p', { class: 'hint top-search-note', hidden: true });
-  // автодополнение (в бете 'player-suggest'): «D» → до 10 игроков, у кого ник или имя на «D», «Da» — точнее;
-  // кириллица тоже («Мар» → Марина); пауза 0,2 с между буквами
+  // автодополнение: «Ма» → до 10 игроков, у кого имя на «Ма», «Мар» — точнее (или @ник целиком); @ник не показывается;
+  // пауза 0,2 с между буквами
   const list = el('div', { class: 'top-suggest', role: 'listbox', hidden: true });
   let suggestions = [];
   let asked = 0;
@@ -359,7 +358,7 @@ function findForm(source) {
       avatar(p.name),
       el('span', { class: 'top-row-main' },
         el('span', { class: 'top-row-name' }, p.name),
-        p.username && el('span', { class: 'top-row-sub' }, `@${p.username}`),
+
       ),
     )));
     list.hidden = false;
@@ -394,7 +393,7 @@ function findForm(source) {
       const raw = input.value.trim().replace(/^(https?:\/\/)?(t\.me|telegram\.me)\//i, '').replace(/^@/, '');
       // Enter при подсказках: ник совпал целиком — его профиль, иначе первый из списка
       if (suggestions.length) {
-        const exact = suggestions.find((p) => [p.username, p.name].some((v) => v && v.toLowerCase() === raw.toLowerCase()));
+        const exact = suggestions.find((p) => p.name.toLowerCase() === raw.toLowerCase());
         open((exact ?? suggestions[0]).pid);
         return;
       }
