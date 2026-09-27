@@ -248,9 +248,6 @@ export function progressLines(state) {
  */
 export const SERVER_BETA = [
   // >>> серверная бета
-  'leaderboard-no-admin',
-  'player-search',
-  'leaderboard-overall',
   // <<< конец серверной беты
 ];
 
