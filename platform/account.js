@@ -8,6 +8,8 @@ import { API_URL } from '../shell/config.js';
 import { platform } from './telegram.js';
 export { ERRORS, message } from './errors.js';
 
+let topCache = null;        // { at, promise } — последняя сводка рейтинга
+const TOP_CACHE_MS = 30 * 1000;
 let me = null;              // { id, tgId, name, username, isAdmin, banned, perks } или null
 
 export const account = {
@@ -91,8 +93,16 @@ export const account = {
 
   // ---------- рейтинг (в ответах только имя игрока — без ника и id) ----------
 
+  // сводку просят и меню (подпись «Ты: 4-е место»), и экран рейтинга — полминуты хватает одного запроса
   topSummary() {
-    return this.request('/top');
+    const now = Date.now();
+    if (topCache && now - topCache.at < TOP_CACHE_MS) return topCache.promise;
+    const promise = this.request('/top');
+    topCache = { at: now, promise };
+    promise.then((res) => {
+      if (!res.ok && topCache?.promise === promise) topCache = null;
+    });
+    return promise;
   },
 
   // в адрес — только то, что может быть id игры или pid (иначе «..» в пути уводил бы запрос на другой адрес)

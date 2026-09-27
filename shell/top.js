@@ -1,5 +1,7 @@
 // Рейтинг (в бете: shell/beta.js, id 'leaderboard'). Три экрана:
 //   #/top               — сводка: по каждой игре лидер и твоё место;
+//                         с общим рейтингом (в бете 'leaderboard-overall') — две вкладки: #/top — «Общий»
+//                         (сумма очков за места во всех играх, считает сервер), #/top/games — «По играм»;
 //   #/top/<игра>        — таблица игры: пьедестал из трёх и список до 50-го места (твоё — всегда видно);
 //   #/top/player/<pid>  — профиль игрока: его места во всех играх.
 // Игрок виден только по имени из Telegram — ни ника, ни id (требование владельца, 2026-09-26): их нет
@@ -13,6 +15,7 @@ import { el } from '../shared/dom.js';
 import { GAME_ICONS } from './icons.js';
 import { categoryOfGame } from './categories.js';
 import { message } from '../platform/errors.js';
+import { showLayer, hideLayer } from '../shared/motion.js';
 
 const MEDALS = ['🥇', '🥈', '🥉'];
 
@@ -26,6 +29,21 @@ function catStyle(game) {
   const category = categoryOfGame(game);
   return category ? `--cat: var(${category.color})` : '';
 }
+
+function plural(n, [one, few, many]) {
+  const a = Math.abs(n) % 100;
+  const b = a % 10;
+  if (a > 10 && a < 20) return many;
+  if (b === 1) return one;
+  if (b >= 2 && b <= 4) return few;
+  return many;
+}
+const digits = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '\u00a0');
+/** «1 240 очков» */
+const pointsText = (n) => `${digits(n)} ${plural(n, ['очко', 'очка', 'очков'])}`;
+/** «🥇 3 · в 12 играх» */
+const overallSub = (p) => [p.firsts > 0 && `🥇 ${p.firsts}`, `в ${p.games} ${plural(p.games, ['игре', 'играх', 'играх'])}`]
+  .filter(Boolean).join(' · ');
 
 /** «1-е место из 12» */
 const placeText = (place, total) => `${place}-е место${total ? ` из ${total}` : ''}`;
@@ -50,7 +68,7 @@ function head({ back, backLabel, title, hint, style = '' }) {
   );
 }
 
-export async function renderTop(container, { route, games, source, onBack }) {
+export async function renderTop(container, { route, games, source, onBack, overall = false }) {
   const titleOf = (id) => games.find((g) => g.id === id)?.title ?? id;
   const screen = el('div', { class: 'scroll top-screen' });
   container.replaceChildren(screen);
@@ -75,6 +93,9 @@ export async function renderTop(container, { route, games, source, onBack }) {
       if (!res.ok) return failed(header, res, load);
       const p = res.data;
       const medals = p.games.filter((g) => g.place <= 3).length;
+      // с общим рейтингом сервер отдаёт очки за каждую игру — сверху те, что дали больше (видно, где подняться)
+      const withPoints = overall && 'overall' in p;
+      const list = withPoints ? [...p.games].sort((a, b) => b.points - a.points || a.place - b.place) : p.games;
       show(
         el('div', { class: 'folder-head' },
           el('button', { class: 'back-chip', onclick: onBack, 'aria-label': 'Назад' }, '‹ Назад'),
@@ -82,14 +103,22 @@ export async function renderTop(container, { route, games, source, onBack }) {
         el('div', { class: 'top-profile' },
           avatar(p.name, 'top-avatar-lg'),
           el('div', { class: 'top-profile-name' }, p.name, p.me && el('span', { class: 'top-you' }, 'это ты')),
+          withPoints && el('a', { class: 'top-overall-card', href: '#/top' },
+            el('span', { class: 'top-overall-label' }, 'Общий рейтинг'),
+            p.overall
+              ? el('span', { class: 'top-overall-value' },
+                `${MEDALS[p.overall.place - 1] ?? ''} ${placeText(p.overall.place, p.overall.total)}`.trim(),
+                el('span', { class: 'top-overall-points' }, pointsText(p.overall.points)))
+              : el('span', { class: 'top-overall-value' }, 'пока без места'),
+          ),
           el('div', { class: 'top-profile-sum' },
             stat(p.games.length, 'в рейтинге'),
             stat(p.games.filter((g) => g.place === 1).length, 'первых мест'),
             stat(medals, 'в тройке'),
           ),
         ),
-        p.games.length
-          ? el('div', { class: 'top-list' }, p.games.map((g, i) => el('a', {
+        list.length
+          ? el('div', { class: 'top-list' }, list.map((g, i) => el('a', {
             class: `top-row${g.place <= 3 ? ' top-row-medal' : ''}`,
             href: `#/top/${encodeURIComponent(g.game)}`,
             style: `--i: ${i}; ${catStyle(g.game)}`,
@@ -97,7 +126,7 @@ export async function renderTop(container, { route, games, source, onBack }) {
             tile(g.game),
             el('span', { class: 'top-row-main' },
               el('span', { class: 'top-row-name' }, titleOf(g.game)),
-              el('span', { class: 'top-row-sub' }, g.text),
+              el('span', { class: 'top-row-sub' }, withPoints ? `${g.text} · +${pointsText(g.points)}` : g.text),
             ),
             el('span', { class: 'top-place' }, MEDALS[g.place - 1] ?? `${g.place}`),
           )))
@@ -109,7 +138,7 @@ export async function renderTop(container, { route, games, source, onBack }) {
   }
 
   // ---------- таблица игры ----------
-  if (route.game) {
+  if (route.game && route.game !== 'games') {
     const header = head({ back: onBack, backLabel: 'Рейтинг', title: titleOf(route.game), style: catStyle(route.game) });
     const load = async () => {
       loading(header);
@@ -158,21 +187,94 @@ export async function renderTop(container, { route, games, source, onBack }) {
   }
 
   // ---------- сводка ----------
+  const tab = overall && route.game === 'games' ? 'games' : 'overall';
   const header = head({
     back: onBack, backLabel: 'Все игры', title: 'Рейтинг', style: '--cat: var(--cat-words)',
-    hint: 'Места игроков в каждой игре. Видно только имя — без ника и id.',
+    hint: overall && tab === 'overall'
+      ? 'Очки за места во всех играх. Видно только имя — без ника и id.'
+      : 'Места игроков в каждой игре. Видно только имя — без ника и id.',
   });
+  const tabs = overall && el('div', { class: 'top-tabs', role: 'tablist' },
+    el('a', { class: `top-tab${tab === 'overall' ? ' on' : ''}`, href: '#/top', role: 'tab', 'aria-selected': String(tab === 'overall') }, 'Общий'),
+    el('a', { class: `top-tab${tab === 'games' ? ' on' : ''}`, href: '#/top/games', role: 'tab', 'aria-selected': String(tab === 'games') }, 'По играм'),
+  );
   const load = async () => {
-    loading(header);
+    loading([header, tabs]);
     const res = await source.summary();
-    if (!res.ok) return failed(header, res, load);
+    if (!res.ok) return failed([header, tabs], res, load);
+    const meLink = res.data.mePid && el('a', { class: 'account-row top-me-link', href: `#/top/player/${encodeURIComponent(res.data.mePid)}` },
+      el('span', { class: 'account-name' }, overall ? 'Мой профиль: общее место и места в играх' : 'Мой профиль: места во всех играх'),
+      el('span', { class: 'account-btn' }, 'Открыть'),
+    );
+
+    if (overall && tab === 'overall') {
+      const o = res.data.overall;
+      // сервер ещё старый (worker.bundled.js не вставлен в Cloudflare) — общего рейтинга он не знает
+      if (!o) {
+        return show(header, tabs, el('div', { class: 'top-empty' },
+          el('p', {}, 'Общий рейтинг ещё не включён на сервере.'),
+          el('a', { class: 'account-btn', href: '#/top/games' }, 'Рейтинг по играм'),
+        ));
+      }
+      const meOutside = o.me && !o.rows.some((r) => r.me);
+      const row = (r, i) => el('a', {
+        class: `top-row${r.me ? ' top-row-me' : ''}`, href: `#/top/player/${encodeURIComponent(r.pid)}`, style: `--i: ${i}`,
+      },
+        el('span', { class: 'top-num' }, r.place),
+        avatar(r.name),
+        el('span', { class: 'top-row-main' },
+          el('span', { class: 'top-row-name' }, r.name, r.me && el('span', { class: 'top-you' }, 'ты')),
+          el('span', { class: 'top-row-sub' }, overallSub(r)),
+        ),
+        el('span', { class: 'top-row-value' }, pointsText(r.points)),
+      );
+      const how = el('div', { class: 'top-how', hidden: true },
+        el('div', { class: 'top-how-card' },
+          el('p', {}, 'За место в каждой игре — очки, как в гонках. Очки всех игр складываются.'),
+          el('div', { class: 'top-how-grid' }, [[1, 100], [2, 93], [3, 86], [5, 75], [10, 52], [20, 25]].map(([pl, pt]) => el('span', {},
+            el('b', {}, MEDALS[pl - 1] ?? `${pl}-е`), el('span', {}, `+${pt}`)))),
+          el('p', {}, 'Любой результат в игре — не меньше 10 очков: пробуй разные игры. При равенстве выше тот, у кого больше первых мест.'),
+        ),
+      );
+      let howOpen = false;
+      const howBtn = el('button', {
+        class: 'top-how-btn',
+        onclick: () => {
+          howOpen = !howOpen;
+          howBtn.textContent = howOpen ? 'Скрыть' : 'Как считаются очки';
+          if (howOpen) showLayer(how);
+          else hideLayer(how, () => !howOpen);
+        },
+      }, 'Как считаются очки');
+      const podium = o.rows.slice(0, 3);
+      return show(
+        header, tabs, meLink, howBtn, how,
+        o.rows.length === 0
+          ? el('p', { class: 'hint top-empty' }, 'Здесь пока никого — сыграй первым!')
+          : el('div', { class: 'top-podium' },
+            // порядок на пьедестале: 2 — 1 — 3
+            [podium[1], podium[0], podium[2]].map((r) => (r
+              ? el('a', { class: `top-step top-step-${r.place}${r.me ? ' top-row-me' : ''}`, href: `#/top/player/${encodeURIComponent(r.pid)}` },
+                el('span', { class: 'top-medal' }, MEDALS[r.place - 1]),
+                avatar(r.name, 'top-avatar-md'),
+                el('span', { class: 'top-step-name' }, r.name),
+                el('span', { class: 'top-step-value' }, pointsText(r.points)),
+                el('span', { class: 'top-step-block' }, r.place),
+              )
+              : el('span', { class: 'top-step top-step-empty' }))),
+          ),
+        o.rows.length > 3 && el('div', { class: 'top-list' }, o.rows.slice(3).map(row)),
+        meOutside && el('div', { class: 'top-gap' }, '···'),
+        meOutside && el('div', { class: 'top-list' }, row({ ...o.me, me: true }, 0)),
+        !o.me && o.rows.length > 0 && el('p', { class: 'hint top-empty' }, 'Тебя здесь пока нет — сыграй в любую игру, и место появится.'),
+      );
+    }
+
     const list = res.data.games.filter((g) => games.some((x) => x.id === g.game));
     show(
       header,
-      res.data.mePid && el('a', { class: 'account-row top-me-link', href: `#/top/player/${encodeURIComponent(res.data.mePid)}` },
-        el('span', { class: 'account-name' }, 'Мой профиль: места во всех играх'),
-        el('span', { class: 'account-btn' }, 'Открыть'),
-      ),
+      tabs,
+      meLink,
       el('div', { class: 'top-list' }, list.map((g, i) => el('a', {
         class: 'top-row top-game', href: `#/top/${encodeURIComponent(g.game)}`, style: `--i: ${i}; ${catStyle(g.game)}`,
       },
@@ -191,6 +293,12 @@ export async function renderTop(container, { route, games, source, onBack }) {
     );
   };
   return load();
+}
+
+/** Подпись карточки «Рейтинг» в меню при общем рейтинге: «Ты: 4-е место · 1 240 очков» (или null). */
+export function overallLine(summary) {
+  const me = summary?.overall?.me;
+  return me ? `Ты: ${placeText(me.place, 0)} · ${pointsText(me.points)}` : null;
 }
 
 function stat(value, label) {

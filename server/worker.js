@@ -12,9 +12,11 @@
 //   GET  /state                   -> { data, updatedAt }
 //   PUT  /state  { data, base }   -> { updatedAt }  |  409 с чужим свежим прогрессом
 // Рейтинг (в ответах только имя игрока и случайный pid — ни id, ни ника, ни tg_id):
-//   GET  /top                     -> { games: [{ game, by, total, leader, me }], mePid } — сводка по всем играм
+//   GET  /top                     -> { games: [{ game, by, total, leader, me }], mePid, overall? } — сводка по всем
+//                                    играм; overall (в бете 'leaderboard-overall') — общий рейтинг: { total, rows:
+//                                    [{ place, name, pid, points, firsts, games, me }], me } — очки за места (lib.js)
 //   GET  /top/<игра>              -> { game, by, total, rows: [{ place, name, text, pid, me }], me }
-//   GET  /top/player/<pid>        -> { name, me, games: [{ game, text, place, total }] } — профиль игрока
+//   GET  /top/player/<pid>        -> { name, me, games: [{ game, text, place, total, points? }], overall? } — профиль
 // Панель (только для ADMIN_IDS):
 //   GET    /admin/players?q=&limit=&offset=
 //   GET    /admin/player/<id>
@@ -34,7 +36,7 @@
 import {
   checkInitData, timingSafeEqual, validateState, parseAdminIds, isAdmin, displayName,
   publicGames, findGames, startAppLink, progressLines, shiftEntities, GAMES, BOARDS, boardScores, boardName,
-  PERKS, isPerk, SERVER_BETA, REPORT_MAX, REPORT_PER_HOUR, reportMessage, START_TEXT, WELCOME_TEXT, WELCOME_MEDIA,
+  PERKS, isPerk, SERVER_BETA, overallPoints, overallRanking, REPORT_MAX, REPORT_PER_HOUR, reportMessage, START_TEXT, WELCOME_TEXT, WELCOME_MEDIA,
 } from './lib.js';
 
 // Кто может обращаться к обработчику. Свой домен — чтобы чужой сайт не ходил в него от имени игрока.
@@ -296,7 +298,7 @@ async function backfillBoard(env, limit = 8) {
 }
 
 // Места: по очкам, при равенстве — кто раньше. Заблокированных и убранных владельцем в рейтинге нет.
-const RANKED = `SELECT b.user_id, b.game_id, b.value, p.name, p.pid,
+const RANKED = `SELECT b.user_id, b.game_id, b.value, b.updated_at, p.name, p.pid,
     ROW_NUMBER() OVER (PARTITION BY b.game_id ORDER BY b.value DESC, b.updated_at ASC, b.user_id ASC) AS place,
     COUNT(*) OVER (PARTITION BY b.game_id) AS total
   FROM board_scores b JOIN users u ON u.id = b.user_id JOIN board_players p ON p.user_id = b.user_id
@@ -321,6 +323,10 @@ async function topRoutes(env, path, player, admin, origin) {
   // игры в бете в рейтинге видит только владелец
   const games = new Set(GAMES.filter((g) => BOARDS[g.id] && (admin || !g.beta)).map((g) => g.id));
   const text = (game, value) => BOARDS[game].text(value);
+  // общий рейтинг — сумма очков за места по играм (overallRanking в lib.js); пока в бете — только владельцу
+  const withOverall = betaOpen('leaderboard-overall', admin);
+  const overall = () => overallRanking(all, games);
+  const overallRow = (p) => ({ place: p.place, name: p.name, pid: p.pid, points: p.points, firsts: p.firsts, games: p.games, me: p.user_id === player.id });
 
   if (path === '/top') {
     const byGame = {};
@@ -333,7 +339,13 @@ async function topRoutes(env, path, player, admin, origin) {
     const list = GAMES.filter((g) => games.has(g.id))
       .map((g) => byGame[g.id] ?? { game: g.id, by: BOARDS[g.id].by, total: 0, leader: null, me: null });
     const mine = await env.DB.prepare('SELECT pid FROM board_players WHERE user_id = ?').bind(player.id).first();
-    return json({ games: list, mePid: mine?.pid ?? null }, 200, origin);
+    const out = { games: list, mePid: mine?.pid ?? null };
+    if (withOverall) {
+      const ranking = overall();
+      const me = ranking.find((p) => p.user_id === player.id);
+      out.overall = { total: ranking.length, rows: ranking.slice(0, TOP_LIMIT).map(overallRow), me: me ? overallRow(me) : null };
+    }
+    return json(out, 200, origin);
   }
 
   const profile = path.match(/^\/top\/player\/([a-z0-9]{1,32})$/);
@@ -343,13 +355,20 @@ async function topRoutes(env, path, player, admin, origin) {
     const banned = await env.DB.prepare('SELECT banned FROM users WHERE id = ?').bind(who.user_id).first();
     if (!banned || banned.banned) return fail('no_player', 404, origin);
     const found = Object.fromEntries(all.filter((r) => r.user_id === who.user_id).map((r) => [r.game_id, r]));
-    return json({
+    const out = {
       name: who.name,
       me: who.user_id === player.id,
       games: GAMES.filter((g) => games.has(g.id) && found[g.id]).map((g) => ({
         game: g.id, text: text(g.id, found[g.id].value), place: found[g.id].place, total: found[g.id].total,
+        ...(withOverall && { points: overallPoints(found[g.id].place) }),
       })),
-    }, 200, origin);
+    };
+    if (withOverall) {
+      const ranking = overall();
+      const p = ranking.find((x) => x.user_id === who.user_id);
+      out.overall = p ? { place: p.place, total: ranking.length, points: p.points } : null;
+    }
+    return json(out, 200, origin);
   }
 
   const one = path.match(/^\/top\/([a-z0-9-]{1,40})$/);

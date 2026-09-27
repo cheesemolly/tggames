@@ -14,7 +14,7 @@ import { openGame } from './game-host.js';
 import { createSync } from './sync.js';
 import { renderAdmin } from './admin.js';
 import { renderBeta } from './beta-screen.js';
-import { renderTop } from './top.js';
+import { renderTop, overallLine } from './top.js';
 import { openFeedback } from './feedback.js';
 import { setBetaViewer, seesBeta, feature, inBeta, playerView } from './beta.js';
 import { lockPageScroll } from './no-scroll.js';
@@ -87,10 +87,18 @@ function show(route) {
       goToMenu();
       return;
     }
-    if (route.game) lastBoard = route.game;
+    const overall = feature('leaderboard-overall');
+    // вкладки общего рейтинга (#/top — «Общий», #/top/games — «По играм»): «Назад» из таблицы игры и профиля
+    // возвращает на ту вкладку, откуда пришли
+    if (route.game && route.game !== 'games') lastBoard = route.game;
+    else if (!route.pid) {
+      lastBoard = null;
+      lastTab = route.game === 'games' ? '#/top/games' : '#/top';
+    }
     platform.backButton.show();
     renderTop(screen, {
       route,
+      overall,
       games: visibleGames(),
       source: {
         summary: () => account.topSummary(),
@@ -126,6 +134,7 @@ function show(route) {
   platform.backButton.hide();
   renderMenu(screen, {
     games: visibleGames(), account, owner: isOwner(), top: feature('leaderboard'),
+    topLine: feature('leaderboard-overall') ? async () => overallLine((await account.topSummary()).data) : null,
     feedback: feature('feedback') ? () => openFeedback({ account, toast }) : null,
   })
     .catch((err) => console.error(err));
@@ -133,6 +142,7 @@ function show(route) {
 
 // Из профиля игрока «Назад» ведёт в таблицу, из которой его открыли.
 let lastBoard = null;
+let lastTab = '#/top';          // вкладка рейтинга, с которой ушли в таблицу игры или профиль
 
 /**
  * Особый скин (shell/perks.js): выдан владельцем в панели. Владелец видит все, пока не включил «Смотреть как игрок»
@@ -142,8 +152,15 @@ const hasPerk = (id) => seesBeta() || account.perks.includes(id);
 
 /** Куда ведёт «Назад»: из игры — в её папку, из папки — на главную, в рейтинге — на шаг вверх. */
 function backFrom(route = currentRoute()) {
+  if (route.name === 'top' && route.game === 'games') {
+    goToMenu();
+    return;
+  }
   if (route.name === 'top' && (route.game || route.pid)) {
-    location.replace(route.pid && lastBoard ? `#/top/${encodeURIComponent(lastBoard)}` : '#/top');
+    const overall = feature('leaderboard-overall');
+    // профиль → таблица игры, из которой открыт, иначе вкладка; таблица игры → вкладка «По играм»
+    if (route.pid) location.replace(lastBoard ? `#/top/${encodeURIComponent(lastBoard)}` : overall ? lastTab : '#/top');
+    else location.replace(overall ? '#/top/games' : '#/top');
     if (!route.pid) lastBoard = null;
     return;
   }

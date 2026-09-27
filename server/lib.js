@@ -248,6 +248,7 @@ export function progressLines(state) {
  */
 export const SERVER_BETA = [
   // >>> серверная бета
+  'leaderboard-overall',
   // <<< конец серверной беты
 ];
 
@@ -415,6 +416,39 @@ export function boardScores(state) {
     if (Number.isInteger(value) && value > 0 && value <= MAX_SCORE && plausible(id, value, state)) out[id] = value;
   }
   return out;
+}
+
+// ---------- общий рейтинг (в бете: 'leaderboard-overall') ----------
+
+/**
+ * Очки общего рейтинга за место в одной игре — как в Формуле-1: 1-е — 100, 2-е — 93, 3-е — 86, 10-е — 52…
+ * Любой результат — не меньше 10: выгодно пробовать разные игры. По местам, а не по самим результатам: результаты
+ * игр несравнимы (плитка 2048, удары, победы), а накрутка даёт лишь одно первое место, не обнуляя остальных.
+ */
+export const OVERALL_MIN = 10;
+export const overallPoints = (place) => Math.max(OVERALL_MIN, Math.round(100 * 0.93 ** (place - 1)));
+
+/**
+ * Общий рейтинг из мест по играм. rows — [{ user_id, game_id, place, name, pid, updated_at }], games — какие игры
+ * считать (игры в бете у игроков не считаются). При равенстве очков выше тот, у кого больше первых мест, потом —
+ * больше мест в тройке, потом — кто раньше набрал (последнее изменение результатов раньше).
+ * → [{ user_id, name, pid, points, firsts, podiums, games, place }] по местам.
+ */
+export function overallRanking(rows, games) {
+  const by = new Map();
+  for (const r of rows) {
+    if (!games.has(r.game_id)) continue;
+    let p = by.get(r.user_id);
+    if (!p) by.set(r.user_id, p = { user_id: r.user_id, name: r.name, pid: r.pid, points: 0, firsts: 0, podiums: 0, games: 0, at: 0 });
+    p.points += overallPoints(r.place);
+    p.games += 1;
+    if (r.place === 1) p.firsts += 1;
+    if (r.place <= 3) p.podiums += 1;
+    p.at = Math.max(p.at, Number(r.updated_at) || 0);
+  }
+  return [...by.values()]
+    .sort((a, b) => b.points - a.points || b.firsts - a.firsts || b.podiums - a.podiums || a.at - b.at || a.user_id - b.user_id)
+    .map(({ at, ...p }, i) => ({ ...p, place: i + 1 }));
 }
 
 /**

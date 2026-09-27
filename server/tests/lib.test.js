@@ -232,3 +232,29 @@ test('рейтинг: у каждой игры своя мера, мусор и 
   assert.equal(boardName('   '), 'Игрок');
   assert.equal(boardName('Очень-очень-длинное-имя-игрока-тут'), 'Очень-очень-длинное-имя-');
 });
+
+test('общий рейтинг: очки за места и порядок при равенстве', async () => {
+  const { overallPoints, overallRanking, OVERALL_MIN } = await import('../lib.js');
+  assert.deepEqual([1, 2, 3, 5, 10, 20].map(overallPoints), [100, 93, 86, 75, 52, 25]);
+  assert.equal(overallPoints(500), OVERALL_MIN, 'любой результат — не меньше 10');
+  for (let p = 1; p < 60; p++) assert.ok(overallPoints(p) >= overallPoints(p + 1), 'дальше место — не больше очков');
+
+  const row = (user_id, game_id, place, updated_at = 1) => ({ user_id, game_id, place, name: `И${user_id}`, pid: `p${user_id}`, updated_at });
+  const games = new Set(['a', 'b', 'c', 'd']);
+  const list = overallRanking([
+    row(1, 'a', 1), row(1, 'b', 3),         // 100 + 86 = 186, одно первое
+    row(2, 'a', 3), row(2, 'b', 1),         // 186, одно первое, но позже
+    row(2, 'c', 99, 5),                     // …и ещё 10 за любой результат — выше
+    row(3, 'a', 2), row(3, 'b', 2),         // 186, первых нет
+    row(4, 'c', 1, 2), row(4, 'd', 5, 2),   // 175
+    row(5, 'secret', 1),                    // игра не считается (например, в бете)
+  ], games);
+  assert.deepEqual(list.map((p) => [p.place, p.user_id, p.points, p.firsts, p.podiums, p.games]), [
+    [1, 2, 196, 1, 2, 3],
+    [2, 1, 186, 1, 2, 2],
+    [3, 3, 186, 0, 2, 2],
+    [4, 4, 175, 1, 1, 2],
+  ]);
+  const tie = overallRanking([row(1, 'a', 2, 9), row(2, 'b', 2, 3)], games);
+  assert.deepEqual(tie.map((p) => p.user_id), [2, 1], 'при полном равенстве выше тот, кто набрал раньше');
+});

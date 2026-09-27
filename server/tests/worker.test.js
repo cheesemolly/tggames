@@ -747,6 +747,52 @@ test('рейтинг: заблокированных нет, прогресс д
   assert.deepEqual(rows.map((r) => r.name), ['Петя'], 'удалённый игрок ушёл и из рейтинга');
 });
 
+test('общий рейтинг: очки за места во всех играх; пока в бете — только владельцу', async () => {
+  const lib = await import('../lib.js');
+  const wasBeta = [...lib.SERVER_BETA];
+  lib.SERVER_BETA.splice(0, lib.SERVER_BETA.length, 'leaderboard-overall');
+  try {
+    const env = createEnv();
+    const masha = await asUser(USER);
+    const petya = await asUser({ id: 43, first_name: 'Петя', username: 'petya_secret' });
+    const vasya = await asUser({ id: 44, first_name: 'Вася' });
+    const owner = await asUser(ADMIN);
+    await save(env, masha, { 'shell:progress:words': 'Уровень 14', 'game:bongo-cat:stats': { hits: 1500 } });
+    await save(env, petya, { 'shell:progress:words': 'Уровень 30', 'shell:stats:sudoku': { played: 5, wins: 3 } });
+    await save(env, vasya, { 'shell:progress:words': 'Уровень 20' });
+
+    // в бете: у игрока общего рейтинга нет ни в сводке, ни в профиле
+    const top = await call(env, '/top', { initData: masha });
+    assert.equal(top.data.overall, undefined);
+    const pid = top.data.mePid;
+    const profile = await call(env, `/top/player/${pid}`, { initData: masha });
+    assert.equal(profile.data.overall, undefined);
+    assert.ok(profile.data.games.every((g) => g.points === undefined));
+
+    // владелец видит: слова — Петя 100, Вася 93, Маша 86; Bongo Cat — Маша 100; судоку — Петя 100
+    const own = await call(env, '/top', { initData: owner });
+    assert.deepEqual(own.data.overall.rows.map((r) => [r.place, r.name, r.points, r.firsts, r.games]), [
+      [1, 'Петя', 200, 2, 2],
+      [2, 'Маша', 186, 1, 2],
+      [3, 'Вася', 93, 0, 1],
+    ]);
+    assert.equal(own.data.overall.total, 3);
+    assert.equal(own.data.overall.me, null, 'у владельца результатов нет');
+    const mine = await call(env, `/top/player/${pid}`, { initData: owner });
+    assert.deepEqual(mine.data.overall, { place: 2, total: 3, points: 186 });
+    assert.deepEqual(mine.data.games.map((g) => [g.game, g.place, g.points]), [['words', 3, 86], ['bongo-cat', 1, 100]]);
+    assert.ok(!JSON.stringify(own.data).includes('petya_secret'), 'и здесь — без ников');
+
+    // после релиза — всем
+    lib.SERVER_BETA.splice(0, lib.SERVER_BETA.length);
+    const after = await call(env, '/top', { initData: masha });
+    assert.deepEqual(after.data.overall.me, { place: 2, name: 'Маша', pid, points: 186, firsts: 1, games: 2, me: true });
+    assert.equal(after.data.overall.rows.find((r) => r.me).name, 'Маша');
+  } finally {
+    lib.SERVER_BETA.splice(0, lib.SERVER_BETA.length, ...wasBeta);
+  }
+});
+
 test('рейтинг: игру в бете видит только владелец', async () => {
   const lib = await import('../lib.js');
   const entry = lib.GAMES.find((g) => g.id === 'memory');
