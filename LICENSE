@@ -1,0 +1,55 @@
+AnyGame — Proprietary License
+
+Copyright (c) 2026 cheesemolly (https://github.com/cheesemolly). All rights reserved.
+
+This repository and everything in it — source code, graphics, animations, sounds, texts, level and
+puzzle data, the name "AnyGame" and its logo (together, the "Software") — is the property of the
+copyright holder, except for the third-party components listed below.
+
+The Software is published for viewing only. It is NOT open source and NO license is granted to you
+except as expressly stated here.
+
+YOU MAY:
+  - view the source code on GitHub;
+  - use the features that the GitHub Terms of Service grant for public repositories (viewing and
+    forking within GitHub), solely for viewing;
+  - play the games through the official Telegram bot @anygametg_bot and the official website
+    https://cheesemolly.github.io/tggames/.
+
+YOU MAY NOT, without prior written permission from the copyright holder:
+  - copy, reproduce, publish or distribute the Software or any part of it;
+  - modify it, translate it or create derivative works based on it;
+  - host, deploy or run the Software or any part of it — including as a Telegram bot or Mini App,
+    a website, a mobile or desktop application — other than through the official bot and website;
+  - use its graphics, animations, sounds, texts, level or puzzle data, name or logo in any other
+    product;
+  - sell, rent, sublicense or otherwise exploit the Software commercially.
+
+Any use not expressly permitted above is prohibited and constitutes copyright infringement.
+
+THIRD-PARTY COMPONENTS
+These are not owned by the copyright holder; their own licenses and notices apply:
+  - games/flags/flags/*.svg — flag-icons by lipis (https://github.com/lipis/flag-icons),
+    MIT License, see games/flags/flags/LICENSE.
+  - games/flags/countries.json — derived from mledoze/countries (https://github.com/mledoze/countries),
+    Open Database License (ODbL) 1.0, see games/flags/ATTRIBUTION.txt.
+  - games/boggle/words/ru.json — noun list from Harrix/Russian-Nouns
+    (https://github.com/Harrix/Russian-Nouns), MIT License; word frequencies from "The New Frequency
+    Dictionary of Russian Vocabulary" by O. N. Lyashevskaya and S. A. Sharov (2009).
+  - games/wordle/words/*.json — word lists compiled from publicly available sources; they belong to
+    their respective owners.
+  - The Telegram Web App script is loaded from telegram.org at runtime and is not part of this
+    repository.
+
+The rules and mechanics of well-known game genres (2048, sudoku, mahjong solitaire, checkers,
+Wordle-style word games, snake and others) are not claimed. This license protects this particular
+implementation: its code, graphics, sounds, texts and data.
+
+NO WARRANTY
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED. IN NO EVENT SHALL
+THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY ARISING FROM THE SOFTWARE
+OR ITS USE.
+
+PERMISSIONS
+To request permission for any use not granted above, contact the copyright holder via
+https://github.com/cheesemolly or through the Telegram bot @anygametg_bot (command /report).
