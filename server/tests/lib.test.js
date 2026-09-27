@@ -291,3 +291,13 @@ test('поиск игроков: имя и ник, кириллица, ё = е, 
   assert.deepEqual(ids(''), []);
   assert.equal(matchPlayers(Array.from({ length: 30 }, (_, i) => ({ id: i, name: 'Дима', username: null })), 'д').length, 10);
 });
+
+test('рейтинг «Три в ряд»: пройденные уровни, в том числе из старого формата со звёздами', async () => {
+  const { match3Levels, boardScores } = await import('../lib.js');
+  const done = Array(100).fill(0);
+  done[0] = done[1] = done[2] = 1;
+  assert.equal(match3Levels({ 'game:match3:progress': { v: 2, done } }), 3);
+  assert.equal(match3Levels({ 'game:match3:progress': { v: 1, stars: [3, 1, 0, 2, ...Array(96).fill(0)] } }), 3);
+  assert.equal(match3Levels({}), null);
+  assert.equal(boardScores({ 'game:match3:progress': { v: 2, done } }).match3, 3);
+});

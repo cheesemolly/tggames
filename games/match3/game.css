@@ -181,29 +181,25 @@
   background: linear-gradient(90deg, var(--m3-boss), var(--m3-boss-2));
 }
 .m3-node-num { line-height: 1; }
-.m3-stars { position: absolute; bottom: -14px; display: flex; gap: 1px; font-style: normal; }
-.m3-node-boss .m3-stars { bottom: -14px; }
-.m3-stars i, .m3-card-stars i, .m3-win-stars i { font-style: normal; color: rgba(40, 20, 70, 0.45); text-shadow: none; }
-.m3-stars i { font-size: 14px; filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.3)); }
-.m3-stars i.on, .m3-card-stars i.on, .m3-win-stars i.on { color: var(--m3-gold); }
+.m3-check {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-size: 13px;
+  color: #fff;
+  background: var(--m3-play-2);
+  border: 2px solid #fff;
+  text-shadow: none;
+}
 
 /* ---------- уровень ---------- */
 .m3-level-head { padding-left: 6px; }
-.m3-score { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
-.m3-score-bar { position: relative; flex: 1; height: 8px; border-radius: 999px; background: rgba(0, 0, 0, 0.3); }
-.m3-score-fill { height: 100%; width: 0; border-radius: inherit; background: linear-gradient(90deg, #ffe27a, var(--m3-gold-2)); transition: width 0.35s ease; }
-.m3-score-star {
-  position: absolute;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  font-style: normal;
-  font-size: 15px;
-  color: rgba(255, 255, 255, 0.45);
-  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
-  transition: color 0.25s ease;
-}
-.m3-score-star.on { color: var(--m3-gold); }
-.m3-score-n { min-width: 52px; text-align: right; font-weight: 800; font-size: 13px; font-variant-numeric: tabular-nums; }
+.m3-level-head .m3-sub { margin-top: 2px; }
 
 .m3-hud {
   position: relative;
@@ -349,10 +345,21 @@
   color: #fff;
   background: linear-gradient(90deg, var(--m3-boss), var(--m3-boss-2));
 }
-.m3-card-stars, .m3-win-stars { display: flex; gap: 6px; }
-.m3-card-stars i { font-size: 26px; }
-.m3-win-stars i { font-size: 46px; filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.2)); }
-.m3-win-stars i:nth-child(2) { transform: translateY(-10px); }
+.m3-card-done { font-weight: 800; color: var(--m3-play-2); }
+.m3-win-medal {
+  width: 88px;
+  height: 88px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-size: 46px;
+  font-weight: 900;
+  color: #fff;
+  background: radial-gradient(circle at 35% 30%, #9ff0a8, var(--m3-play-2) 75%);
+  box-shadow: 0 5px 0 rgba(0, 0, 0, 0.18), 0 0 0 6px rgba(255, 255, 255, 0.7);
+}
+.m3-card-boss .m3-win-medal { background: radial-gradient(circle at 35% 30%, #ff9ad8, var(--m3-boss) 70%, #5a0fa0); }
+.m3-win-sub { font-weight: 800; opacity: 0.7; }
 .m3-card-label { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; opacity: 0.6; }
 .m3-card-goals { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 .m3-card .m3-goal { background: rgba(43, 29, 74, 0.08); padding: 4px 10px 4px 4px; }
@@ -376,8 +383,6 @@
 .m3-btn:active { transform: scale(0.96); }
 .m3-btn-play { width: 100%; color: #fff; background: linear-gradient(180deg, #5fe07a, var(--m3-play-2)); box-shadow: 0 5px 0 #157a2c; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.25); }
 .m3-btn-ghost { color: var(--m3-ink); background: rgba(43, 29, 74, 0.1); box-shadow: 0 4px 0 rgba(43, 29, 74, 0.15); }
-.m3-win-score { font-size: 26px; font-weight: 900; font-variant-numeric: tabular-nums; }
-.m3-win-score span { font-size: 15px; opacity: 0.6; }
 .m3-reward { display: grid; gap: 6px; justify-items: center; }
 .m3-reward-list { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
 .m3-reward-chip { padding: 4px 10px; border-radius: 999px; font-weight: 800; font-size: 13px; background: linear-gradient(180deg, #ffe27a, var(--m3-gold)); color: #4a2a00; }

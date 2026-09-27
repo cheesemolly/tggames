@@ -1,11 +1,12 @@
 // «Три в ряд»: карта из 100 уровней (каждый 10-й — босс) и сам уровень. Правила — logic.js, уровни — levels.js,
 // рисование и анимация — render.js, карта — map.js, звуки — sounds.js.
 //
-// Экран уровня: сверху ходы, цели и полоса очков со звёздами; поле; снизу бонусы (молоток — клетка,
+// Экран уровня: сверху ходы и цели; поле; снизу бонусы (молоток — клетка,
 // ракета — ряд, перемешать; ход они не тратят). Управление: провести пальцем с фишки на соседнюю или нажать
 // две соседние по очереди; нажатие на спецфишку запускает её (ход тратится). Долго думаешь — подсветится ход.
-// Прогресс ('progress'): звёзды по уровням и запас бонусов; начатый уровень ('run') сохраняется после
-// каждого хода. В меню — «Уровень N · ★ S».
+// Прогресс ('progress'): пройденные уровни и запас бонусов; начатый уровень ('run') сохраняется после
+// каждого хода. В меню — «Уровень N». Звёзд нет (владелец, 2026-09-27: цели выполняются раньше, чем копятся очки).
+// Финал короткий: часть оставшихся ходов разом — в ракеты; нажатие по полю его ускоряет.
 
 import { el } from '../../shared/dom.js';
 import { animate, showLayer, hideLayer, reducedMotion, pop, shake } from '../../shared/motion.js';
@@ -13,7 +14,7 @@ import { createToast } from '../../shared/toast.js';
 import { createAudio } from '../../shared/sfx.js';
 import { createSounds } from './sounds.js';
 import {
-  newGame, playMove, tapMove, useBooster, finale, swapValid, adjacent, isSpecial, goalLeft, starsFor,
+  newGame, playMove, tapMove, useBooster, finale, swapValid, adjacent, isSpecial, goalLeft,
   isValidState, botMove, findMoves,
 } from './logic.js';
 import { levelSpec, LEVEL_COUNT, CHAPTERS, TIPS } from './levels.js';
@@ -65,7 +66,7 @@ let api = null;
 let root = null;
 let ui = null;
 let toast = null;
-let progress = null;           // { v, stars: [100], boosters }
+let progress = null;           // { v: 2, done: [100 × 0/1], boosters }
 let game = null;               // состояние уровня (logic.js)
 let spec = null;
 let renderer = null;
@@ -79,6 +80,7 @@ let modalActive = false;
 let modalToken = 0;
 let soundOn = true;
 let usedExtra = false;         // «+5 ходов» — один раз за попытку
+let finaleRunning = false;     // идёт финал — нажатие по полю его ускоряет
 let screen = 'map';
 const timers = new Set();
 const audio = createAudio(createSounds);
@@ -105,27 +107,32 @@ function later(fn, ms) {
 // ---------- прогресс ----------
 
 function emptyProgress() {
-  return { v: 1, stars: Array(LEVEL_COUNT).fill(0), boosters: { ...START_BOOSTERS } };
+  return { v: 2, done: Array(LEVEL_COUNT).fill(0), boosters: { ...START_BOOSTERS } };
 }
 
-function validProgress(p) {
-  if (!p || p.v !== 1 || !Array.isArray(p.stars) || p.stars.length !== LEVEL_COUNT) return false;
-  if (!p.stars.every((s) => Number.isInteger(s) && s >= 0 && s <= 3)) return false;
-  return p.boosters && typeof p.boosters === 'object'
-    && ['hammer', 'row', 'shuffle', 'moves'].every((k) => Number.isInteger(p.boosters[k]) && p.boosters[k] >= 0);
+/** Прогресс из хранилища; первая версия (со звёздами 0–3) переводится: пройден = была хоть одна звезда. */
+function loadProgress(p) {
+  const boostersOk = (b) => b && typeof b === 'object'
+    && ['hammer', 'row', 'shuffle', 'moves'].every((k) => Number.isInteger(b[k]) && b[k] >= 0);
+  if (p?.v === 1 && Array.isArray(p.stars) && p.stars.length === LEVEL_COUNT && boostersOk(p.boosters)) {
+    return { v: 2, done: p.stars.map((s) => (Number(s) > 0 ? 1 : 0)), boosters: p.boosters };
+  }
+  if (p?.v === 2 && Array.isArray(p.done) && p.done.length === LEVEL_COUNT && p.done.every((d) => d === 0 || d === 1) && boostersOk(p.boosters)) return p;
+  return emptyProgress();
 }
 
 /** Первый непройденный уровень (все пройдены — последний). */
 const currentLevel = () => {
-  const n = progress.stars.findIndex((s) => s === 0);
+  const n = progress.done.findIndex((d) => !d);
   return n < 0 ? LEVEL_COUNT : n + 1;
 };
-const totalStars = () => progress.stars.reduce((a, b) => a + b, 0);
-const isOpen = (n) => n <= currentLevel() || progress.stars[n - 1] > 0;
+const passed = () => progress.done.reduce((a, b) => a + b, 0);
+const isOpen = (n) => n <= currentLevel() || progress.done[n - 1] === 1;
+const progressLine = () => (passed() >= LEVEL_COUNT ? 'Все 100 уровней пройдены' : `Уровень ${currentLevel()}`);
 
 function saveProgress() {
   api?.storage.set('progress', progress);
-  api?.progress(`Уровень ${currentLevel()} · ★ ${totalStars()}`);
+  api?.progress(progressLine());
 }
 
 function saveRun() {
@@ -198,17 +205,17 @@ function showMap({ celebrate = 0 } = {}) {
   delete root.dataset.theme;
   map?.destroy();
   map = createMap({
-    levelState: (n) => ({ stars: progress.stars[n - 1], open: isOpen(n), current: n === currentLevel() && progress.stars[n - 1] === 0 }),
+    levelState: (n) => ({ done: progress.done[n - 1] === 1, open: isOpen(n), current: n === currentLevel() && !progress.done[n - 1] }),
     onPick: (n) => {
       sfx('click');
       showLevelCard(n);
     },
   });
-  const starsBadge = el('div', { class: 'm3-star-total' }, '★ ', String(totalStars()));
+  const passedBadge = el('div', { class: 'm3-star-total', title: 'Пройдено уровней' }, '✓ ', `${passed()} / ${LEVEL_COUNT}`);
   root.replaceChildren(
     el('div', { class: 'm3-header' },
       el('div', { class: 'm3-head-text' }, el('div', { class: 'm3-title' }, T.title), el('div', { class: 'm3-sub' }, T.level(currentLevel()))),
-      el('div', { class: 'm3-actions' }, starsBadge, soundButton()),
+      el('div', { class: 'm3-actions' }, passedBadge, soundButton()),
     ),
     map.root,
     ui.modal,
@@ -242,12 +249,12 @@ function showMap({ celebrate = 0 } = {}) {
 function showLevelCard(n) {
   const sp = levelSpec(n);
   const boss = sp.boss;
-  const stars = progress.stars[n - 1];
+  const done = progress.done[n - 1] === 1;
   const card = el('div', { class: `m3-card${boss ? ' m3-card-boss' : ''}`, role: 'dialog' },
     el('button', { class: 'm3-close', 'aria-label': T.close, onclick: closeModal }, '✕'),
     boss && el('div', { class: 'm3-boss-badge' }, '👑 ', T.boss),
     el('h2', {}, T.level(n)),
-    el('div', { class: 'm3-card-stars' }, [1, 2, 3].map((k) => el('i', { class: k <= stars ? 'on' : '' }, '★'))),
+    done && el('div', { class: 'm3-card-done' }, '✓ Пройден'),
     el('div', { class: 'm3-card-label' }, T.goals),
     el('div', { class: 'm3-card-goals' }, goalCardChips(sp)),
     el('div', { class: 'm3-card-moves' }, `${sp.moves} ходов`),
@@ -288,9 +295,6 @@ function startLevel(n, saved = null) {
   ui.board = board;
   ui.moves = el('div', { class: 'm3-moves-n' });
   ui.goals = el('div', { class: 'm3-goals' });
-  ui.scoreFill = el('div', { class: 'm3-score-fill' });
-  ui.scoreStars = [1, 2, 3].map(() => el('i', {}, '★'));
-  ui.score = el('div', { class: 'm3-score-n' });
   ui.boosters = el('div', { class: 'm3-boosters' });
   ui.boardWrap = el('div', { class: 'm3-board-wrap' }, board);
 
@@ -299,11 +303,7 @@ function startLevel(n, saved = null) {
       iconButton(ICONS.back, T.back, () => leaveLevel(), 'm3-back'),
       el('div', { class: 'm3-head-text' },
         el('div', { class: 'm3-title' }, T.level(n), spec.boss && el('span', { class: 'm3-boss-tag' }, T.boss)),
-        el('div', { class: 'm3-score' }, el('div', { class: 'm3-score-bar' }, ui.scoreFill, ...ui.scoreStars.map((s, k) => {
-          s.className = 'm3-score-star';
-          s.dataset.k = String(k);
-          return s;
-        })), ui.score),
+        el('div', { class: 'm3-sub' }, `Глава ${spec.chapter + 1} · ${CHAPTERS[spec.chapter].name}`),
       ),
       el('div', { class: 'm3-actions' }, soundButton()),
     ),
@@ -332,7 +332,7 @@ function startLevel(n, saved = null) {
     renderer.layout();
     await renderer.intro();
     busy = false;
-    if (spec.tip && !progress.stars[n - 1]) showTip(spec);
+    if (spec.tip && !progress.done[n - 1]) showTip(spec);
     else armHint();
   });
   saveRun();
@@ -390,19 +390,6 @@ function paintHud(first = false) {
       }
     });
   }
-  const [, two, three] = game.stars;
-  const max = Math.max(three * 1.12, 1);
-  ui.scoreFill.style.width = `${Math.min(100, (game.score / max) * 100)}%`;
-  ui.score.textContent = game.score.toLocaleString('ru-RU');
-  const marks = [Math.min(0.12, two / max * 0.5), two / max, three / max];
-  ui.scoreStars.forEach((s, k) => {
-    s.style.left = `${marks[k] * 100}%`;
-    const got = k === 0 ? game.score > 0 : game.score >= (k === 1 ? two : three);
-    if (got && !s.classList.contains('on')) {
-      s.classList.add('on');
-      if (!first) pop(s, { from: 0.5, duration: 280 });
-    }
-  });
 }
 
 function paintBoosters() {
@@ -424,7 +411,7 @@ function onBooster(b) {
   if (busy || modalActive || !game || game.over) return;
   if (!progress.boosters[b.id]) {
     shake(ui.boosters);
-    toast.show('Бонусы даются за боссов и за три звезды', 2400);
+    toast.show('Бонусы даются за боссов и за уровни 5, 15, 25…', 2600);
     return;
   }
   sfx('click');
@@ -450,6 +437,10 @@ function selectCell(i) {
 }
 
 function onPointerDown(e) {
+  if (finaleRunning) {
+    renderer?.setSpeed(6);
+    return;
+  }
   if (busy || modalActive || !game || game.over || (e.pointerType === 'mouse' && e.button !== 0)) return;
   const i = renderer.cellAt(e.clientX, e.clientY);
   if (i < 0) return;
@@ -593,20 +584,18 @@ async function winLevel() {
   api.platform.haptic.notification('success');
   sfx('win');
   toast.show(game.moves > 0 ? 'Цели выполнены! Оставшиеся ходы — в ракеты' : 'Цели выполнены!', 1800);
-  await sleep(700);
+  await sleep(350);
   if (!renderer) return;
   await runFinale();
   const n = spec.level;
-  const stars = starsFor(game);
-  const before = progress.stars[n - 1];
-  const first = before === 0;
-  progress.stars[n - 1] = Math.max(before, stars);
-  // награды: за босса — по бонусу каждого вида, за первые три звезды — случайный бонус
+  const first = !progress.done[n - 1];
+  progress.done[n - 1] = 1;
+  // награды за первое прохождение: босс — по бонусу каждого вида, уровни 5, 15, 25… — случайный бонус
   const reward = [];
   if (first && spec.boss) {
     for (const k of ['hammer', 'row', 'shuffle', 'moves']) progress.boosters[k] += 1;
     reward.push('hammer', 'row', 'shuffle', 'moves');
-  } else if (stars === 3 && before < 3) {
+  } else if (first && n % 10 === 5) {
     const k = ['hammer', 'row', 'shuffle'][Math.floor(rng() * 3)];
     progress.boosters[k] += 1;
     reward.push(k);
@@ -614,15 +603,22 @@ async function winLevel() {
   saveProgress();
   api.storage.remove('run');
   busy = false;
-  showWinCard(n, stars, reward);
+  showWinCard(n, reward);
 }
 
+/** Финал: короткая вспышка ракет; нажатие по полю — ещё быстрее. */
 async function runFinale() {
-  const gen = finale(game, rng);
-  for (const phase of gen) {
-    if (!renderer) return;
-    await renderer.play(phase, sfx);
-    paintHud();
+  finaleRunning = true;
+  renderer.setSpeed(1.6);
+  try {
+    for (const phase of finale(game, rng)) {
+      if (!renderer) return;
+      await renderer.play(phase, sfx);
+      paintHud();
+    }
+  } finally {
+    finaleRunning = false;
+    renderer?.setSpeed(1);
   }
   renderer?.sync(game);
   paintHud();
@@ -630,14 +626,13 @@ async function runFinale() {
 
 const sleep = (ms) => new Promise((resolve) => later(resolve, reducedMotion() ? 0 : ms));
 
-function showWinCard(n, stars, reward) {
-  const starEls = [1, 2, 3].map(() => el('i', {}, '★'));
+function showWinCard(n, reward) {
   const names = { hammer: 'Молоток', row: 'Ракета', shuffle: 'Перемешать', moves: '+5 ходов' };
   const card = el('div', { class: `m3-card m3-card-win${spec.boss ? ' m3-card-boss' : ''}`, role: 'dialog' },
     el('div', { class: 'm3-rays' }),
     el('h2', {}, spec.boss ? T.bossWon : T.won),
-    el('div', { class: 'm3-win-stars' }, starEls),
-    el('div', { class: 'm3-win-score' }, game.score.toLocaleString('ru-RU'), el('span', {}, ' очков')),
+    el('div', { class: 'm3-win-medal' }, spec.boss ? '👑' : '✓'),
+    el('div', { class: 'm3-win-sub' }, n >= LEVEL_COUNT ? T.allDone : `Открыт уровень ${n + 1}`),
     reward.length > 0 && el('div', { class: 'm3-reward' }, el('span', { class: 'm3-card-label' }, T.reward),
       el('div', { class: 'm3-reward-list' }, reward.map((k) => el('span', { class: 'm3-reward-chip' }, `${names[k]} +1`)))),
     el('div', { class: 'm3-card-btns' },
@@ -646,13 +641,11 @@ function showWinCard(n, stars, reward) {
     ),
   );
   openModal(card);
-  starEls.forEach((s, k) => later(() => {
-    if (k < stars) {
-      s.classList.add('on');
-      sfx('star', { step: k });
-      pop(s, { from: 0.3, duration: 360 });
-    }
-  }, reducedMotion() ? 0 : 350 + k * 380));
+  const medal = card.querySelector('.m3-win-medal');
+  later(() => {
+    sfx('medal');
+    pop(medal, { from: 0.3, duration: 420 });
+  }, reducedMotion() ? 0 : 250);
   if (!reducedMotion()) later(() => renderer?.confettiAt(Math.floor(game.cells.length / 2)), 300);
 }
 
@@ -725,7 +718,8 @@ export default {
     ]);
     if (!api) return;
     soundOn = savedSound !== false;
-    progress = validProgress(savedProgress) ? savedProgress : emptyProgress();
+    progress = loadProgress(savedProgress);
+    if (savedProgress?.v === 1) api.storage.set('progress', progress);
     ui = {
       modal: el('div', { class: 'm3-modal', hidden: true }),
       fx: el('canvas', { class: 'm3-fx' }),
@@ -734,7 +728,7 @@ export default {
     container.append(root);
     document.addEventListener('keydown', onKeydown);
     window.addEventListener('resize', onResize);
-    api.progress(`Уровень ${currentLevel()} · ★ ${totalStars()}`);
+    api.progress(progressLine());
     if (savedRun && Number.isInteger(savedRun.level) && isOpen(savedRun.level) && isValidState(savedRun.state)) startLevel(savedRun.level, savedRun);
     else showMap();
     // для проверки (страница-обёртка с автоигроком): ?m3debug в адресе

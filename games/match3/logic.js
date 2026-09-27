@@ -49,7 +49,7 @@ export const adjacent = (s, a, b) => Math.abs(rowOf(s, a) - rowOf(s, b)) + Math.
 // ---------- создание уровня ----------
 
 /**
- * spec: { level, rows, cols, layout: [строки], colors, moves, goals, treasure?, timer?, slime?, stars? }
+ * spec: { level, rows, cols, layout: [строки], colors, moves, goals, treasure?, timer? }
  * Символы layout: '.' поле, '_' дыра, 'i'/'I' лёд 1/2, 'c'/'C'/'K' ящик 1/2/3, 'S' сейф, 's' слизь,
  * 'l'/'L' цепь 1/2, 'j' лёд + цепь, 't' фишка с таймером, 'T' сундук на старте, 'h' лёд под ящиком (ящик 1).
  */
@@ -60,7 +60,6 @@ export function newGame(spec, rng = Math.random) {
     v: 1, level: spec.level, rows, cols, colors: spec.colors, moves: spec.moves, movesStart: spec.moves,
     cells: Array(n).fill(0), pieces: Array(n).fill(null), ice: Array(n).fill(0), block: Array(n).fill(null),
     goals: spec.goals.map((g) => ({ ...g, done: 0 })), score: 0, nextId: 1, turn: 0, over: null, reason: null,
-    stars: spec.stars ?? [0, 0, 0],
     treasure: spec.treasure ? { total: spec.treasure.total, max: spec.treasure.max ?? 1, spawned: 0, collected: 0, every: spec.treasure.every ?? 4, wait: 0 } : null,
     timer: spec.timer ? { start: spec.timer.start, every: spec.timer.every ?? 0, wait: spec.timer.every ?? 0 } : null,
     slimeHit: false, boss: Boolean(spec.boss),
@@ -899,43 +898,35 @@ export function* useBooster(s, kind, i, rng = Math.random) {
   else yield { t: 'end', timers: [], slime: null, shuffle: null, over: s.over };
 }
 
+export const FINALE_MAX = 8;
+
 /**
- * Финал после победы: оставшиеся ходы превращаются в ракеты (каждая — в случайную обычную фишку) и
- * срабатывают, потом срабатывают спецфишки, что остались на поле. Очки идут в счёт.
+ * Финал после победы — коротко (владелец, 2026-09-27: «в конце, когда только ракетки остаются, это идёт
+ * оооочень долго»): часть оставшихся ходов (не больше FINALE_MAX) разом превращается в ракеты, и они вместе со
+ * спецфишками на поле срабатывают одной волной; потом одно падение. Раньше — по ракете на ход, каждая со своим каскадом.
  */
 export function* finale(s, rng = Math.random) {
-  let left = s.moves;
-  let guard = 0;
-  while (left > 0 && guard++ < 60) {
-    const options = [];
-    for (let i = 0; i < s.pieces.length; i++) if (s.pieces[i]?.k === 'n' && !s.pieces[i].lock) options.push(i);
-    if (!options.length) break;
-    const i = options[Math.floor(rng() * options.length)];
-    const p = s.pieces[i];
+  const options = [];
+  for (let i = 0; i < s.pieces.length; i++) if (s.pieces[i]?.k === 'n' && !s.pieces[i].lock) options.push(i);
+  const list = [];
+  for (let n = Math.min(s.moves, FINALE_MAX, options.length); n > 0; n--) {
+    const at = options.splice(Math.floor(rng() * options.length), 1)[0];
+    const p = s.pieces[at];
     const k = rng() < 0.5 ? 'rh' : 'rv';
-    s.pieces[i] = { ...p, k };
-    left -= 1;
-    s.moves = left;
-    s.score += SCORE.bonusMove;
-    yield { t: 'bonus', i, id: p.id, k, c: p.c, left };
-    yield wave(s, [{ i, special: true }], [], rng, 1);
-    yield* cascade(s, rng, null);
+    s.pieces[at] = { ...p, k };
+    list.push({ i: at, id: p.id, k, c: p.c });
   }
+  s.score += s.moves * SCORE.bonusMove;
   s.moves = 0;
-  for (let round = 0; round < 10; round++) {
-    const specials = [];
-    for (let i = 0; i < s.pieces.length; i++) if (isSpecial(s.pieces[i]) && !s.pieces[i].lock) specials.push(i);
-    if (!specials.length) break;
-    yield wave(s, specials.map((i) => ({ i, special: true })), [], rng, 1);
-    yield* cascade(s, rng, null);
-  }
-}
-
-/** Звёзды за счёт: 1 — пройден, 2 и 3 — по порогам уровня. */
-export function starsFor(s) {
-  if (s.over !== 'win') return 0;
-  const [, two, three] = s.stars;
-  return s.score >= three ? 3 : s.score >= two ? 2 : 1;
+  if (list.length) yield { t: 'bonus', list };
+  const fire = [];
+  for (let i = 0; i < s.pieces.length; i++) if (isSpecial(s.pieces[i]) && !s.pieces[i].lock) fire.push({ i, special: true });
+  if (!fire.length) return;
+  yield wave(s, fire, [], rng, 1);
+  const fall = settle(s, rng);
+  if (fall.moves.length || fall.spawns.length) yield fall;
+  const got = collectTreasures(s);
+  if (got) yield got;
 }
 
 /** Прокрутить генератор хода до конца (бот, тесты). → последняя фаза */

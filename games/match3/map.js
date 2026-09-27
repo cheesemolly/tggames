@@ -1,5 +1,5 @@
 // Карта уровней «Три в ряд» (по наброску владельца): извилистая дорожка снизу вверх, 10 глав со своим
-// оформлением, каждый 10-й уровень — босс (крупнее, с короной и подписью «Босс»). Пройденные — со звёздами,
+// оформлением, каждый 10-й уровень — босс (крупнее, с короной и подписью «Босс»). Пройденные — зелёные с галочкой,
 // текущий пульсирует, закрытые — серые с замком. Карта сама прокручивается к текущему уровню.
 
 import { el } from '../../shared/dom.js';
@@ -80,7 +80,7 @@ function decorSvg(kind) {
 }
 
 /**
- * Карта. levelState(n) → { stars: 0–3, open: bool, current: bool }; onPick(n) — нажали на открытый уровень.
+ * Карта. levelState(n) → { done: bool, open: bool, current: bool }; onPick(n) — нажали на открытый уровень.
  * → { root, scrollTo(n, smooth), unlock(n) }
  */
 export function createMap({ levelState, onPick }) {
@@ -139,14 +139,14 @@ export function createMap({ levelState, onPick }) {
       const st = levelState(n);
       if (st.current) current = n;
       node.classList.toggle('m3-open', st.open);
-      node.classList.toggle('m3-done', st.stars > 0);
+      node.classList.toggle('m3-done', st.done);
       node.classList.toggle('m3-current', st.current);
       const boss = n % 10 === 0;
       // replaceChildren, в отличие от el(), не пропускает false — отсеиваем сами
       node.replaceChildren(...[
         boss && el('span', { class: 'm3-crown' }, st.open ? '👑' : '💀'),
         el('span', { class: 'm3-node-num' }, st.open ? String(n) : '🔒'),
-        st.stars > 0 && el('span', { class: 'm3-stars' }, [1, 2, 3].map((k) => el('i', { class: k <= st.stars ? 'on' : '' }, '★'))),
+        st.done && el('span', { class: 'm3-check' }, '✓'),
         boss && el('span', { class: 'm3-boss-label' }, 'Босс'),
       ].filter(Boolean));
     }

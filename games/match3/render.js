@@ -609,6 +609,7 @@ export function createRenderer({ board, fx, host, getGoalTarget = () => null }) 
   let hintPair = null;
   let raf = 0;
   let timer = 0;
+  let speed = 1;                   // ускорение анимаций (финал; нажатие по полю — ещё быстрее)
   let last = performance.now();
   let alive = true;
   let fxRect = { left: 0, top: 0 };
@@ -728,6 +729,8 @@ export function createRenderer({ board, fx, host, getGoalTarget = () => null }) 
   // ---------- анимация ----------
 
   function tween(dur, fn, { delay = 0, easing = ease.out } = {}) {
+    dur /= speed;
+    delay /= speed;
     if (reducedMotion()) dur = Math.min(dur, 1);
     return new Promise((resolve) => {
       tweens.push({ t0: performance.now() + delay, dur, fn, easing, resolve, started: false });
@@ -1043,14 +1046,17 @@ export function createRenderer({ board, fx, host, getGoalTarget = () => null }) 
     }));
   }
 
+  /** Финал: фишки разом становятся ракетами (с небольшим разбросом во времени). */
   async function playBonus(ph, sounds) {
-    const v = view.pieces.get(ph.id);
-    sounds('bonus', { step: ph.left });
-    if (v) {
-      v.k = ph.k;
-      ring(ph.i, '#fff6b0', 0.9, 0.3);
-      await tween(160, (k) => { v.s = 1 + Math.sin(k * Math.PI) * 0.3; });
-    }
+    sounds('bonus', { step: ph.list.length });
+    await Promise.all(ph.list.map((b, k) => {
+      const v = view.pieces.get(b.id);
+      if (!v) return null;
+      return tween(200, (q) => {
+        if (q > 0.3) v.k = b.k;
+        v.s = 1 + Math.sin(q * Math.PI) * 0.35;
+      }, { delay: k * 45 }).then(() => ring(b.i, '#fff6b0', 0.9, 0.3));
+    }));
   }
 
   /** Сыграть фазу хода. sounds(name, opts) — звук. */
@@ -1356,6 +1362,9 @@ export function createRenderer({ board, fx, host, getGoalTarget = () => null }) 
     },
     cellAt,
     icon: makeIcon,
+    setSpeed(k) {
+      speed = k;
+    },
     cellSize: () => cs,
     select(i) {
       selected = i;

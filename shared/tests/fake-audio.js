@@ -26,6 +26,7 @@ export function fakeContext() {
     destination: { kind: 'destination' },
     createGain: () => node('gain', { gain: param() }),
     createDynamicsCompressor: () => node('compressor', { threshold: param(), ratio: param() }),
+    createDelay: () => node('delay', { delayTime: param() }),
     createBiquadFilter: () => node('filter', { frequency: param(), Q: param(), type: '' }),
     createOscillator: () => source('osc', { frequency: param(), type: '' }),
     createBufferSource: () => source('buffer', { buffer: null, loop: false }),

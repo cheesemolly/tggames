@@ -1,7 +1,6 @@
-// Подбор ходов и порогов звёзд для 100 уровней ботом: node games/match3/tools/tune.js [с уровня] [по уровень]
+// Подбор ходов для 100 уровней ботом: node games/match3/tools/tune.js [с уровня] [по уровень]
 // Для каждого уровня — наименьшее число ходов, при котором жадный бот (logic.js: botMove) выигрывает не реже
-// целевой доли (пилой: начало главы легче, к боссу сложнее; босс — примерно половина). Пороги звёзд — по
-// очкам бота на победах: 2 звезды — медиана, 3 — верхние 20%. Результат — tuning.js рядом.
+// целевой доли (пилой: начало главы легче, к боссу сложнее; босс — примерно половина). Результат — tuning.js рядом.
 import { writeFileSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { levelSpec, LEVEL_COUNT } from '../levels.js';
@@ -66,16 +65,13 @@ for (let n = from; n <= to; n++) {
   }
   if (!best) {
     console.log(`уровень ${n}: бот не проходит даже за 90 ходов!`);
-    current[n - 1] = { moves: 90, stars: [0, 20000, 40000] };
+    current[n - 1] = { moves: 90 };
     continue;
   }
   // первым уровням — с запасом: игрок только знакомится с правилами
   const floor = n <= 10 ? 15 : 12;
   if (best.moves < floor) best = { moves: floor, wins: trial(n, floor) };
-  const sorted = best.wins.slice().sort((a, b) => a - b);
-  const q = (p) => sorted[Math.min(sorted.length - 1, Math.floor(p * sorted.length))];
-  const round = (v) => Math.round(v / 100) * 100;
-  current[n - 1] = { moves: best.moves, stars: [0, round(q(0.5)), round(Math.max(q(0.8), q(0.5) * 1.15))] };
-  console.log(`уровень ${n}: ходов ${best.moves}, побед ${best.wins.length}/${SEEDS} (цель ${Math.round(need * 100)}%), звёзды ${current[n - 1].stars.slice(1).join(' / ')} — ${Date.now() - t0} мс`);
-  writeFileSync(out, `// Подобрано ботом (tools/tune.js): ходы и пороги звёзд [1, 2, 3] по уровням. Не править руками.\nexport const TUNING = ${JSON.stringify(current)};\n`);
+  current[n - 1] = { moves: best.moves };
+  console.log(`уровень ${n}: ходов ${best.moves}, побед ${best.wins.length}/${SEEDS} (цель ${Math.round(need * 100)}%) — ${Date.now() - t0} мс`);
+  writeFileSync(out, `// Подобрано ботом (tools/tune.js): ходы по уровням. Не править руками.\nexport const TUNING = ${JSON.stringify(current)};\n`);
 }

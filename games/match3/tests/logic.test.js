@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   newGame, findMatches, specialFor, findMoves, swapValid, playMove, tapMove, useBooster, finale, settle, shuffle,
-  run, botPlay, goalLeft, isValidState, starsFor, exitCells, isSpecial,
+  run, botPlay, goalLeft, isValidState, exitCells, isSpecial, FINALE_MAX,
 } from '../logic.js';
 import { levelSpec, LEVEL_COUNT, CHAPTERS } from '../levels.js';
 import { createSounds, SOUNDS } from '../sounds.js';
@@ -186,7 +186,6 @@ test('уровни: 100 штук, раскладки ровные, цели вы
     assert.equal(findMatches(s).length, 0, `уровень ${n}: готовые совпадения на старте`);
     assert.ok(findMoves(s).length > 0, `уровень ${n}: нет ходов на старте`);
     assert.ok(sp.moves >= 12 && sp.moves <= 90, `уровень ${n}: ходов ${sp.moves}`);
-    assert.ok(sp.stars[1] > 0 && sp.stars[2] > sp.stars[1], `уровень ${n}: пороги звёзд`);
   }
 });
 
@@ -197,10 +196,7 @@ test('уровни проходимы: бот выигрывает каждый 
     for (let seed = 1; seed <= 3 && !won; seed++) {
       const s = botPlay({ ...sp, moves: Math.ceil(sp.moves * 1.5) }, mulberry(n * 31 + seed));
       won = s.over === 'win';
-      if (won) {
-        assert.ok(starsFor(s) >= 1);
-        assert.equal(s.moves, 0, 'финал превратил все ходы в ракеты');
-      }
+      if (won) assert.equal(s.moves, 0, 'после финала ходов не остаётся');
     }
     assert.ok(won, `уровень ${n} бот не прошёл ни разу`);
   }
@@ -243,6 +239,25 @@ test('бонусы: молоток бьёт клетку, ракета — ря�
   run(useBooster(s, 'row', 0, mulberry(42)));
   run(useBooster(s, 'shuffle', 0, mulberry(43)));
   assert.equal(s.moves, moves);
+});
+
+test('финал короткий: не больше FINALE_MAX ракет разом и одна волна', () => {
+  const s = newGame(levelSpec(5), mulberry(77));
+  s.over = 'win';
+  s.moves = 25;
+  const phases = [...finale(s, mulberry(78))];
+  const bonus = phases.find((ph) => ph.t === 'bonus');
+  assert.ok(bonus.list.length <= FINALE_MAX && bonus.list.length > 0);
+  assert.equal(phases.filter((ph) => ph.t === 'clear').length, 1, 'все ракеты — одной волной');
+  assert.ok(phases.length <= 4, `фаз: ${phases.length}`);
+  assert.equal(s.moves, 0);
+});
+
+test('звуки: мягкие — без «квадратных» и «пилообразных» волн', () => {
+  const { ctx, created } = fakeContext();
+  const sounds = createSounds(ctx);
+  for (const name of SOUNDS) sounds.play(name, { step: 4 });
+  assert.ok(created.filter((n) => n.kind === 'osc').every((o) => o.type === 'sine' || o.type === ''), 'только синусы');
 });
 
 test('звуки: каждый подключён и не падает', () => {
