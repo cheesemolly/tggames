@@ -154,5 +154,6 @@ export const games = [
     title: 'Паук',
     load: () => import('../games/spider/index.js'),
     css: new URL('../games/spider/game.css', import.meta.url),
+    menu: { best: false },                               // «Сыграно · Побед» — очков нет, рекорд — победы
   },
 ];

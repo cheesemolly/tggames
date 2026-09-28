@@ -8,8 +8,8 @@
 // кроме случая, когда карт на столе меньше 10 и занять все столбцы нечем (в Windows тут тупик — известная ошибка).
 // Ход: на карту на единицу старше любой масти кладётся карта или ряд одной масти по убыванию; в пустой столбец —
 // любая карта или ряд. Собран ряд одной масти от короля до туза — он уходит со стола.
-// Очки как в Windows (Vista и новее): 500 в начале, −1 за ход и за отмену, +100 за собранную масть, раздача
-// бесплатна. Отмена без ограничений.
+// Очков нет (решение владельца, 2026-09-28: «рекорды — по числу побед, очки вообще убери»): считаются ходы и время.
+// Отмена без ограничений.
 //
 // Решаемость: если видеть все карты, решается ≈ 98,5% раскладок даже в четыре масти (Solvitaire, Blake & Gent;
 // plspider — 64 998 из 65 000), сложность — в закрытых картах. Поэтому банка «решаемых раскладок» нет:
@@ -22,8 +22,6 @@ export const CLUBS = 3;
 export const UP = 64;
 export const COLUMNS = 10;
 export const MODES = [1, 2, 4];
-export const START_SCORE = 500;
-export const RUN_BONUS = 100;
 
 export const suitOf = (c) => (c >> 4) & 3;
 export const rankOf = (c) => c & 15;
@@ -70,7 +68,7 @@ export function newGame(suits, seed) {
     cols[col][n - 1] |= UP;
   }
   return {
-    v: 1, suits, seed, cols, stock: cards.slice(k), done: [], moves: 0, score: START_SCORE, undo: [],
+    v: 1, suits, seed, cols, stock: cards.slice(k), done: [], moves: 0, undo: [],
     hintsUsed: 0, undos: 0,
   };
 }
@@ -123,7 +121,6 @@ function collect(s, col) {
     const suit = suitOf(cards[cards.length - 1]);
     cards.length -= 13;
     s.done.push(suit);
-    s.score += RUN_BONUS;
     let flipped = false;
     if (cards.length && !isUp(cards[cards.length - 1])) {
       cards[cards.length - 1] |= UP;
@@ -149,7 +146,6 @@ export function move(s, from, index, to) {
     flipped = true;
   }
   s.moves += 1;
-  s.score -= 1;
   const completed = collect(s, to);
   s.undo.push({ t: 'm', f: from, to, n, fl: flipped ? 1 : 0, cp: completed });
   return { ok: true, flipped, completed };
@@ -165,14 +161,14 @@ export function canDeal(s) {
 export function deal(s) {
   if (!canDeal(s)) return { ok: false, reason: s.stock.length ? 'empty' : 'stock' };
   for (let col = 0; col < COLUMNS; col++) s.cols[col].push(s.stock.pop() | UP);
-  s.moves += 1;                     // раздача очков не стоит (как в Windows)
+  s.moves += 1;
   const completed = [];
   for (let col = 0; col < COLUMNS; col++) completed.push(...collect(s, col));
   s.undo.push({ t: 'd', cp: completed });
   return { ok: true, completed };
 }
 
-/** Отмена последнего хода или раздачи (очки за отмену: −1, как в Windows). → запись или null. */
+/** Отмена последнего хода или раздачи (считается ходом). → запись или null. */
 export function undo(s) {
   const rec = s.undo.pop();
   if (!rec) return null;
@@ -183,7 +179,6 @@ export function undo(s) {
     if (flipped) cards[cards.length - 1] &= ~UP;
     for (let r = 13; r >= 1; r--) cards.push(card(suit, r, true));
     s.done.pop();
-    s.score -= RUN_BONUS;
   }
   if (rec.t === 'm') {
     const src = s.cols[rec.f];
@@ -193,7 +188,6 @@ export function undo(s) {
     for (let col = COLUMNS - 1; col >= 0; col--) s.stock.push(s.cols[col].pop() & ~UP);
   }
   s.moves += 1;
-  s.score -= 1;                     // отмена стоит очко (как в Windows)
   s.undos += 1;
   return rec;
 }
@@ -318,7 +312,7 @@ export function isValidState(s) {
   try {
     if (!s || s.v !== 1 || !MODES.includes(s.suits) || !Array.isArray(s.cols) || s.cols.length !== COLUMNS) return false;
     if (!Array.isArray(s.stock) || !Array.isArray(s.done) || !Array.isArray(s.undo)) return false;
-    if (![s.moves, s.score, s.hintsUsed, s.undos].every(Number.isInteger)) return false;
+    if (![s.moves, s.hintsUsed, s.undos].every(Number.isInteger)) return false;
     const all = [...s.cols.flat(), ...s.stock];
     if (!all.every(validCard) || s.stock.some(isUp)) return false;
     if (s.stock.length % COLUMNS !== 0) return false;
@@ -350,24 +344,24 @@ export function isValidState(s) {
 
 export function emptyStats() {
   const out = {};
-  for (const m of MODES) out[m] = { played: 0, wins: 0, bestScore: 0, bestTime: 0, streak: 0, bestStreak: 0 };
+  for (const m of MODES) out[m] = { played: 0, wins: 0, bestTime: 0, fewestMoves: 0, streak: 0, bestStreak: 0 };
   return out;
 }
 
 export function isValidStats(st) {
-  return Boolean(st) && MODES.every((m) => ['played', 'wins', 'bestScore', 'bestTime', 'streak', 'bestStreak']
+  return Boolean(st) && MODES.every((m) => ['played', 'wins', 'bestTime', 'fewestMoves', 'streak', 'bestStreak']
     .every((k) => Number.isInteger(st[m]?.[k]) && st[m][k] >= 0));
 }
 
-/** Итог партии в статистику режима: победа (со счётом и временем) или поражение (брошенная партия). */
-export function recordGame(stats, suits, { won, score = 0, timeMs = 0 }) {
+/** Итог партии в статистику режима: победа (с ходами и временем) или поражение (брошенная партия). */
+export function recordGame(stats, suits, { won, moves = 0, timeMs = 0 }) {
   const row = stats[suits];
   row.played += 1;
   if (won) {
     row.wins += 1;
     row.streak += 1;
     row.bestStreak = Math.max(row.bestStreak, row.streak);
-    row.bestScore = Math.max(row.bestScore, score);
+    if (moves > 0 && (!row.fewestMoves || moves < row.fewestMoves)) row.fewestMoves = moves;
     const sec = Math.round(timeMs / 1000);
     if (sec > 0 && (!row.bestTime || sec < row.bestTime)) row.bestTime = sec;
   } else {

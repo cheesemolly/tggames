@@ -30,7 +30,6 @@ const T = {
     2: 'Пики и черви — нужно думать',
     4: 'Все четыре масти — настоящий вызов',
   },
-  score: 'Очки',
   moves: 'Ходы',
   newGame: 'Новая партия',
   restart: 'Эту раскладку заново',
@@ -54,7 +53,7 @@ const T = {
   played: 'Сыграно',
   wins: 'Побед',
   winRate: 'Процент побед',
-  bestScore: 'Лучший счёт',
+  fewestMoves: 'Меньше всего ходов',
   bestTime: 'Лучшее время',
   streak: 'Серия побед',
   bestStreak: 'Лучшая серия',
@@ -127,6 +126,17 @@ function later(fn, ms) {
   }, ms);
   timers.add(id);
   return id;
+}
+
+/** Статистика первой версии (со «счётом») → без него: победы, время и серии сохраняются. */
+function upgradeStats(old) {
+  const out = emptyStats();
+  for (const m of MODES) {
+    const r = old?.[m];
+    if (!r) continue;
+    for (const k of ['played', 'wins', 'bestTime', 'streak', 'bestStreak']) if (Number.isInteger(r[k]) && r[k] >= 0) out[m][k] = r[k];
+  }
+  return out;
 }
 
 function plural(n, [one, few, many]) {
@@ -578,7 +588,6 @@ function onHint() {
 
 function paintInfo() {
   if (!ui || !game) return;
-  ui.score.textContent = String(game.score);
   ui.moves.textContent = String(game.moves);
   ui.time.textContent = clock(game.time ?? 0);
   ui.sub.textContent = T.modes[game.suits];
@@ -708,7 +717,7 @@ function win() {
   busy = true;
   paintInfo();
   const timeMs = game.time ?? 0;
-  recordGame(stats, game.suits, { won: true, score: game.score, timeMs });
+  recordGame(stats, game.suits, { won: true, moves: game.moves, timeMs });
   api.storage.set('stats', stats);
   api.storage.remove('current');
   sfx('win');
@@ -716,7 +725,6 @@ function win() {
   const result = {
     outcome: 'win',
     title: T.won,
-    score: game.score,
     durationMs: timeMs,
     variant: `suits-${game.suits}`,
     locale: 'ru',
@@ -870,7 +878,7 @@ function showStats() {
         tile(String(r.played), T.played),
         tile(String(r.wins), T.wins),
         tile(r.played ? `${Math.round((r.wins / r.played) * 100)}%` : '—', T.winRate),
-        tile(r.bestScore ? String(r.bestScore) : '—', T.bestScore),
+        tile(r.fewestMoves ? String(r.fewestMoves) : '—', T.fewestMoves),
         tile(r.bestTime ? clock(r.bestTime * 1000) : '—', T.bestTime),
         tile(`${r.streak} / ${r.bestStreak}`, `${T.streak} / ${T.bestStreak.toLowerCase()}`),
       ));
@@ -932,7 +940,7 @@ export default {
     ]);
     if (!api) return;
     soundOn = savedSound !== false;
-    stats = isValidStats(savedStats) ? savedStats : emptyStats();
+    stats = isValidStats(savedStats) ? savedStats : upgradeStats(savedStats);
     settings = {
       skin: SKINS.some((s) => s.id === savedSettings?.skin) ? savedSettings.skin : 'telegram',
       fourColor: savedSettings?.fourColor === true,
@@ -952,7 +960,6 @@ export default {
     });
     ui = {
       sub: el('div', { class: 'sp-sub' }),
-      score: el('b', {}),
       moves: el('b', {}),
       time: el('b', {}),
       table: el('div', { class: 'sp-table' }),
@@ -978,7 +985,7 @@ export default {
         ),
       ),
       el('div', { class: 'sp-info' },
-        el('span', {}, `${T.score} `, ui.score), el('span', {}, `${T.moves} `, ui.moves), el('span', {}, '⏱ ', ui.time)),
+        el('span', {}, `${T.moves} `, ui.moves), el('span', {}, '⏱ ', ui.time)),
       el('div', { class: 'sp-body' },
         ui.table,
         el('div', { class: 'sp-bar' }, ui.done, ui.undoBtn, toolButton(ICONS.hint, T.hint, onHint), ui.stock),
@@ -1018,6 +1025,7 @@ export default {
 
     if (isValidState(saved)) {
       game = { ...saved, time: Number.isFinite(saved.time) ? saved.time : 0 };
+      delete game.score;                          // сохранение первой версии (с очками)
       buildView();
       measure();
       layout();

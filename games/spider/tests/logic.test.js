@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  SPADES, HEARTS, DIAMONDS, CLUBS, UP, COLUMNS, START_SCORE, card, suitOf, rankOf, isUp, face, deck, newGame, seeded,
+  SPADES, HEARTS, DIAMONDS, CLUBS, UP, COLUMNS, card, suitOf, rankOf, isUp, face, deck, newGame, seeded,
   canPick, runStart, canDrop, move, deal, canDeal, undo, isWon, hintMoves, hint, bestTarget, isValidState, allMoves,
   emptyStats, isValidStats, recordGame, dealsLeft,
 } from '../logic.js';
@@ -13,7 +13,7 @@ const down = (suit, rank) => card(suit, rank, false);
 /** Партия из готовых столбцов (для отдельных правил). */
 const table = (cols, { stock = [], done = [], suits = 4 } = {}) => ({
   v: 1, suits, seed: 1, cols: [...cols, ...Array(COLUMNS - cols.length).fill(null).map(() => [])].map((c) => [...c]),
-  stock, done, moves: 0, score: START_SCORE, undo: [], hintsUsed: 0, undos: 0,
+  stock, done, moves: 0, undo: [], hintsUsed: 0, undos: 0,
 });
 const total = (s) => s.cols.flat().length + s.stock.length + s.done.length * 13;
 
@@ -59,7 +59,7 @@ test('ход: карта на старшую на единицу любой ма
   assert.ok(r.ok && r.flipped, 'закрытая карта открылась');
   assert.deepEqual(s.cols[1].map(rankOf), [10, 9, 8, 7]);
   assert.ok(isUp(s.cols[0][0]));
-  assert.equal(s.score, START_SCORE - 1);
+  assert.equal(s.moves, 1);
   assert.ok(move(s, 2, 1, 3).ok, 'в пустой столбец — любая');
   assert.ok(!move(s, 2, 0, 1).ok, 'восьмёрка на семёрку — нельзя');
 });
@@ -74,7 +74,6 @@ test('собранная масть от короля до туза уходит
   assert.deepEqual(s.done, [HEARTS]);
   assert.equal(s.cols[0].length, 1);
   assert.ok(isUp(s.cols[0][0]));
-  assert.equal(s.score, START_SCORE - 1 + 100);
   undo(s);
   assert.equal(s.cols[0].length, 13);
   assert.ok(!isUp(s.cols[0][0]), 'отмена снова закрыла карту');
@@ -89,7 +88,7 @@ test('раздача: по карте в каждый столбец; с пус�
   assert.ok(deal(s).ok);
   assert.deepEqual(s.cols.map((c) => c.length), before.map((n) => n + 1));
   assert.ok(s.cols.every((c) => isUp(c[c.length - 1])));
-  assert.equal(s.score, START_SCORE, 'раздача бесплатна');
+  assert.equal(s.moves, 1, 'раздача — тоже ход');
   assert.equal(dealsLeft(s), 4);
 
   const stock = Array(10).fill(down(SPADES, 5));
@@ -190,12 +189,13 @@ test('сохранение: настоящая партия годится, по
   assert.ok(!isValidState({ ...s, cols: s.cols.slice(1) }));
 });
 
-test('статистика по режимам: победы, серия, лучший счёт и время', () => {
+test('статистика по режимам: победы, серия, лучшее время и меньше всего ходов (очков нет)', () => {
   const st = emptyStats();
   assert.ok(isValidStats(st));
-  recordGame(st, 2, { won: true, score: 900, timeMs: 400000 });
-  recordGame(st, 2, { won: true, score: 850, timeMs: 300000 });
+  recordGame(st, 2, { won: true, moves: 180, timeMs: 400000 });
+  recordGame(st, 2, { won: true, moves: 210, timeMs: 300000 });
   recordGame(st, 2, { won: false });
-  assert.deepEqual(st[2], { played: 3, wins: 2, bestScore: 900, bestTime: 300, streak: 0, bestStreak: 2 });
+  assert.deepEqual(st[2], { played: 3, wins: 2, bestTime: 300, fewestMoves: 180, streak: 0, bestStreak: 2 });
+  assert.ok(!('score' in newGame(1, 1)), 'очков в партии нет');
   assert.ok(!isValidStats({ 1: { played: -1 } }));
 });

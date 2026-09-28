@@ -15,15 +15,24 @@ const EMPTY = { played: 0, wins: 0, best: null };
  */
 const RESET_BEST = ['2048', '2048:3', '2048:4', '2048:5', '2048:6', 'connect-dots'];
 const REMOVED_GAMES = ['guess-number', '_stub-a', '_stub-b'];
+// 2026-09-28: в Пауке убраны очки (рекорд — число побед) — очки его первой версии (бета) обнуляются
+const RESET_BEST_V3 = ['spider', 'spider:suits-1', 'spider:suits-2', 'spider:suits-4'];
 
 export async function migrateStats() {
-  if ((await store.get('__v')) >= 2) return;
-  for (const key of RESET_BEST) {
-    const stats = await store.get(key);
-    if (stats && stats.best !== null && stats.best !== undefined) await store.set(key, { ...stats, best: null });
+  const v = (await store.get('__v')) ?? 0;
+  if (v >= 3) return;
+  const resetBest = async (keys) => {
+    for (const key of keys) {
+      const stats = await store.get(key);
+      if (stats && stats.best !== null && stats.best !== undefined) await store.set(key, { ...stats, best: null });
+    }
+  };
+  if (v < 2) {
+    await resetBest(RESET_BEST);
+    for (const key of REMOVED_GAMES) await store.remove(key);
   }
-  for (const key of REMOVED_GAMES) await store.remove(key);
-  await store.set('__v', 2);
+  await resetBest(RESET_BEST_V3);
+  await store.set('__v', 3);
 }
 
 export async function getStats(gameId, variant = null) {
