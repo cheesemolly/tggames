@@ -91,7 +91,8 @@
 [data-game="spider"] .sp-info { display: flex; gap: 14px; justify-content: center; font-size: 13px; color: var(--sp-ink-2); font-variant-numeric: tabular-nums; }
 [data-game="spider"] .sp-info b { color: var(--sp-ink); font-weight: 700; }
 
-[data-game="spider"] .sp-table { flex: 1; min-height: 0; }
+[data-game="spider"] .sp-body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 4px; }
+[data-game="spider"] .sp-table { flex: 1; min-height: 0; min-width: 0; }
 [data-game="spider"] .sp-bar { display: flex; align-items: center; gap: 6px; height: calc(var(--sp-h, 48px) + 10px); flex: none; }
 [data-game="spider"] .sp-done { flex: 1; min-width: 0; height: 100%; }
 [data-game="spider"] .sp-tool {
@@ -194,6 +195,9 @@
   box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.85), inset 0 0 0 3.5px var(--sp-back-2), 0 0 0 1px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.25);
 }
 [data-game="spider"] .sp-drag .sp-front { box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.16), 0 10px 18px rgba(0, 0, 0, 0.35); }
+/* выбранный касанием ряд: приподнят и обведён; куда можно положить — подсвечено */
+[data-game="spider"] .sp-sel { translate: 0 -4px; transition: transform 0.26s cubic-bezier(0.2, 0.8, 0.25, 1), translate 0.15s ease; }
+[data-game="spider"] .sp-sel .sp-front { box-shadow: 0 0 0 2px var(--sp-accent), 0 6px 12px rgba(0, 0, 0, 0.3); }
 
 [data-game="spider"] .sp-s0 { color: var(--sp-suit-0); }
 [data-game="spider"] .sp-s1 { color: var(--sp-suit-1); }
@@ -338,6 +342,29 @@
 [data-game="spider"] .sp-toggle span { display: grid; gap: 2px; }
 [data-game="spider"] .sp-toggle small { color: var(--tg-theme-hint-color); font-size: 12px; }
 [data-game="spider"] .sp-toggle input { width: 20px; height: 20px; accent-color: var(--tg-theme-button-color); flex: none; }
+
+/* ---------- альбомный вид: стол слева, колода, кнопки и собранные масти — справа столбиком ---------- */
+[data-game="spider"] .sp-land .sp-body { flex-direction: row; }
+[data-game="spider"] .sp-land .sp-bar { flex-direction: column-reverse; width: calc(var(--sp-w, 48px) + 36px); height: auto; justify-content: flex-start; }
+[data-game="spider"] .sp-land .sp-done { flex: 1; width: 100%; min-height: 0; }
+[data-game="spider"] .sp-land .sp-tool { width: 100%; }
+[data-game="spider"] .sp-land .sp-stock { width: calc(var(--sp-w, 48px) + 32px); }
+[data-game="spider"] .sp-land .sp-info { justify-content: flex-start; padding-left: 2px; }
+[data-game="spider"] .sp-land { gap: 2px; }
+
+/* поворот на 90° (кнопкой): игра — во весь контейнер, размеры экрана наоборот */
+.game-root[data-game="spider"].sp-host-rot { position: relative; padding: 0; }
+[data-game="spider"] .sp.sp-rot {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: var(--rot-w);
+  height: var(--rot-h);
+  padding: 8px calc(10px + env(safe-area-inset-bottom)) 8px 12px;
+  box-sizing: border-box;
+  transform: translate(-50%, -50%) rotate(90deg);
+}
+[data-game="spider"] .sp-icon-btn[aria-pressed="true"] { background: var(--sp-accent); color: #1c1c22; }
 
 @media (prefers-reduced-motion: reduce) {
   [data-game="spider"] .sp-card, [data-game="spider"] .sp-inner { transition: none; }

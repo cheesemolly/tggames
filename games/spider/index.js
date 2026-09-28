@@ -3,8 +3,11 @@
 // Все 104 карты — элементы одного слоя поверх игры: так карта может лететь откуда угодно куда угодно (из колоды
 // в столбец, собранная масть — вниз налево). Модель вида (view) повторяет каждое действие логики — ход, раздачу,
 // сбор масти и их отмену, — поэтому каждая карта едет, а не появляется. Раскладка столбцов ужимается под экран:
-// сначала шаг закрытых карт, потом открытых (не меньше MIN_UP). Ход — касанием (лучший столбец: своя масть →
-// чужая → пустой) или перетаскиванием; подсказки перебираются по кругу; отмена без ограничений.
+// сначала шаг закрытых карт, потом открытых (не меньше MIN_UP). Ход — перетаскиванием или двумя касаниями: первое
+// выбирает карту (ряд одной масти), второе — столбец, куда положить (сами карты никуда не прыгают: иначе партию
+// проходили, просто стуча по картам — видео владельца, 2026-09-28). Подсказки — по кругу; отмена без ограничений.
+// Альбомный вид — как в Bongo Cat: кнопка поворота разворачивает игру на 90° (телефон держат боком), а на широком
+// экране он включается сам; координаты касаний тогда переводятся в систему игры (toLocal).
 // Победа — каскад прыгающих карт со следами, как в Windows (касание — пропустить), потом экран результата.
 
 import { el } from '../../shared/dom.js';
@@ -15,7 +18,7 @@ import { createSounds } from './sounds.js';
 import { faceHtml, suitSvg, rankLabel, SUIT_PATHS } from './cards.js';
 import {
   COLUMNS, MODES, suitOf, rankOf, isUp, face, card, newGame, canPick, runStart, canMove, move, deal, canDeal, undo,
-  isWon, hintMoves, bestTarget, allMoves, dealsLeft, isValidState, emptyStats, isValidStats, recordGame,
+  isWon, hintMoves, allMoves, dealsLeft, isValidState, emptyStats, isValidStats, recordGame,
 } from './logic.js';
 
 const T = {
@@ -41,6 +44,7 @@ const T = {
   skin: 'Стол',
   fourColor: 'Четырёхцветная колода',
   fourColorHint: 'Бубны — синие, трефы — зелёные',
+  rotate: 'Повернуть: альбомный вид',
   soundOn: 'Выключить звук',
   soundOff: 'Включить звук',
   noHint: 'Полезных ходов нет — отмени ход или начни заново',
@@ -79,6 +83,7 @@ const ICONS = {
   gear: svgIcon('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/>'),
   soundOn: svgIcon('<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/>'),
   soundOff: svgIcon('<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="m16 9 5 6"/><path d="m21 9-5 6"/>'),
+  rotate: svgIcon('<rect x="7" y="2" width="10" height="16" rx="2"/><path d="M11 15h2"/><path d="M20 13a8 8 0 0 1-6 7.7"/><path d="M16.5 19.8 14 20.7l.8 2.3"/>'),
 };
 
 let api = null;
@@ -92,7 +97,9 @@ let metrics = null;
 let drag = null;
 let busy = false;           // идёт анимация победы
 let hintCycle = { key: '', index: 0 };
-let settings = { skin: 'telegram', fourColor: false };
+let settings = { skin: 'telegram', fourColor: false, rotated: false };
+let selected = null;        // выбранный касанием ряд: { from, index }
+let rotated = false;        // игра повёрнута на 90° (кнопкой)
 let setup = { suits: 1 };
 let stats = emptyStats();
 let soundOn = true;
@@ -179,19 +186,44 @@ function buildView() {
 
 // ---------- раскладка ----------
 
-function measure() {
+/** Положение элемента в системе игры (offset — без учёта поворота всей игры). */
+function boxOf(node) {
+  let x = 0;
+  let y = 0;
+  for (let n = node; n && n !== root; n = n.offsetParent) {
+    x += n.offsetLeft;
+    y += n.offsetTop;
+  }
+  return { x, y, w: node.offsetWidth, h: node.offsetHeight };
+}
+
+/** Точка касания (экран) → система игры: при повороте на 90° по часовой — обратный поворот вокруг центра. */
+function toLocal(clientX, clientY) {
   const R = root.getBoundingClientRect();
-  const Tb = ui.table.getBoundingClientRect();
-  const W = Math.max(22, Math.min(76, Math.floor((Tb.width - PAD * 2 - GAP * (COLUMNS - 1)) / COLUMNS)));
+  if (!rotated) return [clientX - R.left, clientY - R.top];
+  const mx = R.left + R.width / 2;
+  const my = R.top + R.height / 2;
+  return [root.offsetWidth / 2 + (clientY - my), root.offsetHeight / 2 - (clientX - mx)];
+}
+
+function measure() {
+  const land = root.classList.contains('sp-land');
+  const Tb = boxOf(ui.table);
+  let W = Math.floor((Tb.w - PAD * 2 - GAP * (COLUMNS - 1)) / COLUMNS);
+  if (land) W = Math.min(W, Math.floor((Tb.h * 0.3) / 1.42));      // в альбомном — чтобы столбцы влезали по высоте
+  W = Math.max(22, Math.min(76, W));
   const H = Math.round(W * 1.42);
-  const left = Tb.left - R.left + (Tb.width - (W * COLUMNS + GAP * (COLUMNS - 1))) / 2;
-  const top = Tb.top - R.top + 6;
-  const S = ui.stock.getBoundingClientRect();
-  const D = ui.done.getBoundingClientRect();
+  const left = Tb.x + (Tb.w - (W * COLUMNS + GAP * (COLUMNS - 1))) / 2;
+  const top = Tb.y + 6;
+  const S = boxOf(ui.stock);
+  const D = boxOf(ui.done);
   metrics = {
-    W, H, left, top, height: Tb.height - 12,
-    stockX: S.right - R.left - W - 4 * 7, stockY: S.top - R.top + (S.height - H) / 2,
-    doneX: D.left - R.left, doneY: D.top - R.top + (D.height - H) / 2, doneStep: Math.min(W * 0.42, (D.width - W) / 7),
+    W, H, left, top, height: Tb.h - 12, land,
+    stockX: S.x + S.w - W - 4 * 7, stockY: S.y + (S.h - H) / 2,
+    // собранные масти: внизу — в ряд, в альбомном (сбоку) — столбиком
+    doneX: land ? D.x + (D.w - W) / 2 : D.x,
+    doneY: land ? D.y : D.y + (D.h - H) / 2,
+    doneStep: land ? Math.max(4, Math.min(H * 0.3, (D.h - H) / 7)) : Math.min(W * 0.42, (D.w - W) / 7),
   };
   root.style.setProperty('--sp-w', `${W}px`);
   root.style.setProperty('--sp-h', `${H}px`);
@@ -261,15 +293,59 @@ function layout(delays = null) {
   view.piles.forEach((pile, p) => {
     pile.forEach((node, j) => {
       node._loc = { pile: p };
-      place(node, metrics.doneX + p * metrics.doneStep, metrics.doneY, 400 + p * 20 + (13 - j), { delay: delays?.get(node) ?? 0, up: true });
+      const x = metrics.land ? metrics.doneX : metrics.doneX + p * metrics.doneStep;
+      const y = metrics.land ? metrics.doneY + p * metrics.doneStep : metrics.doneY;
+      place(node, x, y, 400 + p * 20 + (13 - j), { delay: delays?.get(node) ?? 0, up: true });
     });
   });
   paintInfo();
 }
 
+/**
+ * Тряска карты — свойством translate: положение карты задано transform'ом, и общий shake() (он анимирует transform)
+ * на время тряски уносил карту в левый верхний угол (видео владельца, 2026-09-28; та же ловушка была в шашках).
+ */
+function jiggle(node) {
+  return animate(node, [
+    { translate: '0 0' }, { translate: '-4px 0' }, { translate: '4px 0' }, { translate: '-2px 0' }, { translate: '2px 0' }, { translate: '0 0' },
+  ], { duration: 260, easing: 'ease-in-out' });
+}
+
+// ---------- выбор касанием ----------
+
+function select(from, index) {
+  deselect();
+  selected = { from, index };
+  view.cols[from].slice(index).forEach((node) => node.classList.add('sp-sel'));
+  markTargets(from, index);
+  sfx('pick');
+}
+
+function deselect() {
+  if (!selected) return;
+  selected = null;
+  root?.querySelectorAll('.sp-sel').forEach((node) => node.classList.remove('sp-sel'));
+  markTargets(-1, -1);
+}
+
+/** Касание столбца col, когда что-то выбрано: положить туда. → получилось ли */
+function dropSelected(col) {
+  if (!selected || col === selected.from || !canMove(game, selected.from, selected.index, col)) return false;
+  const { from, index } = selected;
+  deselect();
+  return doMove(from, index, col);
+}
+
+/** Столбец под точкой (в системе игры) или -1. */
+function columnAt(x) {
+  const c = Math.round((x - metrics.left - metrics.W / 2) / (metrics.W + GAP));
+  return c >= 0 && c < COLUMNS && Math.abs(x - (colX(c) + metrics.W / 2)) <= (metrics.W + GAP) / 2 ? c : -1;
+}
+
 // ---------- действия (логика + модель вида + звук) ----------
 
 function afterAction() {
+  deselect();
   hintCycle = { key: '', index: 0 };
   clearHint();
   save();
@@ -312,6 +388,7 @@ function doDeal() {
   if (nowMs - lastDealAt < 300) return;            // двойное касание не раздаёт два ряда
   const res = deal(game);
   if (!res.ok) {
+    deselect();
     sfx('illegal');
     shake(ui.stock, { distance: 5, duration: 300 });
     toast.show(res.reason === 'empty' ? T.emptyColumn : T.noStock, 1800);
@@ -333,6 +410,7 @@ function doDeal() {
 }
 
 function doUndo() {
+  deselect();
   if (busy || !game.undo.length) return;
   const rec = undo(game);
   if (!rec) return;
@@ -353,21 +431,26 @@ function onPointerDown(e) {
   const node = e.target.closest?.('.sp-card');
   if (!node) return;
   e.preventDefault();
+  e.stopPropagation();
   const loc = node._loc;
   if (loc?.stock) {
+    deselect();
     doDeal();
     return;
   }
-  if (!loc || loc.col == null) return;
-  const col = game.cols[loc.col];
-  if (!isUp(col[loc.index])) {
-    shake(node, { distance: 3, duration: 220 });
+  if (!loc || loc.col == null) {
+    deselect();
     return;
   }
-  // карта внутри разномастного ряда — берём ряд одной масти снизу
-  const index = canPick(col, loc.index) ? loc.index : runStart(col);
-  const nodes = view.cols[loc.col].slice(index);
-  drag = { from: loc.col, index, nodes, id: e.pointerId, x: e.clientX, y: e.clientY, moving: false, pickable: canPick(col, loc.index) };
+  const col = game.cols[loc.col];
+  const up = isUp(col[loc.index]);
+  // карта внутри разномастного ряда — берём ряд одной масти снизу; закрытая — только как «куда положить»
+  const index = !up ? -1 : canPick(col, loc.index) ? loc.index : runStart(col);
+  const [x, y] = toLocal(e.clientX, e.clientY);
+  drag = {
+    col: loc.col, from: loc.col, index, node, nodes: index >= 0 ? view.cols[loc.col].slice(index) : [],
+    id: e.pointerId, x, y, moving: false, pickable: up && canPick(col, loc.index),
+  };
   try {
     ui.layer.setPointerCapture(e.pointerId);
   } catch {
@@ -377,11 +460,13 @@ function onPointerDown(e) {
 
 function onPointerMove(e) {
   if (!drag || drag.id !== e.pointerId) return;
-  const dx = e.clientX - drag.x;
-  const dy = e.clientY - drag.y;
+  const [x, y] = toLocal(e.clientX, e.clientY);
+  const dx = x - drag.x;
+  const dy = y - drag.y;
   if (!drag.moving) {
     if (!drag.pickable || Math.hypot(dx, dy) < 7) return;
     drag.moving = true;
+    deselect();
     sfx('pick');
     drag.nodes.forEach((node) => node.classList.add('sp-drag'));
     markTargets(drag.from, drag.index);
@@ -397,10 +482,11 @@ function onPointerUp(e) {
   const d = drag;
   drag = null;
   d.nodes.forEach((node) => node.classList.remove('sp-drag'));
-  markTargets(-1, -1);
   if (d.moving) {
+    markTargets(-1, -1);
     // куда уронили: столбец под серединой взятой карты
-    const cx = d.nodes[0]._x + (e.clientX - d.x) + metrics.W / 2;
+    const [x] = toLocal(e.clientX, e.clientY);
+    const cx = d.nodes[0]._x + (x - d.x) + metrics.W / 2;
     let to = Math.round((cx - metrics.left - metrics.W / 2) / (metrics.W + GAP));
     to = Math.max(0, Math.min(COLUMNS - 1, to));
     if (to !== d.from && canMove(game, d.from, d.index, to)) {
@@ -413,17 +499,38 @@ function onPointerUp(e) {
     layout();
     if (to !== d.from) {
       sfx('illegal');
-      shake(d.nodes[0], { distance: 3, duration: 220 });
+      jiggle(d.nodes[0]);
     }
     return;
   }
-  // касание: лучший столбец для ряда
-  const to = bestTarget(game, d.from, d.index);
-  if (to >= 0) doMove(d.from, d.index, to);
-  else {
-    sfx('illegal');
-    d.nodes.forEach((node) => shake(node, { distance: 3, duration: 240 }));
+  // касание: выбрано что-то — положить в этот столбец; тот же ряд — снять выбор; иначе — выбрать этот ряд
+  if (selected && d.col !== selected.from && dropSelected(d.col)) return;
+  if (selected && d.col === selected.from && (d.index === selected.index || d.index < 0)) {
+    deselect();
+    return;
   }
+  if (d.index >= 0) {
+    select(d.col, d.index);
+    return;
+  }
+  deselect();
+  sfx('illegal');
+  jiggle(d.node);
+}
+
+/** Касание стола мимо карт: выбрано что-то — положить в столбец под пальцем (пустой или ниже карт), иначе снять выбор. */
+function onTablePointer(e) {
+  if (!game || busy || modalActive || e.target.closest?.('.sp-card, button, .sp-modal, .sp-cascade-wrap')) return;
+  if (!selected) return;
+  const [x, y] = toLocal(e.clientX, e.clientY);
+  const Tb = boxOf(ui.table);
+  const col = y >= Tb.y && y <= Tb.y + Tb.h ? columnAt(x) : -1;
+  if (col >= 0 && dropSelected(col)) return;
+  if (col >= 0 && col !== selected.from) {
+    sfx('illegal');
+    view.cols[selected.from].slice(selected.index).forEach(jiggle);
+  }
+  deselect();
 }
 
 function markTargets(from, index) {
@@ -445,6 +552,7 @@ function onHint() {
   if (busy || !game) return;
   const key = JSON.stringify(game.cols.map((c) => c.length)) + game.stock.length + game.moves;
   const list = [...hintMoves(game).map((m) => ({ type: 'move', ...m })), ...(canDeal(game) ? [{ type: 'deal' }] : [])];
+  deselect();
   clearHint();
   if (!list.length) {
     sfx('illegal');
@@ -533,6 +641,52 @@ function startGame({ suits = setup.suits, seed = null } = {}) {
   paintInfo();
 }
 
+// ---------- альбомный вид (как в Bongo Cat) ----------
+
+/**
+ * Альбомная раскладка — если игру повернули кнопкой или экран и так шире, чем выше (телефон боком, окно на ПК):
+ * столбцы шире, колода, кнопки и собранные масти — справа столбиком. Поворот — вся игра на 90° по часовой.
+ */
+function applyOrientation(animated = false) {
+  if (!ui || !host) return;
+  const W = host.clientWidth;
+  const H = host.clientHeight;
+  const wide = W > H;
+  const was = rotated;
+  rotated = settings.rotated && !wide;
+  host.classList.toggle('sp-host-rot', rotated);
+  root.classList.toggle('sp-rot', rotated);
+  root.classList.toggle('sp-land', rotated || wide);
+  if (rotated) {
+    root.style.setProperty('--rot-w', `${H}px`);
+    root.style.setProperty('--rot-h', `${W}px`);
+  }
+  ui.rotateBtn.hidden = wide;
+  ui.rotateBtn.setAttribute('aria-pressed', String(rotated));
+  metrics = null;
+  if (game && view) {
+    measure();
+    layout();
+  }
+  if (animated && was !== rotated && !reducedMotion() && H > 0) {
+    const k = (W / H).toFixed(3);
+    animate(root, rotated
+      ? [{ transform: `translate(-50%, -50%) rotate(0deg) scale(${k})`, opacity: 0.35 }, { transform: 'translate(-50%, -50%) rotate(90deg) scale(1)', opacity: 1 }]
+      : [{ transform: `rotate(90deg) scale(${k})`, opacity: 0.35 }, { transform: 'none', opacity: 1 }],
+    { duration: 480, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' });
+  }
+}
+
+function toggleRotate() {
+  if (busy) return;
+  deselect();
+  settings.rotated = !rotated;
+  api.storage.set('settings', settings);
+  api.platform.haptic.impact('medium');
+  sfx('click');
+  applyOrientation(true);
+}
+
 // ---------- победа: каскад прыгающих карт ----------
 
 function cardImage(c) {
@@ -581,7 +735,7 @@ function win() {
 }
 
 function cascade(done) {
-  const R = root.getBoundingClientRect();
+  const R = { width: root.offsetWidth, height: root.offsetHeight };
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   const canvas = el('canvas', { class: 'sp-cascade' });
   canvas.width = Math.round(R.width * dpr);
@@ -782,6 +936,7 @@ export default {
     settings = {
       skin: SKINS.some((s) => s.id === savedSettings?.skin) ? savedSettings.skin : 'telegram',
       fourColor: savedSettings?.fourColor === true,
+      rotated: savedSettings?.rotated === true,
     };
     const knownSetup = MODES.includes(savedSetup?.suits);
     if (knownSetup) setup = { suits: savedSetup.suits };
@@ -809,11 +964,13 @@ export default {
     ui.slots = Array.from({ length: COLUMNS }, () => el('div', { class: 'sp-slot' }));
     ui.slotLayer = el('div', { class: 'sp-slots' }, ui.slots);
     ui.stock = el('button', { class: 'sp-stock', 'aria-label': 'Раздать', onclick: () => doDeal() }, ui.stockCount);
+    ui.rotateBtn = iconButton(ICONS.rotate, T.rotate, toggleRotate);
     ui.undoBtn = toolButton(ICONS.undo, T.undo, doUndo);
     root = el('div', { class: 'sp' },
       el('div', { class: 'sp-header' },
         el('div', { class: 'sp-head-text' }, el('div', { class: 'sp-title' }, T.title), ui.sub),
         el('div', { class: 'sp-actions' },
+          ui.rotateBtn,
           soundBtn,
           iconButton(ICONS.stats, T.stats, showStats),
           iconButton(ICONS.gear, T.settings, showSettings),
@@ -822,8 +979,10 @@ export default {
       ),
       el('div', { class: 'sp-info' },
         el('span', {}, `${T.score} `, ui.score), el('span', {}, `${T.moves} `, ui.moves), el('span', {}, '⏱ ', ui.time)),
-      ui.table,
-      el('div', { class: 'sp-bar' }, ui.done, ui.undoBtn, toolButton(ICONS.hint, T.hint, onHint), ui.stock),
+      el('div', { class: 'sp-body' },
+        ui.table,
+        el('div', { class: 'sp-bar' }, ui.done, ui.undoBtn, toolButton(ICONS.hint, T.hint, onHint), ui.stock),
+      ),
       ui.slotLayer,
       ui.layer,
       ui.modal,
@@ -831,6 +990,7 @@ export default {
     );
     container.append(root);
     ui.layer.addEventListener('pointerdown', onPointerDown);
+    root.addEventListener('pointerdown', onTablePointer);
     ui.layer.addEventListener('pointermove', onPointerMove);
     ui.layer.addEventListener('pointerup', onPointerUp);
     ui.layer.addEventListener('pointercancel', () => {
@@ -847,11 +1007,10 @@ export default {
     document.addEventListener('keydown', onKeydown);
     resizeObserver = new ResizeObserver(() => {
       if (!game || drag) return;
-      metrics = null;
-      measure();
-      view && layout();
+      applyOrientation(false);
     });
-    resizeObserver.observe(root);
+    resizeObserver.observe(host);
+    applyOrientation(false);
     lastTick = performance.now();
     const tickId = setInterval(tick, 1000);
     timers.add(tickId);
@@ -873,7 +1032,9 @@ export default {
         get busy() { return busy; },
         start: (opts) => { closeModal(); startGame(opts); },
         move: (from, index, to) => doMove(from, index, to),
-        tap: (col, index) => bestTarget(game, col, index),
+        select: (col, index) => select(col, index),
+      get selected() { return selected; },
+      rotate: () => toggleRotate(),
         deal: () => doDeal(),
         undo: () => doUndo(),
         hint: () => onHint(),
@@ -909,11 +1070,13 @@ export default {
     root?.remove();
     if (host) {
       delete host.dataset.skin;
-      host.classList.remove('sp-four');
+      host.classList.remove('sp-four', 'sp-host-rot');
     }
     api = host = root = ui = toast = game = view = metrics = drag = resizeObserver = null;
     busy = false;
     modalActive = false;
+    selected = null;
+    rotated = false;
     hintCycle = { key: '', index: 0 };
   },
 };
