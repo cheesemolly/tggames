@@ -36,17 +36,33 @@ export const account = {
     return Array.isArray(me?.perks) ? me.perks : [];
   },
 
+  /** Нет связи с сервером после попытки входа (shell/login.js) — меню пишет об этом и даёт «Повторить». */
+  offline: false,
+
+  /**
+   * Сколько ждать ответа, мс (0 — сколько угодно, как раньше). Зависший запрос (связь «подвисла» посреди ответа)
+   * иначе держал бы меню без имени и рейтинга до перезапуска. Задаёт оболочка (бета stable-login).
+   */
+  timeoutMs: 0,
+
   async request(path, { method = 'GET', payload = null, keepalive = false } = {}) {
     if (!this.enabled) return { ok: false, error: 'no_init_data' };
     const headers = { Authorization: `tma ${platform.initData}` };
     if (payload) headers['Content-Type'] = 'application/json';
 
+    // отправку при закрытии не обрываем: её и так доводит браузер
+    const limit = keepalive ? 0 : this.timeoutMs;
+    const abort = limit > 0 ? new AbortController() : null;
+    const timer = abort && setTimeout(() => abort.abort(), limit);
     const send = (alive) => fetch(API_URL + path, {
       method,
       headers,
       body: payload ? JSON.stringify(payload) : undefined,
       keepalive: alive,   // отправка при закрытии мини-приложения: браузер доводит запрос до конца
+      signal: abort?.signal,
     });
+    // зависший запрос — та же «нет связи» (все, кто проверяет 'network', так его и поймут), с пометкой timeout
+    const noNetwork = () => (abort?.signal.aborted ? { ok: false, error: 'network', timeout: true } : { ok: false, error: 'network' });
     let response;
     try {
       response = await send(keepalive);
@@ -57,7 +73,8 @@ export const account = {
         if (!keepalive) throw new Error('network');
         response = await send(false);
       } catch {
-        return { ok: false, error: 'network' };
+        clearTimeout(timer);
+        return noNetwork();
       }
     }
 
@@ -65,7 +82,10 @@ export const account = {
     try {
       data = await response.json();
     } catch {
-      // сервер ответил не JSON — ниже это станет ошибкой по коду ответа
+      // сервер ответил не JSON — ниже это станет ошибкой по коду ответа; тело оборвалось по таймауту — нет связи
+      if (abort?.signal.aborted) return noNetwork();
+    } finally {
+      clearTimeout(timer);
     }
     if (!response.ok) return { ok: false, error: data.error ?? 'server', status: response.status, data };
     return { ok: true, data };

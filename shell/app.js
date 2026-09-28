@@ -19,6 +19,7 @@ import { openFeedback } from './feedback.js';
 import { setBetaViewer, seesBeta, feature, inBeta, playerView } from './beta.js';
 import { lockPageScroll } from './no-scroll.js';
 import { finishSplash, SEES_BETA_KEY } from './splash.js';
+import { createLogin } from './login.js';
 
 const root = document.getElementById('app');
 lockPageScroll();
@@ -47,6 +48,8 @@ const visibleGames = () => games.filter((g) => feature(g.id));
 function show(route) {
   session?.close();
   session = null;
+  // вошли посреди партии (shell/login.js) — прогресс подтягивается, когда игрок из неё вышел
+  if (route.name !== 'game' && login) setTimeout(() => login.leftGame()?.catch((err) => console.error(err)), 0);
 
   // Каждый маршрут — новый экран. Если маршрут сменится во время асинхронной отрисовки,
   // старый экран уже отсоединён и дорисуется «в пустоту», не затирая новый.
@@ -139,6 +142,7 @@ function show(route) {
     games: visibleGames(), account, owner: isOwner(), top: feature('leaderboard'),
     topLine: feature('leaderboard-overall') ? async () => overallLine((await account.topSummary()).data) : null,
     feedback: feature('feedback') ? () => openFeedback({ account, toast }) : null,
+    onRetry: login ? () => login.retry() : null,
   })
     .catch((err) => console.error(err));
 }
@@ -178,6 +182,24 @@ function backFrom(route = currentRoute()) {
 }
 
 const redraw = () => show(currentRoute());
+
+// Вход на сервер (shell/login.js) — в бете stable-login; игрокам пока по-старому (ниже).
+const LOGIN_TIMEOUT_MS = 20000;
+let login = null;
+
+/**
+ * Видит ли бету — ещё до ответа сервера (он и скажет, владелец ли это): как у заставки, по отметке с прошлого
+ * запуска (rememberBeta). Иначе новый вход включился бы у владельца только после старого.
+ */
+function stableLogin() {
+  if (!inBeta('stable-login')) return true;
+  if (LOCAL_OWNER) return !playerView();
+  try {
+    return localStorage.getItem(SEES_BETA_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
 
 // Смысл рекорда у части игр изменился — старые числа чистятся один раз (shell/stats.js).
 await migrateStats();
@@ -241,10 +263,24 @@ if (!platform.isDesktop) setTimeout(() => offerFullscreen('запрос при �
 
 // Внутри Telegram вход происходит сам: подпись initData проверяет сервер (platform/account.js).
 // В обычном браузере аккаунтов нет — игра остаётся гостевой, прогресс живёт в браузере.
-if (account.enabled) {
+if (account.enabled && stableLogin()) {
+  // бета stable-login: имя и рейтинг сразу после входа, повторы, запросы не висят дольше LOGIN_TIMEOUT_MS
+  account.timeoutMs = LOGIN_TIMEOUT_MS;
+  login = createLogin({
+    account,
+    sync,
+    inGame: () => currentRoute().name === 'game',
+    redraw: () => {
+      if (account.current) rememberBeta();      // без ответа сервера не знаем, владелец ли, — отметку не трогаем
+      redraw();
+    },
+    onError: (res) => toast.show(message(res.error), 3000),
+  });
+  login.start().catch((err) => console.error(err)).finally(finishSplash);
+} else if (account.enabled) {
   (async () => {
     const res = await account.signIn();
-    rememberBeta();
+    if (res.ok) rememberBeta();                 // без ответа сервера не знаем, владелец ли, — отметку не трогаем
     if (!res.ok) {
       if (res.error !== 'network') toast.show(message(res.error), 3000);
       return;

@@ -350,6 +350,7 @@ h1, h2 { margin: 0 0 8px; line-height: 1.2; }
   border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 18%, transparent);
 }
 .account-name { min-width: 0; font-size: 14px; color: var(--tg-theme-hint-color); overflow-wrap: anywhere; }
+.account-btn-retry:disabled { opacity: 0.6; }
 .account-btn {
   flex: none;
   padding: 6px 14px;
