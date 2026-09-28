@@ -30,6 +30,9 @@ const DIRTY_KEY = 'tggames-sync-dirty';   // есть изменения, кот
 export const KEEPALIVE_LIMIT = 60000;
 // возврат в приложение шлёт и visibilitychange, и Telegram 'activated' — перечитываем один раз
 export const REFRESH_GAP = 1500;
+// Версия синхронизации (server/lib.js SYNC_PROTOCOL): уходит с каждым сохранением при бете 'sync-refresh' — сервер
+// принимает сохранения таких игроков только от клиента, который умеет перезапускать устаревшую игру.
+export const SYNC_PROTOCOL = 2;
 
 export const isEmpty = (data) => !data || Object.keys(data).length === 0;
 
@@ -99,7 +102,7 @@ function writeBase(value) {
  */
 export function createSync({
   account, onMessage = () => {}, delay = SYNC_DELAY, afterRestore = () => {},
-  fresh = () => false, onFresh = (apply) => apply(), log = console,
+  fresh = () => false, onFresh = (apply) => apply(), log = console, refreshGap = REFRESH_GAP,
 }) {
   let timer = null;
   let applying = false;      // мы сами пишем в хранилище — это не повод слать его обратно
@@ -112,6 +115,7 @@ export function createSync({
   let adopting = null;       // идёт приём свежего прогресса
   let queued = null;         // пока принимали, пришёл ещё новее
   let lastRefresh = 0;
+  let refreshing = null;     // перечитывание при возврате: второе, пока идёт первое, не запускаем
   // Прогресс, который точно совпадает с серверным (бета): такой же не отправляем. Иначе каждое сворачивание
   // слало бы всё заново и сдвигало время на сервере — у второго устройства чаще случался бы 409.
   let lastSynced = null;
@@ -143,7 +147,10 @@ export function createSync({
       writeDirty(false);
       return;
     }
-    pushing = account.saveState(data, readBase(), { keepalive: final && data.length < KEEPALIVE_LIMIT })
+    pushing = account.saveState(data, readBase(), {
+      keepalive: final && data.length < KEEPALIVE_LIMIT,
+      sync: fresh() ? SYNC_PROTOCOL : null,
+    })
       .then(async (res) => {
         if (res.ok) {
           writeBase(res.data.updatedAt);
@@ -173,6 +180,10 @@ export function createSync({
         if (res.error === 'network') return;      // сеть моргнула, попробуем со следующим изменением
         if (res.error === 'too_many') {           // сервер пускает сохранения раз в пару секунд — повторим сами
           dirty = true;
+          return;
+        }
+        if (res.error === 'update_required') {    // сервер ждёт новый клиент — этот устарел
+          onMessage('Приложение обновилось — закрой игры и открой заново');
           return;
         }
         if (res.error === 'expired' || res.error === 'bad_signature') {
@@ -262,18 +273,31 @@ export function createSync({
    * Вернулись в приложение (бета 'sync-refresh'): перечитать прогресс. Сервер новее нашего обмена — значит, играли
    * на другом устройстве: принимаем. Не новее — ничего не делаем (неотправленное своё уедет как обычно).
    */
-  async function refresh() {
-    if (!account.current || !fresh() || adopting || pulling) return;
+  function refresh() {
+    if (!account.current || !fresh() || adopting || pulling || refreshing) return Promise.resolve();
     const now = Date.now();
-    if (now - lastRefresh < REFRESH_GAP) return;
+    if (now - lastRefresh < refreshGap) return Promise.resolve();
     lastRefresh = now;
+    refreshing = refreshOnce().finally(() => {
+      refreshing = null;
+    });
+    return refreshing;
+  }
+
+  async function refreshOnce() {
     // своё сохранение может быть в пути: дождёмся, иначе его ответ приняли бы за чужой прогресс
     if (pushing) await pushing;
     const res = await account.fetchState();
+    // нет связи, таймаут, сервер недоступен — ничего не трогаем: игра остаётся как есть, повтора в цикле нет;
+    // проверим снова при следующем возврате, а несохранённое уйдёт при следующем изменении или сворачивании
     if (!res.ok || pushing || adopting || pulling) return;
     const updatedAt = res.data.updatedAt ?? 0;
-    if (updatedAt <= readBase()) return;
-    await adoptServer(res.data.data ?? '{}', updatedAt, 'return');
+    if (updatedAt > readBase()) {
+      await adoptServer(res.data.data ?? '{}', updatedAt, 'return');
+      return;
+    }
+    // сервер не новее, а у нас есть неотправленное (например, пока не было связи) — отправляем сейчас
+    if (readDirty()) await push();
   }
 
   /** Забрать прогресс с сервера (после входа или при открытии страницы). */

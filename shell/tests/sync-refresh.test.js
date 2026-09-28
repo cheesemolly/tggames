@@ -17,7 +17,8 @@ globalThis.localStorage = {
 globalThis.document ??= { visibilityState: 'visible', addEventListener() {}, removeEventListener() {} };
 globalThis.window ??= { addEventListener() {}, removeEventListener() {} };
 
-const { createSync } = await import('../sync.js');
+const { createSync, SYNC_PROTOCOL } = await import('../sync.js');
+const lib = await import('../../server/lib.js');
 const { createStorage } = await import('../../platform/storage.js');
 const { gatedStorage } = await import('../game-host.js');
 
@@ -26,9 +27,11 @@ const LOOP = 'game:loop:current';
 const levelOf = (data) => data[LOOP]?.level;
 
 function fakeServer(level, at = 1000) {
-  const srv = { data: JSON.stringify({ [LOOP]: { level } }), updatedAt: at, levels: [], conflicts: 0, gets: 0, puts: 0, slow: 0 };
-  srv.put = async (data, base) => {
+  const srv = { data: JSON.stringify({ [LOOP]: { level } }), updatedAt: at, levels: [], conflicts: 0, gets: 0, puts: 0, slow: 0, down: false, hang: 0, syncs: [] };
+  srv.put = async (data, base, sync) => {
     srv.puts += 1;
+    srv.syncs.push(sync);
+    if (srv.down) return { ok: false, error: 'network' };
     if (srv.slow) await wait(srv.slow);
     if (typeof base === 'number' && srv.updatedAt > base) {
       srv.conflicts += 1;
@@ -41,6 +44,11 @@ function fakeServer(level, at = 1000) {
   };
   srv.get = async () => {
     srv.gets += 1;
+    if (srv.hang) {                            // запрос висит, потом обрывается по таймауту (account.timeoutMs)
+      await wait(srv.hang);
+      return { ok: false, error: 'network', timeout: true };
+    }
+    if (srv.down) return { ok: false, error: 'network' };
     return { ok: true, data: { data: srv.data, updatedAt: srv.updatedAt } };
   };
   // на ПК прошли уровни — сохранение пришло на сервер с другого устройства
@@ -78,7 +86,7 @@ function fakeGame() {
 }
 
 /** Телефон: на устройстве и на сервере уровень 35, обмен был (base = время сервера). */
-async function phone({ fresh = true, onWindow = null, duringReload = null } = {}) {
+async function phone({ fresh = true, onWindow = null, duringReload = null, refreshGap = 0 } = {}) {
   store.clear();
   const srv = fakeServer(35);
   store.set(`tggames:${LOOP}`, JSON.stringify({ level: 35 }));
@@ -87,10 +95,11 @@ async function phone({ fresh = true, onWindow = null, duringReload = null } = {}
   await game.start();
   const warnings = [];
   const messages = [];
-  const account = { current: { id: 7 }, saveState: (data, base) => srv.put(data, base), fetchState: () => srv.get() };
+  const account = { current: { id: 7 }, saveState: (data, base, opts) => srv.put(data, base, opts?.sync), fetchState: () => srv.get() };
   const sync = createSync({
     account,
     delay: 5,
+    refreshGap,
     fresh: () => fresh,
     onMessage: (text) => messages.push(text),
     log: { warn: (...args) => warnings.push(args), error: () => {} },
@@ -216,5 +225,60 @@ test('одинаковый прогресс не отправляется: св�
   await wait(40);
   assert.equal(srv.puts, 1);
   assert.equal(levelOf(JSON.parse(srv.data)), 61);
+  sync.destroy();
+});
+
+test('версия клиента уходит с сохранением только в бете и совпадает с серверной', async () => {
+  assert.equal(SYNC_PROTOCOL, lib.SYNC_PROTOCOL);
+  const beta = await phone();
+  await beta.game.win();
+  await wait(40);
+  assert.deepEqual(beta.srv.syncs, [SYNC_PROTOCOL]);
+  beta.sync.destroy();
+  const old = await phone({ fresh: false });
+  await old.game.win();
+  await wait(40);
+  assert.deepEqual(old.srv.syncs, [null], 'без беты — как раньше, без версии');
+  old.sync.destroy();
+});
+
+test('нет связи при возврате: игра не перезапускается, локальное цело, повтора нет; связь вернулась — сохранение уходит', async () => {
+  const { srv, game, sync, warnings } = await phone({ refreshGap: 50 });
+  srv.down = true;
+  await sync.refresh();
+  assert.equal(srv.gets, 1);
+  assert.equal(game.reloads, 0, 'игра не перезапущена');
+  assert.equal(game.level, 35);
+  await wait(200);
+  assert.equal(srv.gets, 1, 'сам запрос не повторяется');
+
+  await game.win();                            // играем без связи: 36, сохранение не проходит
+  await wait(40);
+  assert.equal(localLevel(), 36, 'локальное не потеряно');
+  assert.equal(store.get('tggames-sync-dirty'), '1', 'отмечено как неотправленное');
+  assert.equal(levelOf(JSON.parse(srv.data)), 35);
+
+  srv.down = false;                            // связь вернулась — вернулись в приложение
+  await wait(60);
+  await sync.refresh();
+  await wait(20);
+  assert.equal(levelOf(JSON.parse(srv.data)), 36, 'неотправленное ушло');
+  assert.equal(game.reloads, 0);
+  assert.equal(store.get('tggames-sync-dirty'), undefined);
+  assert.equal(warnings.length, 0);
+  sync.destroy();
+});
+
+test('сервер висит (таймаут): перечитывание не запускается второй раз, пока первое не кончилось; игра не трогается', async () => {
+  const { srv, game, sync } = await phone();
+  srv.hang = 80;
+  const first = sync.refresh();
+  await sync.refresh();                        // вернулись ещё раз, пока первый запрос висит
+  await sync.refresh();
+  await first;
+  assert.equal(srv.gets, 1, 'один запрос, без очереди и цикла');
+  assert.equal(game.reloads, 0);
+  assert.equal(game.level, 35);
+  assert.equal(localLevel(), 35);
   sync.destroy();
 });

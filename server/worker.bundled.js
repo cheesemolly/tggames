@@ -258,8 +258,16 @@ function progressLines(state) {
  */
 const SERVER_BETA = [
   // >>> серверная бета
+  'sync-refresh',
   // <<< конец серверной беты
 ];
+
+/**
+ * Версия синхронизации клиента (shell/sync.js SYNC_PROTOCOL). 2 — клиент перечитывает прогресс при возврате и
+ * перезапускает устаревшую игру (бета 'sync-refresh'). Сохранения тех, кому она открыта, принимаются только от
+ * такого клиента: старый (закэшированный или висящий в памяти свёрнутого мини-приложения) откатил бы прогресс.
+ */
+const SYNC_PROTOCOL = 2;
 
 // ---------- приветствие (/start) ----------
 
@@ -676,7 +684,7 @@ export default {
         }, 200, origin);
       }
       if (path === '/state' && request.method === 'GET') return await getState(env, player, origin);
-      if (path === '/state' && request.method === 'PUT') return await putState(request, env, player, user, origin);
+      if (path === '/state' && request.method === 'PUT') return await putState(request, env, player, user, origin, admin);
       if (path === '/top' || path.startsWith('/top/')) return await topRoutes(request, env, path, player, admin, origin);
       if (path === '/report' && request.method === 'POST') {
         if (!betaOpen('feedback', admin) && !(await isTester(env, player.id))) return fail('not_found', 404, origin);
@@ -752,8 +760,14 @@ async function getState(env, player, origin) {
   return json({ data: row?.data ?? '{}', updatedAt: row?.updated_at ?? 0 }, 200, origin);
 }
 
-async function putState(request, env, player, user, origin) {
-  const { data, base } = await body(request);
+async function putState(request, env, player, user, origin, admin = false) {
+  const { data, base, sync } = await body(request);
+  // бета 'sync-refresh': у того, кому она открыта, сохранение принимается только от нового клиента (sync: 2) —
+  // старый после 409 отправил бы уровень из памяти игры и откатил прогресс. Ему отказ: прогресс остаётся на
+  // устройстве, после перезапуска приложения уйдёт уже новым клиентом. Тестера спрашиваем, только если sync нет.
+  if (sync !== SYNC_PROTOCOL && betaOpen('sync-refresh', admin || await isTester(env, player.id))) {
+    return fail('update_required', 426, origin);
+  }
   const bad = validateState(data);
   if (bad) return fail(bad, 400, origin);
 

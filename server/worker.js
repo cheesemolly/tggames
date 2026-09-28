@@ -41,7 +41,7 @@
 import {
   checkInitData, timingSafeEqual, validateState, parseAdminIds, isAdmin, displayName,
   publicGames, findGames, startAppLink, progressLines, shiftEntities, GAMES, BOARDS, boardScores, boardName,
-  PERKS, isPerk, SERVER_BETA, overallPoints, overallRanking, withoutUsers, parseUsername, matchPlayers, REPORT_MAX, REPORT_PER_HOUR, reportMessage, START_TEXT, WELCOME_TEXT, WELCOME_MEDIA,
+  PERKS, isPerk, SERVER_BETA, SYNC_PROTOCOL, overallPoints, overallRanking, withoutUsers, parseUsername, matchPlayers, REPORT_MAX, REPORT_PER_HOUR, reportMessage, START_TEXT, WELCOME_TEXT, WELCOME_MEDIA,
 } from './lib.js';
 
 // Кто может обращаться к обработчику. Свой домен — чтобы чужой сайт не ходил в него от имени игрока.
@@ -108,7 +108,7 @@ export default {
         }, 200, origin);
       }
       if (path === '/state' && request.method === 'GET') return await getState(env, player, origin);
-      if (path === '/state' && request.method === 'PUT') return await putState(request, env, player, user, origin);
+      if (path === '/state' && request.method === 'PUT') return await putState(request, env, player, user, origin, admin);
       if (path === '/top' || path.startsWith('/top/')) return await topRoutes(request, env, path, player, admin, origin);
       if (path === '/report' && request.method === 'POST') {
         if (!betaOpen('feedback', admin) && !(await isTester(env, player.id))) return fail('not_found', 404, origin);
@@ -184,8 +184,14 @@ async function getState(env, player, origin) {
   return json({ data: row?.data ?? '{}', updatedAt: row?.updated_at ?? 0 }, 200, origin);
 }
 
-async function putState(request, env, player, user, origin) {
-  const { data, base } = await body(request);
+async function putState(request, env, player, user, origin, admin = false) {
+  const { data, base, sync } = await body(request);
+  // бета 'sync-refresh': у того, кому она открыта, сохранение принимается только от нового клиента (sync: 2) —
+  // старый после 409 отправил бы уровень из памяти игры и откатил прогресс. Ему отказ: прогресс остаётся на
+  // устройстве, после перезапуска приложения уйдёт уже новым клиентом. Тестера спрашиваем, только если sync нет.
+  if (sync !== SYNC_PROTOCOL && betaOpen('sync-refresh', admin || await isTester(env, player.id))) {
+    return fail('update_required', 426, origin);
+  }
   const bad = validateState(data);
   if (bad) return fail(bad, 400, origin);
 

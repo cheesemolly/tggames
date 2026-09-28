@@ -41,7 +41,7 @@ const sync = createSync({
   onMessage: (text) => toast.show(text, 2600),
   afterRestore: migrateStats,      // серверный прогресс может быть ещё со старыми рекордами
   // бета sync-refresh: прогресс с другого устройства принимается через перезапуск открытой игры (adoptFresh)
-  fresh: () => feature('sync-refresh'),
+  fresh: () => syncBeta(),
   onFresh: (apply) => adoptFresh(apply),
 });
 
@@ -54,6 +54,15 @@ const isOwner = () => account.isAdmin || LOCAL_OWNER;
 // «Смотреть как игрок». Панель игроков — только владельцу (isAdmin; её и так закрывает сервер).
 const isTester = () => isOwner() || account.beta;
 setBetaViewer(() => isTester() && !playerView());
+
+/**
+ * Бета sync-refresh — по аккаунту, а не по устройству: «Смотреть как игрок» её не выключает. Иначе на одном устройстве
+ * работал бы новый клиент, а на другом — старый, и старый снова откатывал бы прогресс. Сервер (server/worker.js)
+ * тоже принимает сохранения таких игроков только от нового клиента — это закрывает и закэшированный старый код.
+ */
+function syncBeta() {
+  return !inBeta('sync-refresh') || isOwner() || account.beta;
+}
 
 /** Игры, которые видит этот игрок: игры из беты — только владельцу. */
 const visibleGames = () => games.filter((g) => feature(g.id));
@@ -84,7 +93,7 @@ function show(route) {
     platform.backButton.show();
     if (nuiOn()) noteOpened(entry.id).catch(() => {});    // «Сначала недавние» и баннер «Продолжить»
     // «Назад» из игры возвращает в её папку, а не на главную.
-    session = openGame(screen, entry, { platform, beta: seesBeta(), feature, perk: hasPerk, onExit: () => backFrom(route) });
+    session = openGame(screen, entry, { platform, beta: seesBeta(), feature, perk: hasPerk, fresh: syncBeta, onExit: () => backFrom(route) });
     return;
   }
 

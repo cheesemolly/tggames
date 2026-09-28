@@ -656,8 +656,9 @@ test('заблокированный игрок не может писать о�
 
 // ---------- рейтинг ----------
 
+// сохраняет новый клиент (sync: 2) — после релиза беты sync-refresh сервер других не принимает
 const save = (env, initData, state) => call(env, '/state', {
-  method: 'PUT', initData, payload: { data: JSON.stringify(state), base: Number.MAX_SAFE_INTEGER },
+  method: 'PUT', initData, payload: { data: JSON.stringify(state), base: Number.MAX_SAFE_INTEGER, sync: 2 },
 });
 
 test('рейтинг: места по очкам, при равенстве — кто раньше; в ответе только имя, без id и ника', async () => {
@@ -983,6 +984,44 @@ test('бета-тестер: видит бету (игры в рейтинге, 
     assert.equal(back.data.beta, false, 'удалённый игрок заводится заново — уже не тестер');
   } finally {
     delete entry.beta;
+    lib.SERVER_BETA.splice(0, lib.SERVER_BETA.length, ...wasBeta);
+  }
+});
+
+// ---------- бета sync-refresh: сохранения — только от нового клиента ----------
+
+test('бета sync-refresh: у владельца и тестера сохранение принимается только от нового клиента, у игрока — любое; после релиза — у всех', async () => {
+  const lib = await import('../lib.js');
+  const wasBeta = [...lib.SERVER_BETA];
+  lib.SERVER_BETA.splice(0, lib.SERVER_BETA.length, 'sync-refresh');
+  try {
+    const env = createEnv();
+    const masha = await asUser(USER);
+    const owner = await asUser(ADMIN);
+    const put = (initData, data, sync) => call(env, '/state', {
+      method: 'PUT', initData, payload: { data: JSON.stringify(data), base: Number.MAX_SAFE_INTEGER, ...(sync ? { sync } : {}) },
+    });
+    const state = async (initData) => JSON.parse((await call(env, '/state', { initData })).data.data);
+
+    assert.equal((await put(masha, { a: 1 })).status, 200, 'игрок без беты — старый клиент, как раньше');
+    const old = await put(owner, { level: 35 });
+    assert.equal(old.status, 426, 'владелец (видит бету) со старым клиентом — отказ');
+    assert.equal(old.data.error, 'update_required');
+    assert.deepEqual(await state(owner), {}, 'старый клиент ничего не записал');
+    assert.equal((await put(owner, { level: 60 }, lib.SYNC_PROTOCOL)).status, 200, 'новый клиент — принят');
+    assert.equal((await put(owner, { level: 35 })).status, 426, 'и потом старый не откатит');
+    assert.deepEqual(await state(owner), { level: 60 });
+
+    const id = (await call(env, '/me', { initData: masha })).data.id;
+    await call(env, `/admin/player/${id}/tester`, { method: 'POST', initData: owner, payload: { on: true } });
+    assert.equal((await put(masha, { a: 2 })).status, 426, 'тестер со старым клиентом — отказ');
+    assert.equal((await put(masha, { a: 3 }, lib.SYNC_PROTOCOL)).status, 200);
+
+    lib.SERVER_BETA.splice(0, lib.SERVER_BETA.length);           // релиз
+    await call(env, `/admin/player/${id}/tester`, { method: 'POST', initData: owner, payload: { on: false } });
+    assert.equal((await put(masha, { a: 4 })).status, 426, 'после релиза старый клиент не пишет ни у кого');
+    assert.equal((await put(masha, { a: 5 }, lib.SYNC_PROTOCOL)).status, 200);
+  } finally {
     lib.SERVER_BETA.splice(0, lib.SERVER_BETA.length, ...wasBeta);
   }
 });

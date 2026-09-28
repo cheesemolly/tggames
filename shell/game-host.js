@@ -34,7 +34,9 @@ export function gatedStorage(storage, allowed) {
   };
 }
 
-export function openGame(container, entry, { platform, onExit, beta = false, feature = () => true, perk = () => false }) {
+export function openGame(container, entry, {
+  platform, onExit, beta = false, feature = () => true, perk = () => false, fresh = () => false,
+}) {
   const gameStorage = createStorage(`game:${entry.id}`);
   let game = null;
   let scoped = null;
@@ -45,7 +47,7 @@ export function openGame(container, entry, { platform, onExit, beta = false, fea
   // Бета sync-refresh: партия не изменилась — при сворачивании не пересохраняем (менялось бы только время игры).
   // Иначе устройство, которое просто свернули, сдвигало бы прогресс на сервере, а второе устройство, где в это
   // время играют, получало бы 409 и теряло свой несохранённый ход.
-  const quiet = () => Boolean(feature('sync-refresh'));
+  const quiet = () => Boolean(fresh());
   let savedJson = null;
   let finished = false;
   let closed = false;

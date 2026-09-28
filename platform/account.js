@@ -50,13 +50,16 @@ export const account = {
    */
   timeoutMs: 0,
 
-  async request(path, { method = 'GET', payload = null, keepalive = false } = {}) {
+  // bounded — и отправку при уходе (keepalive) обрывать по таймауту (бета sync-refresh): приложение свернули, а не
+  // закрыли — зависшая отправка иначе держала бы все следующие сохранения и перечитывание. Если страницу закрывают,
+  // таймер уже не сработает, и браузер доведёт запрос до конца, как раньше.
+  async request(path, { method = 'GET', payload = null, keepalive = false, bounded = false } = {}) {
     if (!this.enabled) return { ok: false, error: 'no_init_data' };
     const headers = { Authorization: `tma ${platform.initData}` };
     if (payload) headers['Content-Type'] = 'application/json';
 
     // отправку при закрытии не обрываем: её и так доводит браузер
-    const limit = keepalive ? 0 : this.timeoutMs;
+    const limit = keepalive && !bounded ? 0 : this.timeoutMs;
     const abort = limit > 0 ? new AbortController() : null;
     const timer = abort && setTimeout(() => abort.abort(), limit);
     const send = (alive) => fetch(API_URL + path, {
@@ -107,8 +110,9 @@ export const account = {
     return this.request('/state');
   },
 
-  saveState(data, base, { keepalive = false } = {}) {
-    return this.request('/state', { method: 'PUT', payload: { data, base }, keepalive });
+  /** sync — версия синхронизации клиента (shell/sync.js SYNC_PROTOCOL), у тех, кому открыта бета sync-refresh. */
+  saveState(data, base, { keepalive = false, sync = null } = {}) {
+    return this.request('/state', { method: 'PUT', payload: sync ? { data, base, sync } : { data, base }, keepalive, bounded: Boolean(sync) });
   },
 
   /** Обратная связь (как /report в боте): отзыв сразу приходит владельцу. */
