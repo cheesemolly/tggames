@@ -17,6 +17,8 @@
 //   setChrome(color | null)    — цвет шапки и фона Telegram вокруг мини-приложения (null — цвета темы)
 //   setHaptics(on)             — общий выключатель вибрации (игры зовут haptic как раньше)
 //   openLink(url), openTelegramLink(url) — ссылка наружу / в Telegram (бот, канал)
+//   onActivated(cb) — мини-приложение снова на экране (Telegram 'activated', Bot API 8.0; вне Telegram — нет:
+//                     там хватает visibilitychange). Для перечитывания прогресса (бета 'sync-refresh').
 
 import { el, loadCss } from '../shared/dom.js';
 import { isMobilePlatform } from './device.js';
@@ -104,6 +106,13 @@ function createTelegramPlatform(tg) {
         tg.openTelegramLink(url);
       } catch {
         window.open(url, '_blank', 'noopener');
+      }
+    },
+    onActivated(cb) {
+      try {
+        tg.onEvent?.('activated', cb);
+      } catch {
+        // старый клиент — остаётся visibilitychange
       }
     },
 
@@ -266,6 +275,7 @@ function createBrowserPlatform() {
     setHaptics: (on) => log('setHaptics', on),
     openLink: (url) => window.open(url, '_blank', 'noopener'),
     openTelegramLink: (url) => window.open(url, '_blank', 'noopener'),
+    onActivated: () => {},
     lockSwipes: () => log('lockSwipes()'),
     fullscreen: {
       supported: false,

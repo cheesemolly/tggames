@@ -5,6 +5,10 @@
 //   уход / сворачивание → getState(); не null — партия сохраняется, null — сохранение стирается
 //   api.finish()  → сохранение стирается, результат пишется в статистику, показывается экран результата
 //   закрытие      → destroy(), оболочка снимает обработчики MainButton и прячет её
+//   устарела      → markStale(): с сервера пришёл прогресс новее (другое устройство, бета 'sync-refresh') —
+//                   всё, что эта сессия игры сохранит дальше, отбрасывается; reload() — запустить игру заново
+//                   уже со свежим сохранением. Иначе старое состояние из памяти игры (её destroy() и getState()
+//                   тоже сохраняют) снова уехало бы на сервер и откатило прогресс.
 
 import { el, loadCss } from '../shared/dom.js';
 import { formatDuration } from '../shared/format.js';
@@ -21,12 +25,28 @@ const EYE_ICON = `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="t
 const EYE_OFF_ICON = `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="currentColor"><path d="${EYE_PATH}"/>`
   + '<path d="M3 4.5 4.5 3l16.5 16.5-1.5 1.5Z"/></svg>';
 
+/** Хранилище игры, которое молчит, пока allowed() ложно (сессия устарела): запись просто не происходит. */
+export function gatedStorage(storage, allowed) {
+  return {
+    get: (key) => storage.get(key),
+    set: (key, value) => (allowed() ? storage.set(key, value) : Promise.resolve()),
+    remove: (key) => (allowed() ? storage.remove(key) : Promise.resolve()),
+  };
+}
+
 export function openGame(container, entry, { platform, onExit, beta = false, feature = () => true, perk = () => false }) {
   const gameStorage = createStorage(`game:${entry.id}`);
   let game = null;
   let scoped = null;
   let cssLink = null;
-  let run = 0;          // номер запуска: finish() от прошлого запуска игнорируется
+  let run = 0;          // номер запуска (поколение сессии): finish() от прошлого запуска игнорируется
+  let staleBefore = 0;  // запуски с номером не больше этого устарели — их сохранения отбрасываются
+  const live = (r) => r > staleBefore;
+  // Бета sync-refresh: партия не изменилась — при сворачивании не пересохраняем (менялось бы только время игры).
+  // Иначе устройство, которое просто свернули, сдвигало бы прогресс на сервере, а второе устройство, где в это
+  // время играют, получало бы 409 и теряло свой несохранённый ход.
+  const quiet = () => Boolean(feature('sync-refresh'));
+  let savedJson = null;
   let finished = false;
   let closed = false;
   let startedAt = 0;
@@ -39,7 +59,19 @@ export function openGame(container, entry, { platform, onExit, beta = false, fea
 
   start().catch(showError);
 
-  return { close };
+  return {
+    close,
+    /** Прогресс на сервере новее: всё, что эта сессия сохранит дальше, отбрасывается. */
+    markStale() {
+      staleBefore = run;
+    },
+    /** Запустить игру заново со свежим сохранением (после markStale и замены прогресса). */
+    reload() {
+      if (closed) return Promise.resolve();
+      teardown();
+      return start().catch(showError);
+    },
+  };
 
   async function start() {
     const thisRun = ++run;
@@ -56,6 +88,7 @@ export function openGame(container, entry, { platform, onExit, beta = false, fea
     game = candidate;
     finished = false;
     elapsedBefore = save?.elapsedMs ?? 0;
+    savedJson = save ? JSON.stringify(save.state) : null;
     startedAt = performance.now();
     scoped = createScopedPlatform(platform);
 
@@ -64,7 +97,7 @@ export function openGame(container, entry, { platform, onExit, beta = false, fea
 
     await game.init(gameRoot, {
       platform: scoped.api,
-      storage: gameStorage,
+      storage: gatedStorage(gameStorage, () => live(thisRun)),
       savedState: save?.state ?? null,
       // true, если игрок видит бету (владелец); новое в игре лучше спрашивать по id — api.feature('<id>'):
       // так релиз (очистка shell/beta.js) включает его всем без правки игры
@@ -73,17 +106,17 @@ export function openGame(container, entry, { platform, onExit, beta = false, fea
       // особый скин, выданный владельцем этому игроку (shell/perks.js)
       perk: (id) => Boolean(perk(id)),
       finish: (result) => {
-        if (thisRun === run) onFinish(result).catch(showError);
+        if (thisRun === run && live(thisRun)) onFinish(result).catch(showError);
       },
       // Короткая строка для меню («Уровень 14») — у игр с уровнями партии и победы ничего не говорят.
       progress: (text) => {
-        if (thisRun === run) progress.set(entry.id, text);
+        if (thisRun === run && live(thisRun)) progress.set(entry.id, text);
       },
     });
   }
 
   async function onFinish(result) {
-    if (finished || closed || !game) return;
+    if (finished || closed || !game || !live(run)) return;
     finished = true;
     const full = normalizeResult(result);
     await saves.remove(entry.id);
@@ -161,15 +194,22 @@ export function openGame(container, entry, { platform, onExit, beta = false, fea
   }
 
   function saveProgress() {
-    if (!game || finished) return;
+    if (!game || finished || !live(run)) return;   // устаревшая сессия: getState() тоже сохраняет — не зовём
     let state = null;
     try {
       state = game.getState();
     } catch (err) {
       console.error(`Игра "${entry.id}": getState() упал`, err);
     }
-    if (state == null) saves.remove(entry.id);
-    else saves.set(entry.id, { state, elapsedMs: elapsed() });
+    if (state == null) {
+      if (!quiet() || savedJson !== null) saves.remove(entry.id);
+      savedJson = null;
+      return;
+    }
+    const json = JSON.stringify(state);
+    if (quiet() && json === savedJson) return;
+    savedJson = json;
+    saves.set(entry.id, { state, elapsedMs: elapsed() });
   }
 
   function elapsed() {

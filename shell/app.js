@@ -40,6 +40,9 @@ const sync = createSync({
   account,
   onMessage: (text) => toast.show(text, 2600),
   afterRestore: migrateStats,      // серверный прогресс может быть ещё со старыми рекордами
+  // бета sync-refresh: прогресс с другого устройства принимается через перезапуск открытой игры (adoptFresh)
+  fresh: () => feature('sync-refresh'),
+  onFresh: (apply) => adoptFresh(apply),
 });
 
 // Владелец — по /me (решает сервер). Для проверки на локальном сервере — ещё ?owner в адресе:
@@ -216,6 +219,29 @@ function backFrom(route = currentRoute()) {
 }
 
 const redraw = () => show(currentRoute());
+
+/**
+ * На сервере прогресс новее (играли на другом устройстве; бета sync-refresh). Порядок важен: сначала открытая игра
+ * помечается устаревшей — всё, что она сохранит дальше (в том числе в destroy()), отбрасывается; потом прогресс
+ * ложится в хранилище (apply); потом игра перезапускается уже с ним. Только после этого sync сдвигает отметку обмена.
+ * На экранах меню — просто перерисовка; панель и «Бета» не трогаем (там могут что-то набирать).
+ */
+async function adoptFresh(apply) {
+  const game = session;                           // открытая игра или null
+  game?.markStale();
+  await apply();
+  if (game && session === game) await game.reload();
+  else if (['menu', 'folder', 'games', 'profile', 'top'].includes(currentRoute().name)) redraw();
+  toast.show('Прогресс обновлён с другого устройства', 2600);
+}
+
+// Вернулись в приложение — перечитать прогресс (бета sync-refresh; sync.refresh сам проверяет флаг и не
+// спрашивает сервер дважды, когда приходят оба события)
+const onReturn = () => sync.refresh().catch((err) => console.error(err));
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') onReturn();
+});
+platform.onActivated(onReturn);
 
 // ---------- новый интерфейс (в бете 'new-ui') ----------
 
