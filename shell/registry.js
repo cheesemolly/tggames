@@ -163,4 +163,12 @@ export const games = [
     css: new URL('../games/klondike/game.css', import.meta.url),
     menu: { best: false },                               // «Сыграно · Побед» — очков нет, рекорд — победы
   },
+  {
+    id: 'pinball',
+    title: 'Пинбол',
+    load: () => import('../games/pinball/index.js'),
+    css: new URL('../games/pinball/game.css', import.meta.url),
+    // «Сыграно · Рекорд: 1 234 500 · Звание: Капитан» — победы в пинболе нет
+    menu: { wins: false, progress: 'append', bestValue: (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') },
+  },
 ];

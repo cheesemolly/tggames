@@ -46,6 +46,9 @@ export const GAME_ICONS = {
     + '<circle cx="15.4" cy="15.4" r="2.4"/><path d="M3 12h18" opacity="0.35"/>'),
 
   // Аркады
+  pinball: svg('<circle cx="12" cy="8" r="3.2" fill="currentColor" stroke="none"/>'
+    + '<path d="M3.5 15.5l6 3"/><path d="M20.5 15.5l-6 3"/><path d="M3.5 21.5h17" opacity="0.4"/>'
+    + '<path d="M16.5 3.8a6.5 6.5 0 0 1 1.9 4.2" opacity="0.5"/>'),
   'flappy-burger': svg('<path d="M4 9.5c0-3 3.6-5 8-5s8 2 8 5z"/><path d="M4.5 12.6h15"/>'
     + '<path d="M4 16h16c0 2-1.4 3.4-3.2 3.4H7.2C5.4 19.4 4 18 4 16z"/>'),
   snake: svg('<path d="M4 18.5h9.5a3 3 0 0 0 0-6H9a3 3 0 0 1 0-6h7.5"/><circle cx="18.5" cy="6.5" r="2.4" fill="currentColor" stroke="none"/>'

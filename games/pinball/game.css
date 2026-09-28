@@ -1,0 +1,311 @@
+/* Пинбол. Стол — тёмная «космическая» сцена со своими цветами (как Flappy Burger и «Три в ряд»): одинаково в обеих
+   темах; скин стола меняет палитру холста и акценты панели (data-skin). Окна — карточки в цветах темы Telegram. */
+
+.game-root[data-game="pinball"] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+}
+
+[data-game="pinball"] .pb {
+  --pb-bg: #07061a;
+  --pb-panel: rgba(20, 16, 51, 0.82);
+  --pb-line: rgba(155, 107, 255, 0.35);
+  --pb-cyan: #3de8ff;
+  --pb-pink: #ff4fd8;
+  --pb-gold: #ffd166;
+  --pb-red: #ff5a7a;
+  --pb-text: #eef0ff;
+  --pb-hint: rgba(238, 240, 255, 0.6);
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--pb-text);
+  background: radial-gradient(120% 70% at 50% 0%, #1a1440 0%, var(--pb-bg) 60%);
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+[data-game="pinball"] .pb[data-skin="aurora"] { --pb-bg: #03121a; --pb-panel: rgba(8, 38, 46, 0.82); --pb-line: rgba(47, 214, 196, 0.35); --pb-cyan: #7cf5ff; --pb-pink: #b18cff; --pb-gold: #fff08a; }
+[data-game="pinball"] .pb[data-skin="sunset"] { --pb-bg: #1a0712; --pb-panel: rgba(51, 16, 31, 0.82); --pb-line: rgba(255, 138, 92, 0.35); --pb-cyan: #ffb85c; --pb-pink: #ff3d8b; --pb-gold: #ffe08a; }
+[data-game="pinball"] .pb[data-skin="classic"] { --pb-bg: #040a24; --pb-panel: rgba(10, 26, 74, 0.82); --pb-line: rgba(159, 180, 255, 0.35); --pb-cyan: #59d9ff; --pb-pink: #ff3d3d; --pb-gold: #ffd23d; }
+
+/* ---------- панель ---------- */
+
+[data-game="pinball"] .pb-hud {
+  flex: none;
+  display: grid;
+  gap: 6px;
+  padding: 8px 12px 6px;
+  background: linear-gradient(180deg, var(--pb-panel), transparent);
+  border-bottom: 1px solid var(--pb-line);
+}
+[data-game="pinball"] .pb-hud-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+[data-game="pinball"] .pb-score-box { min-width: 0; }
+[data-game="pinball"] .pb-score {
+  font: 800 26px/1.05 system-ui, "Segoe UI", sans-serif;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  color: #fff;
+  text-shadow: 0 0 12px color-mix(in srgb, var(--pb-cyan) 70%, transparent), 0 0 2px var(--pb-cyan);
+}
+[data-game="pinball"] .pb-sub { display: flex; align-items: center; gap: 8px; margin-top: 3px; font-size: 12px; color: var(--pb-hint); min-width: 0; }
+[data-game="pinball"] .pb-balls { display: flex; align-items: center; gap: 4px; }
+[data-game="pinball"] .pb-balls i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+}
+[data-game="pinball"] .pb-balls i.pb-on { background: radial-gradient(circle at 35% 30%, #fff, #9aa2d4 60%, #3a3d63); box-shadow: 0 0 6px color-mix(in srgb, var(--pb-cyan) 60%, transparent); }
+[data-game="pinball"] .pb-balls b { font-size: 11px; color: var(--pb-gold); }
+[data-game="pinball"] .pb-rank { font-weight: 700; color: var(--pb-gold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+[data-game="pinball"] .pb-mult {
+  padding: 0 6px;
+  border-radius: 6px;
+  font-weight: 800;
+  color: var(--pb-hint);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  transition: color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+[data-game="pinball"] .pb-mult.pb-on { color: #fff; border-color: var(--pb-cyan); box-shadow: 0 0 8px color-mix(in srgb, var(--pb-cyan) 60%, transparent); }
+[data-game="pinball"] .pb-btns { display: flex; gap: 6px; flex: none; }
+[data-game="pinball"] .pb-icon-btn {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.07);
+  color: inherit;
+  font: inherit;
+  font-size: 18px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+[data-game="pinball"] .pb-icon-btn:active { transform: scale(0.93); }
+
+[data-game="pinball"] .pb-hud-bottom { display: flex; align-items: center; gap: 10px; min-width: 0; }
+[data-game="pinball"] .pb-mission {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  padding: 4px 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.25);
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+[data-game="pinball"] .pb-mission.pb-active { border-color: color-mix(in srgb, #4dffb5 70%, transparent); box-shadow: 0 0 10px rgba(77, 255, 181, 0.25) inset; }
+[data-game="pinball"] .pb-mission b { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+[data-game="pinball"] .pb-mission span { font-size: 11px; color: var(--pb-hint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+[data-game="pinball"] .pb-fuel-box { flex: none; display: grid; justify-items: end; gap: 3px; font-size: 10px; color: var(--pb-hint); text-transform: uppercase; letter-spacing: 0.06em; }
+[data-game="pinball"] .pb-fuel { display: flex; gap: 3px; }
+[data-game="pinball"] .pb-fuel i { width: 9px; height: 14px; border-radius: 3px; background: rgba(255, 255, 255, 0.1); transition: background 0.3s ease, box-shadow 0.3s ease; }
+[data-game="pinball"] .pb-fuel i.pb-on { background: var(--pb-gold); box-shadow: 0 0 6px color-mix(in srgb, var(--pb-gold) 70%, transparent); }
+[data-game="pinball"] .pb-fuel i.pb-low { background: var(--pb-red); animation: pb-blink 0.6s ease-in-out infinite alternate; }
+@keyframes pb-blink { to { opacity: 0.35; } }
+
+/* ---------- стол ---------- */
+
+[data-game="pinball"] .pb-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  touch-action: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+[data-game="pinball"] .pb-canvas { display: block; border-radius: 6px; }
+
+[data-game="pinball"] .pb-callout {
+  position: absolute;
+  top: 17%;
+  left: 50%;
+  width: min(var(--pb-w, 360px), 100%);
+  padding: 0 14px;
+  box-sizing: border-box;
+  transform: translate(-50%, 0) scale(0.7);
+  opacity: 0;
+  text-align: center;
+  font: 800 17px/1.2 system-ui, "Segoe UI", sans-serif;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #fff;
+  text-shadow: 0 0 10px var(--pb-cyan), 0 0 22px color-mix(in srgb, var(--pb-cyan) 60%, transparent), 0 2px 0 rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+  overflow-wrap: anywhere;
+}
+[data-game="pinball"] .pb-callout.pb-big {
+  font-size: 22px;
+  color: #fff8e1;
+  text-shadow: 0 0 10px var(--pb-gold), 0 0 26px color-mix(in srgb, var(--pb-pink) 70%, transparent), 0 2px 0 rgba(0, 0, 0, 0.6);
+}
+[data-game="pinball"] .pb-callout.pb-on { animation: pb-callout 1.05s cubic-bezier(0.2, 0.9, 0.3, 1.2) both; }
+[data-game="pinball"] .pb-callout.pb-big.pb-on { animation-duration: 1.5s; }
+@keyframes pb-callout {
+  0% { opacity: 0; transform: translate(-50%, 10px) scale(0.6); letter-spacing: 0.3em; }
+  14% { opacity: 1; transform: translate(-50%, 0) scale(1.06); letter-spacing: 0.05em; }
+  24% { transform: translate(-50%, 0) scale(1); }
+  82% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -12px) scale(0.96); }
+}
+
+[data-game="pinball"] .pb-hint {
+  position: absolute;
+  bottom: 27%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: min(300px, calc(100% - 32px));
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(7, 6, 26, 0.78);
+  border: 1px solid var(--pb-line);
+  font-size: 12px;
+  color: var(--pb-text);
+  text-align: center;
+  pointer-events: none;
+  transition: opacity 0.5s ease;
+  animation: pb-hint 1.4s ease-in-out infinite alternate;
+}
+[data-game="pinball"] .pb-hint.pb-gone { opacity: 0; animation: none; }
+@keyframes pb-hint { to { border-color: var(--pb-cyan); } }
+
+/* широкий экран (компьютер, телефон боком): панель справа от стола */
+[data-game="pinball"] .pb.pb-wide { flex-direction: row-reverse; }
+[data-game="pinball"] .pb.pb-wide .pb-hud {
+  width: min(280px, 34%);
+  align-content: start;
+  gap: 14px;
+  padding: 16px;
+  border-bottom: 0;
+  border-left: 1px solid var(--pb-line);
+  background: linear-gradient(90deg, transparent, var(--pb-panel));
+}
+[data-game="pinball"] .pb.pb-wide .pb-hud-top { flex-direction: column; align-items: stretch; }
+[data-game="pinball"] .pb.pb-wide .pb-btns { justify-content: flex-end; order: -1; }
+[data-game="pinball"] .pb.pb-wide .pb-score { font-size: 32px; }
+[data-game="pinball"] .pb.pb-wide .pb-sub { flex-wrap: wrap; }
+[data-game="pinball"] .pb.pb-wide .pb-hud-bottom { flex-direction: column; align-items: stretch; }
+[data-game="pinball"] .pb.pb-wide .pb-mission b { white-space: normal; }
+[data-game="pinball"] .pb.pb-wide .pb-mission span { white-space: normal; }
+[data-game="pinball"] .pb.pb-wide .pb-fuel-box { justify-items: start; }
+
+/* ---------- окна ---------- */
+
+[data-game="pinball"] .pb-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 7;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  background: rgba(3, 2, 12, 0.6);
+}
+[data-game="pinball"] .pb-dialog {
+  width: min(380px, 100%);
+  max-height: 100%;
+  overflow: auto;
+  padding: 16px;
+  border-radius: 18px;
+  background: var(--tg-theme-bg-color);
+  color: var(--tg-theme-text-color);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+}
+[data-game="pinball"] .pb-dialog-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+[data-game="pinball"] .pb-dialog h2 { margin: 0; font-size: 20px; }
+[data-game="pinball"] .pb-dialog .pb-icon-btn { border-color: transparent; background: var(--tg-theme-secondary-bg-color); color: var(--tg-theme-text-color); width: 34px; height: 34px; }
+[data-game="pinball"] .pb-section { margin: 16px 0 8px; font-size: 13px; font-weight: 700; color: var(--tg-theme-hint-color); text-transform: uppercase; letter-spacing: 0.04em; }
+[data-game="pinball"] .pb-menu { display: grid; gap: 8px; }
+[data-game="pinball"] .pb-row2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+[data-game="pinball"] .pb-wide-btn { width: 100%; }
+[data-game="pinball"] .pb-dialog .btn { background: var(--tg-theme-button-color); color: var(--tg-theme-button-text-color); }
+[data-game="pinball"] .pb-dialog .btn-secondary { background: var(--tg-theme-secondary-bg-color); color: var(--tg-theme-text-color); }
+[data-game="pinball"] .pb-dialog > .pb-wide-btn { margin-top: 10px; }
+[data-game="pinball"] .pb-note { margin: 8px 0 0; font-size: 13px; line-height: 1.45; color: var(--tg-theme-text-color); }
+[data-game="pinball"] .pb-tiers { margin: 8px 0 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+[data-game="pinball"] .pb-tiers li { display: grid; gap: 2px; padding: 8px 10px; border-radius: 10px; background: var(--tg-theme-secondary-bg-color); font-size: 12px; }
+[data-game="pinball"] .pb-tiers span { color: var(--tg-theme-hint-color); }
+
+[data-game="pinball"] .pb-skins { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+[data-game="pinball"] .pb-skin {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  background: var(--tg-theme-secondary-bg-color);
+  color: var(--tg-theme-text-color);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.2s ease;
+}
+[data-game="pinball"] .pb-skin[aria-checked="true"] { border-color: var(--tg-theme-button-color); }
+[data-game="pinball"] .pb-skin b { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+[data-game="pinball"] .pb-skin-dot {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: radial-gradient(circle at 70% 30%, var(--a) 0 22%, transparent 24%), radial-gradient(circle at 30% 72%, var(--b) 0 20%, transparent 22%), var(--c);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15);
+}
+[data-game="pinball"] .pb-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin-top: 6px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--tg-theme-secondary-bg-color);
+  color: var(--tg-theme-text-color);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+[data-game="pinball"] .pb-toggle i {
+  position: relative;
+  width: 40px;
+  height: 24px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tg-theme-hint-color) 45%, transparent);
+  transition: background 0.2s ease;
+}
+[data-game="pinball"] .pb-toggle i::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.2s ease;
+}
+[data-game="pinball"] .pb-toggle[aria-checked="true"] i { background: var(--tg-theme-button-color); }
+[data-game="pinball"] .pb-toggle[aria-checked="true"] i::after { transform: translateX(16px); }
+
+[data-game="pinball"] .pb-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+[data-game="pinball"] .pb-tile { display: grid; justify-items: center; align-content: center; gap: 2px; padding: 8px 4px; border-radius: 12px; background: var(--tg-theme-secondary-bg-color); text-align: center; min-width: 0; }
+[data-game="pinball"] .pb-tile b { font-size: 15px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+[data-game="pinball"] .pb-tile span { font-size: 11px; color: var(--tg-theme-hint-color); line-height: 1.2; }
+
+@media (prefers-reduced-motion: reduce) {
+  [data-game="pinball"] .pb-callout.pb-on { animation: none; opacity: 1; transform: translate(-50%, 0); }
+  [data-game="pinball"] .pb-hint { animation: none; }
+}
