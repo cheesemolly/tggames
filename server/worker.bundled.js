@@ -581,7 +581,7 @@ function shiftEntities(entities, cut, textLength) {
 //   APP_URL         — адрес мини-приложения (по умолчанию наш GitHub Pages).
 //
 // Запросы игры (везде заголовок `Authorization: tma <initData>`):
-//   GET  /me                      -> { id, tgId, name, username, isAdmin, banned, perks }
+//   GET  /me                      -> { id, tgId, name, username, isAdmin, beta, banned, perks }
 //   GET  /state                   -> { data, updatedAt }
 //   PUT  /state  { data, base }   -> { updatedAt }  |  409 с чужим свежим прогрессом
 // Рейтинг (в ответах только имя игрока и случайный pid — ни id, ни ника, ни tg_id):
@@ -600,6 +600,7 @@ function shiftEntities(entities, cut, textLength) {
 //   PUT    /admin/player/<id>/state  { data }
 //   POST   /admin/player/<id>/ban    { banned }
 //   POST   /admin/player/<id>/perk   { perk, on } — выдать / забрать особый скин (PERKS в lib.js)
+//   POST   /admin/player/<id>/tester { on } — бета-тестер: видит бету, но не панель (таблица beta_testers)
 // Обратная связь: POST /report { text } (из приложения) и /report текст в боте — отзыв приходит владельцам.
 //   DELETE /admin/player/<id>
 //   POST   /admin/broadcast          { text }
@@ -668,7 +669,8 @@ export default {
       if (path === '/me' && request.method === 'GET') {
         return json({
           id: player.id, tgId: player.tg_id, name: player.name, username: player.username,
-          isAdmin: admin, banned: Boolean(player.banned),
+          // beta — видит бету (владелец или бета-тестер из панели); панель — только isAdmin
+          isAdmin: admin, beta: admin || await isTester(env, player.id), banned: Boolean(player.banned),
           // владелец видит все особые скины и так; остальным — выданные в панели
           perks: admin ? Object.keys(PERKS) : await perksOf(env, player.id),
         }, 200, origin);
@@ -677,7 +679,7 @@ export default {
       if (path === '/state' && request.method === 'PUT') return await putState(request, env, player, user, origin);
       if (path === '/top' || path.startsWith('/top/')) return await topRoutes(request, env, path, player, admin, origin);
       if (path === '/report' && request.method === 'POST') {
-        if (!betaOpen('feedback', admin)) return fail('not_found', 404, origin);
+        if (!betaOpen('feedback', admin) && !(await isTester(env, player.id))) return fail('not_found', 404, origin);
         const { text } = await body(request);
         const res = await submitReport(env, { player, user, text, source: 'app' });
         return res.ok ? json({ ok: true }, 200, origin) : fail(res.error, res.error === 'too_many' ? 429 : 400, origin);
@@ -950,18 +952,20 @@ async function searchable(env) {
 async function topRoutes(request, env, path, player, admin, origin) {
   await ensureBoardTables(env);
   const ranked = await rankedRows(env);
+  // бета (игры и функции рейтинга) открыта владельцу и бета-тестерам
+  const beta = admin || await isTester(env, player.id);
   // разработчик тестирует игры и иначе стоит везде первым — в местах его нет (в бете 'leaderboard-no-admin'),
   // профиль по-прежнему открывается, с бейджем admin
   const adminIds = parseAdminIds(env.ADMIN_IDS);
-  const noAdmin = betaOpen('leaderboard-no-admin', admin);
+  const noAdmin = betaOpen('leaderboard-no-admin', beta);
   const isOwnerRow = (r) => adminIds.includes(Number(r.tg_id));
   const all = noAdmin ? withoutUsers(ranked, new Set(ranked.filter(isOwnerRow).map((r) => r.user_id))) : ranked;
   const outside = noAdmin && admin;   // смотрит сам разработчик: его мест нет — экран так и скажет
-  // игры в бете в рейтинге видит только владелец
-  const games = new Set(GAMES.filter((g) => BOARDS[g.id] && (admin || !g.beta)).map((g) => g.id));
+  // игры в бете в рейтинге видят только владелец и бета-тестеры
+  const games = new Set(GAMES.filter((g) => BOARDS[g.id] && (beta || !g.beta)).map((g) => g.id));
   const text = (game, value) => BOARDS[game].text(value);
   // общий рейтинг — сумма очков за места по играм (overallRanking в lib.js); пока в бете — только владельцу
-  const withOverall = betaOpen('leaderboard-overall', admin);
+  const withOverall = betaOpen('leaderboard-overall', beta);
   const overall = () => overallRanking(all, games);
   const overallRow = (p) => ({ place: p.place, name: p.name, pid: p.pid, points: p.points, firsts: p.firsts, games: p.games, me: p.user_id === player.id });
 
@@ -986,12 +990,12 @@ async function topRoutes(request, env, path, player, admin, origin) {
   }
 
   if (path === '/top/find') {
-    if (!betaOpen('player-search', admin)) return fail('not_found', 404, origin);
+    if (!betaOpen('player-search', beta)) return fail('not_found', 404, origin);
     if (request.method !== 'POST') return fail('not_found', 404, origin);
     const username = parseUsername((await body(request)).username);
     if (!username) return fail('bad_username', 400, origin);
     if (!findAllowed(player.id)) return fail('too_many', 429, origin);
-    if (betaOpen('player-suggest', admin)) {
+    if (betaOpen('player-suggest', beta)) {
       // и тех, кто ещё ничего не сохранял: запись в рейтинге заводится сейчас
       const found = await env.DB.prepare(
         `SELECT u.id FROM users u LEFT JOIN board_players p ON p.user_id = u.id
@@ -1008,7 +1012,7 @@ async function topRoutes(request, env, path, player, admin, origin) {
   }
 
   if (path === '/top/suggest') {
-    if (!betaOpen('player-suggest', admin) || request.method !== 'POST') return fail('not_found', 404, origin);
+    if (!betaOpen('player-suggest', beta) || request.method !== 'POST') return fail('not_found', 404, origin);
     const q = String((await body(request)).q ?? '').slice(0, 64);
     if (!q.trim()) return json({ players: [] }, 200, origin);
     if (!allowed(suggestLog, SUGGEST_PER_MINUTE, player.id)) return fail('too_many', 429, origin);
@@ -1073,8 +1077,8 @@ async function topRoutes(request, env, path, player, admin, origin) {
 
 // ---------- бета на сервере и обратная связь ----------
 
-/** Функция из серверной беты (SERVER_BETA) доступна только владельцу; после релиза — всем. */
-const betaOpen = (id, admin) => admin || !SERVER_BETA.includes(id);
+/** Функция из серверной беты (SERVER_BETA) доступна владельцу и бета-тестерам; после релиза — всем. */
+const betaOpen = (id, beta) => beta || !SERVER_BETA.includes(id);
 
 const reportsReady = new WeakSet();
 
@@ -1171,6 +1175,23 @@ async function perksOf(env, userId) {
   return (rows.results ?? []).map((r) => r.perk).filter(isPerk);
 }
 
+// ---------- бета-тестеры ----------
+// Кого владелец позвал проверять бету: видят новые игры и функции, как он, но панели у них нет (её закрывает
+// isAdmin). Список — в базе, не в коде: репозиторий публичный. Отмечает владелец в панели.
+
+const testersReady = new WeakSet();
+
+async function ensureTesters(env) {
+  if (testersReady.has(env.DB)) return;
+  await env.DB.prepare('CREATE TABLE IF NOT EXISTS beta_testers (user_id INTEGER PRIMARY KEY, since INTEGER NOT NULL)').run();
+  testersReady.add(env.DB);
+}
+
+async function isTester(env, userId) {
+  await ensureTesters(env);
+  return Boolean(await env.DB.prepare('SELECT 1 FROM beta_testers WHERE user_id = ?').bind(userId).first());
+}
+
 // ---------- панель владельца ----------
 
 async function adminRoutes(request, env, path, url, origin) {
@@ -1199,7 +1220,7 @@ async function adminRoutes(request, env, path, url, origin) {
     return json(await broadcast(env, text.trim()), 200, origin);
   }
 
-  const match = path.match(/^\/admin\/player\/(\d+)(\/state|\/ban|\/perk|\/board)?$/);
+  const match = path.match(/^\/admin\/player\/(\d+)(\/state|\/ban|\/perk|\/board|\/tester)?$/);
   if (!match) return fail('not_found', 404, origin);
   const id = Number(match[1]);
   const action = match[2] ?? '';
@@ -1214,7 +1235,17 @@ async function adminRoutes(request, env, path, url, origin) {
     return json({
       player: playerRow(player), data: row?.data ?? '{}', updatedAt: row?.updated_at ?? 0,
       perks: await perksOf(env, id), allPerks: PERKS, boardHidden: Boolean(board?.hidden),
+      tester: await isTester(env, id),
     }, 200, origin);
+  }
+
+  // бета-тестер: видит бету, панели не получает
+  if (action === '/tester' && request.method === 'POST') {
+    const { on } = await body(request);
+    await ensureTesters(env);
+    if (on) await env.DB.prepare('INSERT OR IGNORE INTO beta_testers (user_id, since) VALUES (?, ?)').bind(id, Date.now()).run();
+    else await env.DB.prepare('DELETE FROM beta_testers WHERE user_id = ?').bind(id).run();
+    return json({ ok: true, tester: await isTester(env, id) }, 200, origin);
   }
 
   // убрать из рейтинга (подделанные очки) или вернуть — прогресс игрока не трогается
@@ -1263,6 +1294,8 @@ async function adminRoutes(request, env, path, url, origin) {
   if (!action && request.method === 'DELETE') {
     await ensurePerks(env);
     await env.DB.prepare('DELETE FROM user_perks WHERE user_id = ?').bind(id).run();
+    await ensureTesters(env);
+    await env.DB.prepare('DELETE FROM beta_testers WHERE user_id = ?').bind(id).run();
     await ensureBoardTables(env);
     await env.DB.prepare('DELETE FROM board_scores WHERE user_id = ?').bind(id).run();
     await env.DB.prepare('DELETE FROM board_players WHERE user_id = ?').bind(id).run();

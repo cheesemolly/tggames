@@ -39,8 +39,10 @@ const sync = createSync({
 const LOCAL_OWNER = ['localhost', '127.0.0.1'].includes(location.hostname) && new URLSearchParams(location.search).has('owner');
 const isOwner = () => account.isAdmin || LOCAL_OWNER;
 
-// Бету (shell/beta.js) видит только владелец — и то пока не включил «Смотреть как игрок».
-setBetaViewer(() => isOwner() && !playerView());
+// Бету (shell/beta.js) видят владелец и бета-тестеры (отмечаются в панели, решает сервер) — пока не включили
+// «Смотреть как игрок». Панель игроков — только владельцу (isAdmin; её и так закрывает сервер).
+const isTester = () => isOwner() || account.beta;
+setBetaViewer(() => isTester() && !playerView());
 
 /** Игры, которые видит этот игрок: игры из беты — только владельцу. */
 const visibleGames = () => games.filter((g) => feature(g.id));
@@ -74,7 +76,7 @@ function show(route) {
   }
 
   if (route.name === 'beta') {
-    if (!isOwner()) {
+    if (!isTester()) {
       goToMenu();
       return;
     }
@@ -139,7 +141,7 @@ function show(route) {
 
   platform.backButton.hide();
   renderMenu(screen, {
-    games: visibleGames(), account, owner: isOwner(), top: feature('leaderboard'),
+    games: visibleGames(), account, beta: isTester(), top: feature('leaderboard'),
     topLine: feature('leaderboard-overall') ? async () => overallLine((await account.topSummary()).data) : null,
     feedback: feature('feedback') ? () => openFeedback({ account, toast }) : null,
     onRetry: login ? () => login.retry() : null,
@@ -153,9 +155,10 @@ let lastTab = '#/top';          // вкладка рейтинга, с кото�
 
 /**
  * Особый скин (shell/perks.js): выдан владельцем в панели. Владелец видит все, пока не включил «Смотреть как игрок»
- * (seesBeta; на локальном сервере — и с ?owner) — даже если в Cloudflare ещё старый воркер, не отдающий perks.
+ * (на локальном сервере — и с ?owner) — даже если в Cloudflare ещё старый воркер, не отдающий perks. Бета-тестеру
+ * особые скины сами не выдаются: они — подарок конкретному игроку.
  */
-const hasPerk = (id) => seesBeta() || account.perks.includes(id);
+const hasPerk = (id) => (isOwner() && !playerView()) || account.perks.includes(id);
 
 /** Куда ведёт «Назад»: из игры — в её папку, из папки — на главную, в рейтинге — на шаг вверх. */
 function backFrom(route = currentRoute()) {

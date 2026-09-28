@@ -26,7 +26,7 @@ async function gameInfo(game) {
 }
 
 export async function renderMenu(container, {
-  games, account = null, owner = false, top = false, topLine = null, feedback = null, onRetry = null,
+  games, account = null, beta = false, top = false, topLine = null, feedback = null, onRetry = null,
 }) {
   // Незаконченные партии считаем заранее — по ним на папке загорается точка «есть что продолжить».
   const savedIds = new Set(
@@ -53,7 +53,7 @@ export async function renderMenu(container, {
     el('h1', {}, 'Игры'),
     el('div', { class: 'title-rule' }),
     el('p', { class: 'hint' }, 'Выбери игру ниже.'),
-    accountRow(account, owner, onRetry),
+    accountRow(account, beta, onRetry),
     top && account?.enabled && account.current && topEntry(topLine),
     el('div', { class: 'folder-grid' }, cards),
     feedback && feedbackEntry(feedback),
@@ -124,8 +124,9 @@ function topEntry(topLine = null) {
  * Внутри Telegram — имя игрока (вход происходит сам) и кнопка панели у владельца.
  * В обычном браузере аккаунтов нет: честно пишем, что прогресс живёт только здесь.
  */
-function accountRow(account, owner = false, onRetry = null) {
-  const betaBtn = owner && el('a', { class: 'account-btn account-btn-beta', href: '#/beta' }, BETA.length ? `Бета · ${BETA.length}` : 'Бета');
+function accountRow(account, beta = false, onRetry = null) {
+  // вкладка «Бета» — владельцу и бета-тестерам; «Панель» — только владельцу (решает сервер)
+  const betaBtn = beta && el('a', { class: 'account-btn account-btn-beta', href: '#/beta' }, BETA.length ? `Бета · ${BETA.length}` : 'Бета');
   if (!account?.enabled) {
     return el('div', { class: 'account-row' },
       el('span', { class: 'account-name' }, 'Прогресс хранится только в этом браузере'), betaBtn);

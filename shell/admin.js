@@ -114,7 +114,7 @@ export function renderAdmin(container, { onBack, toast, api = account, onOwnSave
     showCard(res.data);
   }
 
-  function showCard({ player, data, updatedAt, perks = [], allPerks = null, boardHidden = false }) {
+  function showCard({ player, data, updatedAt, perks = [], allPerks = null, boardHidden = false, tester = null }) {
     const parts = splitState(data);
     const jsonBox = el('textarea', { class: 'adm-json', spellcheck: 'false', value: pretty(data) });
 
@@ -159,15 +159,19 @@ export function renderAdmin(container, { onBack, toast, api = account, onOwnSave
         `Telegram id ${player.tgId} · первый заход ${date(player.createdAt)} · последний ${date(player.lastSeenAt)}`
         + `\nПрогресс сохранён: ${date(updatedAt)}`),
 
-      statFields.length && el('h3', { class: 'adm-h3' }, 'Статистика по играм'),
+      statFields.length > 0 && el('h3', { class: 'adm-h3' }, 'Статистика по играм'),
       ...statFields.map((f) => f.node),
 
       gameNodes.length > 0 && el('h3', { class: 'adm-h3' }, 'Игры и подсказки'),
       gameNodes.length > 0 && el('p', { class: 'hint' }, 'Уйдёт игроку при следующем запуске. Если он прямо сейчас в этой игре, она может затереть правку своим сохранением — правь, когда не играет. Свой прогресс ложится и на это устройство сразу. «Текущая партия» — только в начатой; новая начнётся как обычно.'),
       ...gameNodes,
 
-      progressFields.length && el('h3', { class: 'adm-h3' }, 'Строки уровней'),
+      progressFields.length > 0 && el('h3', { class: 'adm-h3' }, 'Строки уровней'),
       ...progressFields.map((f) => f.node),
+
+      // бета-тестер: видит всё из беты, но не панель; старый воркер поля tester не отдаёт — блока нет
+      tester !== null && el('h3', { class: 'adm-h3' }, 'Бета-тестер'),
+      tester !== null && testerRow(),
 
       // особые скины (в бете: perks) — выдать / забрать; список приходит с сервера (старый воркер его не отдаёт)
       allPerks && feature('perks') && el('h3', { class: 'adm-h3' }, 'Особые скины'),
@@ -239,6 +243,31 @@ export function renderAdmin(container, { onBack, toast, api = account, onOwnSave
         return;
       }
       await send(jsonBox.value);
+    }
+
+    function testerRow() {
+      let on = tester;
+      const button = el('button', { class: 'account-btn', onclick: toggle });
+      const note = el('span', {});
+      const paint = () => {
+        button.textContent = on ? 'Убрать' : 'Сделать тестером';
+        button.classList.toggle('adm-perk-on', on);
+        note.textContent = on ? 'Видит бету — новые игры и функции. Панели у него нет.' : 'Видит только то, что вышло.';
+      };
+      async function toggle() {
+        button.disabled = true;
+        const res = await api.setTester(player.id, !on);
+        button.disabled = false;
+        if (!res.ok) {
+          toast.show(message(res.error));
+          return;
+        }
+        on = res.data.tester;
+        paint();
+        toast.show(on ? 'Теперь тестер — бета появится при следующем запуске' : 'Больше не тестер');
+      }
+      paint();
+      return el('div', { class: 'adm-perk' }, note, button);
     }
 
     function perkRow(perk, title) {

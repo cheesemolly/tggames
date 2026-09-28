@@ -934,6 +934,59 @@ test('рейтинг: игру в бете видит только владел�
   }
 });
 
+// ---------- бета-тестеры ----------
+
+test('бета-тестер: видит бету (игры в рейтинге, серверные функции), но панель ему закрыта; отмечает только владелец', async () => {
+  const lib = await import('../lib.js');
+  const entry = lib.GAMES.find((g) => g.id === 'memory');
+  const wasBeta = [...lib.SERVER_BETA];
+  entry.beta = true;
+  lib.SERVER_BETA.splice(0, lib.SERVER_BETA.length, 'player-search');
+  try {
+    const env = createEnv();
+    const masha = await asUser(USER);
+    const owner = await asUser(ADMIN);
+    const me = await call(env, '/me', { initData: masha });
+    assert.equal(me.data.beta, false, 'сначала обычный игрок');
+    assert.equal((await call(env, '/me', { initData: owner })).data.beta, true, 'владелец видит бету всегда');
+    await save(env, masha, { 'shell:progress:memory': 'Уровень 5' });
+    assert.equal((await call(env, '/top/memory', { initData: masha })).status, 404);
+    await call(env, '/me', { initData: owner });
+    assert.equal((await call(env, '/top/find', { method: 'POST', initData: masha, payload: { username: 'owner' } })).status, 404,
+      'поиск по нику — в серверной бете, игроку его нет');
+
+    const id = me.data.id;
+    assert.equal((await call(env, `/admin/player/${id}/tester`, { method: 'POST', initData: masha, payload: { on: true } })).status, 403,
+      'сам себя тестером не сделать');
+    const made = await call(env, `/admin/player/${id}/tester`, { method: 'POST', initData: owner, payload: { on: true } });
+    assert.equal(made.data.tester, true);
+    assert.equal((await call(env, `/admin/player/${id}`, { initData: owner })).data.tester, true, 'в карточке панели');
+
+    const now = await call(env, '/me', { initData: masha });
+    assert.equal(now.data.beta, true);
+    assert.equal(now.data.isAdmin, false, 'владельцем не стал');
+    assert.deepEqual(now.data.perks, [], 'особые скины тестеру сами не выдаются');
+    assert.equal((await call(env, '/top/memory', { initData: masha })).status, 200, 'игра в бете — в рейтинге');
+    assert.equal((await call(env, '/top/find', { method: 'POST', initData: masha, payload: { username: 'owner' } })).status, 200,
+      'функция из серверной беты (поиск по нику) открыта');
+    for (const path of ['/admin/players', `/admin/player/${id}`]) {
+      assert.equal((await call(env, path, { initData: masha })).status, 403, `панель закрыта: ${path}`);
+    }
+
+    await call(env, `/admin/player/${id}/tester`, { method: 'POST', initData: owner, payload: { on: false } });
+    assert.equal((await call(env, '/me', { initData: masha })).data.beta, false, 'сняли');
+    assert.equal((await call(env, '/top/memory', { initData: masha })).status, 404);
+
+    await call(env, `/admin/player/${id}/tester`, { method: 'POST', initData: owner, payload: { on: true } });
+    await call(env, `/admin/player/${id}`, { method: 'DELETE', initData: owner });
+    const back = await call(env, '/me', { initData: masha });
+    assert.equal(back.data.beta, false, 'удалённый игрок заводится заново — уже не тестер');
+  } finally {
+    delete entry.beta;
+    lib.SERVER_BETA.splice(0, lib.SERVER_BETA.length, ...wasBeta);
+  }
+});
+
 // ---------- особые скины (перки) ----------
 
 test('особые скины: игрок видит только выданные, владелец — все; выдаёт и забирает только владелец', async () => {

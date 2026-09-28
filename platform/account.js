@@ -10,7 +10,7 @@ export { ERRORS, message } from './errors.js';
 
 let topCache = null;        // { at, promise } — последняя сводка рейтинга
 const TOP_CACHE_MS = 30 * 1000;
-let me = null;              // { id, tgId, name, username, isAdmin, banned, perks } или null
+let me = null;              // { id, tgId, name, username, isAdmin, beta, banned, perks } или null
 
 export const account = {
   /** Аккаунты работают, только если выложен сервер и игра открыта внутри Telegram. */
@@ -29,6 +29,11 @@ export const account = {
 
   get isAdmin() {
     return Boolean(me?.isAdmin);
+  },
+
+  /** Видит ли бету: владелец или бета-тестер (отмечается в панели). Панель — только isAdmin. */
+  get beta() {
+    return Boolean(me?.beta ?? me?.isAdmin);
   },
 
   /** Особые скины этого игрока (shell/perks.js); владельцу сервер отдаёт все. */
@@ -164,6 +169,11 @@ export const account = {
 
   setPerk(id, perk, on) {
     return this.request(`/admin/player/${id}/perk`, { method: 'POST', payload: { perk, on } });
+  },
+
+  /** Сделать игрока бета-тестером (видит бету, панели не получает) или снять. */
+  setTester(id, on) {
+    return this.request(`/admin/player/${id}/tester`, { method: 'POST', payload: { on } });
   },
 
   /** Убрать из рейтинга (подделанные очки) или вернуть; прогресс не трогается. */
