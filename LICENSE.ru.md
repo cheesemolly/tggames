@@ -48,6 +48,10 @@ Copyright (c) 2026 cheesemolly (https://github.com/cheesemolly). Все прав
 - `games/chess/engine.js` — значения таблиц полей взяты из «Simplified Evaluation Function»
   Томаша Михневского, опубликованной в Chess Programming Wiki
   (https://www.chessprogramming.org/Simplified_Evaluation_Function);
+- `styles/fonts/press-start-2p-*.woff2` — шрифт «Press Start 2P» (CodeMan38; Copyright 2012 The Press Start 2P
+  Project Authors), SIL Open Font License 1.1, см. `styles/fonts/OFL-press-start-2p.txt`;
+- `styles/fonts/golos-text-*.woff2` — шрифт «Golos Text» (Copyright 2019 The Golos Text Project Authors,
+  https://github.com/googlefonts/golos-text), SIL Open Font License 1.1, см. `styles/fonts/OFL-golos-text.txt`;
 - скрипт Telegram Web App загружается с telegram.org во время работы и не входит в репозиторий.
 
 Правила и механики известных игровых жанров (2048, судоку, маджонг-пасьянс, шашки, шахматы, игры со словами

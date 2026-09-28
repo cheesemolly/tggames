@@ -41,6 +41,12 @@ These are not owned by the copyright holder; their own licenses and notices appl
   - games/chess/engine.js — the piece-square table values follow the "Simplified Evaluation
     Function" by Tomasz Michniewski, published on the Chess Programming Wiki
     (https://www.chessprogramming.org/Simplified_Evaluation_Function).
+  - styles/fonts/press-start-2p-*.woff2 — the "Press Start 2P" font by CodeMan38
+    (Copyright 2012 The Press Start 2P Project Authors), SIL Open Font License 1.1,
+    see styles/fonts/OFL-press-start-2p.txt.
+  - styles/fonts/golos-text-*.woff2 — the "Golos Text" font (Copyright 2019 The Golos Text Project
+    Authors, https://github.com/googlefonts/golos-text), SIL Open Font License 1.1,
+    see styles/fonts/OFL-golos-text.txt.
   - The Telegram Web App script is loaded from telegram.org at runtime and is not part of this
     repository.
 

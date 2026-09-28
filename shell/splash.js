@@ -9,7 +9,8 @@
 // SEES_BETA_KEY в localStorage — её ставит app.js тому, кто видит бету. У владельца заставка появится со
 // второго запуска. После релиза id нет в BETA — заставку видят все.
 
-import { inBeta } from './beta.js';
+import { inBeta, playerView } from './beta.js';
+import { startPixelSplash } from './nui/splash.js';
 
 export const SEES_BETA_KEY = 'tggames-sees-beta';
 export const MIN_MS = 1200;    // логотип успевает собраться
@@ -18,6 +19,14 @@ export const MAX_MS = 4000;    // сеть медленная — не держ�
 /** Показывать ли заставку: выпущена — всем; в бете — тому, у кого отметка (или ?owner на localhost). */
 export function shouldShow({ released, marked, localOwner }) {
   return released || marked || localOwner;
+}
+
+/**
+ * Какую заставку: пиксельную нового интерфейса (в бете 'new-ui') или «Пульс 3D». Как и сама заставка, решается
+ * до ответа сервера — по отметке SEES_BETA_KEY (или ?owner на localhost, если не «Смотреть как игрок»).
+ */
+export function whichSplash({ nuiReleased, marked, localOwner, asPlayer }) {
+  return nuiReleased || ((marked || localOwner) && !asPlayer) ? 'pixel' : 'pulse';
 }
 
 // ---------- рисунок: кадр 45 × 80 клеток ----------
@@ -194,6 +203,19 @@ export function finishSplash() {
   finish();
 }
 
+/** Пиксельная заставка нового интерфейса — те же MIN_MS и MAX_MS. */
+function startPixel() {
+  const shownAt = performance.now();
+  const remove = startPixelSplash();
+  let done = false;
+  finish = () => {
+    if (done) return;
+    done = true;
+    remove(Math.max(0, MIN_MS - (performance.now() - shownAt)));
+  };
+  setTimeout(finish, MAX_MS);
+}
+
 function start() {
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const layer = document.createElement('div');
@@ -242,5 +264,6 @@ if (typeof document !== 'undefined') {
   let marked = false;
   try { marked = localStorage.getItem(SEES_BETA_KEY) === '1'; } catch { /* приватный режим */ }
   const localOwner = ['localhost', '127.0.0.1'].includes(location.hostname) && new URLSearchParams(location.search).has('owner');
-  if (shouldShow({ released: !inBeta('splash'), marked, localOwner })) start();
+  if (whichSplash({ nuiReleased: !inBeta('new-ui'), marked, localOwner, asPlayer: playerView() }) === 'pixel') startPixel();
+  else if (shouldShow({ released: !inBeta('splash'), marked, localOwner })) start();
 }

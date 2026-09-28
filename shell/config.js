@@ -5,3 +5,6 @@
 // Без косой черты в конце.
 
 export const API_URL = 'https://tggames-api.cheesemolly3.workers.dev';
+
+// Имя бота (без @) — ссылка «Наш бот» в профиле нового интерфейса.
+export const BOT_USERNAME = 'anygametg_bot';

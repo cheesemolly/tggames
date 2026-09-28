@@ -6,6 +6,9 @@
 //   #/beta          — вкладка «Бета»: что обкатывается у владельца до релиза (shell/beta.js)
 //   #/top           — рейтинг: сводка (с общим рейтингом — вкладка «Общий», #/top/games — «По играм»);
 //                     #/top/<игра> — таблица игры; #/top/player/<pid> — профиль игрока
+// Новый интерфейс (в бете 'new-ui', shell/nui/): вкладки «Главная» (#/), «Игры», «Рейтинг» (#/top), «Профиль»:
+//   #/games         — все игры: поиск, папки-фильтры, избранное; #/games/<папка> — сразу с фильтром папки
+//   #/profile       — профиль: место в общем рейтинге, лучшие места, настройки, обратная связь
 
 /** decodeURIComponent без исключения: ссылка вида #/game/%E0 иначе роняла приложение на старте. */
 const decode = (text) => {
@@ -23,6 +26,8 @@ export function currentRoute() {
   if (section === 'folder' && id) return { name: 'folder', id: decodeURIComponent(id) };
   if (section === 'admin') return { name: 'admin' };
   if (section === 'beta') return { name: 'beta' };
+  if (section === 'games') return { name: 'games', id: id ? decodeURIComponent(id) : null };
+  if (section === 'profile') return { name: 'profile' };
   if (section === 'top') {
     if (id === 'player' && sub) return { name: 'top', pid: decodeURIComponent(sub) };
     return { name: 'top', game: id ? decodeURIComponent(id) : null };

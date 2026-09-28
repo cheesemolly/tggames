@@ -12,6 +12,11 @@
 //   backButton: show(), hide(), onClick(cb), offClick(cb)
 //   haptic: impact(style), notification(type), selection()
 //   share(text) → Promise<'shared' | 'copied' | 'cancelled' | 'failed'>
+// Для нового интерфейса (в бете 'new-ui'; в старом не вызываются):
+//   forceScheme('dark' | null) — тема всегда тёмная, что бы ни выбрал Telegram (null — снова как в Telegram)
+//   setChrome(color | null)    — цвет шапки и фона Telegram вокруг мини-приложения (null — цвета темы)
+//   setHaptics(on)             — общий выключатель вибрации (игры зовут haptic как раньше)
+//   openLink(url), openTelegramLink(url) — ссылка наружу / в Telegram (бот, канал)
 
 import { el, loadCss } from '../shared/dom.js';
 import { isMobilePlatform } from './device.js';
@@ -44,9 +49,22 @@ async function webShare(text) {
 
 function createTelegramPlatform(tg) {
   const root = document.documentElement;
-  const syncScheme = () => { root.dataset.theme = tg.colorScheme; };
+  let forced = null;
+  let hapticsOn = true;
+  const syncScheme = () => { root.dataset.theme = forced ?? tg.colorScheme; };
   syncScheme();
   tg.onEvent('themeChanged', syncScheme);
+  // цвет вокруг мини-приложения: шапка (hex — с Bot API 6.9), фон при оттягивании, нижняя панель (7.10)
+  const chrome = (color) => {
+    try {
+      if (!tg.isVersionAtLeast?.('6.9')) return;
+      tg.setHeaderColor?.(color ?? 'bg_color');
+      tg.setBackgroundColor?.(color ?? 'bg_color');
+      if (tg.isVersionAtLeast?.('7.10')) tg.setBottomBarColor?.(color ?? 'bottom_bar_bg_color');
+    } catch (err) {
+      console.warn('не удалось сменить цвет шапки', err);
+    }
+  };
 
   // В полноэкранном режиме Telegram убирает свою шапку, но рисует поверх страницы кнопки «закрыть»
   // и «меню», а сверху ещё часы и вырез устройства. По этому признаку вёрстка добавляет отступы
@@ -63,10 +81,31 @@ function createTelegramPlatform(tg) {
     startParam: tg.initDataUnsafe?.start_param ?? null,
     // Сырая строка с подписью: сервер по ней узнаёт игрока. Читается каждый раз — Telegram её обновляет.
     get initData() { return tg.initData; },
-    get colorScheme() { return tg.colorScheme; },
+    get colorScheme() { return forced ?? tg.colorScheme; },
 
     ready: () => tg.ready(),
     expand: () => tg.expand(),
+
+    forceScheme(scheme) {
+      forced = scheme;
+      syncScheme();
+    },
+    setChrome: chrome,
+    setHaptics(on) { hapticsOn = Boolean(on); },
+    openLink(url) {
+      try {
+        tg.openLink(url);
+      } catch {
+        window.open(url, '_blank', 'noopener');
+      }
+    },
+    openTelegramLink(url) {
+      try {
+        tg.openTelegramLink(url);
+      } catch {
+        window.open(url, '_blank', 'noopener');
+      }
+    },
 
     /**
      * Свайп вниз сворачивает мини-апп, а в 2048 и «Соедини точки» свайп — это ход:
@@ -154,9 +193,9 @@ function createTelegramPlatform(tg) {
     },
 
     haptic: {
-      impact: (style = 'light') => tg.HapticFeedback?.impactOccurred(style),
-      notification: (type) => tg.HapticFeedback?.notificationOccurred(type),
-      selection: () => tg.HapticFeedback?.selectionChanged(),
+      impact: (style = 'light') => hapticsOn && tg.HapticFeedback?.impactOccurred(style),
+      notification: (type) => hapticsOn && tg.HapticFeedback?.notificationOccurred(type),
+      selection: () => hapticsOn && tg.HapticFeedback?.selectionChanged(),
     },
 
     // Внутри Telegram ещё не проверено: если Web Share недоступен — окно выбора чата через t.me/share.
@@ -176,7 +215,8 @@ function createBrowserPlatform() {
   let scheme = fromUrl === 'dark' || fromUrl === 'light'
     ? fromUrl
     : matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-  const applyScheme = () => { root.dataset.theme = scheme; };
+  let forced = null;
+  const applyScheme = () => { root.dataset.theme = forced ?? scheme; };
   applyScheme();
 
   loadCss(new URL('./stub.css', import.meta.url));
@@ -213,10 +253,19 @@ function createBrowserPlatform() {
     isDesktop: false,                // заглушка изображает телефон (разработка в мобильном режиме)
     initData: '',                    // вне Telegram подписывать нечего — аккаунтов тут нет
     user: FAKE_USER,
-    get colorScheme() { return scheme; },
+    get colorScheme() { return forced ?? scheme; },
 
     ready: () => log('ready()'),
     expand: () => log('expand()'),
+
+    forceScheme(value) {
+      forced = value;
+      applyScheme();
+    },
+    setChrome: (color) => log('setChrome', color),
+    setHaptics: (on) => log('setHaptics', on),
+    openLink: (url) => window.open(url, '_blank', 'noopener'),
+    openTelegramLink: (url) => window.open(url, '_blank', 'noopener'),
     lockSwipes: () => log('lockSwipes()'),
     fullscreen: {
       supported: false,

@@ -2,7 +2,8 @@
 // При системной настройке «уменьшить движение» всё происходит мгновенно.
 
 const reduce = matchMedia('(prefers-reduced-motion: reduce)');
-export const reducedMotion = () => reduce.matches;
+// или «Меньше анимаций» в настройках нового интерфейса (shell/nui/prefs.js, класс на <html>)
+export const reducedMotion = () => reduce.matches || Boolean(globalThis.document?.documentElement.classList.contains('reduce-motion'));
 
 export const EASE_OUT = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
 

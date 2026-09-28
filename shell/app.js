@@ -16,13 +16,21 @@ import { renderAdmin } from './admin.js';
 import { renderBeta } from './beta-screen.js';
 import { renderTop, overallLine } from './top.js';
 import { openFeedback } from './feedback.js';
-import { setBetaViewer, seesBeta, feature, inBeta, playerView } from './beta.js';
+import { setBetaViewer, seesBeta, feature, inBeta, playerView, BETA } from './beta.js';
 import { lockPageScroll } from './no-scroll.js';
 import { finishSplash, SEES_BETA_KEY } from './splash.js';
 import { createLogin } from './login.js';
+// новый интерфейс (в бете 'new-ui', концепт 7 «Пиксель») — shell/nui/
+import { renderHome } from './nui/home.js';
+import { renderCatalog } from './nui/catalog.js';
+import { renderProfile, renderNoRating, streakSheet } from './nui/profile.js';
+import { tabBar, skeleton } from './nui/ui.js';
+import { installAudioGate, applyPrefs, DEFAULT_PREFS } from './nui/prefs.js';
+import { markVisit, noteOpened } from './nui/store.js';
 
 const root = document.getElementById('app');
-lockPageScroll();
+// ряды игр и баннеры нового интерфейса листаются вбок — там палец не гасим
+lockPageScroll(document, { horizontal: () => nuiOn() });
 let session = null;
 
 const toast = createToast();
@@ -50,6 +58,7 @@ const visibleGames = () => games.filter((g) => feature(g.id));
 function show(route) {
   session?.close();
   session = null;
+  applyChrome();
   // вошли посреди партии (shell/login.js) — прогресс подтягивается, когда игрок из неё вышел
   if (route.name !== 'game' && login) setTimeout(() => login.leftGame()?.catch((err) => console.error(err)), 0);
 
@@ -70,6 +79,7 @@ function show(route) {
       return;
     }
     platform.backButton.show();
+    if (nuiOn()) noteOpened(entry.id).catch(() => {});    // «Сначала недавние» и баннер «Продолжить»
     // «Назад» из игры возвращает в её папку, а не на главную.
     session = openGame(screen, entry, { platform, beta: seesBeta(), feature, perk: hasPerk, onExit: () => backFrom(route) });
     return;
@@ -81,7 +91,17 @@ function show(route) {
       return;
     }
     platform.backButton.show();
-    renderBeta(screen, { games, onBack: goToMenu, onChange: redraw });
+    renderBeta(screen, { games, onBack: () => backFrom(route), backLabel: nuiOn() ? 'Профиль' : 'Все игры', onChange: redraw });
+    return;
+  }
+
+  // новый интерфейс: главная, игры, рейтинг, профиль — с вкладками внизу
+  if (nuiOn() && ['menu', 'folder', 'games', 'profile', 'top'].includes(route.name)) {
+    renderNui(screen, route);
+    return;
+  }
+  if (route.name === 'games' || route.name === 'profile') {   // адреса нового интерфейса — в старом их нет
+    goToMenu();
     return;
   }
 
@@ -124,7 +144,7 @@ function show(route) {
       return;
     }
     platform.backButton.show();
-    renderAdmin(screen, { onBack: goToMenu, toast, onOwnSave: (text, updatedAt) => sync.adopt(text, updatedAt) });
+    renderAdmin(screen, { onBack: () => backFrom(route), toast, onOwnSave: (text, updatedAt) => sync.adopt(text, updatedAt) });
     return;
   }
 
@@ -162,6 +182,17 @@ const hasPerk = (id) => (isOwner() && !playerView()) || account.perks.includes(i
 
 /** Куда ведёт «Назад»: из игры — в её папку, из папки — на главную, в рейтинге — на шаг вверх. */
 function backFrom(route = currentRoute()) {
+  // новый интерфейс: из игры — туда, откуда её открыли (главная, «Игры», рейтинг); бета и панель — в профиль
+  if (nuiOn()) {
+    if (route.name === 'game') {
+      location.replace(lastPlace);
+      return;
+    }
+    if (route.name === 'beta' || route.name === 'admin') {
+      location.replace('#/profile');
+      return;
+    }
+  }
   if (route.name === 'top' && route.game === 'games') {
     goToMenu();
     return;
@@ -185,6 +216,116 @@ function backFrom(route = currentRoute()) {
 }
 
 const redraw = () => show(currentRoute());
+
+// ---------- новый интерфейс (в бете 'new-ui') ----------
+
+let lastPlace = '#/';          // экран, с которого открыли игру: «Назад» из игры ведёт туда
+
+/**
+ * Включён ли новый интерфейс. До ответа сервера (он скажет, владелец ли это) — по отметке с прошлого запуска,
+ * как у заставки: иначе у владельца сначала мелькало бы старое меню. Вне Telegram — ?owner на localhost.
+ */
+function nuiOn() {
+  if (!inBeta('new-ui')) return true;
+  if (account.current || !account.enabled) return seesBeta();
+  if (playerView()) return false;
+  if (LOCAL_OWNER) return true;
+  try {
+    return localStorage.getItem(SEES_BETA_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+const NUI_BG = '#110e20';
+let chromeOn = null;
+
+/** Новый интерфейс всегда тёмный (выбор владельца): тема, цвет шапки Telegram, настройки из шторки профиля. */
+function applyChrome() {
+  const on = nuiOn();
+  if (on === chromeOn) return;
+  const was = chromeOn;
+  chromeOn = on;
+  document.documentElement.classList.toggle('nui', on);
+  if (on) {
+    platform.forceScheme('dark');
+    platform.setChrome(NUI_BG);
+    installAudioGate();
+    applyPrefs(platform);
+  } else if (was) {
+    // «Смотреть как игрок» — всё как у игроков; у тех, кто нового не видел, ничего не трогаем
+    platform.forceScheme(null);
+    platform.setChrome(null);
+    applyPrefs(platform, DEFAULT_PREFS);
+  }
+}
+
+function renderNui(screen, route) {
+  if (route.name === 'folder') {                  // старые ссылки на папки — вкладка «Игры» с этой папкой
+    location.replace(`#/games/${encodeURIComponent(route.id)}`);
+    return;
+  }
+  const tab = { menu: 'home', games: 'games', top: 'top', profile: 'profile' }[route.name];
+  const sub = route.name === 'top' && Boolean(route.pid || (route.game && route.game !== 'games'));
+  if (sub) platform.backButton.show();
+  else platform.backButton.hide();
+  lastPlace = location.hash || '#/';
+
+  screen.classList.add('nscreen');
+  const body = el('div', { class: 'nbody' });
+  screen.append(body, tabBar(tab, {
+    onTab: (_, same) => {
+      platform.haptic.selection();
+      if (same) body.querySelector('.scroll')?.scrollTo({ top: 0, behavior: 'smooth' });
+    },
+  }));
+  markVisit().catch(() => {});                    // огонёк серии: день засчитывается за то, что зашёл
+
+  const summary = account.current && feature('leaderboard') ? () => account.topSummary() : null;
+  const beta = (id) => inBeta(id) && seesBeta();
+  const fail = (err) => console.error(err);
+  if (route.name === 'menu') {
+    renderHome(body, {
+      games: visibleGames(), account, platform, summary, beta,
+      onRetry: login ? () => login.retry() : null,
+      onStreak: () => streakSheet().catch(fail),
+    }).catch(fail);
+  } else if (route.name === 'games') {
+    renderCatalog(body, { games: visibleGames(), route, account, summary, beta }).catch(fail);
+  } else if (route.name === 'profile') {
+    renderProfile(body, {
+      games: visibleGames(), account, platform, summary,
+      betaCount: isTester() ? BETA.length : null,
+      admin: account.isAdmin,
+      feedback: () => openFeedback({ account, toast }),
+      onPrefs: (prefs) => applyPrefs(platform, prefs),
+    });
+  } else if (!account.enabled) {
+    renderNoRating(body, { platform });
+  } else {
+    if (route.game && route.game !== 'games') lastBoard = route.game;
+    else if (!route.pid) {
+      lastBoard = null;
+      lastTab = route.game === 'games' ? '#/top/games' : '#/top';
+    }
+    renderTop(body, {
+      route,
+      overall: feature('leaderboard-overall'),
+      games: visibleGames(),
+      source: {
+        summary: () => account.topSummary(),
+        game: (id) => account.topGame(id),
+        player: (pid) => account.topPlayer(pid),
+        find: (username) => account.findPlayer(username),
+        suggest: feature('player-suggest') ? (q) => account.suggestPlayers(q) : null,
+      },
+      search: feature('player-search'),
+      tabbed: true,
+      skeleton: () => skeleton('row', 6),
+      onBack: () => backFrom(route),
+    }).catch(fail);
+  }
+}
 
 // Вход на сервер (shell/login.js) — в бете stable-login; игрокам пока по-старому (ниже).
 const LOGIN_TIMEOUT_MS = 20000;

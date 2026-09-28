@@ -61,7 +61,7 @@ function avatar(name, size = '') {
 
 function head({ back, backLabel, title, hint, style = '' }) {
   return el('div', { class: 'folder-head', style },
-    el('button', { class: 'back-chip', onclick: back, 'aria-label': backLabel }, `‹ ${backLabel}`),
+    back && el('button', { class: 'back-chip', onclick: back, 'aria-label': backLabel }, `‹ ${backLabel}`),
     el('div', { class: 'folder-head-text' },
       el('h1', {}, title),
       el('div', { class: 'title-rule' }),
@@ -70,14 +70,18 @@ function head({ back, backLabel, title, hint, style = '' }) {
   );
 }
 
-export async function renderTop(container, { route, games, source, onBack, overall = false, search = false }) {
+// tabbed — рейтинг открыт вкладкой нового интерфейса (в бете 'new-ui'): у сводки нет «‹ Все игры», внизу вкладки;
+// skeleton — что показать, пока грузится (вместо «Загрузка…»).
+export async function renderTop(container, {
+  route, games, source, onBack, overall = false, search = false, tabbed = false, skeleton = null,
+}) {
   const titleOf = (id) => games.find((g) => g.id === id)?.title ?? id;
   const screen = el('div', { class: 'scroll top-screen' });
   container.replaceChildren(screen);
   // replaceChildren, в отличие от el(), не пропускает false/null — отсеиваем сами
   const show = (...nodes) => screen.replaceChildren(...nodes.flat().filter((n) => n != null && n !== false));
 
-  const loading = (header) => show(header, el('p', { class: 'hint top-loading' }, 'Загрузка…'));
+  const loading = (header) => show(header, skeleton ? skeleton() : el('p', { class: 'hint top-loading' }, 'Загрузка…'));
   const failed = (header, res, retry) => show(header, el('div', { class: 'top-empty' },
     el('p', {}, res.error === 'network' ? 'Нет связи с сервером.'
       // сервер ещё старый (новый worker.bundled.js не вставлен в Cloudflare) — рейтинга он не знает
@@ -196,7 +200,7 @@ export async function renderTop(container, { route, games, source, onBack, overa
   const tab = overall && route.game === 'games' ? 'games' : 'overall';
   const privacy = 'Видно только имя — без ника и id.';
   const header = head({
-    back: onBack, backLabel: 'Все игры', title: 'Рейтинг', style: '--cat: var(--cat-words)',
+    back: tabbed ? null : onBack, backLabel: 'Все игры', title: 'Рейтинг', style: '--cat: var(--cat-words)',
     hint: overall && tab === 'overall'
       ? `Очки за места во всех играх. ${privacy}`
       : `Места игроков в каждой игре. ${privacy}`,

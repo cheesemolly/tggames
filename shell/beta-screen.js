@@ -12,7 +12,7 @@ function tile(markup) {
   return node;
 }
 
-export function renderBeta(container, { games, onBack, onChange }) {
+export function renderBeta(container, { games, onBack, onChange, backLabel = 'Все игры' }) {
   const asPlayer = playerView();
   const gamesList = BETA.filter((b) => b.kind === 'game');
   const features = BETA.filter((b) => b.kind === 'feature');
@@ -50,7 +50,7 @@ export function renderBeta(container, { games, onBack, onChange }) {
 
   container.replaceChildren(el('div', { class: 'scroll beta-screen' },
     el('div', { class: 'folder-head' },
-      el('button', { class: 'back-chip', onclick: onBack, 'aria-label': 'Ко всем играм' }, '‹ Все игры'),
+      el('button', { class: 'back-chip', onclick: onBack, 'aria-label': backLabel }, `‹ ${backLabel}`),
       el('div', { class: 'folder-head-text' },
         el('h1', {}, 'Бета'),
         el('div', { class: 'title-rule' }),

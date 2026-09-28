@@ -6,19 +6,25 @@
 //      (длинное окно настроек, список игр, панель владельца) — там прокрутка нужна, иначе не добраться до низа.
 // Игры получают pointer-события как раньше: preventDefault у touchmove их не отменяет.
 
-/** Ближайший предок, который сейчас можно прокрутить по вертикали (или null). style(el) — getComputedStyle. */
-export function scrollableAncestor(el, style) {
+/**
+ * Ближайший предок, который сейчас можно прокрутить по вертикали (или null). style(el) — getComputedStyle.
+ * horizontal — считать и ряды, прокручиваемые вбок (ряды игр и баннеры нового интерфейса, в бете 'new-ui').
+ */
+export function scrollableAncestor(el, style, { horizontal = false } = {}) {
+  const can = (value) => value === 'auto' || value === 'scroll';
   for (let node = el; node && node.nodeType === 1; node = node.parentElement) {
-    const overflowY = style(node).overflowY;
-    if ((overflowY === 'auto' || overflowY === 'scroll') && node.scrollHeight > node.clientHeight + 1) return node;
+    const s = style(node);
+    if (can(s.overflowY) && node.scrollHeight > node.clientHeight + 1) return node;
+    if (horizontal && can(s.overflowX) && node.scrollWidth > node.clientWidth + 1) return node;
   }
   return null;
 }
 
-export function lockPageScroll(doc = document) {
+/** horizontal() — спрашивается при каждом касании: новый интерфейс включается после входа. */
+export function lockPageScroll(doc = document, { horizontal = () => false } = {}) {
   const style = (node) => doc.defaultView.getComputedStyle(node);
   doc.addEventListener('touchmove', (e) => {
     if (e.touches.length > 1) return;                    // щипок (масштаб в маджонге) — не трогаем
-    if (!scrollableAncestor(e.target, style)) e.preventDefault();
+    if (!scrollableAncestor(e.target, style, { horizontal: horizontal() })) e.preventDefault();
   }, { passive: false });
 }
