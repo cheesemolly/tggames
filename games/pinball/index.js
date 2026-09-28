@@ -94,6 +94,10 @@ let calloutT = 0;
 let hinted = false;
 let resizeObs = null;
 let sizeKey = '';
+let hudT = 0;
+// качество: плотность пикселей холста; если кадры не успевают — ниже (2 → 1,5 → 1,25 → 1)
+let quality = 2;
+let perf = { n: 0, sum: 0, cool: 0 };
 const pointers = new Map();        // pointerId → { side, kind, x0, y0, t0, nudged }
 const keys = { left: false, right: false, plunger: false };
 let flipWas = [false, false];
@@ -214,7 +218,7 @@ function capture(id, holdSec, exit) {
   ball.trail = [];
   const h = table.elements.holes[id] ?? table.elements.well;
   renderer.ring(h.x, h.y, 'cyan', 10, 80, 0.45);
-  renderer.burst(h.x, h.y, 'violet', 10, 380);
+  renderer.burst(h.x, h.y, 'violet', 6, 380);
 }
 
 function eject() {
@@ -232,7 +236,7 @@ function eject() {
       renderer.ring(from.x, from.y, 'violet', 60, 5, 0.35);
     }
     renderer.ring(h.x, h.y, 'cyan', 5, 90, 0.5);
-    renderer.burst(h.x, h.y, 'cyan', 12, 420);
+    renderer.burst(h.x, h.y, 'cyan', 8, 420);
   }
   sfx('eject');
   noCatchUntil = clock + 0.6;
@@ -255,6 +259,16 @@ function place(x, y, vx, vy, layer) {
 // ---------- события мира ----------
 
 const SPEED_MIN = { target: 90, fuelT: 230, sling: 150 };
+// эффекты одного элемента — не чаще раза в 0,1 с: на платформе шарик бьётся о бамперы десятки раз в секунду,
+// и частицы с кольцами от каждого удара тормозили телефон (жалоба владельца, 2026-09-28)
+const FX_GAP = 0.1;
+const fxAt = new Map();
+const fxReady = (id) => {
+  const t = fxAt.get(id);
+  if (t != null && clock - t < FX_GAP) return false;
+  fxAt.set(id, clock);
+  return true;
+};
 
 function onEvent(e) {
   if (e.ball !== ball || mode !== 'play') return;
@@ -267,22 +281,24 @@ function onEvent(e) {
     if (c.kind === 'bumper') {
       R.hit(g, id);
       renderer.hit(id);
-      renderer.ring(c.x, c.y, id.startsWith('lbump') ? 'rubber' : id === 'bumpSat' ? 'cyan' : 'gold', c.r, c.r + 55, 0.3);
-      renderer.burst(ball.x, ball.y, 'gold', 6, 380);
+      if (fxReady(id)) {
+        renderer.ring(c.x, c.y, id.startsWith('lbump') ? 'rubber' : id === 'bumpSat' ? 'cyan' : 'gold', c.r, c.r + 55, 0.3);
+        renderer.burst(ball.x, ball.y, 'gold', 4, 380);
+      }
       return;
     }
     if (c.kind === 'sling' || c.kind === 'rubber') {
       if (e.speed < SPEED_MIN.sling) return;
       R.hit(g, id);
       renderer.hit(id);
-      if (c.kind === 'sling') renderer.burst(ball.x, ball.y, 'rubber', 7, 360);
+      if (c.kind === 'sling' && fxReady(id)) renderer.burst(ball.x, ball.y, 'rubber', 5, 360);
       return;
     }
     if (c.kind === 'drop' || c.kind === 'target') {
       if (e.speed < (id.startsWith('fuelT') ? SPEED_MIN.fuelT : SPEED_MIN.target)) return;
       R.hit(g, id);
       renderer.hit(id);
-      renderer.burst(ball.x, ball.y, c.kind === 'drop' ? 'cyan' : 'green', 6, 300);
+      if (fxReady(id)) renderer.burst(ball.x, ball.y, c.kind === 'drop' ? 'cyan' : 'green', 4, 300);
       return;
     }
     if (id === 'post') R.hit(g, id);
@@ -314,7 +330,7 @@ function onEvent(e) {
     const v = side === 'L' ? KICK_L : KICK_R;
     ball.vx = v[0] + (Math.random() - 0.5) * 40;
     ball.vy = v[1];
-    renderer.burst(ball.x, ball.y, 'green', 14, 500);
+    renderer.burst(ball.x, ball.y, 'green', 10, 500);
     renderer.shake(5);
     return;
   }
@@ -399,7 +415,7 @@ function drainFx() {
       const w = table.elements.well;
       renderer.white(f.kind === 'rank' || f.kind === 'jackpot' ? 0.35 : 0.2);
       renderer.shake(f.kind === 'rank' ? 12 : 7);
-      renderer.burst(w.x, w.y - 40, 'gold', 36, 900);
+      renderer.burst(w.x, w.y - 40, 'gold', 24, 900);
       renderer.ring(w.x, w.y, 'gold', 30, 260, 0.7);
       haptic('notification', 'success');
     }
@@ -442,6 +458,9 @@ function hideHint() {
 function updateHud(dt) {
   shownScore += (g.score - shownScore) * Math.min(1, dt * 9);
   if (Math.abs(g.score - shownScore) < 1) shownScore = g.score;
+  hudT -= dt;
+  if (hudT > 0) return;
+  hudT = 0.08;                                   // панель — не чаще ~12 раз в секунду: смена текста стоит вёрстки
   const s = fmt(shownScore);
   if (ui.score.textContent !== s) ui.score.textContent = s;
   const m = R.missionText(g);
@@ -466,8 +485,10 @@ function updateHud(dt) {
 function frame(ts) {
   raf = 0;
   if (!root) return;
-  const dt = lastTs ? Math.min(1 / 30, Math.max(0, (ts - lastTs) / 1000)) : 1 / 60;
+  const gap = lastTs ? Math.max(0, (ts - lastTs) / 1000) : 1 / 60;
+  const dt = Math.min(1 / 30, gap);
   lastTs = ts;
+  if (!paused && !modalActive && document.visibilityState === 'visible') watchPerf(gap);
   if (!paused && !modalActive) step(dt);
   renderer.draw(view(), paused || modalActive ? 0 : dt);
   if (!paused && !modalActive) {
@@ -475,6 +496,31 @@ function frame(ts) {
     updateHud(dt);
   }
   schedule();
+}
+
+/**
+ * Кадры идут реже 45 в секунду 1,5 с подряд — холст становится менее плотным (дешевле рисовать). Вверх качество
+ * не возвращается: иначе оно прыгало бы туда-обратно.
+ */
+function watchPerf(gap) {
+  if (gap > 0.25) return;                        // вкладку сворачивали — не мерило
+  perf.n += 1;
+  perf.sum += gap;
+  if (perf.cool > 0) perf.cool -= gap;
+  if (perf.n < 90) return;
+  const avg = perf.sum / perf.n;
+  perf.n = 0;
+  perf.sum = 0;
+  if (avg > 1 / 45 && perf.cool <= 0 && quality > 1) {
+    quality = quality > 1.5 ? 1.5 : quality > 1.25 ? 1.25 : 1;
+    perf.cool = 1.5;
+    sizeKey = '';
+    hudT = 0;
+    quality = 2;
+    perf = { n: 0, sum: 0, cool: 0 };
+    fxAt.clear();
+    onResize();
+  }
 }
 
 function schedule() {
@@ -896,7 +942,7 @@ function onResize() {
   const wide = root.clientWidth > root.clientHeight * 0.95;
   ui.root.classList.toggle('pb-wide', wide);
   const s = ui.stage.getBoundingClientRect();
-  const dpr = window.devicePixelRatio || 1;
+  const dpr = Math.min(quality, window.devicePixelRatio || 1);
   const key = `${Math.round(s.width)}x${Math.round(s.height)}@${dpr}`;
   if (key === sizeKey) return;
   sizeKey = key;
@@ -979,6 +1025,11 @@ export default {
     ui.stage.addEventListener('pointercancel', onPointerUp);
     ui.stage.addEventListener('lostpointercapture', onPointerUp);
     ui.stage.addEventListener('contextmenu', (e) => e.preventDefault());
+    // долгое нажатие на айфоне включало выделение текста и лупу (владелец, 2026-09-28): касания стола — только наши.
+    // Pointer-события при этом приходят как обычно.
+    ui.stage.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false });
+    ui.stage.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
+    ui.stage.addEventListener('selectstart', (e) => e.preventDefault());
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
     document.addEventListener('visibilitychange', onVisibility);
@@ -997,6 +1048,9 @@ export default {
         press(side, on) { if (side < 0) keys.left = on; else keys.right = on; },
         hit: (id) => R.hit(g, id),
         say,
+        get renderer() { return renderer; },
+        view: () => view(),
+        get quality() { return quality; },
       };
     }
     schedule();

@@ -7,6 +7,14 @@
   overflow: hidden;
   padding: 0;
 }
+/* долгое нажатие (пружина, флиппер) на айфоне не должно выделять текст и звать лупу / меню */
+.game-root[data-game="pinball"],
+.game-root[data-game="pinball"] * {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
 
 [data-game="pinball"] .pb {
   --pb-bg: #07061a;

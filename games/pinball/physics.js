@@ -179,10 +179,18 @@ function insideSensor(ball, c) {
   if (c.shape === 'circle') return len(ball.x - c.x, ball.y - c.y) < c.r;
   if (c.shape === 'line') {
     // «ворота»: шарик касается отрезка
+    const bx = boxOf(c);
+    if (ball.x + ball.r < bx[0] || ball.x - ball.r > bx[2] || ball.y + ball.r < bx[1] || ball.y - ball.r > bx[3]) return false;
     const p = closestOnSegment(ball.x, ball.y, c.a[0], c.a[1], c.b[0], c.b[1]);
     return len(ball.x - p.x, ball.y - p.y) < ball.r;
   }
   return ball.x > c.x0 && ball.x < c.x1 && ball.y > c.y0 && ball.y < c.y1;
+}
+
+/** Рамка отрезка (для быстрого отсева: шарик далеко — точного расчёта нет). */
+function boxOf(c) {
+  if (!c.box) c.box = [Math.min(c.a[0], c.b[0]), Math.min(c.a[1], c.b[1]), Math.max(c.a[0], c.b[0]), Math.max(c.a[1], c.b[1])];
+  return c.box;
 }
 
 /** Столкновение шарика с препятствием: выталкивание + отскок. → скорость удара, −1 (касание без удара) или 0. */
@@ -200,6 +208,9 @@ function collide(ball, c) {
     return bounce(ball, nx, ny, c.restitution ?? 0.5, c.friction ?? 0.1, c.kick ?? 0, 0, 0, c.falloff ?? 0, c.kickAlways) || -1;
   }
   if (c.type === 'seg') {
+    const bx = boxOf(c);
+    const r = ball.r;
+    if (ball.x + r < bx[0] || ball.x - r > bx[2] || ball.y + r < bx[1] || ball.y - r > bx[3]) return 0;
     const p = closestOnSegment(ball.x, ball.y, c.a[0], c.a[1], c.b[0], c.b[1]);
     let dx = ball.x - p.x;
     let dy = ball.y - p.y;
@@ -237,6 +248,8 @@ function collide(ball, c) {
     return bounce(ball, nx, ny, c.restitution ?? 0.5, c.friction ?? 0.1, c.kick ?? 0, 0, 0, c.falloff ?? 0) || -1;
   }
   if (c.type === 'flipper') {
+    const reach = c.length + c.r0 + ball.r;
+    if (Math.abs(ball.x - c.x) > reach || Math.abs(ball.y - c.y) > reach) return 0;
     const [tx, ty] = flipperTip(c);
     const p = closestOnSegment(ball.x, ball.y, c.x, c.y, tx, ty);
     const r = c.r0 + (c.r1 - c.r0) * p.t;

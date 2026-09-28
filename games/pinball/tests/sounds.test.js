@@ -11,7 +11,7 @@ test('каждый звук пинбола звучит, все узлы под�
   const sounds = createSounds(ctx);
   for (const name of SOUNDS) {
     assert.ok(sounds.has(name), `нет звука ${name}`);
-    ctx.currentTime += 1;                        // не упираться в «не чаще 35 мс»
+    ctx.currentTime += 1;                        // не упираться в «не чаще 70 мс»
     const before = created.length;
     sounds.play(name, { lane: 2, level: 0.7, speed: 0.5 });
     const fresh = created.slice(before);
@@ -41,7 +41,7 @@ test('шум — только через фильтр не выше 4 кГц', (
   void created;
 });
 
-test('частые удары не трещат: бампер не чаще раза в 35 мс, серия идёт вверх по нотам', () => {
+test('частые удары не трещат: бампер не чаще раза в 70 мс, серия идёт вверх по нотам', () => {
   const { ctx, created } = fakeContext();
   const sounds = createSounds(ctx);
   ctx.currentTime = 10;
