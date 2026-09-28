@@ -1,0 +1,27 @@
+/*
+ * Лицо игральной карты (shared/cards.js): индекс, масть, картинки. Подключают пасьянсы (loadCardStyles).
+ * Размер — переменная --pc-w (ширина карты), цвета мастей — --pc-suit-0…3 (пики, червы, бубны, трефы) — их задаёт игра.
+ */
+
+.pc-s0 { color: var(--pc-suit-0, #1c1c22); }
+.pc-s1 { color: var(--pc-suit-1, #d42a3c); }
+.pc-s2 { color: var(--pc-suit-2, #d42a3c); }
+.pc-s3 { color: var(--pc-suit-3, #1c1c22); }
+.pc-s0 svg, .pc-s1 svg, .pc-s2 svg, .pc-s3 svg { display: block; fill: currentColor; }
+.pc-idx {
+  position: absolute;
+  left: 7%;
+  top: 3%;
+  font-size: calc(var(--pc-w, 34px) * 0.42);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+.pc-idx-10 { letter-spacing: -0.1em; font-size: calc(var(--pc-w, 34px) * 0.36); }
+.pc-idx-suit { position: absolute; right: 7%; top: 5%; width: 30%; }
+.pc-center { position: absolute; left: 0; right: 0; top: 36%; bottom: 7%; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.pc-pip { width: 56%; }
+.pc-pip-ace { width: 70%; }
+.pc-court { width: 62%; fill: none !important; stroke: currentColor; stroke-width: 7; stroke-linejoin: round; stroke-linecap: round; }
+.pc-court-suit { width: 26%; margin-top: 2%; }

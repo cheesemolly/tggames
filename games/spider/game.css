@@ -1,20 +1,20 @@
 /*
  * Паук. Стол — фон всей игры (скин): «По умолчанию» — от цветов темы Telegram, остальные — свои палитры (стол и рубашка
- * карты — это «картинка», в обеих темах одинаковая). Карты — свои SVG (cards.js); лицо светлое во всех скинах, цвета
- * мастей — --sp-suit-*, четырёхцветная колода — класс .sp-four у контейнера. Окна — в цветах темы.
+ * карты — это «картинка», в обеих темах одинаковая). Карты — свои SVG (shared/cards.js, лицо — shared/cards.css); лицо светлое во всех скинах, цвета
+ * мастей — --pc-suit-*, четырёхцветная колода — класс .sp-four у контейнера. Окна — в цветах темы.
  */
 
 [data-game="spider"] {
-  --sp-suit-0: #1c1c22;
-  --sp-suit-1: #d42a3c;
-  --sp-suit-2: #d42a3c;
-  --sp-suit-3: #1c1c22;
+  --pc-suit-0: #1c1c22;
+  --pc-suit-1: #d42a3c;
+  --pc-suit-2: #d42a3c;
+  --pc-suit-3: #1c1c22;
   --sp-face: #fdfdfb;
   --sp-face-2: #f0efe8;
   --sp-accent: #ffd43b;
   --toast-top: 110px;
 }
-[data-game="spider"].sp-four { --sp-suit-2: #1f6fd6; --sp-suit-3: #16965a; }
+[data-game="spider"].sp-four { --pc-suit-2: #1f6fd6; --pc-suit-3: #16965a; }
 
 [data-game="spider"], [data-game="spider"] [data-skin="telegram"] {
   --sp-table: var(--tg-theme-secondary-bg-color);
@@ -198,29 +198,6 @@
 /* выбранный касанием ряд: приподнят и обведён; куда можно положить — подсвечено */
 [data-game="spider"] .sp-sel { translate: 0 -4px; transition: transform 0.26s cubic-bezier(0.2, 0.8, 0.25, 1), translate 0.15s ease; }
 [data-game="spider"] .sp-sel .sp-front { box-shadow: 0 0 0 2px var(--sp-accent), 0 6px 12px rgba(0, 0, 0, 0.3); }
-
-[data-game="spider"] .sp-s0 { color: var(--sp-suit-0); }
-[data-game="spider"] .sp-s1 { color: var(--sp-suit-1); }
-[data-game="spider"] .sp-s2 { color: var(--sp-suit-2); }
-[data-game="spider"] .sp-s3 { color: var(--sp-suit-3); }
-[data-game="spider"] .sp-front svg { display: block; fill: currentColor; }
-[data-game="spider"] .sp-idx {
-  position: absolute;
-  left: 7%;
-  top: 3%;
-  font-size: calc(var(--sp-w, 34px) * 0.42);
-  font-weight: 800;
-  line-height: 1;
-  letter-spacing: -0.03em;
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-}
-[data-game="spider"] .sp-idx-10 { letter-spacing: -0.1em; font-size: calc(var(--sp-w, 34px) * 0.36); }
-[data-game="spider"] .sp-idx-suit { position: absolute; right: 7%; top: 5%; width: 30%; }
-[data-game="spider"] .sp-center { position: absolute; left: 0; right: 0; top: 36%; bottom: 7%; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-[data-game="spider"] .sp-pip { width: 56%; }
-[data-game="spider"] .sp-pip-ace { width: 70%; }
-[data-game="spider"] .sp-court { width: 62%; fill: none !important; stroke: currentColor; stroke-width: 7; stroke-linejoin: round; stroke-linecap: round; }
-[data-game="spider"] .sp-court-suit { width: 26%; margin-top: 2%; }
 
 /* подсказка и цели */
 [data-game="spider"] .sp-hint-src .sp-front, [data-game="spider"] .sp-hint-dst .sp-front {

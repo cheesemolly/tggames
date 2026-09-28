@@ -26,6 +26,8 @@ export const GAME_ICONS = {
     + '<path d="M5.5 9v4.5a2.5 2.5 0 0 0 2.5 2.5h8"/>'),
   mahjong: svg('<rect x="2.5" y="7" width="9" height="13.5" rx="2"/><rect x="12.5" y="3.5" width="9" height="13.5" rx="2"/>'
     + '<path d="M6 11.5h2.5M6 15h2.5M16 8h2.5M16 11.5h2.5" opacity="0.7"/>'),
+  klondike: svg('<rect x="3" y="6.5" width="10.5" height="14.5" rx="2" transform="rotate(-9 8 14)"/><rect x="10" y="3.5" width="10.5" height="14.5" rx="2"/>'
+    + '<path d="M15.2 13.4c-1.6-1.2-2.8-2.1-2.8-3.4a1.4 1.4 0 0 1 2.8-.5 1.4 1.4 0 0 1 2.8.5c0 1.3-1.2 2.2-2.8 3.4Z" fill="currentColor" stroke="none"/>'),
   spider: svg('<circle cx="12" cy="13.5" r="3.4"/><circle cx="12" cy="8.2" r="1.9"/>'
     + '<path d="M9.2 11.5 5 8.5 3.5 4.5M8.8 13.5H4.5L2.5 11M9.2 15.5 5.5 18.5 4.5 21.5M14.8 11.5 19 8.5l1.5-4M15.2 13.5h4.3l2-2.5M14.8 15.5l3.7 3 1 3"/>'),
   match3: svg('<circle cx="6" cy="7" r="3"/><circle cx="12" cy="7" r="3"/><circle cx="18" cy="7" r="3"/>'

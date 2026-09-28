@@ -193,6 +193,7 @@ const GAMES = [
   { id: 'match3', title: 'Три в ряд', emoji: '💎', about: 'меняй фишки местами и собирай по три — 100 уровней с боссами', beta: true },
   { id: 'chess', title: 'Шахматы', emoji: '♟️', about: 'против бота: семь уровней, от новичка до полной силы', beta: true },
   { id: 'spider', title: 'Паук', emoji: '🕷️', about: 'пасьянс как в Windows: 1, 2 или 4 масти', beta: true },
+  { id: 'klondike', title: 'Косынка', emoji: '🃏', about: 'пасьянс как в Windows: из колоды по одной или по три', beta: true },
 ];
 
 const fold = (text) => String(text ?? '').toLowerCase().replace(/ё/g, 'е').trim();
@@ -398,6 +399,7 @@ const BOARDS = {
   match3: { by: 'пройденные уровни', score: match3Levels, text: count(['уровень пройден', 'уровня пройдено', 'уровней пройдено']) },
   chess: { by: 'победы над ботом', score: shellStats('chess', 'wins'), text: WINS },
   spider: { by: 'разложенные пасьянсы', score: shellStats('spider', 'wins'), text: count(['пасьянс', 'пасьянса', 'пасьянсов']) },
+  klondike: { by: 'разложенные пасьянсы', score: shellStats('klondike', 'wins'), text: count(['пасьянс', 'пасьянса', 'пасьянсов']) },
 };
 
 const MAX_SCORE = 1e9;   // больше — явно испорченные данные
@@ -415,9 +417,10 @@ const BOARD_LIMITS = {
   tictactoe: 1e5,
   chess: 1e5,
   spider: 1e5,
+  klondike: 1e5,
 };
 // побед не может быть больше сыгранных партий
-const WINS_FROM = { checkers: 'checkers', mahjong: 'mahjong', sudoku: 'sudoku', wordle: 'wordle', tictactoe: 'tictactoe', chess: 'chess', spider: 'spider' };
+const WINS_FROM = { checkers: 'checkers', mahjong: 'mahjong', sudoku: 'sudoku', wordle: 'wordle', tictactoe: 'tictactoe', chess: 'chess', spider: 'spider', klondike: 'klondike' };
 
 function plausible(id, value, state) {
   if (value > (BOARD_LIMITS[id] ?? MAX_SCORE)) return false;

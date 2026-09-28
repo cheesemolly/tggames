@@ -1,4 +1,5 @@
-// Паук (Spider Solitaire, как в Windows): правила — logic.js, карты — cards.js (свои SVG), звуки — sounds.js.
+// Паук (Spider Solitaire, как в Windows): правила — logic.js, карты — shared/cards.js (свои SVG, общие с Косынкой),
+// звуки — shared/card-sounds.js.
 //
 // Все 104 карты — элементы одного слоя поверх игры: так карта может лететь откуда угодно куда угодно (из колоды
 // в столбец, собранная масть — вниз налево). Модель вида (view) повторяет каждое действие логики — ход, раздачу,
@@ -14,8 +15,8 @@ import { el } from '../../shared/dom.js';
 import { animate, showLayer, hideLayer, reducedMotion, shake } from '../../shared/motion.js';
 import { createToast } from '../../shared/toast.js';
 import { createAudio } from '../../shared/sfx.js';
-import { createSounds } from './sounds.js';
-import { faceHtml, suitSvg, rankLabel, SUIT_PATHS } from './cards.js';
+import { createCardSounds } from '../../shared/card-sounds.js';
+import { faceHtml, suitSvg, cardImage as cardPicture, loadCardStyles } from '../../shared/cards.js';
 import {
   COLUMNS, MODES, suitOf, rankOf, isUp, face, card, newGame, canPick, runStart, canMove, move, deal, canDeal, undo,
   isWon, hintMoves, allMoves, dealsLeft, isValidState, emptyStats, isValidStats, recordGame,
@@ -108,7 +109,7 @@ let lastDealAt = 0;
 let lastTick = 0;
 let resizeObserver = null;
 const timers = new Set();
-const audio = createAudio(createSounds);
+const audio = createAudio(createCardSounds);
 
 function sfx(name, opts) {
   if (!soundOn) return;
@@ -161,7 +162,7 @@ function makeCard(code) {
   const c = face(code);
   const node = el('div', { class: `sp-card${isUp(code) ? ' sp-up' : ''}` },
     el('div', { class: 'sp-inner' },
-      el('div', { class: `sp-face sp-front sp-s${suitOf(c)}` }),
+      el('div', { class: `sp-face sp-front pc-s${suitOf(c)}` }),
       el('div', { class: 'sp-face sp-back' }),
     ),
   );
@@ -176,7 +177,7 @@ function ensureFace(node, code) {
   const c = face(code);
   if (node._card === c) return;
   const front = node.querySelector('.sp-front');
-  front.className = `sp-face sp-front sp-s${suitOf(c)}`;
+  front.className = `sp-face sp-front pc-s${suitOf(c)}`;
   front.innerHTML = faceHtml(suitOf(c), rankOf(c));
   node._card = c;
 }
@@ -236,6 +237,7 @@ function measure() {
     doneStep: land ? Math.max(4, Math.min(H * 0.3, (D.h - H) / 7)) : Math.min(W * 0.42, (D.w - W) / 7),
   };
   root.style.setProperty('--sp-w', `${W}px`);
+  root.style.setProperty('--pc-w', `${W}px`);
   root.style.setProperty('--sp-h', `${H}px`);
   ui.slots.forEach((slot, c) => {
     slot.style.transform = `translate(${colX(c)}px, ${metrics.top}px)`;
@@ -700,16 +702,8 @@ function toggleRotate() {
 
 function cardImage(c) {
   const suit = suitOf(c);
-  const rank = rankOf(c);
-  const color = getComputedStyle(root).getPropertyValue(`--sp-suit-${suit}`).trim() || (suit % 2 ? '#d62828' : '#1b1b1f');
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="142" viewBox="0 0 100 142">`
-    + '<rect x="1" y="1" width="98" height="140" rx="9" fill="#fdfdfb" stroke="#b9b9b3" stroke-width="2"/>'
-    + `<text x="9" y="36" font-family="system-ui, sans-serif" font-weight="800" font-size="34" fill="${color}">${rankLabel(rank)}</text>`
-    + `<g transform="translate(62 10) scale(0.3)" fill="${color}"><path d="${SUIT_PATHS[suit]}"/></g>`
-    + `<g transform="translate(22 52) scale(0.56)" fill="${color}"><path d="${SUIT_PATHS[suit]}"/></g></svg>`;
-  const img = new Image();
-  img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
-  return img;
+  const color = getComputedStyle(root).getPropertyValue(`--pc-suit-${suit}`).trim() || (suit % 3 ? '#d42a3c' : '#1c1c22');
+  return cardPicture(suit, rankOf(c), color);
 }
 
 function win() {
@@ -762,10 +756,13 @@ function cascade(done) {
   }
   const images = new Map();
   for (const q of queue) if (!images.has(q.c)) images.set(q.c, cardImage(q.c));
-  let active = null;
+  // новая карта — каждые LAUNCH_MS, в полёте их несколько (по одной 104 карты не успели бы вылететь)
+  const LAUNCH_MS = 110;
+  const flying = [];
   let finished = false;
   let last = performance.now();
-  let started = last;
+  const started = last;
+  let nextLaunch = last;
   const floor = R.height - H;
   const stop = () => {
     if (finished) return;
@@ -778,24 +775,26 @@ function cascade(done) {
     if (finished || !ui) return;
     const dt = Math.min(40, Math.max(0, now - last)) / 16.7;
     last = now;
-    if (!active && queue.length) {
+    if (queue.length && now >= nextLaunch) {
+      nextLaunch = now + LAUNCH_MS;
       const q = queue.shift();
       // стопки внизу — карта подпрыгивает вверх и скачет по экрану, оставляя след
-      active = { ...q, vx: (Math.random() < 0.5 ? -1 : 1) * (2 + Math.random() * 3.5), vy: -(12 + Math.random() * 7) };
+      flying.push({ ...q, vx: (Math.random() < 0.5 ? -1 : 1) * (3 + Math.random() * 4), vy: -(12 + Math.random() * 7) });
     }
-    if (active) {
-      active.vy += 0.55 * dt;
-      active.x += active.vx * dt;
-      active.y += active.vy * dt;
-      if (active.y > floor) {
-        active.y = floor;
-        active.vy = -active.vy * 0.78;
+    for (let k = flying.length - 1; k >= 0; k--) {
+      const card = flying[k];
+      card.vy += 0.55 * dt;
+      card.x += card.vx * dt;
+      card.y += card.vy * dt;
+      if (card.y > floor) {
+        card.y = floor;
+        card.vy = -card.vy * 0.78;
       }
-      const img = images.get(active.c);
-      if (img.complete) ctx.drawImage(img, active.x, active.y, W, H);
-      if (active.x < -W || active.x > R.width) active = null;
+      const img = images.get(card.c);
+      if (img.complete) ctx.drawImage(img, card.x, card.y, W, H);
+      if (card.x < -W || card.x > R.width) flying.splice(k, 1);
     }
-    if ((!active && !queue.length) || now - started > 9000) {
+    if ((!flying.length && !queue.length) || now - started > 14000) {
       stop();
       return;
     }
@@ -848,7 +847,7 @@ function radioGroup(cls, items, isOn, onPick) {
 function suitRow(suits) {
   const list = suits === 4 ? [0, 1, 2, 3] : suits === 2 ? [0, 1] : [0];
   return el('span', { class: 'sp-suit-row' }, list.map((s) => {
-    const span = el('span', { class: `sp-mini sp-s${s}` });
+    const span = el('span', { class: `sp-mini pc-s${s}` });
     span.innerHTML = suitSvg(s);
     return span;
   }));
@@ -938,6 +937,7 @@ export default {
     const [saved, savedStats, savedSettings, savedSetup, savedSound] = await Promise.all([
       api.storage.get('current'), api.storage.get('stats'), api.storage.get('settings'), api.storage.get('setup'), api.storage.get('sound'),
     ]);
+    await loadCardStyles();
     if (!api) return;
     soundOn = savedSound !== false;
     stats = isValidStats(savedStats) ? savedStats : upgradeStats(savedStats);

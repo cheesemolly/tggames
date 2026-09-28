@@ -156,4 +156,11 @@ export const games = [
     css: new URL('../games/spider/game.css', import.meta.url),
     menu: { best: false },                               // «Сыграно · Побед» — очков нет, рекорд — победы
   },
+  {
+    id: 'klondike',
+    title: 'Косынка',
+    load: () => import('../games/klondike/index.js'),
+    css: new URL('../games/klondike/game.css', import.meta.url),
+    menu: { best: false },                               // «Сыграно · Побед» — очков нет, рекорд — победы
+  },
 ];
