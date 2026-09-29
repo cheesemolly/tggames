@@ -10,8 +10,9 @@ const PREFIX = `${ROOT}:`;
 
 // Кому сообщать, что данные изменились (синхронизация с сервером). Токен аккаунта лежит
 // вне PREFIX, поэтому в выгрузку не попадает и по сети не гуляет.
-// fn(key, same): key — какой ключ (как в snapshot(), без общего префикса; null — заменено всё),
-// same — записано то же значение, что уже лежало (слиянию, бета sync-merge, отправлять нечего).
+// fn(key, same, reset): key — какой ключ (как в snapshot(), без общего префикса; null — заменено всё),
+// same — записано то же значение, что уже лежало (слиянию, бета sync-merge, отправлять нечего),
+// reset — явный сброс (reset()): при слиянии всё записанное раньше не учитывается.
 const listeners = new Set();
 
 export function onStorageChange(fn) {
@@ -19,10 +20,10 @@ export function onStorageChange(fn) {
   return () => listeners.delete(fn);
 }
 
-function changed(key = null, same = false) {
+function changed(key = null, same = false, reset = false) {
   for (const fn of listeners) {
     try {
-      fn(key, same);
+      fn(key, same, reset);
     } catch (err) {
       console.warn('обработчик изменения хранилища упал', err);
     }
@@ -50,6 +51,20 @@ export function createStorage(namespace) {
         changed(`${namespace}:${key}`, same);
       } catch (err) {
         console.warn(`storage.set(${prefix}${key}) не удался`, err);
+      }
+    },
+
+    /**
+     * Явный сброс (статистика, рекорды, прогресс — «Сбросить статистику»): value становится новым началом ключа.
+     * Обычный set() слияние между устройствами отменило бы — максимум вернул бы рекорд, счётчики другого устройства —
+     * сыгранное. После reset() всё записанное раньше (на любом устройстве) при слиянии не учитывается.
+     */
+    async reset(key, value) {
+      try {
+        localStorage.setItem(prefix + key, JSON.stringify(value));
+        changed(`${namespace}:${key}`, false, true);
+      } catch (err) {
+        console.warn(`storage.reset(${prefix}${key}) не удался`, err);
       }
     },
 

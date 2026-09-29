@@ -325,3 +325,57 @@ test('нет связи при возврате: игра не перезапу�
   assert.equal((await srv.state())['game:loop:current'].level, 3);
   assert.equal(a.restarts, 0, 'итог совпал с игрой — без перезапуска');
 });
+
+test('сброс на одном устройстве, потом синхронизируется второе со старыми данными — сброс сохраняется', async () => {
+  const srv = await server();
+  const a = device(srv, 'device-aaaa-01');
+  const b = device(srv, 'device-bbbb-02');
+  a.put('game:flags:stats', { games: 10, answers: 100, correct: 70, best: { test: 9, type: 7 }, bestStreak: 12, misses: { fr: 3 } });
+  await a.run((sync) => sync.pull());
+  await b.run((sync) => sync.pull());
+  // B без связи сыграл ещё: счётчики и рекорд выросли
+  b.down = true;
+  await b.run(async (sync) => {
+    const flags = createStorage('game:flags');
+    const s = await flags.get('stats');
+    await flags.set('stats', { ...s, games: 11, answers: 110, correct: 78, best: { test: 10, type: 7 }, bestStreak: 14 });
+    await sync.push();
+  });
+  // A сбрасывает статистику (явно)
+  const empty = { games: 0, answers: 0, correct: 0, best: { test: 0, type: 0 }, bestStreak: 0, misses: {} };
+  await a.run(async (sync) => {
+    await createStorage('game:flags').reset('stats', empty);
+    await sync.push();
+  });
+  b.down = false;
+  await b.run((sync) => sync.push());
+  await a.run((sync) => sync.refresh());
+  assert.deepEqual((await srv.state())['game:flags:stats'], empty, 'на сервере — сброшенное');
+  assert.deepEqual(b.local('game:flags:stats'), empty, 'у B старое не вернулось, он взял сброс');
+  assert.deepEqual(a.local('game:flags:stats'), empty);
+  // и дальше обычный счёт
+  await b.run(async (sync) => {
+    await createStorage('game:flags').set('stats', { ...empty, games: 1, answers: 10, correct: 6, best: { test: 6, type: 0 } });
+    await sync.push();
+  });
+  assert.equal((await srv.state())['game:flags:stats'].games, 1);
+});
+
+test('Wordle: партия на EN с одного устройства и на RU с другого (оба не видят друг друга) — обе сохраняются', async () => {
+  const srv = await server();
+  const a = device(srv, 'device-aaaa-01');
+  const b = device(srv, 'device-bbbb-02');
+  const boards = { en: { secret: 'crane', guesses: [] }, ua: null, ru: { secret: 'пятно', guesses: [] } };
+  a.put('game:wordle:boards', boards);
+  await a.run((sync) => sync.pull());
+  await b.run((sync) => sync.pull());
+  await a.run(async () => createStorage('game:wordle').set('boards', { ...boards, en: { secret: 'crane', guesses: ['slate'] } }));
+  await b.run(async () => createStorage('game:wordle').set('boards', { ...boards, ru: { secret: 'пятно', guesses: ['кошка'] } }));
+  await a.run((sync) => sync.push());
+  await b.run((sync) => sync.push());
+  await a.run((sync) => sync.refresh());
+  const want = { en: { secret: 'crane', guesses: ['slate'] }, ua: null, ru: { secret: 'пятно', guesses: ['кошка'] } };
+  assert.deepEqual((await srv.state())['game:wordle:boards'], want);
+  assert.deepEqual(a.local('game:wordle:boards'), want);
+  assert.deepEqual(b.local('game:wordle:boards'), want);
+});

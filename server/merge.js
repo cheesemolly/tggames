@@ -6,7 +6,9 @@
 // на сервере есть запись: { v — значение, t — время записи по часам СЕРВЕРА, e — эпоха (правка в панели, переход
 // на слияние), f — счётчики по устройствам, del — ключ удалён }. Как сливать значение, решает правило ключа (RULES):
 //   lww    — целиком побеждает записанное позже (t); так — по умолчанию (настройки, начатые партии);
-//   level  — партия с уровнем внутри («Петля»): больший уровень, при равном — позже записанное;
+//   level  — партия с уровнем внутри («Петля», Филворд): больший уровень, при равном — позже записанное;
+//   map    — объект из независимых частей (партии Wordle по языкам): у каждой части своё время, побеждает
+//            записанное позже по каждой части отдельно;
 //   fields — объект по полям: у поля своё правило, остальное — от записанного позже; вложенные объекты с правилами
 //            внутри объединяются (вариант статистики, заведённый на другом устройстве, не пропадает).
 // Правила полей:
@@ -16,6 +18,9 @@
 //               значение = l + сумма d; каждое устройство увеличивает только своё, при слиянии — максимум;
 //   spend     — расходуемое (подсказки, бонусы): f = { s: стартовое, d: { устройство: [начислено, потрачено] } },
 //               значение = s + сумма начисленного − сумма потраченного, не меньше 0.
+// Эпоха (e): правка в панели и явный сброс (storage.reset) начинают ключ заново; запись из более старой эпохи при
+// слиянии не учитывается вовсе — иначе максимум вернул бы сброшенный рекорд, а счётчики другого устройства —
+// сброшенную статистику.
 // Слияние коммутативно и идемпотентно: merge(a, b) = merge(b, a), merge(a, a) = a (тест shell/tests/merge.test.js).
 
 export const MERGE_PROTOCOL = 3;
@@ -33,7 +38,8 @@ const CARDS = {
   // '*.streak' — серия: растёт и сбрасывается (спорное, пока — от записанного позже)
 };
 
-// Правило ключа: { type: 'level', at: 'level' } | { type: 'fields', fields: { путь: правило } }; нет правила — lww.
+// Правило ключа: { type: 'level', at: 'level' } | { type: 'map' } | { type: 'fields', fields: { путь: правило } };
+// нет правила — lww.
 // Путь поля — через точку, '*' — любой ключ объекта или индекс массива, '' — всё значение целиком.
 // Правило поля: 'max' | 'min' | 'union' | 'count' | { spend: стартовое } | { union: true, sort: true, keep: N }.
 // Ключ — как в snapshot() (без «tggames:»); '*' в конце — любое продолжение. Берётся первое подходящее.
@@ -77,6 +83,10 @@ export const RULES = [
     cleared: 'count', bestLevel: 'max', bricks: 'count', shots: 'count', fails: 'count',
   } }],
   ['game:loop:current', { type: 'level', at: 'level' }],
+  // Филворд: уровень общий для всех размеров поля (смена размера уровень не сбрасывает — с беты sync-merge)
+  ['game:boggle:current', { type: 'level', at: 'level' }],
+  // Wordle: партии трёх языков — независимые части (партия на EN с телефона и на RU с ПК уживаются)
+  ['game:wordle:boards', { type: 'map' }],
   ['game:loop:stats', { type: 'fields', fields: { solved: 'count', taps: 'count', bestLevel: 'max' } }],
   ['game:connect-dots:stats', { type: 'fields', fields: { played: 'count', bestRound: 'max', rounds: 'count' } }],
   ['game:mahjong:stats', { type: 'fields', fields: { '*.played': 'count', '*.wins': 'count', '*.clean': 'count' } }],
@@ -182,6 +192,17 @@ export function canon(value) {
 }
 
 export const same = (a, b) => canon(a) === canon(b);
+
+/** Короткий отпечаток значения (FNV-1a по canon): устройство помнит, какими части были на сервере. */
+export function fingerprint(value) {
+  let h = 0x811c9dc5;
+  const text = canon(value);
+  for (let i = 0; i < text.length; i += 1) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(36);
+}
 
 const splitPath = (p) => (p === '' ? [] : p.split('.'));
 
@@ -291,6 +312,7 @@ export function cleanEntry(key, entry, rules = RULES) {
   const out = { t: isNum(entry?.t) ? entry.t : 0, e: isNum(entry?.e) ? entry.e : 0 };
   if (entry?.del || entry?.v === undefined) out.del = true;
   else out.v = entry.v;
+  if (rule.type === 'map') out.c = cleanParts(entry, out.t);
   if (rule.type === 'fields') {
     out.f = {};
     for (const [path, raw] of Object.entries(isObj(entry?.f) ? entry.f : {})) {
@@ -313,6 +335,15 @@ function winner(a, b, rule) {
   return ca >= cb ? a : b;
 }
 
+/** Времена частей объекта-«карты»: у присланного без них — время всего ключа (так переходят старые данные). */
+function cleanParts(entry, t) {
+  const out = {};
+  const src = isObj(entry?.c) ? entry.c : {};
+  for (const [part, at] of Object.entries(src)) if (isNum(at) || at === Infinity) out[part] = at;
+  if (isObj(entry?.v)) for (const part of Object.keys(entry.v)) if (!(part in out)) out[part] = t;
+  return out;
+}
+
 function entryLevel(entry, at) {
   if (entry.del) return null;
   const lv = getAt(entry.v, splitPath(at));
@@ -324,8 +355,12 @@ export function mergeEntry(key, a, b, rules = RULES) {
   if (!a) return b;
   if (!b) return a;
   const rule = ruleFor(key, rules);
+  // новая эпоха (правка в панели, явный сброс) — записанное раньше неё не учитывается вовсе
+  if (a.e !== b.e) return a.e > b.e ? a : b;
   const t = Math.max(a.t, b.t);
-  const e = Math.max(a.e, b.e);
+  const e = a.e;
+
+  if (rule.type === 'map' && !a.del && !b.del && isObj(a.v) && isObj(b.v)) return mergeParts(a, b, t, e);
 
   if (rule.type !== 'fields') {
     let win = null;
@@ -337,18 +372,17 @@ export function mergeEntry(key, a, b, rules = RULES) {
     }
     win ??= winner(a, b);
     // время — победителя: иначе при равных уровнях порядок слияний менял бы итог
-    return win.del ? { t: win.t, e, del: true } : { t: win.t, e, v: win.v };
+    const out = win.del ? { t: win.t, e, del: true } : { t: win.t, e, v: win.v };
+    if (win.c) out.c = win.c;
+    return out;
   }
 
-  // у кого эпоха новее (правка в панели, новый переход на слияние), того и накопленное — у другой стороны сброшено
-  const aOld = a.e < b.e;
-  const bOld = b.e < a.e;
   const f = {};
   for (const path of new Set([...Object.keys(a.f ?? {}), ...Object.keys(b.f ?? {})])) {
     const spec = specAt(rule, splitPath(path));
     if (!spec) continue;
-    const fa = aOld ? undefined : a.f?.[path];
-    const fb = bOld ? undefined : b.f?.[path];
+    const fa = a.f?.[path];
+    const fb = b.f?.[path];
     if (fa && fb) f[path] = spec.kind === 'count' ? mergeCount(fa, fb) : mergeSpend(fa, fb);
     else if (fa || fb) f[path] = fa ?? fb;
   }
@@ -359,9 +393,28 @@ export function mergeEntry(key, a, b, rules = RULES) {
   if (b.del) return a;
   const win = winner(a, b, rule);
   const lose = win === a ? b : a;
-  // значение из старой эпохи приходит без накопленного — его сбросила правка
-  const v = mergeValue(rule, [], win.v, lose.v, { winOld: win.e < lose.e, loseOld: lose.e < win.e });
-  return { t, e, f, v: materialize(rule, v, f) };
+  return { t, e, f, v: materialize(rule, mergeValue(rule, [], win.v, lose.v), f) };
+}
+
+/**
+ * «Карта»: каждая часть — сама по себе, побеждает записанная позже (время части в c; нет в значении, но есть время —
+ * часть удалена). Одновременно — «большее» значение, чтобы слияние было коммутативным.
+ */
+function mergeParts(a, b, t, e) {
+  const v = {};
+  const c = {};
+  const parts = new Set([...Object.keys(a.v), ...Object.keys(a.c ?? {}), ...Object.keys(b.v), ...Object.keys(b.c ?? {})]);
+  for (const part of [...parts].sort()) {
+    const side = (x) => ({ at: x.c?.[part] ?? (hasOwn(x.v, part) ? x.t : -Infinity), has: hasOwn(x.v, part), val: x.v[part] });
+    const pa = side(a);
+    const pb = side(b);
+    let win;
+    if (pa.at !== pb.at) win = pa.at > pb.at ? pa : pb;
+    else win = (pa.has ? canon(pa.val) : '') >= (pb.has ? canon(pb.val) : '') ? pa : pb;
+    if (win.at !== -Infinity) c[part] = win.at;
+    if (win.has) v[part] = win.val;
+  }
+  return { t, e, v, c };
 }
 
 /** Значение без полей с правилами (без накопленного) — то, что при слиянии берётся целиком от победителя. */
@@ -376,17 +429,17 @@ function ownOnly(rule, segs, value) {
   return out;
 }
 
-function mergeValue(rule, segs, win, lose, epochs) {
+function mergeValue(rule, segs, win, lose) {
   const spec = specAt(rule, segs);
-  if (spec) return mergeLeaf(spec, win, lose, epochs);
+  if (spec) return mergeLeaf(spec, win, lose);
   // без правил внутри — целиком от записанного позже (в том числе «поля нет»: игра его убрала — не возвращаем)
   if (!rulesBelow(rule, segs)) return win;
-  if (win === undefined) return epochs.loseOld ? ownOnly(rule, segs, lose) : lose;
-  if (lose === undefined) return epochs.winOld ? ownOnly(rule, segs, win) : win;
+  if (win === undefined) return lose;
+  if (lose === undefined) return win;
   if (isObj(win) && isObj(lose)) {
     const out = {};
     for (const k of [...Object.keys(win), ...Object.keys(lose).filter((x) => !hasOwn(win, x))]) {
-      const child = mergeValue(rule, [...segs, k], win[k], lose[k], epochs);
+      const child = mergeValue(rule, [...segs, k], win[k], lose[k]);
       if (child !== undefined) out[k] = child;
     }
     return out;
@@ -394,17 +447,14 @@ function mergeValue(rule, segs, win, lose, epochs) {
   if (Array.isArray(win) && Array.isArray(lose)) {
     const out = [];
     for (let i = 0; i < Math.max(win.length, lose.length); i += 1) {
-      out.push(mergeValue(rule, [...segs, String(i)], win[i], lose[i], epochs));
+      out.push(mergeValue(rule, [...segs, String(i)], win[i], lose[i]));
     }
-    while (out.length && out[out.length - 1] === undefined) out.pop();   // сброшенное правкой — без «дыр» в конце
     return out;
   }
   return win;
 }
 
-function mergeLeaf(spec, win, lose, { winOld, loseOld }) {
-  if (winOld) return lose;                        // эпоха старше — накопленное у той стороны сброшено правкой
-  if (loseOld) return win;
+function mergeLeaf(spec, win, lose) {
   if (spec.kind === 'count' || spec.kind === 'spend') return win ?? lose;   // число потом берётся из f
   if (spec.kind === 'max' || spec.kind === 'min') {
     const ok = (x) => isNum(x) && (spec.kind === 'max' || x > 0);
@@ -460,6 +510,20 @@ export function absorb(key, entry, value, device, rules = RULES) {
   const out = { t: entry?.t ?? 0, e: entry?.e ?? 0 };
   if (value === undefined) out.del = true;
   else out.v = value;
+  if (rule.type === 'map') {
+    // изменённые части — те, что отличаются от последних известных с сервера (h — их отпечатки); они «новее всего»
+    const known = isObj(entry?.h) ? entry.h : null;
+    out.c = { ...(entry?.c ?? {}) };
+    out.ch = [];
+    const now = isObj(value) ? value : {};
+    for (const part of new Set([...Object.keys(now), ...Object.keys(known ?? {})])) {
+      const fp = hasOwn(now, part) ? fingerprint(now[part]) : null;
+      if (known && (known[part] ?? null) === fp) continue;
+      out.ch.push(part);
+      out.c[part] = Infinity;
+    }
+    return out;
+  }
   if (rule.type !== 'fields') return out;
   const f = {};
   for (const [path, meta] of Object.entries(entry?.f ?? {})) f[path] = clone(meta);
@@ -483,6 +547,23 @@ export function absorb(key, entry, value, device, rules = RULES) {
   return out;
 }
 
+/**
+ * Что устройство помнит о ключе после обмена: время и эпоха — как на сервере, счётчики — слитые (со своими
+ * неотправленными прибавками), у «карты» — времена и отпечатки частей, КАК НА СЕРВЕРЕ (по ним видно, что изменилось).
+ */
+export function keepMeta(key, result, server, rules = RULES) {
+  const rule = ruleFor(key, rules);
+  const out = { t: server.t };
+  if (result.e) out.e = result.e;
+  if (result.f && Object.keys(result.f).length) out.f = result.f;
+  if (rule.type === 'map') {
+    out.c = server.c ?? {};
+    out.h = {};
+    if (!server.del && isObj(server.v)) for (const [part, val] of Object.entries(server.v)) out.h[part] = fingerprint(val);
+  }
+  return out;
+}
+
 // ---------- переход на слияние ----------
 
 /**
@@ -494,6 +575,7 @@ export function legacyEntry(key, value, t, e = 0, rules = RULES) {
   const out = { t, e };
   if (value === undefined) out.del = true;
   else out.v = value;
+  if (rule.type === 'map') out.c = cleanParts(out, t);
   if (rule.type !== 'fields') return out;
   out.f = {};
   if (value === undefined) return out;
@@ -548,6 +630,7 @@ export function saveDoc(doc, at = 0) {
     if (entry.e) m.e = entry.e;
     if (entry.del) m.del = 1;
     if (entry.f && Object.keys(entry.f).length) m.f = entry.f;
+    if (entry.c && Object.keys(entry.c).length) m.c = entry.c;
     k[key] = m;
   }
   return { data, meta: { at, mig: doc.mig, acks: doc.acks, k } };
@@ -560,6 +643,7 @@ export function wireEntry(entry) {
   if (entry.del) out.del = 1;
   else out.v = entry.v;
   if (entry.f && Object.keys(entry.f).length) out.f = entry.f;
+  if (entry.c && Object.keys(entry.c).length) out.c = entry.c;
   return out;
 }
 
@@ -574,7 +658,10 @@ export function entriesSince(doc, since, extra = []) {
 }
 
 /**
- * Принять сохранение устройства: push = { device, seq, keys: { ключ: { v | del, e, f, s } }, migrate?: { oldBase } }.
+ * Принять сохранение устройства: push = { device, seq, keys: { ключ: { v | del, e, f, s, ch, r } }, migrate?: { oldBase } }.
+ *   r  — явный сброс (storage.reset): значение становится новым началом ключа (новая эпоха), всё записанное раньше
+ *        при слиянии больше не учитывается;
+ *   ch — какие части «карты» изменены на устройстве (остальные части присланного значения не трогаются).
  * Время записи ставит сервер (stamp): часам устройства не доверяем.
  *   s — номер отправки, в которой это значение ушло впервые: если сервер уже принял отправку с таким номером от
  *       этого устройства (acks), ключ пропускается — повтор (ответ не дошёл) не перебьёт то, что позже записало
@@ -598,6 +685,11 @@ export function applyPush(doc, push, stamp, rules = RULES) {
     if (!migrate && device && isNum(raw.s) && raw.s > 0 && raw.s <= acked) continue;   // повтор уже принятого
     const stored = next.k[key];
     const value = raw.del ? undefined : raw.v;
+    if (raw.r && !migrate) {
+      next.k[key] = legacyEntry(key, value, stamp, stamp, rules);
+      changed.push(key);
+      continue;
+    }
     let incoming;
     if (migrate) {
       const at = oldBase + 0.5;
@@ -606,6 +698,7 @@ export function applyPush(doc, push, stamp, rules = RULES) {
     } else {
       incoming = cleanEntry(key, { ...raw, t: stamp }, rules);
       incoming.e = stored ? Math.min(incoming.e, stored.e) : 0;   // эпоху устройство знает только от сервера
+      if (ruleFor(key, rules).type === 'map' && !incoming.del && isObj(incoming.v)) incoming = changedParts(incoming, raw, stamp);
     }
     const merged = mergeEntry(key, stored, incoming, rules);
     if (!stored || !sameEntry(stored, merged)) {
@@ -620,6 +713,18 @@ export function applyPush(doc, push, stamp, rules = RULES) {
     dirty = true;
   }
   return { doc: next, changed, dirty };
+}
+
+/** Из присланной «карты» — только изменённые на устройстве части (ch; не сказано — все), со временем сервера. */
+function changedParts(incoming, raw, stamp) {
+  const parts = Array.isArray(raw.ch) ? raw.ch.filter((p) => typeof p === 'string') : Object.keys(incoming.v);
+  const v = {};
+  const c = {};
+  for (const part of parts) {
+    if (hasOwn(incoming.v, part)) v[part] = incoming.v[part];
+    c[part] = stamp;
+  }
+  return { t: stamp, e: incoming.e, v, c };
 }
 
 /** Устройство взяло уже слитый прогресс старым клиентом: засчитать ему только то, что сверх серверного итога. */

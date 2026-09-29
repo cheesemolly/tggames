@@ -30,7 +30,7 @@
 
 import { snapshot, restore, onStorageChange, readValue, writeValues } from '../platform/storage.js';
 import {
-  MERGE_PROTOCOL, absorb, cleanEntry, mergeEntry, sameEntry, same,
+  MERGE_PROTOCOL, absorb, cleanEntry, mergeEntry, sameEntry, same, keepMeta,
 } from '../server/merge.js';
 
 export const SYNC_DELAY = 4000;
@@ -40,6 +40,7 @@ const DIRTY_KEY = 'tggames-sync-dirty';   // есть изменения, кот
 const META_KEY = 'tggames-sync-meta';       // { k: { ключ: { t, e, f } } } — записи слияния; есть — устройство перешло
 const PENDING_KEY = 'tggames-sync-pending'; // { ключ: s } — изменено, сервер ещё не подтвердил (s — номер отправки, 0 — не слали)
 const SEQ_KEY = 'tggames-sync-seq';         // номер последней отправки этого устройства
+const RESETS_KEY = 'tggames-sync-resets';   // { ключ: 1 } — явный сброс (storage.reset), сервер ещё не подтвердил
 // Запрос с keepalive браузер доводит до конца и после закрытия страницы, но тело — не больше 64 КБ.
 export const KEEPALIVE_LIMIT = 60000;
 // возврат в приложение шлёт и visibilitychange, и Telegram 'activated' — перечитываем один раз
@@ -148,12 +149,9 @@ function nextSeq() {
   return seq;
 }
 
-/** Запись ключа, как её помнит устройство: время на сервере, эпоха, счётчики по устройствам. */
-function keepEntry(entry, t) {
-  const out = { t: Number.isFinite(entry.t) ? entry.t : t };
-  if (entry.e) out.e = entry.e;
-  if (entry.f && Object.keys(entry.f).length) out.f = entry.f;
-  return out;
+function readResets() {
+  const resets = readJson(RESETS_KEY);
+  return isMap(resets) ? resets : {};
 }
 
 /**
@@ -476,13 +474,17 @@ export function createSync({
     const meta = readMeta();
     const seq = nextSeq();
     const out = {};
+    const resets = readResets();
     for (const key of keys) {
-      const entry = absorb(key, meta.k[key], readValue(key), dev);
-      meta.k[key] = keepEntry(entry, meta.k[key]?.t ?? 0);
+      const known = meta.k[key];
+      const entry = absorb(key, known, readValue(key), dev);
+      if (entry.f) meta.k[key] = { ...(known ?? { t: 0 }), f: entry.f };
       pending[key] ||= seq;
       out[key] = { ...(entry.del ? { del: 1 } : { v: entry.v }), s: pending[key] };
       if (entry.e) out[key].e = entry.e;
       if (entry.f) out[key].f = entry.f;
+      if (entry.ch) out[key].ch = entry.ch;     // у «карты» (партии Wordle по языкам) — какие части изменены
+      if (resets[key]) out[key].r = 1;
     }
     writeJson(META_KEY, meta);
     writeJson(PENDING_KEY, pending);
@@ -561,8 +563,14 @@ export function createSync({
       const meta = readMeta() ?? { k: {} };
       const next = full ? { k: {} } : { k: { ...meta.k } };
       const pending = readPending();
+      const resets = readResets();
       const ack = Number(reply.ack) || 0;
-      for (const [key, s] of Object.entries(pending)) if (s > 0 && s <= ack) delete pending[key];   // доставлено
+      for (const [key, s] of Object.entries(pending)) {
+        if (s > 0 && s <= ack) {                 // доставлено
+          delete pending[key];
+          delete resets[key];
+        }
+      }
       const writes = {};
       for (const [key, raw] of Object.entries(incoming)) {
         const server = cleanEntry(key, raw);
@@ -573,7 +581,7 @@ export function createSync({
           result = mergeEntry(key, server, mine);
           if (sameEntry(result, server)) delete pending[key];     // своё проиграло или уже там — слать нечего
         }
-        next.k[key] = keepEntry(result, server.t);
+        next.k[key] = keepMeta(key, result, server);
         const value = result.del ? undefined : result.v;
         if (!same(value, local)) writes[key] = value;
       }
@@ -587,7 +595,8 @@ export function createSync({
           }
         }
       }
-      return { next, pending, writes };
+      for (const key of Object.keys(resets)) if (!(key in pending)) delete resets[key];
+      return { next, pending, resets, writes };
     };
     const commit = (p) => {
       applying = true;
@@ -598,6 +607,7 @@ export function createSync({
       }
       writeJson(META_KEY, p.next);
       writeJson(PENDING_KEY, p.pending);
+      writeJson(RESETS_KEY, Object.keys(p.resets).length ? p.resets : null);
     };
 
     const preview = plan();
@@ -615,11 +625,13 @@ export function createSync({
     else dirty = true;
   }
 
-  const unsubscribe = onStorageChange((key, sameValue) => {
+  const unsubscribe = onStorageChange((key, sameValue, reset) => {
     if (applying) return;
     // что изменилось — помним на слиянии и пока вход не ответил (после него устройство может оказаться на слиянии)
-    if (key && !sameValue && (merge() || !account.current)) markPending(key);
-    if (merge() && sameValue) return;
+    const track = key && (merge() || !account.current);
+    if (track && (!sameValue || reset)) markPending(key);
+    if (track && reset) writeJson(RESETS_KEY, { ...readResets(), [key]: 1 });
+    if (merge() && sameValue && !reset) return;
     changes++;
     writeDirty(true);
     schedule();
@@ -671,6 +683,7 @@ export function createSync({
       writeDirty(false);
       writeJson(META_KEY, null);
       writeJson(PENDING_KEY, null);
+      writeJson(RESETS_KEY, null);
     },
     destroy() {
       stop();

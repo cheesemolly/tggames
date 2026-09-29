@@ -426,7 +426,7 @@ function report() {
 
 // ---------- новая партия ----------
 
-async function startGame(saved = null) {
+async function startGame(saved = null, level = 1) {
   ui.current.textContent = T.loading;
   try {
     dict = await loadDict();
@@ -436,7 +436,7 @@ async function startGame(saved = null) {
     return;
   }
   if (!api) return;
-  game = saved ?? newGame(settings.size, generatePuzzle(settings.size, dict));
+  game = saved ?? newGame(settings.size, generatePuzzle(settings.size, dict), level);
   if (!game.level) game.level = 1;              // сохранения до уровней — это первый уровень
   finished = false;
   selection = [];
@@ -531,8 +531,10 @@ function showSettings() {
       settings.size = n;
       api.storage.set('settings', settings);
       sizeButtons.forEach((b, k) => b.setAttribute('aria-checked', String(SIZES[k] === n)));
-      // В партии ещё ничего не найдено — сразу новое поле, иначе — со следующей партии.
-      if (game && !finished && !game.found.length && !game.bonus.length) startGame();
+      // В партии ещё ничего не найдено — сразу новое поле, иначе — со следующей партии. Уровень общий для всех
+      // размеров: с беты sync-merge новое поле — того же уровня (раньше — первого: код писался до уровней, а
+      // слияние по большему уровню такой сброс всё равно отменило бы).
+      if (game && !finished && !game.found.length && !game.bonus.length) startGame(null, api.feature?.('sync-merge') ? game.level : 1);
       else note.hidden = n === game?.size;
     },
   }, el('b', {}, `${n}×${n}`), el('span', {}, T.settings.words(n))));
@@ -637,7 +639,12 @@ export default {
     renderSoundBtn();
     renderInfo();
 
-    await startGame(isValidState(savedGame) && !isComplete(savedGame) ? savedGame : null);
+    // Уровень пройден, а следующее поле не успело появиться (закрыли за 1,6 с) — с беты sync-merge следующий уровень,
+    // а не первый: статистика за пройденный уже записана; иначе слияние по большему уровню возвращало бы пройденный
+    // и игра бесконечно перезапускалась бы.
+    const valid = isValidState(savedGame);
+    if (valid && isComplete(savedGame) && api.feature?.('sync-merge')) await startGame(null, (savedGame.level ?? 1) + 1);
+    else await startGame(valid && !isComplete(savedGame) ? savedGame : null);
   },
 
   getState() {

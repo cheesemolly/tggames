@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 
 import {
   RULES, ruleFor, kindAt, mergeEntry, sameEntry, absorb, legacyEntry, loadDoc, saveDoc, applyPush, applyAdmin,
-  entriesSince, cleanEntry, same,
+  entriesSince, cleanEntry, same, fingerprint,
 } from '../../server/merge.js';
 import { games } from '../registry.js';
 
@@ -174,7 +174,8 @@ test('«Петля»: уровень не опускается ни в како�
     let top = 35;
     let stamp = 2000;
     for (const save of order) {
-      doc = applyPush(doc, { device: save.device, seq: stamp, keys: { [key]: { v: { v: 1, level: save.level, moves: save.moves } } } }, stamp += 10).doc;
+      // эпоху устройство знает от сервера (1000 — прогресс перешёл на слияние в 1000)
+      doc = applyPush(doc, { device: save.device, seq: stamp, keys: { [key]: { v: { v: 1, level: save.level, moves: save.moves }, e: 1000 } } }, stamp += 10).doc;
       const level = doc.k[key].v.level;
       assert.ok(level >= top, `уровень опустился: ${top} → ${level} (порядок ${order.map((s) => s.level)})`);
       top = level;
@@ -257,7 +258,7 @@ test('переход: расходуемое — текущий баланс с�
 test('переход: изменённое на устройстве после прошлого обмена побеждает, изменённое на сервере позже — тоже', () => {
   let doc = loadDoc({ 'game:2048:settings': { size: 4, skin: 'telegram' }, 'game:chess:setup': { level: 3 } }, null, 1000);
   // другое устройство уже поменяло шахматы после 1000
-  doc = applyPush(doc, { device: A, seq: 1, keys: { 'game:chess:setup': { v: { level: 5 } } } }, 1500).doc;
+  doc = applyPush(doc, { device: A, seq: 1, keys: { 'game:chess:setup': { v: { level: 5 }, e: 1000 } } }, 1500).doc;
   // B был в обмене в 1000, без связи сменил скин 2048 и (по старой памяти) шахматы
   doc = applyPush(doc, {
     device: B, seq: 1, migrate: { oldBase: 1000 },
@@ -298,7 +299,7 @@ test('правка в панели: новая эпоха — счётчики �
 
 test('удаление: начатая партия удаляется по времени, накопленное удалением не стирается', () => {
   let doc = loadDoc({ 'game:chess:current': { v: 1, moves: ['e2e4'] }, 'shell:stats:chess': { played: 3, wins: 1, best: null } }, null, 1000);
-  doc = applyPush(doc, { device: A, seq: 1, keys: { 'game:chess:current': { del: 1 }, 'shell:stats:chess': { del: 1 } } }, 2000).doc;
+  doc = applyPush(doc, { device: A, seq: 1, keys: { 'game:chess:current': { del: 1, e: 1000 }, 'shell:stats:chess': { del: 1, e: 1000 } } }, 2000).doc;
   assert.ok(doc.k['game:chess:current'].del, 'партия закончена на A — её нет');
   assert.equal(doc.k['shell:stats:chess'].v.played, 3, 'статистику удаление не стирает');
   const saved = saveDoc(doc);
@@ -431,5 +432,92 @@ test('слитое значение принимает сама игра (все
       check(merged.v, va, vb, base, []);
       assert.ok(same(mergeEntry(key, merged, merged).v, merged.v));
     }
+  }
+});
+
+// ---------- явный сброс, эпохи ----------
+
+test('явный сброс (storage.reset): записанное раньше — на любом устройстве — при слиянии не учитывается', () => {
+  const key = 'shell:stats:flags';
+  let doc = loadDoc({ [key]: { played: 10, wins: 4, best: 9 } }, null, 1000);
+  const known = cleanEntry(key, entriesSince(doc, 0)[key]);
+  // устройство B без связи сыграло ещё 2 (рекорд 12) — его данные из старой эпохи
+  const stale = absorb(key, known, { played: 12, wins: 5, best: 12 }, B);
+  // A сбрасывает статистику
+  doc = applyPush(doc, { device: A, seq: 1, keys: { [key]: { v: { played: 0, wins: 0, best: null }, e: known.e, r: 1 } } }, 2000).doc;
+  // B приходит со своими старыми данными
+  doc = applyPush(doc, { device: B, seq: 1, keys: { [key]: { v: stale.v, f: stale.f, e: stale.e } } }, 3000).doc;
+  assert.deepEqual(doc.k[key].v, { played: 0, wins: 0, best: null }, 'сброс устоял: ни рекорд, ни партии B не вернулись');
+  // после сброса B узнал новую эпоху — его новые партии считаются
+  const fresh = cleanEntry(key, entriesSince(doc, 0)[key]);
+  const after = absorb(key, fresh, { played: 1, wins: 1, best: 3 }, B);
+  doc = applyPush(doc, { device: B, seq: 2, keys: { [key]: { v: after.v, f: after.f, e: after.e } } }, 4000).doc;
+  assert.deepEqual(doc.k[key].v, { played: 1, wins: 1, best: 3 });
+});
+
+test('правка в панели уровня «Петли» вниз не отменяется большим уровнем со старого устройства', () => {
+  const key = 'game:loop:current';
+  let doc = loadDoc({ [key]: { v: 1, level: 60 } }, null, 1000);
+  doc = applyAdmin(doc, { [key]: { v: 1, level: 10 } }, 5000);
+  doc = applyPush(doc, { device: B, seq: 1, keys: { [key]: { v: { v: 1, level: 61 }, e: 1000 } } }, 6000).doc;
+  assert.equal(doc.k[key].v.level, 10);
+});
+
+// ---------- Филворд: уровень общий для всех размеров ----------
+
+test('Филворд: партия с большим уровнем побеждает (как «Петля»), при равном — записанная позже', () => {
+  const key = 'game:boggle:current';
+  let doc = loadDoc({ [key]: { level: 30, size: 8, found: [] } }, null, 1000);
+  doc = applyPush(doc, { device: B, seq: 1, keys: { [key]: { v: { level: 12, size: 8, found: [{ word: 'кот' }] }, e: 1000 } } }, 2000).doc;
+  assert.equal(doc.k[key].v.level, 30, 'старая партия с другого устройства уровень не откатывает');
+  doc = applyPush(doc, { device: A, seq: 1, keys: { [key]: { v: { level: 30, size: 5, found: [] }, e: 1000 } } }, 3000).doc;
+  assert.equal(doc.k[key].v.size, 5, 'сменил размер на том же уровне — новое поле');
+});
+
+// ---------- Wordle: партии по языкам ----------
+
+test('Wordle: партии языков сливаются по отдельности; старые данные переходят по языку без потерь', () => {
+  const key = 'game:wordle:boards';
+  const en = { secret: 'crane', guesses: ['slate'] };
+  const ru = { secret: 'пятно', guesses: [] };
+  // было записано старым обменом одним ключом
+  let doc = loadDoc({ [key]: { en, ua: null, ru } }, null, 1000);
+  const known = cleanEntry(key, entriesSince(doc, 0)[key]);
+  assert.deepEqual(known.c, { en: 1000, ua: 1000, ru: 1000 }, 'у каждой партии — время прежнего ключа');
+  // устройство знает, какими партии были на сервере (отпечатки) — как после обмена
+  const meta = { ...known, h: { en: fingerprint(en), ua: fingerprint(null), ru: fingerprint(ru) } };
+  // телефон ходит в EN, ПК — в RU; каждый шлёт весь объект, но изменённой — только свою часть
+  const phone = absorb(key, meta, { en: { ...en, guesses: ['slate', 'crony'] }, ua: null, ru }, A);
+  const pc = absorb(key, meta, { en, ua: null, ru: { ...ru, guesses: ['кошка'] } }, B);
+  assert.deepEqual(phone.ch, ['en']);
+  assert.deepEqual(pc.ch, ['ru']);
+  doc = applyPush(doc, { device: A, seq: 1, keys: { [key]: { v: phone.v, ch: phone.ch, e: 1000 } } }, 2000).doc;
+  doc = applyPush(doc, { device: B, seq: 1, keys: { [key]: { v: pc.v, ch: pc.ch, e: 1000 } } }, 2010).doc;
+  assert.deepEqual(doc.k[key].v, { en: { ...en, guesses: ['slate', 'crony'] }, ua: null, ru: { ...ru, guesses: ['кошка'] } });
+  // обе партии одного языка — побеждает записанная позже
+  doc = applyPush(doc, { device: A, seq: 2, keys: { [key]: { v: { en: null, ua: null, ru }, ch: ['en'], e: 1000 } } }, 2020).doc;
+  assert.equal(doc.k[key].v.en, null, 'EN закончена на телефоне');
+  assert.deepEqual(doc.k[key].v.ru.guesses, ['кошка'], 'а RU с ПК не тронута, хотя телефон прислал старую');
+});
+
+test('Wordle: слияние частей коммутативно, идемпотентно и ассоциативно', () => {
+  const r = rng(314);
+  const key = 'game:wordle:boards';
+  const make = (t) => {
+    const v = {};
+    const c = {};
+    for (const lang of ['en', 'ua', 'ru']) {
+      if (r() < 0.2) continue;
+      c[lang] = t * 10 + int(r, 0, 9);
+      if (r() < 0.85) v[lang] = r() < 0.3 ? null : { secret: pick(r, ['crane', 'pилот', 'слово']), guesses: ['a'].slice(0, int(r, 0, 1)) };
+    }
+    return cleanEntry(key, { t: t * 10 + 9, e: 0, v, c });
+  };
+  for (let i = 0; i < 400; i += 1) {
+    const [a, b, c] = [make(int(r, 0, 5)), make(int(r, 0, 5)), make(int(r, 0, 5))];
+    const ab = mergeEntry(key, a, b);
+    assert.ok(eq(ab, mergeEntry(key, b, a)));
+    assert.ok(eq(mergeEntry(key, a, a), a));
+    assert.ok(eq(mergeEntry(key, ab, c), mergeEntry(key, a, mergeEntry(key, b, c))));
   }
 });

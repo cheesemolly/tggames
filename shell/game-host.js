@@ -30,6 +30,7 @@ export function gatedStorage(storage, allowed) {
   return {
     get: (key) => storage.get(key),
     set: (key, value) => (allowed() ? storage.set(key, value) : Promise.resolve()),
+    reset: (key, value) => (allowed() ? storage.reset(key, value) : Promise.resolve()),
     remove: (key) => (allowed() ? storage.remove(key) : Promise.resolve()),
   };
 }
