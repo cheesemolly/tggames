@@ -108,6 +108,12 @@ export const games = [
     css: new URL('../games/sudoku/game.css', import.meta.url),
   },
   {
+    id: 'killer-sudoku',
+    title: 'Судоку-киллер',
+    load: () => import('../games/killer-sudoku/index.js'),
+    css: new URL('../games/killer-sudoku/game.css', import.meta.url),
+  },
+  {
     id: 'wordle',
     title: 'Wordle',
     load: () => import('../games/wordle/index.js'),

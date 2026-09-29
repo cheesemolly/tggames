@@ -98,6 +98,9 @@ export const RULES = [
   ['game:sudoku:stats', { type: 'fields', fields: {
     '*.played': 'count', '*.wins': 'count', '*.maxStreak': 'max', '*.bestMs': 'min', '*.totalWinMs': 'count',
   } }],
+  ['game:killer-sudoku:stats', { type: 'fields', fields: {
+    '*.played': 'count', '*.wins': 'count', '*.maxStreak': 'max', '*.bestMs': 'min', '*.totalWinMs': 'count',
+  } }],
   ['game:tictactoe:stats', { type: 'fields', fields: {
     ...COUNT4('*.*.'), 'friend.played': 'count', 'friend.x': 'count', 'friend.o': 'count', 'friend.draws': 'count',
     bestStreak: 'max',

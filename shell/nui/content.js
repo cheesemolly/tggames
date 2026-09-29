@@ -9,6 +9,15 @@ import { digits, plural, placeOn } from './logic.js';
 
 export const STORIES = [
   {
+    id: 'killer-new',
+    label: 'Киллер',
+    games: ['killer-sudoku'],
+    slides: [
+      { kicker: 'Новая игра', title: 'Судоку-киллер', text: 'Поле разбито на пунктирные группы: цифры группы складываются в число в её углу и не повторяются.' },
+      { kicker: 'Совет', title: 'Правило 45', text: 'Сумма цифр любой строки, столбца и блока — 45. Вычти суммы групп, которые лежат в нём целиком, — и узнаешь, сколько в остальных клетках.', play: 'killer-sudoku' },
+    ],
+  },
+  {
     id: 'pinball-new',
     label: 'Новая игра',
     games: ['pinball'],
@@ -132,6 +141,7 @@ export function pickStories({ visible, rated = false, seen = [], week = null }) 
 
 /** Что показать баннером «Новая игра»: первая видимая игроку из списка (новые — выше). */
 export const NEW_GAMES = [
+  { id: 'killer-sudoku', text: 'Суммы в группах, подсказки с объяснением' },
   { id: 'pinball', text: 'Миссии и звания, как в Windows XP' },
   { id: 'klondike', text: 'Только решаемые раскладки' },
   { id: 'spider', text: 'Пасьянс в 1, 2 или 4 масти' },

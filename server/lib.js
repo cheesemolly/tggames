@@ -182,6 +182,7 @@ export const GAMES = [
   { id: 'boggle', title: 'Филворд', emoji: '🔠', about: 'найди спрятанные на поле слова' },
   { id: 'block-blast', title: 'Block Blast', emoji: '🟦', about: 'ставь фигуры, собирай линии' },
   { id: 'sudoku', title: 'Судоку', emoji: '🧩', about: 'классика 9×9, четыре сложности и подсказки' },
+  { id: 'killer-sudoku', title: 'Судоку-киллер', emoji: '➕', about: 'судоку с суммами: цифры группы складываются в число в её углу', beta: true },
   { id: 'wordle', title: 'Wordle', emoji: '🟩', about: 'угадай слово из пяти букв: русский, украинский, английский', best: false },
   { id: 'memory', title: 'Мемори', emoji: '🃏', about: 'найди пары одинаковых карточек' },
   { id: 'bongo-cat', title: 'Bongo Cat', emoji: '🐱', about: 'кот играет на инструментах, разучи мелодию' },
@@ -395,6 +396,7 @@ export const BOARDS = {
   boggle: { by: 'найденные слова, включая бонусные', score: boggleWords, text: count(['слово', 'слова', 'слов']) },
   'block-blast': { by: 'рекорд', score: shellStats('block-blast', 'best'), text: POINTS },
   sudoku: { by: 'решённые судоку', score: shellStats('sudoku', 'wins'), text: count(['судоку', 'судоку', 'судоку']) },
+  'killer-sudoku': { by: 'решённые судоку', score: shellStats('killer-sudoku', 'wins'), text: count(['судоку', 'судоку', 'судоку']) },
   wordle: { by: 'угаданные слова', score: shellStats('wordle', 'wins'), text: count(['слово', 'слова', 'слов']) },
   memory: { by: 'уровень', score: menuLevel('memory'), text: levelText },
   'bongo-cat': { by: 'ударов за всё время', score: gameStats('bongo-cat', 'hits'), text: count(['удар', 'удара', 'ударов']) },
@@ -424,9 +426,10 @@ export const BOARD_LIMITS = {
   spider: 1e5,
   klondike: 1e5,
   pinball: 1e9,
+  'killer-sudoku': 1e5,
 };
 // побед не может быть больше сыгранных партий
-const WINS_FROM = { checkers: 'checkers', mahjong: 'mahjong', sudoku: 'sudoku', wordle: 'wordle', tictactoe: 'tictactoe', chess: 'chess', spider: 'spider', klondike: 'klondike' };
+const WINS_FROM = { checkers: 'checkers', mahjong: 'mahjong', sudoku: 'sudoku', wordle: 'wordle', tictactoe: 'tictactoe', chess: 'chess', spider: 'spider', klondike: 'klondike', 'killer-sudoku': 'killer-sudoku' };
 
 function plausible(id, value, state) {
   if (value > (BOARD_LIMITS[id] ?? MAX_SCORE)) return false;

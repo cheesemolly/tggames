@@ -32,6 +32,8 @@ export const GAME_FIELDS = [
   { game: 'connect-dots', key: 'current', path: ['hintsLeft'], label: 'Подсказки', min: 0, max: 99, run: true },
   { game: 'sudoku', key: 'current', path: ['hintsLeft'], label: 'Подсказки', min: 0, max: 99, run: true },
   { game: 'sudoku', key: 'current', path: ['mistakes'], label: 'Ошибки', min: 0, max: 99, run: true },
+  { game: 'killer-sudoku', key: 'current', path: ['hintsLeft'], label: 'Подсказки', min: 0, max: 99, run: true },
+  { game: 'killer-sudoku', key: 'current', path: ['mistakes'], label: 'Ошибки', min: 0, max: 99, run: true },
   { game: '2048', key: 'current', path: ['undoLeft'], label: 'Отмены хода', min: 0, max: 99, run: true },
 
   { game: 'flags', key: 'stats', path: ['correct'], label: 'Угадано флагов всего', min: 0, max: 1e9, note: 'по нему место в рейтинге' },

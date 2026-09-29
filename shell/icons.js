@@ -20,6 +20,10 @@ export const GAME_ICONS = {
   // Головоломки
   sudoku: svg('<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/>'
     + '<circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/>'),
+  // киллер: поле, пунктирная группа и плюс в её углу — там, где у группы сумма
+  'killer-sudoku': svg('<rect x="3" y="3" width="18" height="18" rx="3"/>'
+    + '<path d="M11.5 7H17v10H7v-5.5" stroke-width="1.6" stroke-dasharray="2 1.8"/>'
+    + '<path d="M8.2 5.9v4.6M5.9 8.2h4.6" stroke-width="1.8"/>'),
   loop: svg('<path d="M5 19v-6.5A4.5 4.5 0 0 1 9.5 8H19"/><circle cx="5" cy="19" r="2.2"/><circle cx="19" cy="8" r="2.2"/>'),
   'connect-dots': svg('<circle cx="5.5" cy="6" r="2.4" fill="currentColor" stroke="none"/>'
     + '<circle cx="18.5" cy="18" r="2.4" fill="currentColor" stroke="none"/>'

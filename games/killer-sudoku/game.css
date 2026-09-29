@@ -1,0 +1,671 @@
+/*
+ * Судоку-киллер. Оформление — как у судоку (шапка, строка статуса, инструменты, окна), плюс пунктир групп с
+ * суммами (SVG поверх доски), заметки в клетке ниже суммы и полоска сочетаний выбранной группы под доской.
+ * Все цвета игры — 8 базовых переменных --ks-*, остальное выводится из них через color-mix.
+ * Скин «telegram» (по умолчанию) берёт базовые цвета из темы Telegram, остальные скины — свои палитры
+ * (атрибут data-skin на корне игры; настройка в окне ⚙).
+ */
+
+[data-game="killer-sudoku"] {
+  --ks-bg: var(--tg-theme-bg-color);
+  --ks-surface: var(--tg-theme-secondary-bg-color);
+  --ks-text: var(--tg-theme-text-color);
+  --ks-hint: var(--tg-theme-hint-color);
+  --ks-accent: var(--tg-theme-button-color);
+  --ks-accent-text: var(--tg-theme-button-text-color);
+  --ks-link: var(--tg-theme-link-color);
+  --ks-danger: var(--tg-theme-destructive-text-color);
+
+  --ks-line: color-mix(in srgb, var(--ks-hint) 40%, var(--ks-bg));
+  --ks-line-strong: color-mix(in srgb, var(--ks-text) 70%, var(--ks-bg));
+  --ks-selected: color-mix(in srgb, var(--ks-accent) 38%, var(--ks-bg));
+  --ks-peer: color-mix(in srgb, var(--ks-hint) 16%, var(--ks-bg));
+  --ks-same: color-mix(in srgb, var(--ks-accent) 24%, var(--ks-bg));
+  --ks-user: var(--ks-link);
+  --ks-error: var(--ks-danger);
+  --ks-conflict: color-mix(in srgb, var(--ks-danger) 22%, var(--ks-bg));
+  /* Подсказка (как на sudoku.com): доска затемнена, «мешающие» цифры — зелёные, перекрытые ими строки/столбцы —
+     голубые, группа — в синей рамке, клетка ответа — светлая. Смысловые цвета одни на все скины и обе темы:
+     они смешиваются с фоном скина, поэтому читаются и на светлом, и на тёмном. */
+  --ks-h-dim: color-mix(in srgb, var(--ks-text) 28%, var(--ks-bg));        /* серая «маска»: и в светлом, и в тёмном скине */
+  --ks-h-dim-text: color-mix(in srgb, var(--ks-text) 55%, var(--ks-h-dim));
+  --ks-h-area: color-mix(in srgb, #38bdf8 42%, var(--ks-bg));
+  --ks-h-key: #22c55e;
+  --ks-h-frame: #3b82f6;
+  --ks-h-elim: #ef4444;
+  --ks-flash: color-mix(in srgb, var(--ks-accent) 45%, var(--ks-bg));   /* волна заполнения */
+
+  /* общая всплывашка (shared/toast.js) — под строкой статуса и в цветах скина */
+  --toast-top: 96px;
+  --toast-bg: var(--ks-text);
+  --toast-fg: var(--ks-bg);
+}
+
+/* Скины. Палитра применяется и к корню игры, и к квадрату-образцу в настройках (фон / акцент). */
+[data-game="killer-sudoku"] [data-skin="telegram"] {
+  --ks-bg: var(--tg-theme-bg-color); --ks-accent: var(--tg-theme-button-color);
+}
+[data-game="killer-sudoku"][data-skin="classic"], [data-game="killer-sudoku"] [data-skin="classic"] {       /* белый и голубой */
+  --ks-bg: #ffffff; --ks-surface: #edf2f9; --ks-text: #1e2b3c; --ks-hint: #7a8799;
+  --ks-accent: #2f7de1; --ks-accent-text: #ffffff; --ks-link: #2a6fd6; --ks-danger: #e5484d;
+}
+[data-game="killer-sudoku"][data-skin="ember"], [data-game="killer-sudoku"] [data-skin="ember"] {        /* чёрный и оранжевый */
+  --ks-bg: #1f1e1d; --ks-surface: #2c2b28; --ks-text: #f2eee6; --ks-hint: #9d978c;
+  --ks-accent: #d97757; --ks-accent-text: #ffffff; --ks-link: #e8906c; --ks-danger: #ff4f86;
+}
+[data-game="killer-sudoku"][data-skin="sepia"], [data-game="killer-sudoku"] [data-skin="sepia"] {         /* кремовый и коричневый */
+  --ks-bg: #f6efe0; --ks-surface: #ebe0c9; --ks-text: #3d2e1e; --ks-hint: #8b7860;
+  --ks-accent: #9a6b3f; --ks-accent-text: #ffffff; --ks-link: #8a5a2b; --ks-danger: #c0392b;
+}
+[data-game="killer-sudoku"][data-skin="forest"], [data-game="killer-sudoku"] [data-skin="forest"] {        /* тёмно-зелёный и мятный */
+  --ks-bg: #14201c; --ks-surface: #1e2e29; --ks-text: #e2eee8; --ks-hint: #86a097;
+  --ks-accent: #3ecf9e; --ks-accent-text: #0c1a15; --ks-link: #62d9b0; --ks-danger: #ff6b6b;
+}
+[data-game="killer-sudoku"][data-skin="night"], [data-game="killer-sudoku"] [data-skin="night"] {         /* тёмно-синий и фиолетовый */
+  --ks-bg: #121629; --ks-surface: #1d2342; --ks-text: #e6e8f5; --ks-hint: #8b90b3;
+  --ks-accent: #8b7cff; --ks-accent-text: #ffffff; --ks-link: #a99dff; --ks-danger: #ff6b81;
+}
+
+.game-root[data-game="killer-sudoku"] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+  background: var(--ks-bg);
+  color: var(--ks-text);
+}
+
+/* Общие классы оболочки (.btn, .hint) внутри судоку — в цветах скина */
+[data-game="killer-sudoku"] .btn { background: var(--ks-accent); color: var(--ks-accent-text); }
+[data-game="killer-sudoku"] .btn-secondary { background: var(--ks-surface); color: var(--ks-text); }
+[data-game="killer-sudoku"] .hint { color: var(--ks-hint); }
+
+[data-game="killer-sudoku"] .ks {
+  container-type: inline-size;         /* 100cqw ниже — ширина игры: по ней ограничена высота доски */
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Шапка — как у Wordle */
+[data-game="killer-sudoku"] .ks-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 4px;
+}
+[data-game="killer-sudoku"] .ks-title { font-size: 20px; font-weight: 700; line-height: 1.2; }
+[data-game="killer-sudoku"] .ks-sub { font-size: 13px; color: var(--ks-hint); }
+[data-game="killer-sudoku"] .ks-actions { display: flex; gap: 6px; }
+
+[data-game="killer-sudoku"] .ks-icon-btn {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: var(--ks-surface);
+  color: var(--ks-text);
+  font: inherit;
+  font-size: 16px;
+  cursor: pointer;
+}
+[data-game="killer-sudoku"] .ks-icon-btn svg { width: 20px; height: 20px; }
+[data-game="killer-sudoku"] .ks-icon-btn:disabled { opacity: 0.4; }
+
+/* Строка «Сложность · Ошибки · Очки · Время · пауза» */
+[data-game="killer-sudoku"] .ks-info {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+  align-items: center;
+  gap: 4px;
+  padding: 0 4px;
+  text-align: center;
+}
+[data-game="killer-sudoku"] .ks-info-label { font-size: 12px; color: var(--ks-hint); }
+[data-game="killer-sudoku"] .ks-info-value { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+[data-game="killer-sudoku"] .ks-pause-btn { border-radius: 50%; }
+
+/* Доска: квадрат по меньшей стороне свободного места */
+[data-game="killer-sudoku"] .ks-board-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: flex-start;              /* доска сразу под строкой статуса */
+  justify-content: center;
+  container-type: size;
+  /* Не выше, чем доска широка: иначе область доски забирала всё свободное место, и инструменты с цифрами
+     прижимались к самому низу экрана — тянуться неудобно (скрин владельца). Теперь они сразу под полем,
+     а свободное место — под цифрами. */
+  max-height: 100cqw;
+}
+[data-game="killer-sudoku"] .ks-board {
+  --size: min(100cqw, 100cqh);
+  width: var(--size);
+  height: var(--size);
+  display: grid;
+  grid-template-columns: repeat(9, 1fr);
+  grid-template-rows: repeat(9, 1fr);
+  border: 2px solid var(--ks-line-strong);
+  user-select: none;
+  touch-action: manipulation;
+}
+
+[data-game="killer-sudoku"] .ks-cell {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  min-height: 0;
+  border-right: 1px solid var(--ks-line);
+  border-bottom: 1px solid var(--ks-line);
+  font-size: calc(var(--size) * 0.068);
+  line-height: 1;
+  cursor: pointer;
+}
+[data-game="killer-sudoku"] .ks-c-thick { border-right: 2px solid var(--ks-line-strong); }
+[data-game="killer-sudoku"] .ks-r-thick { border-bottom: 2px solid var(--ks-line-strong); }
+[data-game="killer-sudoku"] .ks-c-last { border-right: 0; }
+[data-game="killer-sudoku"] .ks-r-last { border-bottom: 0; }
+
+[data-game="killer-sudoku"] .ks-given { color: var(--ks-text); }
+[data-game="killer-sudoku"] .ks-user { color: var(--ks-user); }
+[data-game="killer-sudoku"] .ks-wrong { color: var(--ks-error); }
+
+/* Фон — по приоритету: чем ниже правило, тем важнее */
+[data-game="killer-sudoku"] .ks-peer { background: var(--ks-peer); }
+[data-game="killer-sudoku"] .ks-same { background: var(--ks-same); }
+[data-game="killer-sudoku"] .ks-conflict { background: var(--ks-conflict); }
+[data-game="killer-sudoku"] .ks-selected { background: var(--ks-selected); }
+
+/* Подсказка на доске */
+[data-game="killer-sudoku"] .ks-board { position: relative; }
+[data-game="killer-sudoku"] .ks-board .ks-cell { transition: background-color 0.25s ease, color 0.25s ease; }
+[data-game="killer-sudoku"] .ks-hinting .ks-cell { background: var(--ks-h-dim); color: var(--ks-h-dim-text); }
+[data-game="killer-sudoku"] .ks-hinting .ks-h-area { background: var(--ks-h-area); color: var(--ks-text); }
+[data-game="killer-sudoku"] .ks-hinting .ks-h-elim { background: color-mix(in srgb, var(--ks-h-elim) 22%, var(--ks-bg)); color: var(--ks-text); }
+[data-game="killer-sudoku"] .ks-hinting .ks-h-key { background: var(--ks-h-key); color: #fff; }
+[data-game="killer-sudoku"] .ks-hinting .ks-h-target { background: var(--ks-bg); color: var(--ks-text); }
+[data-game="killer-sudoku"] .ks-hinting .ks-h-wrong { background: color-mix(in srgb, var(--ks-h-elim) 30%, var(--ks-bg)); color: var(--ks-h-elim); }
+[data-game="killer-sudoku"] .ks-h-reveal { color: var(--ks-h-frame); font-weight: 600; }
+/* варианты, о которых говорит подсказка: нужные — зелёные (на зелёной клетке — белые), вычеркнутые — красные с чертой */
+[data-game="killer-sudoku"] .ks-notes .ks-h-cand,
+[data-game="killer-sudoku"] .ks-notes .ks-h-x { font-size: 1.25em; font-weight: 800; }
+[data-game="killer-sudoku"] .ks-h-one { font-size: calc(var(--size) * 0.05); font-weight: 800; }
+[data-game="killer-sudoku"] .ks-hinting .ks-cell .ks-h-cand { color: var(--ks-h-key); }
+[data-game="killer-sudoku"] .ks-hinting .ks-h-key .ks-h-cand { color: #fff; }
+[data-game="killer-sudoku"] .ks-h-x { position: relative; color: var(--ks-h-elim); }
+[data-game="killer-sudoku"] .ks-hinting .ks-h-key .ks-h-x { color: #7f1d1d; }
+[data-game="killer-sudoku"] .ks-h-x::after {
+  content: '';
+  position: absolute;
+  left: 15%;
+  right: 15%;
+  top: 50%;
+  border-top: 2px solid var(--ks-h-elim);
+  transform: rotate(-35deg);
+}
+[data-game="killer-sudoku"] .ks-h-one.ks-h-x::after { left: -30%; right: -30%; transform: rotate(-20deg); }
+[data-game="killer-sudoku"] .ks-hint-layer { position: absolute; inset: 0; pointer-events: none; }
+[data-game="killer-sudoku"] .ks-h-frame {
+  position: absolute;
+  border: 3px solid var(--ks-h-frame);
+  border-radius: 6px;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ks-h-frame) 25%, transparent), 0 4px 14px rgb(0 0 0 / 0.25);
+}
+
+/* Заметки: сетка 3×3 мелких цифр */
+[data-game="killer-sudoku"] .ks-notes {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  width: 100%;
+  height: 100%;
+  padding: 1px;
+  font-size: calc(var(--size) * 0.028);
+  color: var(--ks-hint);
+}
+[data-game="killer-sudoku"] .ks-notes span { display: grid; place-items: center; }
+[data-game="killer-sudoku"] .ks-notes .ks-note-on { color: var(--ks-accent); font-weight: 700; }
+
+/* Пауза: доска закрыта */
+[data-game="killer-sudoku"] .ks-pause-cover {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--ks-bg);
+}
+[data-game="killer-sudoku"] .ks-resume { width: auto; padding: 14px 32px; }
+
+/* Инструменты и цифры */
+/* Как в sudoku.com: под полем заметный отступ, инструменты, ещё отступ и крупные цифры; свободное место — ниже. */
+[data-game="killer-sudoku"] .ks-controls {
+  position: relative;
+  flex: none;
+  display: grid;
+  gap: clamp(4px, 3.2vh, 30px);
+  margin-top: clamp(4px, 4vh, 38px);
+}
+
+[data-game="killer-sudoku"] .ks-tools { display: grid; grid-template-columns: repeat(4, 1fr); }
+[data-game="killer-sudoku"] .ks-tool {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: 6px 0;
+  border: 0;
+  background: none;
+  color: var(--ks-hint);
+  font: inherit;
+  cursor: pointer;
+}
+[data-game="killer-sudoku"] .ks-tool:disabled { opacity: 0.4; }
+[data-game="killer-sudoku"] .ks-tool-icon { display: grid; }
+[data-game="killer-sudoku"] .ks-tool-label { font-size: 12px; }
+
+[data-game="killer-sudoku"] .ks-badge {
+  position: absolute;
+  top: 0;
+  left: calc(50% + 6px);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+[data-game="killer-sudoku"] .ks-badge-pill {
+  padding: 3px 5px;
+  border-radius: 8px;
+  background: var(--ks-hint);
+  color: var(--ks-bg);
+}
+[data-game="killer-sudoku"] .ks-badge-pill.ks-badge-on {
+  background: var(--ks-accent);
+  color: var(--ks-accent-text);
+}
+[data-game="killer-sudoku"] .ks-badge-count {
+  display: grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  background: var(--ks-accent);
+  color: var(--ks-accent-text);
+}
+
+[data-game="killer-sudoku"] .ks-pad { display: grid; grid-template-columns: repeat(9, 1fr); }
+[data-game="killer-sudoku"] .ks-digit {
+  height: 60px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--ks-user);
+  font: inherit;
+  font-size: 38px;
+  cursor: pointer;
+}
+[data-game="killer-sudoku"] .ks-digit:active { background: var(--ks-surface); }
+[data-game="killer-sudoku"] .ks-pad-notes .ks-digit { color: var(--ks-hint); font-size: 26px; }
+
+/* Подсказка — на месте инструментов и цифр; доска над ней уменьшается и видна целиком */
+[data-game="killer-sudoku"] .ks-hint-open .ks-controls { margin-top: 10px; }   /* доске нужно всё место, что осталось над панелью */
+[data-game="killer-sudoku"] .ks-hint-open .ks-tools,
+[data-game="killer-sudoku"] .ks-hint-open .ks-pad,
+[data-game="killer-sudoku"] .ks-hint-open .ks-cagebar { display: none; }
+[data-game="killer-sudoku"] .ks-hint-card {
+  width: 100%;
+  max-height: 42vh;
+  overflow-y: auto;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--ks-surface);
+}
+[data-game="killer-sudoku"] .ks-hint-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+[data-game="killer-sudoku"] .ks-hint-title { font-size: 17px; font-weight: 700; }
+[data-game="killer-sudoku"] .ks-hint-close { width: 30px; height: 30px; font-size: 14px; flex: none; }
+[data-game="killer-sudoku"] .ks-hint-text { margin: 8px 0 12px; min-height: 2.8em; font-size: 15px; line-height: 1.4; }  /* 2 строки — карточка не прыгает между страницами */
+[data-game="killer-sudoku"] .ks-mark { font-weight: 700; }
+[data-game="killer-sudoku"] .ks-mark-key { color: var(--ks-h-key); }
+[data-game="killer-sudoku"] .ks-mark-area { color: color-mix(in srgb, #0ea5e9 80%, var(--ks-text)); }
+[data-game="killer-sudoku"] .ks-mark-unit { color: var(--ks-h-frame); }
+[data-game="killer-sudoku"] .ks-mark-target { color: var(--ks-text); text-decoration: underline; text-underline-offset: 3px; }
+[data-game="killer-sudoku"] .ks-mark-elim,
+[data-game="killer-sudoku"] .ks-mark-wrong { color: var(--ks-h-elim); }
+[data-game="killer-sudoku"] .ks-hint-nav { display: grid; grid-template-columns: 48px 1fr auto; align-items: center; gap: 8px; }
+[data-game="killer-sudoku"] .ks-hint-arrow {
+  width: 44px;
+  height: 40px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--ks-bg);
+  color: var(--ks-h-frame);
+  font: inherit;
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+}
+[data-game="killer-sudoku"] .ks-hint-arrow:disabled { opacity: 0.3; cursor: default; }
+[data-game="killer-sudoku"] .ks-hint-single .ks-hint-arrow { visibility: hidden; }   /* одна страница — листать нечего */
+[data-game="killer-sudoku"] .ks-hint-dots { display: flex; justify-content: center; gap: 8px; }
+[data-game="killer-sudoku"] .ks-hint-dots span { width: 8px; height: 8px; border-radius: 50%; background: color-mix(in srgb, var(--ks-hint) 45%, transparent); transition: background-color 0.2s ease, transform 0.2s ease; }
+[data-game="killer-sudoku"] .ks-hint-dots span.on { background: var(--ks-h-frame); transform: scale(1.25); }
+[data-game="killer-sudoku"] .ks-hint-done { width: auto; padding: 10px 18px; }
+
+/* Окна: новая игра и статистика */
+[data-game="killer-sudoku"] .ks-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ks-bg);
+  background: color-mix(in srgb, var(--ks-bg) 85%, transparent);
+}
+[data-game="killer-sudoku"] .ks-card {
+  width: 100%;
+  max-width: 360px;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--ks-surface);
+}
+[data-game="killer-sudoku"] .ks-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+[data-game="killer-sudoku"] .ks-card-head h2 { margin: 0; font-size: 18px; }
+[data-game="killer-sudoku"] .ks-card .ks-icon-btn { background: var(--ks-bg); }
+[data-game="killer-sudoku"] .ks-muted { opacity: 0.55; }
+[data-game="killer-sudoku"] .ks-card .btn-secondary { background: var(--ks-bg); }
+[data-game="killer-sudoku"] .ks-warning { margin: -4px 0 12px; }
+[data-game="killer-sudoku"] .ks-picker { display: grid; gap: 8px; }
+
+[data-game="killer-sudoku"] .ks-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  padding: 2px;
+  margin-bottom: 12px;
+  border-radius: 10px;
+  background: var(--ks-bg);
+}
+[data-game="killer-sudoku"] .ks-tab {
+  padding: 6px 2px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--ks-hint);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+[data-game="killer-sudoku"] .ks-tab[aria-selected="true"] {
+  background: var(--ks-accent);
+  color: var(--ks-accent-text);
+}
+[data-game="killer-sudoku"] .ks-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 8px;
+  text-align: center;
+}
+[data-game="killer-sudoku"] .ks-stat-value { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
+[data-game="killer-sudoku"] .ks-stat-label { font-size: 12px; color: var(--ks-hint); }
+
+
+/* Настройки */
+[data-game="killer-sudoku"] .ks-setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0 12px;
+  cursor: pointer;
+}
+[data-game="killer-sudoku"] .ks-setting-title { font-weight: 600; }
+[data-game="killer-sudoku"] .ks-setting-desc { font-size: 13px; color: var(--ks-hint); }
+
+/* Автозаполнение: три положения в ряд */
+[data-game="killer-sudoku"] .ks-setting-col { flex-direction: column; align-items: stretch; gap: 8px; cursor: default; }
+[data-game="killer-sudoku"] .ks-seg {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--ks-hint) 16%, var(--ks-bg));
+}
+[data-game="killer-sudoku"] .ks-seg-btn {
+  min-width: 0;
+  padding: 8px 4px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ks-text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+[data-game="killer-sudoku"] .ks-seg-btn[aria-checked="true"] { background: var(--ks-accent); color: var(--ks-accent-text); }
+[data-game="killer-sudoku"] .ks-seg-btn:focus-visible { outline: 2px solid var(--ks-accent); outline-offset: 2px; }
+@media (max-width: 360px) { [data-game="killer-sudoku"] .ks-seg-btn { font-size: 12.5px; padding: 8px 2px; } }
+
+/* Переключатель */
+[data-game="killer-sudoku"] .ks-switch {
+  appearance: none;
+  flex: none;
+  position: relative;
+  width: 46px;
+  height: 28px;
+  margin: 0;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--ks-hint) 45%, var(--ks-bg));
+  cursor: pointer;
+  transition: background 0.15s;
+}
+[data-game="killer-sudoku"] .ks-switch::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--ks-bg);
+  transition: transform 0.15s;
+}
+[data-game="killer-sudoku"] .ks-switch:checked { background: var(--ks-accent); }
+[data-game="killer-sudoku"] .ks-switch:checked::after { transform: translateX(18px); }
+
+[data-game="killer-sudoku"] .ks-section-title { margin: 4px 0 10px; font-size: 14px; font-weight: 700; }
+
+/* Скины: квадрат, разрезанный по диагонали на фон и акцент */
+[data-game="killer-sudoku"] .ks-skins {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px 8px;
+}
+[data-game="killer-sudoku"] .ks-skin {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ks-text);
+  font: inherit;
+  font-size: 12px;
+  text-align: center;
+  cursor: pointer;
+}
+[data-game="killer-sudoku"] .ks-swatch {
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--ks-bg) 50%, var(--ks-accent) 50%);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ks-hint) 40%, transparent);
+}
+[data-game="killer-sudoku"] .ks-skin[aria-checked="true"] .ks-swatch {
+  outline: 3px solid var(--ks-accent);
+  outline-offset: 3px;
+}
+
+/* ---------- Движение ---------- */
+
+/* смена скина — цвета перетекают */
+.game-root[data-game="killer-sudoku"],
+[data-game="killer-sudoku"] .ks-icon-btn,
+[data-game="killer-sudoku"] .ks-badge,
+[data-game="killer-sudoku"] .ks-digit,
+[data-game="killer-sudoku"] .ks-tool {
+  transition: background-color 0.3s ease, color 0.3s ease, opacity 0.25s ease, transform 0.25s ease;
+}
+/* выбор клетки — подсветка перетекает */
+[data-game="killer-sudoku"] .ks-cell { transition: background-color 0.15s ease, color 0.15s ease; }
+[data-game="killer-sudoku"] .ks-val { display: inline-block; }
+
+[data-game="killer-sudoku"] .ks-icon-btn:active,
+[data-game="killer-sudoku"] .ks-tool:active { transform: scale(0.92); }
+[data-game="killer-sudoku"] .ks-digit:active { transform: scale(0.9); }
+
+/* цифра, которой больше нет на доске (все 9 стоят), — плавно исчезает */
+[data-game="killer-sudoku"] .ks-digit.ks-digit-done {
+  opacity: 0;
+  transform: scale(0.6);
+  pointer-events: none;
+}
+
+/* клетка ответа подсказки мягко пульсирует */
+[data-game="killer-sudoku"] .ks-hinting .ks-h-target { animation: ks-target 1.4s ease-in-out infinite; }
+@keyframes ks-target {
+  0%, 100% { box-shadow: inset 0 0 0 2px var(--ks-h-frame); }
+  50% { box-shadow: inset 0 0 0 4px var(--ks-h-frame); }
+}
+
+/* образец скина при нажатии чуть сжимается */
+[data-game="killer-sudoku"] .ks-swatch { transition: transform 0.2s ease, outline-color 0.2s ease; }
+[data-game="killer-sudoku"] .ks-skin:active .ks-swatch { transform: scale(0.92); }
+
+/* ---------- киллер: группы ---------- */
+
+[data-game="killer-sudoku"] {
+  --ks-cage: color-mix(in srgb, var(--ks-text) 72%, var(--ks-bg));        /* пунктир и суммы — чернилами цифр */
+  --ks-incage: color-mix(in srgb, var(--ks-accent) 12%, var(--ks-bg));   /* клетки выбранной группы */
+  --ks-cage-hint: #f59e0b;                                                /* группы, о которых говорит подсказка */
+}
+
+/* пунктир и суммы поверх клеток, под рамками подсказки; нажатия проходят к клеткам */
+[data-game="killer-sudoku"] .ks-cage-layer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+[data-game="killer-sudoku"] .ks-cage-lines line {
+  stroke: var(--ks-cage);
+  stroke-width: 1.1px;
+  stroke-linecap: butt;
+  transition: stroke 0.2s ease, stroke-width 0.2s ease;
+}
+/* выбранная группа — сплошной контур цвета акцента */
+[data-game="killer-sudoku"] .ks-cg-on line { stroke: var(--ks-accent); stroke-width: 2px; stroke-dasharray: none; }
+/* подсказка говорит о группе — янтарный сплошной контур */
+[data-game="killer-sudoku"] .ks-cg-hint line { stroke: var(--ks-cage-hint); stroke-width: 2.6px; stroke-dasharray: none; }
+[data-game="killer-sudoku"] .ks-cage-sums text {
+  fill: var(--ks-cage);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+[data-game="killer-sudoku"] .ks-hinting .ks-cage-sums text { fill: var(--ks-text); }
+
+/* цифра чуть ниже середины, заметки — ниже суммы в углу (как на sudoku.com: 60% клетки, со сдвигом вниз) */
+[data-game="killer-sudoku"] .ks-cell { padding-top: calc(var(--size) * 0.006); font-size: calc(var(--size) * 0.064); }
+[data-game="killer-sudoku"] .ks-notes {
+  position: absolute;
+  top: 27%;
+  left: 12%;
+  right: 8%;
+  bottom: 5%;
+  width: auto;
+  height: auto;
+  padding: 0;
+  font-size: calc(var(--size) * 0.023);
+}
+[data-game="killer-sudoku"] .ks-h-one { font-size: calc(var(--size) * 0.046); }
+[data-game="killer-sudoku"] .ks-notes span { line-height: 1; overflow: hidden; }
+/* варианты подсказки в клетке — чуть крупнее заметок, но в своей сетке (ниже суммы) */
+[data-game="killer-sudoku"] .ks-notes .ks-h-cand,
+[data-game="killer-sudoku"] .ks-notes .ks-h-x { font-size: 1.12em; }
+
+/* клетки выбранной группы — лёгкий оттенок (важнее строки/столбца, слабее одинаковых цифр) */
+[data-game="killer-sudoku"] .ks-incage { background: var(--ks-incage); }
+[data-game="killer-sudoku"] .ks-peer.ks-incage { background: color-mix(in srgb, var(--ks-accent) 16%, var(--ks-peer)); }
+[data-game="killer-sudoku"] .ks-same { background: var(--ks-same); }
+[data-game="killer-sudoku"] .ks-conflict { background: var(--ks-conflict); }
+[data-game="killer-sudoku"] .ks-selected { background: var(--ks-selected); }
+
+[data-game="killer-sudoku"] .ks-mark-cage { color: color-mix(in srgb, var(--ks-cage-hint) 82%, var(--ks-text)); }
+
+/* ---------- киллер: сочетания выбранной группы под доской ---------- */
+
+[data-game="killer-sudoku"] .ks-cagebar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  margin-top: clamp(0px, 1.2vh, 10px);
+  padding: 0 4px;
+  overflow: hidden;
+  white-space: nowrap;
+  transition: opacity 0.2s ease;
+}
+[data-game="killer-sudoku"] .ks-cagebar-off { opacity: 0; }
+[data-game="killer-sudoku"] .ks-cb-title { flex: none; font-size: 13px; font-weight: 600; color: var(--ks-hint); }
+[data-game="killer-sudoku"] .ks-cb-done { color: var(--ks-accent); }
+[data-game="killer-sudoku"] .ks-cb-chips { display: flex; gap: 5px; min-width: 0; overflow: hidden; }
+[data-game="killer-sudoku"] .ks-chip {
+  flex: none;
+  padding: 3px 7px;
+  border-radius: 8px;
+  background: var(--ks-surface);
+  color: var(--ks-text);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+}
+[data-game="killer-sudoku"] .ks-chip-off { color: var(--ks-hint); opacity: 0.6; text-decoration: line-through; font-weight: 500; }
+[data-game="killer-sudoku"] .ks-chip-more { background: none; color: var(--ks-hint); letter-spacing: 0; }
+
+/* инструменты — ближе к доске: полоска сочетаний уже дала отступ */
+[data-game="killer-sudoku"] .ks-controls { margin-top: clamp(2px, 2.2vh, 24px); }
+
+/* окно новой игры: правила и описание сложностей */
+[data-game="killer-sudoku"] .ks-rules { margin: -4px 0 12px; font-size: 13px; line-height: 1.35; }
+[data-game="killer-sudoku"] .ks-level { display: grid; gap: 1px; text-align: left; padding: 10px 14px; }
+[data-game="killer-sudoku"] .ks-level-name { font-weight: 700; }
+[data-game="killer-sudoku"] .ks-level-desc { font-size: 12px; font-weight: 400; opacity: 0.75; }
+/* настройки длиннее экрана телефона — прокрутка внутри карточки */
+[data-game="killer-sudoku"] .ks-card-scroll { max-height: calc(100% - 16px); overflow-y: auto; }
+/* «Судоку-киллер» длиннее «Судоку»: на узком экране заголовок мельче, иначе переносится и отнимает место у доски */
+@media (max-width: 360px) {
+  [data-game="killer-sudoku"] .ks-cb-title { font-size: 12px; }
+  [data-game="killer-sudoku"] .ks-title { font-size: 17px; white-space: nowrap; }
+  [data-game="killer-sudoku"] .ks-actions { gap: 4px; }
+}
