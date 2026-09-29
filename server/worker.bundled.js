@@ -189,12 +189,12 @@ const GAMES = [
   { id: 'wordle', title: 'Wordle', emoji: '🟩', about: 'угадай слово из пяти букв: русский, украинский, английский', best: false },
   { id: 'memory', title: 'Мемори', emoji: '🃏', about: 'найди пары одинаковых карточек' },
   { id: 'bongo-cat', title: 'Bongo Cat', emoji: '🐱', about: 'кот играет на инструментах, разучи мелодию' },
-  { id: 'tictactoe', title: 'Крестики-нолики', emoji: '❌', about: 'классика 3×3 и гомоку — пять в ряд на большом поле', beta: true },
-  { id: 'match3', title: 'Три в ряд', emoji: '💎', about: 'меняй фишки местами и собирай по три — 100 уровней с боссами', beta: true },
-  { id: 'chess', title: 'Шахматы', emoji: '♟️', about: 'против бота: семь уровней, от новичка до полной силы', beta: true },
-  { id: 'spider', title: 'Паук', emoji: '🕷️', about: 'пасьянс как в Windows: 1, 2 или 4 масти', beta: true },
-  { id: 'klondike', title: 'Косынка', emoji: '🃏', about: 'пасьянс как в Windows: из колоды по одной или по три', beta: true },
-  { id: 'pinball', title: 'Пинбол', emoji: '🚀', about: 'как в Windows XP: миссии, звания, гиперпространство', beta: true },
+  { id: 'tictactoe', title: 'Крестики-нолики', emoji: '❌', about: 'классика 3×3 и гомоку — пять в ряд на большом поле' },
+  { id: 'match3', title: 'Три в ряд', emoji: '💎', about: 'меняй фишки местами и собирай по три — 100 уровней с боссами' },
+  { id: 'chess', title: 'Шахматы', emoji: '♟️', about: 'против бота: семь уровней, от новичка до полной силы' },
+  { id: 'spider', title: 'Паук', emoji: '🕷️', about: 'пасьянс как в Windows: 1, 2 или 4 масти' },
+  { id: 'klondike', title: 'Косынка', emoji: '🃏', about: 'пасьянс как в Windows: из колоды по одной или по три' },
+  { id: 'pinball', title: 'Пинбол', emoji: '🚀', about: 'как в Windows XP: миссии, звания, гиперпространство' },
 ];
 
 const fold = (text) => String(text ?? '').toLowerCase().replace(/ё/g, 'е').trim();
@@ -258,8 +258,6 @@ function progressLines(state) {
  */
 const SERVER_BETA = [
   // >>> серверная бета
-  'sync-refresh',
-  'sync-merge',
   // <<< конец серверной беты
 ];
 

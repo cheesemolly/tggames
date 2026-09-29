@@ -36,6 +36,7 @@ test('собранный обработчик работает: вход по п
   assert.equal(me.data.tgId, USER.id);
 
   const state = JSON.stringify({ 'shell:progress:loop': 'Уровень 3' });
-  assert.equal((await call('/state', { method: 'PUT', payload: { data: state, base: 0 } })).status, 200);
+  const keys = Object.fromEntries(Object.entries(JSON.parse(state)).map(([k, v]) => [k, { v }]));
+  assert.equal((await call('/state', { method: 'PUT', payload: { sync: 3, device: 'test-device-0', seq: 1, base: 0, keys } })).status, 200);
   assert.equal((await call('/state')).data.data, state);
 });

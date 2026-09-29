@@ -182,9 +182,11 @@ test('два устройства без связи: по 3 партии и по
 test('переход со старого обмена: счётчики двух устройств не удваиваются, сыгранное без связи не теряется', async () => {
   const srv = await server();
   // старый клиент (игрок без беты) записал прогресс снимком
-  const old = await srv.http('PUT', '/state', { data: JSON.stringify({ 'shell:stats:flags': { played: 10, wins: 4, best: 7 } }), base: 0 });
-  assert.equal(old.status ?? 200, 200);
-  const t0 = old.data.updatedAt;
+  // прогресс, записанный раньше старым обменом (снимком; после релиза слияния сервер старый обмен не принимает)
+  await srv.http('GET', '/me');
+  srv.env.DB.prepare('INSERT INTO states (user_id, data, updated_at) VALUES (1, ?, 1000)')
+    .bind(JSON.stringify({ 'shell:stats:flags': { played: 10, wins: 4, best: 7 } })).run();
+  const t0 = 1000;
   const a = device(srv, 'device-aaaa-01');
   const b = device(srv, 'device-bbbb-02');
   const c = device(srv, 'device-cccc-03');

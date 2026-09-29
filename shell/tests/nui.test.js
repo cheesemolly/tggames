@@ -13,11 +13,8 @@ import { games } from '../registry.js';
 
 const ids = games.map((g) => g.id);
 
-test('новый интерфейс — в бете, кнопка «Открыть» ведёт на главную', () => {
-  const entry = BETA.find((b) => b.id === 'new-ui');
-  assert.ok(entry, 'new-ui в shell/beta.js');
-  assert.equal(entry.kind, 'feature');
-  assert.equal(entry.open, '#/');
+test('новый интерфейс выпущен (2026-09-29): в бете его нет — он у всех', () => {
+  assert.equal(BETA.find((b) => b.id === 'new-ui'), undefined);
 });
 
 test('серия: дни подряд до сегодня, пропуск рвёт серию, лучшая — за всё время', () => {

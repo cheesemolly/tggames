@@ -120,7 +120,8 @@ test('поиск игр: начало названия, слово назван�
   assert.deepEqual(findGames('СЛОВ').map((g) => g.id), ['words'], 'регистр не важен');
   assert.deepEqual(findGames('blast').map((g) => g.id), ['brick-blast', 'block-blast'], 'второе слово');
   assert.equal(findGames('').length, GAMES.filter((g) => !g.beta).length, 'игры в бете бот игрокам не показывает');
-  assert.deepEqual(findGames('шахматы'), []);
+  assert.deepEqual(findGames('шахматы').map((g) => g.id), ['chess']);
+  assert.deepEqual(findGames('бильярд'), []);
 });
 
 test('ссылка на мини-приложение и строки прогресса', () => {

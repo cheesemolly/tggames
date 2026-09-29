@@ -28,6 +28,25 @@ async function call(env, path, { method = 'GET', payload, initData, headers = {}
 
 const asUser = (user) => makeInitData(TOKEN, user);
 
+// Сохранение прогресса, как его шлёт приложение после релиза слияния (sync: 3): ключи прогресса целиком.
+let pushSeq = 0;
+const snapshotPush = (state) => ({
+  sync: 3, device: 'test-device-0', seq: ++pushSeq, base: 0,
+  keys: Object.fromEntries(Object.entries(state).map(([k, v]) => [k, { v }])),
+});
+
+/** Пока слияние в бете у всех (как до релиза): игрок без беты сохраняет старым обменом — снимком. */
+async function beforeMergeRelease(fn) {
+  const lib = await import('../lib.js');
+  const was = [...lib.SERVER_BETA];
+  lib.SERVER_BETA.splice(0, lib.SERVER_BETA.length, 'sync-refresh', 'sync-merge');
+  try {
+    return await fn();
+  } finally {
+    lib.SERVER_BETA.splice(0, lib.SERVER_BETA.length, ...was);
+  }
+}
+
 test('первый заход заводит игрока, следующий — обновляет имя', async () => {
   const env = createEnv();
   const first = await call(env, '/me', { initData: await asUser(USER) });
@@ -57,14 +76,14 @@ test('прогресс: сохраняется, читается и не вид�
   await call(env, '/me', { initData: petya });
 
   const state = JSON.stringify({ 'shell:progress:words': 'Уровень 14' });
-  const put = await call(env, '/state', { method: 'PUT', initData: masha, payload: { data: state, base: 0 } });
+  const put = await call(env, '/state', { method: 'PUT', initData: masha, payload: snapshotPush(JSON.parse(state)) });
   assert.equal(put.status, 200);
 
   assert.equal((await call(env, '/state', { initData: masha })).data.data, state);
   assert.equal((await call(env, '/state', { initData: petya })).data.data, '{}', 'чужой прогресс не виден');
 });
 
-test('сохранение с другого устройства не затирается', async () => {
+test('старый обмен (до релиза слияния): сохранение с другого устройства не затирается', () => beforeMergeRelease(async () => {
   const env = createEnv();
   const masha = await asUser(USER);
   await call(env, '/me', { initData: masha });
@@ -80,7 +99,7 @@ test('сохранение с другого устройства не зати�
     method: 'PUT', initData: masha, payload: { data: '{"b":2}', base: desktop.data.updatedAt },
   });
   assert.equal(retry.status, 200);
-});
+}));
 
 test('панель: только для владельца', async () => {
   const env = createEnv();
@@ -104,7 +123,7 @@ test('панель: поиск, правка прогресса, блокиро�
   const owner = await asUser(ADMIN);
   await call(env, '/me', { initData: masha });
   await call(env, '/me', { initData: owner });
-  await call(env, '/state', { method: 'PUT', initData: masha, payload: { data: '{"x":1}', base: 0 } });
+  await call(env, '/state', { method: 'PUT', initData: masha, payload: snapshotPush({ x: 1 }) });
 
   const found = await call(env, '/admin/players?q=masha', { initData: owner });
   assert.equal(found.data.players.length, 1);
@@ -224,14 +243,11 @@ test('бот: /me рассказывает прогресс', async () => {
   await call(env, '/state', {
     method: 'PUT',
     initData: masha,
-    payload: {
-      data: JSON.stringify({
-        'shell:progress:words': 'Уровень 14',
-        'shell:stats:2048': { played: 5, wins: 1, best: 512 },
-        'shell:stats:2048:4': { played: 5, wins: 1, best: 512 },
-      }),
-      base: 0,
-    },
+    payload: snapshotPush({
+      'shell:progress:words': 'Уровень 14',
+      'shell:stats:2048': { played: 5, wins: 1, best: 512 },
+      'shell:stats:2048:4': { played: 5, wins: 1, best: 512 },
+    }),
   });
 
   const tg = captureTelegram();
@@ -275,7 +291,7 @@ test('инлайн: пустой запрос — приглашение и вс
   assert.equal(res.is_personal, true);
   assert.equal(res.results[0].id, 'all', 'первым — «позвать играть»');
   const games = res.results.filter((r) => r.id.startsWith('g:'));
-  assert.equal(games.length, 17);
+  assert.equal(games.length, 23);
   for (const r of res.results) {
     const btn = r.reply_markup.inline_keyboard[0][0];
     assert.equal(btn.web_app, undefined, 'web_app в чужих чатах запрещён');
@@ -294,14 +310,14 @@ test('инлайн: поиск игры по названию и свои рек
   await call(env, '/state', {
     method: 'PUT',
     initData: masha,
-    payload: { data: JSON.stringify({ 'shell:stats:sudoku': { played: 3, wins: 2, best: 450 }, 'shell:progress:loop': 'Уровень 14' }), base: 0 },
+    payload: snapshotPush({ 'shell:stats:sudoku': { played: 3, wins: 2, best: 450 }, 'shell:progress:loop': 'Уровень 14' }),
   });
 
   const found = await inline(env, USER.id, 'судо');
   assert.deepEqual(found.results.map((r) => r.id), ['g:sudoku']);
   const byWord = await inline(env, USER.id, 'точки');
   assert.deepEqual(byWord.results.map((r) => r.id), ['g:connect-dots'], 'по любому слову названия');
-  const none = await inline(env, USER.id, 'шахматы');
+  const none = await inline(env, USER.id, 'бильярд');
   assert.deepEqual(none.results.map((r) => r.id), ['all'], 'не нашлось — хотя бы приглашение');
 
   const mine = await inline(env, USER.id, 'рекорды');
@@ -560,7 +576,7 @@ test('вебхук: без заданного секрета не принима
 test('сохранения прогресса — не чаще раза в пару секунд', async () => {
   const env = createEnv({ STATE_MIN_GAP_MS: '60000' });
   const masha = await asUser(USER);
-  const put = () => call(env, '/state', { method: 'PUT', initData: masha, payload: { data: '{"a":1}', base: Number.MAX_SAFE_INTEGER } });
+  const put = () => call(env, '/state', { method: 'PUT', initData: masha, payload: snapshotPush({ a: 1 }) });
   assert.equal((await put()).status, 200);
   const second = await put();
   assert.equal(second.status, 429);
@@ -583,8 +599,8 @@ test('убрать из рейтинга: игрок пропадает из т�
   const masha = await asUser(USER);
   const petya = await asUser({ id: 43, first_name: 'Петя' });
   const state = (level) => ({ 'shell:progress:words': `Уровень ${level}` });
-  await call(env, '/state', { method: 'PUT', initData: masha, payload: { data: JSON.stringify(state(90)), base: 0 } });
-  await call(env, '/state', { method: 'PUT', initData: petya, payload: { data: JSON.stringify(state(10)), base: 0 } });
+  await call(env, '/state', { method: 'PUT', initData: masha, payload: snapshotPush(state(90)) });
+  await call(env, '/state', { method: 'PUT', initData: petya, payload: snapshotPush(state(10)) });
   const mashaId = (await call(env, '/me', { initData: masha })).data.id;
   let top = await call(env, '/top/words', { initData: petya });
   assert.equal(top.data.rows[0].name, 'Маша');
@@ -1365,7 +1381,7 @@ test('слияние: правка владельца в панели — нов
   assert.equal(JSON.parse((await call(env, '/state', { initData: masha })).data.data)['game:words:progress'].hints, 2, 'правка устояла');
 });
 
-test('слияние: старый клиент снимком (игрок без беты) сбрасывает записи слияния — потом они выводятся заново', async () => {
+test('слияние: старый клиент снимком (игрок без беты, до релиза) сбрасывает записи слияния — потом они выводятся заново', () => beforeMergeRelease(async () => {
   const env = createEnv();
   const masha = await asUser(USER);
   await pushMerged(env, masha, 'device-aaaa-01', 1, { 'shell:stats:flags': { v: { played: 3, wins: 1, best: 2 }, f: { played: { d: { 'device-aaaa-01': 3 } }, wins: { d: { 'device-aaaa-01': 1 } } } } });
@@ -1376,7 +1392,7 @@ test('слияние: старый клиент снимком (игрок бе�
   assert.deepEqual(entry.v, { played: 5, wins: 2, best: 2 });
   assert.deepEqual(entry.f.played, { l: 5, d: {} }, 'счётчик — заново «перенесённое», без старых записей устройства');
   assert.equal(entry.e, snap.data.updatedAt, 'новая эпоха: старые записи устройства отбросятся');
-});
+}));
 
 test('слияние: откат — копия прогресса до перехода (states_premerge) один раз; прогресс, записанный в обход записей слияния, не перекрывается старыми счётчиками', async () => {
   const env = createEnv();
