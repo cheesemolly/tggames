@@ -255,6 +255,7 @@ export function progressLines(state) {
 export const SERVER_BETA = [
   // >>> серверная бета
   'sync-refresh',
+  'sync-merge',
   // <<< конец серверной беты
 ];
 

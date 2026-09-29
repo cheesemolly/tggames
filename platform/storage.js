@@ -10,6 +10,8 @@ const PREFIX = `${ROOT}:`;
 
 // Кому сообщать, что данные изменились (синхронизация с сервером). Токен аккаунта лежит
 // вне PREFIX, поэтому в выгрузку не попадает и по сети не гуляет.
+// fn(key, same): key — какой ключ (как в snapshot(), без общего префикса; null — заменено всё),
+// same — записано то же значение, что уже лежало (слиянию, бета sync-merge, отправлять нечего).
 const listeners = new Set();
 
 export function onStorageChange(fn) {
@@ -17,10 +19,10 @@ export function onStorageChange(fn) {
   return () => listeners.delete(fn);
 }
 
-function changed() {
+function changed(key = null, same = false) {
   for (const fn of listeners) {
     try {
-      fn();
+      fn(key, same);
     } catch (err) {
       console.warn('обработчик изменения хранилища упал', err);
     }
@@ -42,8 +44,10 @@ export function createStorage(namespace) {
 
     async set(key, value) {
       try {
-        localStorage.setItem(prefix + key, JSON.stringify(value));
-        changed();
+        const raw = JSON.stringify(value);
+        const same = localStorage.getItem(prefix + key) === raw;
+        localStorage.setItem(prefix + key, raw);
+        changed(`${namespace}:${key}`, same);
       } catch (err) {
         console.warn(`storage.set(${prefix}${key}) не удался`, err);
       }
@@ -51,8 +55,9 @@ export function createStorage(namespace) {
 
     async remove(key) {
       try {
+        const same = localStorage.getItem(prefix + key) === null;
         localStorage.removeItem(prefix + key);
-        changed();
+        changed(`${namespace}:${key}`, same);
       } catch {
         // хранилище недоступно — удалять нечего
       }
@@ -89,6 +94,29 @@ export function restore(data) {
     }
     for (const [key, value] of Object.entries(data ?? {})) {
       localStorage.setItem(PREFIX + key, JSON.stringify(value));
+    }
+  } catch (err) {
+    console.warn('не удалось применить прогресс', err);
+  }
+  changed();
+}
+
+/** Одно значение (ключ как в snapshot()); нет — undefined. */
+export function readValue(key) {
+  try {
+    const raw = localStorage.getItem(PREFIX + key);
+    return raw === null ? undefined : JSON.parse(raw);
+  } catch {
+    return undefined;
+  }
+}
+
+/** Заменить отдельные ключи (слияние с сервером): значение undefined — ключ удаляется. */
+export function writeValues(values) {
+  try {
+    for (const [key, value] of Object.entries(values)) {
+      if (value === undefined) localStorage.removeItem(PREFIX + key);
+      else localStorage.setItem(PREFIX + key, JSON.stringify(value));
     }
   } catch (err) {
     console.warn('не удалось применить прогресс', err);

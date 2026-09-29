@@ -20,12 +20,26 @@
 //   на сервер ничего не отправляется (hold). Раньше после 409 base сдвигался сразу, а игра из памяти следующим
 //   сохранением отправляла старый уровень уже с новым base — и сервер откатывался. Неотправленные изменения этого
 //   устройства в таком случае пока проигрывают серверу (слияние — следующий шаг) — это пишется в консоль.
+// — бета 'sync-merge' (слияние по ключам, server/merge.js): сервер не отвергает устаревшее, а сливает. Устройство
+//   помнит, какие ключи изменились с последнего обмена (PENDING_KEY), и шлёт только их — вместе со своими счётчиками
+//   по устройствам (META_KEY: записи ключей, как их знает сервер). Сервер отвечает итогом: присланными ключами и
+//   всем, что с прошлого обмена изменили другие устройства. Итог ложится в хранилище; если он задевает открытую
+//   игру (её ключи стали другими) — игра перезапускается через onFresh (поколения, как в sync-refresh), иначе
+//   ничего не перезапускается. Без связи изменения копятся и уходят, когда связь есть. Первый обмен устройства
+//   по-новому — переход (migrate): прогресс уходит целиком «на момент прошлого обмена», сервер сливает без удвоения.
 
-import { snapshot, restore, onStorageChange } from '../platform/storage.js';
+import { snapshot, restore, onStorageChange, readValue, writeValues } from '../platform/storage.js';
+import {
+  MERGE_PROTOCOL, absorb, cleanEntry, mergeEntry, sameEntry, same,
+} from '../server/merge.js';
 
 export const SYNC_DELAY = 4000;
 const BASE_KEY = 'tggames-sync';   // вне пространства `tggames:` — иначе синхронизировался бы сам
 const DIRTY_KEY = 'tggames-sync-dirty';   // есть изменения, которых сервер ещё не видел
+// Слияние (бета 'sync-merge'). Всё — вне пространства `tggames:`, на сервер как прогресс не уезжает.
+const META_KEY = 'tggames-sync-meta';       // { k: { ключ: { t, e, f } } } — записи слияния; есть — устройство перешло
+const PENDING_KEY = 'tggames-sync-pending'; // { ключ: s } — изменено, сервер ещё не подтвердил (s — номер отправки, 0 — не слали)
+const SEQ_KEY = 'tggames-sync-seq';         // номер последней отправки этого устройства
 // Запрос с keepalive браузер доводит до конца и после закрытия страницы, но тело — не больше 64 КБ.
 export const KEEPALIVE_LIMIT = 60000;
 // возврат в приложение шлёт и visibilitychange, и Telegram 'activated' — перечитываем один раз
@@ -91,6 +105,57 @@ function writeBase(value) {
   }
 }
 
+function readJson(key) {
+  try {
+    return JSON.parse(localStorage.getItem(key) ?? 'null');
+  } catch {
+    return null;
+  }
+}
+
+function writeJson(key, value) {
+  try {
+    if (value === null) localStorage.removeItem(key);
+    else localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // приватный режим
+  }
+}
+
+const isMap = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
+
+function readMeta() {
+  const meta = readJson(META_KEY);
+  return isMap(meta) && isMap(meta.k) ? meta : null;
+}
+
+function readPending() {
+  const pending = readJson(PENDING_KEY);
+  return isMap(pending) ? pending : {};
+}
+
+/** Ключ изменён на устройстве: отправить при следующем обмене (0 — эту версию ещё не отправляли). */
+function markPending(key) {
+  const pending = readPending();
+  if (pending[key] === 0) return;
+  pending[key] = 0;
+  writeJson(PENDING_KEY, pending);
+}
+
+function nextSeq() {
+  const seq = (Number(readJson(SEQ_KEY)) || 0) + 1;
+  writeJson(SEQ_KEY, seq);
+  return seq;
+}
+
+/** Запись ключа, как её помнит устройство: время на сервере, эпоха, счётчики по устройствам. */
+function keepEntry(entry, t) {
+  const out = { t: Number.isFinite(entry.t) ? entry.t : t };
+  if (entry.e) out.e = entry.e;
+  if (entry.f && Object.keys(entry.f).length) out.f = entry.f;
+  return out;
+}
+
 /**
  * afterRestore — вызывается каждый раз, когда серверный прогресс заменил локальный.
  * Оболочка чистит там устаревшие рекорды (migrateStats): иначе сервер возвращал бы
@@ -103,6 +168,7 @@ function writeBase(value) {
 export function createSync({
   account, onMessage = () => {}, delay = SYNC_DELAY, afterRestore = () => {},
   fresh = () => false, onFresh = (apply) => apply(), log = console, refreshGap = REFRESH_GAP,
+  merge = () => false, device = async () => null,
 }) {
   let timer = null;
   let applying = false;      // мы сами пишем в хранилище — это не повод слать его обратно
@@ -131,6 +197,7 @@ export function createSync({
   /** final — отправка при уходе со страницы: с keepalive, чтобы запрос пережил закрытие. */
   async function push({ final = false } = {}) {
     if (!account.current) return;
+    if (merge()) return exchange({ final });
     if (hold) {                          // свежий прогресс ещё не в игре — со старым base не отправляем
       holdPending = true;
       return;
@@ -155,7 +222,10 @@ export function createSync({
         if (res.ok) {
           writeBase(res.data.updatedAt);
           remember(data);
-          if (changes === sent) writeDirty(false);
+          if (changes === sent) {
+            writeDirty(false);
+            writeJson(PENDING_KEY, null);    // на сервере весь прогресс — для слияния отправлять нечего
+          }
           return;
         }
         if (res.status === 409 && res.data?.data && fresh()) {
@@ -274,7 +344,7 @@ export function createSync({
    * на другом устройстве: принимаем. Не новее — ничего не делаем (неотправленное своё уедет как обычно).
    */
   function refresh() {
-    if (!account.current || !fresh() || adopting || pulling || refreshing) return Promise.resolve();
+    if (!account.current || !(fresh() || merge()) || adopting || pulling || refreshing) return Promise.resolve();
     const now = Date.now();
     if (now - lastRefresh < refreshGap) return Promise.resolve();
     lastRefresh = now;
@@ -285,6 +355,11 @@ export function createSync({
   }
 
   async function refreshOnce() {
+    if (merge()) {
+      // нет связи — ничего не трогаем, повтора нет; неотправленное уйдёт, когда получится
+      await exchange({ read: true });
+      return;
+    }
     // своё сохранение может быть в пути: дождёмся, иначе его ответ приняли бы за чужой прогресс
     if (pushing) await pushing;
     const res = await account.fetchState();
@@ -310,6 +385,10 @@ export function createSync({
 
   async function pullOnce({ afterLogin = false } = {}) {
     if (!account.current) return;
+    if (merge()) {
+      await exchange({ read: true, opening: true });
+      return;
+    }
     const res = await account.fetchState();
     if (!res.ok) {
       if (res.error === 'network') onMessage('Сервер не отвечает, играем на этом устройстве');
@@ -344,8 +423,203 @@ export function createSync({
     remember(JSON.stringify(snapshot()));
   }
 
-  const unsubscribe = onStorageChange(() => {
+  // ---------- слияние по ключам (бета 'sync-merge') ----------
+
+  /**
+   * Один обмен с сервером (отправки и чтения не идут параллельно): есть изменённые ключи — отправить их, иначе
+   * (read) — прочитать изменившееся с прошлого обмена. Ответ сливается с неотправленным и ложится в хранилище.
+   * Устройство ещё не переходило на слияние — сначала переход.
+   */
+  function exchange({ final = false, read = false, opening = false } = {}) {
+    if (pushing) {
+      if (!read) dirty = true;             // уже идёт обмен — отправим после
+      return pushing;
+    }
+    stop();
+    dirty = false;
+    pushing = (async () => {
+      const dev = await device();
+      if (!readMeta()) {
+        await migrate(dev, { opening });
+        return;
+      }
+      const sending = buildPush(dev);
+      let res;
+      if (sending) {
+        const size = JSON.stringify(sending).length;
+        res = await account.saveMerged(sending, { keepalive: final && size < KEEPALIVE_LIMIT });
+      } else if (read) {
+        res = await account.fetchMerged(readBase(), dev);
+      } else {
+        writeDirty(false);
+        return;
+      }
+      if (res.ok) {
+        await takeReply(res.data, dev);
+        return;
+      }
+      failed(res, { sending: Boolean(sending), opening });
+    })()
+      .catch((err) => log.error?.('синхронизация: обмен не удался', err))
+      .finally(() => {
+        pushing = null;
+        if (dirty) schedule();
+      });
+    return pushing;
+  }
+
+  /** Изменённые ключи → отправка: свои прибавки к счётчикам вписываются в записи (absorb) и запоминаются. */
+  function buildPush(dev) {
+    const pending = readPending();
+    const keys = Object.keys(pending);
+    if (!keys.length) return null;
+    const meta = readMeta();
+    const seq = nextSeq();
+    const out = {};
+    for (const key of keys) {
+      const entry = absorb(key, meta.k[key], readValue(key), dev);
+      meta.k[key] = keepEntry(entry, meta.k[key]?.t ?? 0);
+      pending[key] ||= seq;
+      out[key] = { ...(entry.del ? { del: 1 } : { v: entry.v }), s: pending[key] };
+      if (entry.e) out[key].e = entry.e;
+      if (entry.f) out[key].f = entry.f;
+    }
+    writeJson(META_KEY, meta);
+    writeJson(PENDING_KEY, pending);
+    return { sync: MERGE_PROTOCOL, device: dev, seq, base: readBase(), keys: out };
+  }
+
+  function failed(res, { sending, opening }) {
+    if (res.error === 'network') {
+      if (opening) onMessage('Сервер не отвечает, играем на этом устройстве');
+      return;                                  // без связи: изменения ждут, уйдут при следующем обмене
+    }
+    if (!sending) return;
+    if (res.error === 'too_many') {
+      dirty = true;
+      return;
+    }
+    if (res.error === 'expired' || res.error === 'bad_signature') {
+      onMessage('Сессия устарела — перезапусти игру');
+      return;
+    }
+    onMessage(res.error === 'state_big' ? 'Прогресс слишком большой для сохранения' : 'Не удалось сохранить прогресс');
+  }
+
+  /**
+   * Первый обмен по-новому. На сервере пусто, а тут есть прогресс (играл гостем) или есть неотправленное с прошлого
+   * обмена — прогресс уходит целиком «на момент прошлого обмена» (oldBase), сервер сливает: что менялось на сервере
+   * позже — побеждает, счётчики переносятся по максимуму. Иначе просто берём серверное (как раньше при входе).
+   */
+  async function migrate(dev, { opening }) {
+    const res = await account.fetchMerged(0, dev);
+    if (!res.ok) {
+      if (res.error === 'network' && opening) onMessage('Сервер не отвечает, играем на этом устройстве');
+      return;
+    }
+    const server = isMap(res.data.keys) ? res.data.keys : {};
+    const serverHas = Object.values(server).some((entry) => entry && !entry.del);
+    const local = snapshot();
+    const base = readBase();
+    const upload = !isEmpty(local) && (!serverHas || (readDirty() && base > 0));
+    if (!upload) {
+      await takeReply(res.data, dev, { full: true });
+      return;
+    }
+    const seq = nextSeq();
+    const keys = {};
+    const pending = {};
+    for (const [key, v] of Object.entries(local)) {
+      keys[key] = { v };
+      pending[key] = seq;
+    }
+    for (const [key, entry] of Object.entries(server)) {
+      if (!(key in local) && !entry?.del) {
+        keys[key] = { del: 1 };                  // удалено тут после прошлого обмена (или не было)
+        pending[key] = seq;
+      }
+    }
+    writeJson(PENDING_KEY, pending);
+    const put = await account.saveMerged({
+      sync: MERGE_PROTOCOL, device: dev, seq, base: 0, keys, migrate: { oldBase: serverHas ? base : 0 },
+    });
+    if (!put.ok) {
+      failed(put, { sending: true, opening });
+      return;
+    }
+    await takeReply(put.data, dev, { full: true });
+  }
+
+  /**
+   * Ответ сервера → хранилище. Ключ, изменённый тут и ещё не подтверждённый, сливается со своим (неотправленное
+   * новее всего на сервере); остальные берутся как есть. full — пришёл весь прогресс: чего в нём нет — удаляется.
+   * Если итог задевает открытую игру — она перезапускается (onFresh), отметка обмена сдвигается после.
+   */
+  async function takeReply(reply, dev, { full = false } = {}) {
+    const incoming = isMap(reply.keys) ? reply.keys : {};
+    const plan = () => {
+      const meta = readMeta() ?? { k: {} };
+      const next = full ? { k: {} } : { k: { ...meta.k } };
+      const pending = readPending();
+      const ack = Number(reply.ack) || 0;
+      for (const [key, s] of Object.entries(pending)) if (s > 0 && s <= ack) delete pending[key];   // доставлено
+      const writes = {};
+      for (const [key, raw] of Object.entries(incoming)) {
+        const server = cleanEntry(key, raw);
+        const local = readValue(key);
+        let result = server;
+        if (key in pending) {
+          const mine = { ...absorb(key, meta.k[key], local, dev), t: Infinity };
+          result = mergeEntry(key, server, mine);
+          if (sameEntry(result, server)) delete pending[key];     // своё проиграло или уже там — слать нечего
+        }
+        next.k[key] = keepEntry(result, server.t);
+        const value = result.del ? undefined : result.v;
+        if (!same(value, local)) writes[key] = value;
+      }
+      if (full) {
+        for (const key of Object.keys(snapshot())) {
+          if (key in incoming) continue;
+          if (key in pending) {
+            if (meta.k[key]) next.k[key] = meta.k[key];
+          } else {
+            writes[key] = undefined;
+          }
+        }
+      }
+      return { next, pending, writes };
+    };
+    const commit = (p) => {
+      applying = true;
+      try {
+        if (Object.keys(p.writes).length) writeValues(p.writes);
+      } finally {
+        applying = false;
+      }
+      writeJson(META_KEY, p.next);
+      writeJson(PENDING_KEY, p.pending);
+    };
+
+    const preview = plan();
+    const touched = Object.keys(preview.writes);
+    if (touched.length) {
+      await onFresh(async () => {
+        commit(plan());                          // заново: между предпросмотром и записью могли что-то сохранить
+        await afterRestore();
+      }, touched);
+    } else {
+      commit(preview);
+    }
+    writeBase(reply.updatedAt ?? 0);
+    if (!Object.keys(readPending()).length) writeDirty(false);
+    else dirty = true;
+  }
+
+  const unsubscribe = onStorageChange((key, sameValue) => {
     if (applying) return;
+    // что изменилось — помним на слиянии и пока вход не ответил (после него устройство может оказаться на слиянии)
+    if (key && !sameValue && (merge() || !account.current)) markPending(key);
+    if (merge() && sameValue) return;
     changes++;
     writeDirty(true);
     schedule();
@@ -373,6 +647,11 @@ export function createSync({
      * в панели, в «Словах» всё равно 0).
      */
     async adopt(text, updatedAt) {
+      if (merge()) {                   // правка в панели — новая эпоха на сервере: просто перечитать
+        if (pushing) await pushing;
+        await exchange({ read: true });
+        return;
+      }
       stop();
       applying = true;
       try {
@@ -390,6 +669,8 @@ export function createSync({
       stop();
       writeBase(0);
       writeDirty(false);
+      writeJson(META_KEY, null);
+      writeJson(PENDING_KEY, null);
     },
     destroy() {
       stop();

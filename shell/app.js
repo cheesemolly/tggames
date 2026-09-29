@@ -2,6 +2,7 @@
 
 import { platform } from '../platform/telegram.js';
 import { account } from '../platform/account.js';
+import { deviceId } from '../platform/device-id.js';
 import { message } from '../platform/errors.js';
 import { el } from '../shared/dom.js';
 import { createToast } from '../shared/toast.js';
@@ -41,8 +42,11 @@ const sync = createSync({
   onMessage: (text) => toast.show(text, 2600),
   afterRestore: migrateStats,      // серверный прогресс может быть ещё со старыми рекордами
   // бета sync-refresh: прогресс с другого устройства принимается через перезапуск открытой игры (adoptFresh)
-  fresh: () => syncBeta(),
-  onFresh: (apply) => adoptFresh(apply),
+  fresh: () => syncBeta() || mergeBeta(),
+  // бета sync-merge: сервер сливает прогресс по ключам (server/merge.js); счётчики — по номеру устройства
+  merge: () => mergeBeta(),
+  device: () => deviceId(platform),
+  onFresh: (apply, keys) => adoptFresh(apply, keys),
 });
 
 // Владелец — по /me (решает сервер). Для проверки на локальном сервере — ещё ?owner в адресе:
@@ -63,6 +67,14 @@ setBetaViewer(() => isTester() && !playerView());
 function syncBeta() {
   return !inBeta('sync-refresh') || isOwner() || account.beta;
 }
+
+/** Бета sync-merge (слияние по ключам) — тоже по аккаунту: на всех устройствах игрока один и тот же обмен. */
+function mergeBeta() {
+  return !inBeta('sync-merge') || isOwner() || account.beta;
+}
+
+/** Ключ хранилища принадлежит игре: её данные и её сохранённая партия (для перезапуска при слиянии). */
+const ownsKey = (gameId, key) => key.startsWith(`game:${gameId}:`) || key === `shell:saves:${gameId}`;
 
 /** Игры, которые видит этот игрок: игры из беты — только владельцу. */
 const visibleGames = () => games.filter((g) => feature(g.id));
@@ -93,7 +105,9 @@ function show(route) {
     platform.backButton.show();
     if (nuiOn()) noteOpened(entry.id).catch(() => {});    // «Сначала недавние» и баннер «Продолжить»
     // «Назад» из игры возвращает в её папку, а не на главную.
-    session = openGame(screen, entry, { platform, beta: seesBeta(), feature, perk: hasPerk, fresh: syncBeta, onExit: () => backFrom(route) });
+    session = openGame(screen, entry, {
+      platform, beta: seesBeta(), feature, perk: hasPerk, fresh: () => syncBeta() || mergeBeta(), onExit: () => backFrom(route),
+    });
     return;
   }
 
@@ -235,13 +249,15 @@ const redraw = () => show(currentRoute());
  * ложится в хранилище (apply); потом игра перезапускается уже с ним. Только после этого sync сдвигает отметку обмена.
  * На экранах меню — просто перерисовка; панель и «Бета» не трогаем (там могут что-то набирать).
  */
-async function adoptFresh(apply) {
+async function adoptFresh(apply, keys = null) {
   const game = session;                           // открытая игра или null
-  game?.markStale();
+  // слияние (бета sync-merge) сообщает, какие ключи изменились: игру перезапускаем, только если задеты её данные
+  const hit = Boolean(game) && (!keys || keys.some((key) => ownsKey(game.gameId, key)));
+  if (hit) game.markStale();
   await apply();
-  if (game && session === game) await game.reload();
+  if (hit && session === game) await game.reload();
   else if (['menu', 'folder', 'games', 'profile', 'top'].includes(currentRoute().name)) redraw();
-  toast.show('Прогресс обновлён с другого устройства', 2600);
+  if (!keys || hit) toast.show('Прогресс обновлён с другого устройства', 2600);
 }
 
 // Вернулись в приложение — перечитать прогресс (бета sync-refresh; sync.refresh сам проверяет флаг и не

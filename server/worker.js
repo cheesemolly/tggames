@@ -43,6 +43,9 @@ import {
   publicGames, findGames, startAppLink, progressLines, shiftEntities, GAMES, BOARDS, boardScores, boardName,
   PERKS, isPerk, SERVER_BETA, SYNC_PROTOCOL, overallPoints, overallRanking, withoutUsers, parseUsername, matchPlayers, REPORT_MAX, REPORT_PER_HOUR, reportMessage, START_TEXT, WELCOME_TEXT, WELCOME_MEDIA,
 } from './lib.js';
+import {
+  MERGE_PROTOCOL, loadDoc, saveDoc, applyPush, applyAdmin, entriesSince, isDeviceId,
+} from './merge.js';
 
 // Кто может обращаться к обработчику. Свой домен — чтобы чужой сайт не ходил в него от имени игрока.
 const ALLOWED_ORIGINS = [
@@ -107,7 +110,10 @@ export default {
           perks: admin ? Object.keys(PERKS) : await perksOf(env, player.id),
         }, 200, origin);
       }
-      if (path === '/state' && request.method === 'GET') return await getState(env, player, origin);
+      if (path === '/state' && request.method === 'GET') {
+        if (url.searchParams.get('sync') === String(MERGE_PROTOCOL)) return await getMerged(env, player, url, origin);
+        return await getState(env, player, origin);
+      }
       if (path === '/state' && request.method === 'PUT') return await putState(request, env, player, user, origin, admin);
       if (path === '/top' || path.startsWith('/top/')) return await topRoutes(request, env, path, player, admin, origin);
       if (path === '/report' && request.method === 'POST') {
@@ -185,12 +191,26 @@ async function getState(env, player, origin) {
 }
 
 async function putState(request, env, player, user, origin, admin = false) {
-  const { data, base, sync } = await body(request);
-  // бета 'sync-refresh': у того, кому она открыта, сохранение принимается только от нового клиента (sync: 2) —
-  // старый после 409 отправил бы уровень из памяти игры и откатил прогресс. Ему отказ: прогресс остаётся на
-  // устройстве, после перезапуска приложения уйдёт уже новым клиентом. Тестера спрашиваем, только если sync нет.
-  if (sync !== SYNC_PROTOCOL && betaOpen('sync-refresh', admin || await isTester(env, player.id))) {
-    return fail('update_required', 426, origin);
+  const text = await request.text();
+  // прогресс и его записи по устройствам (переход на слияние шлёт весь прогресс сразу)
+  if (text.length > MAX_PUSH_CHARS) return fail('state_big', 400, origin);
+  let payload = {};
+  try {
+    payload = JSON.parse(text);
+  } catch {
+    payload = {};
+  }
+  if (payload?.sync === MERGE_PROTOCOL) return await putMerged(env, player, user, payload, origin);
+  const { data, base, sync } = payload ?? {};
+  // Старый клиент у того, кому открыта бета, прогресс не пишет: прогресс остаётся у него на устройстве и уйдёт
+  // новым клиентом после перезапуска приложения. 'sync-merge' — только слияние (иначе старый снимок целиком затёр
+  // бы записи устройств), 'sync-refresh' — хотя бы клиент, который перезапускает устаревшую игру (sync: 2) —
+  // старый после 409 отправил бы уровень из памяти игры и откатил прогресс. Тестера спрашиваем, только если нужно.
+  if (sync !== MERGE_PROTOCOL) {
+    const beta = admin || await isTester(env, player.id);
+    if (betaOpen('sync-merge', beta) || (sync !== SYNC_PROTOCOL && betaOpen('sync-refresh', beta))) {
+      return fail('update_required', 426, origin);
+    }
   }
   const bad = validateState(data);
   if (bad) return fail(bad, 400, origin);
@@ -213,11 +233,120 @@ async function putState(request, env, player, user, origin, admin = false) {
   return json({ updatedAt: stamp }, 200, origin);
 }
 
-function saveState(env, userId, data, stamp) {
+/** Записать прогресс снимком (старый обмен, панель). Записи слияния (meta) при этом сбрасываются: снимок их не знает. */
+async function saveState(env, userId, data, stamp, meta = null) {
+  await ensureStateMeta(env);
   return env.DB.prepare(
-    `INSERT INTO states (user_id, data, updated_at) VALUES (?, ?, ?)
-     ON CONFLICT(user_id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`,
-  ).bind(userId, data, stamp).run();
+    `INSERT INTO states (user_id, data, updated_at, meta) VALUES (?, ?, ?, ?)
+     ON CONFLICT(user_id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at, meta = excluded.meta`,
+  ).bind(userId, data, stamp, meta).run();
+}
+
+// ---------- слияние по ключам (бета 'sync-merge', server/merge.js) ----------
+
+// Весь прогресс (до 400 КБ) и записи по устройствам — с запасом на них и на обёртку запроса.
+const MAX_PUSH_CHARS = 2 * 400 * 1024;
+const MERGE_TRIES = 3;           // два устройства записали одновременно — слить заново поверх записанного
+const stateMetaReady = new WeakSet();
+
+/**
+ * Откат слияния без wrangler: при первом переходе игрока на слияние его прежний прогресс (как он был записан старым
+ * обменом) один раз копируется в states_premerge. Вернуть — в консоли D1:
+ *   UPDATE states SET data = (SELECT data FROM states_premerge p WHERE p.user_id = states.user_id), meta = NULL
+ *   WHERE user_id IN (SELECT user_id FROM states_premerge);
+ * (Time Travel D1 тоже есть — 7 дней на бесплатном плане, но только через wrangler или API.)
+ * Когда слияние выйдет из беты и обкатается — таблицу можно удалить (DROP TABLE states_premerge).
+ */
+async function keepPremerge(env, userId, row) {
+  try {
+    await env.DB.prepare(`CREATE TABLE IF NOT EXISTS states_premerge (
+      user_id INTEGER PRIMARY KEY, data TEXT NOT NULL, updated_at INTEGER NOT NULL, saved_at INTEGER NOT NULL)`).run();
+    await env.DB.prepare('INSERT OR IGNORE INTO states_premerge (user_id, data, updated_at, saved_at) VALUES (?, ?, ?, ?)')
+      .bind(userId, row.data, row.updated_at, Date.now()).run();
+  } catch (err) {
+    console.error('не удалось сохранить копию прогресса до слияния', err);
+  }
+}
+
+/** Столбец meta (записи слияния: время, эпоха, счётчики по устройствам) добавлен позже — заводим сами. */
+async function ensureStateMeta(env) {
+  if (stateMetaReady.has(env.DB)) return;
+  try {
+    await env.DB.prepare('ALTER TABLE states ADD COLUMN meta TEXT').run();
+  } catch {
+    // уже есть
+  }
+  stateMetaReady.add(env.DB);
+}
+
+async function readDoc(env, userId) {
+  await ensureStateMeta(env);
+  const row = await env.DB.prepare('SELECT data, meta, updated_at FROM states WHERE user_id = ?').bind(userId).first();
+  const parse = (s) => {
+    try {
+      return JSON.parse(s ?? 'null');
+    } catch {
+      return null;
+    }
+  };
+  return {
+    row: row ?? null,
+    doc: loadDoc(parse(row?.data) ?? {}, parse(row?.meta), row?.updated_at ?? 0),
+  };
+}
+
+/** GET /state?sync=3&since=<время>&device=<id>: изменившееся на сервере позже since (0 — всё) и что принято от устройства. */
+async function getMerged(env, player, url, origin) {
+  const since = Math.max(0, Number(url.searchParams.get('since')) || 0);
+  const device = url.searchParams.get('device');
+  const { row, doc } = await readDoc(env, player.id);
+  return json({
+    updatedAt: row?.updated_at ?? 0,
+    full: since === 0,
+    ack: isDeviceId(device) ? (doc.acks[device] ?? 0) : 0,
+    keys: entriesSince(doc, since),
+  }, 200, origin);
+}
+
+/**
+ * PUT /state { sync: 3, device, seq, base, keys, migrate? } — сохранение по-новому: сервер не отвергает устаревшее,
+ * а сливает его со своей копией (server/merge.js) и отдаёт итог: всё, что изменилось позже base, и присланные ключи.
+ * Записывается, только если что-то изменилось. Два устройства одновременно: запись — только если со времени
+ * чтения никто не писал (updated_at тот же), иначе слияние заново поверх записанного.
+ */
+async function putMerged(env, player, user, payload, origin) {
+  if (!isDeviceId(payload.device)) return fail('bad_device', 400, origin);
+  const base = Number(payload.base) || 0;
+  const sent = Object.keys(payload.keys ?? {});
+  for (let attempt = 0; attempt < MERGE_TRIES; attempt += 1) {
+    const { row, doc } = await readDoc(env, player.id);
+    const stored = row?.updated_at ?? 0;
+    const since = Date.now() - stored;
+    if (row && since >= 0 && since < Number(env.STATE_MIN_GAP_MS ?? STATE_MIN_GAP_MS)) return fail('too_many', 429, origin);
+    const stamp = Math.max(Date.now(), stored + 1);
+    const res = applyPush(doc, payload, stamp);
+    if (!res.dirty) {
+      return json({ updatedAt: stored, ack: doc.acks[payload.device] ?? 0, keys: entriesSince(doc, base, sent) }, 200, origin);
+    }
+    const saved = saveDoc(res.doc, stamp);
+    const data = JSON.stringify(saved.data);
+    const bad = validateState(data);
+    if (bad) return fail(bad, 400, origin);
+    const meta = JSON.stringify(saved.meta);
+    if (meta.length > MAX_PUSH_CHARS) return fail('state_big', 400, origin);
+    const written = row
+      ? await env.DB.prepare('UPDATE states SET data = ?, meta = ?, updated_at = ? WHERE user_id = ? AND updated_at = ?')
+        .bind(data, meta, stamp, player.id, stored).run()
+      : await env.DB.prepare(
+        `INSERT INTO states (user_id, data, meta, updated_at) VALUES (?, ?, ?, ?)
+         ON CONFLICT(user_id) DO NOTHING`,
+      ).bind(player.id, data, meta, stamp).run();
+    if (!written?.meta?.changes) continue;       // между чтением и записью успело записать другое устройство
+    if (row && !row.meta) await keepPremerge(env, player.id, row);
+    if (res.changed.length) await indexBoard(env, player.id, saved.data, user?.first_name);
+    return json({ updatedAt: stamp, ack: res.doc.acks[payload.device] ?? 0, keys: entriesSince(res.doc, base, sent) }, 200, origin);
+  }
+  return fail('too_many', 429, origin);
 }
 
 // ---------- рейтинг ----------
@@ -708,7 +837,15 @@ async function adminRoutes(request, env, path, url, origin) {
     // Отметка заведомо новее всего, что есть у игрока: его устройство при следующем обмене
     // получит конфликт и применит правку, а не затрёт её своим старым прогрессом.
     const stamp = Date.now() + 1000;
-    await saveState(env, id, data, stamp);
+    // прогресс уже на слиянии (бета 'sync-merge'): изменённые ключи начинаются заново (новая эпоха) — счётчики
+    // устройств из старой эпохи отбрасываются, иначе правка «вниз» не прошла бы
+    const { row, doc } = await readDoc(env, id);
+    let meta = null;
+    if (row?.meta) {
+      const saved = saveDoc(applyAdmin(doc, JSON.parse(data), stamp), stamp);
+      meta = JSON.stringify(saved.meta);
+    }
+    await saveState(env, id, data, stamp, meta);
     await indexBoard(env, id, JSON.parse(data));
     return json({ ok: true, updatedAt: stamp }, 200, origin);
   }
@@ -738,6 +875,11 @@ async function adminRoutes(request, env, path, url, origin) {
     await env.DB.prepare('DELETE FROM board_scores WHERE user_id = ?').bind(id).run();
     await env.DB.prepare('DELETE FROM board_players WHERE user_id = ?').bind(id).run();
     await env.DB.prepare('DELETE FROM states WHERE user_id = ?').bind(id).run();
+    try {
+      await env.DB.prepare('DELETE FROM states_premerge WHERE user_id = ?').bind(id).run();
+    } catch {
+      // копий до слияния ещё не было — таблицы нет
+    }
     // отзывы тоже: политика конфиденциальности (privacy.html) обещает удалить всё, что связано с игроком
     await ensureReports(env);
     await env.DB.prepare('DELETE FROM reports WHERE tg_id = ?').bind(player.tg_id).run();

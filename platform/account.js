@@ -115,6 +115,20 @@ export const account = {
     return this.request('/state', { method: 'PUT', payload: sync ? { data, base, sync } : { data, base }, keepalive, bounded: Boolean(sync) });
   },
 
+  /**
+   * Слияние по ключам (бета 'sync-merge', server/merge.js): что изменилось на сервере позже since (0 — всё)
+   * и какую отправку этого устройства сервер уже принял (ack).
+   */
+  fetchMerged(since, device) {
+    const q = new URLSearchParams({ sync: '3', since: String(since || 0), device: String(device ?? '') });
+    return this.request(`/state?${q}`);
+  },
+
+  /** Отправить изменённые ключи на слияние: payload = { sync: 3, device, seq, base, keys, migrate? }. */
+  saveMerged(payload, { keepalive = false } = {}) {
+    return this.request('/state', { method: 'PUT', payload, keepalive, bounded: true });
+  },
+
   /** Обратная связь (как /report в боте): отзыв сразу приходит владельцу. */
   report(text) {
     return this.request('/report', { method: 'POST', payload: { text } });

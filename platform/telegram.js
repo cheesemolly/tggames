@@ -19,6 +19,9 @@
 //   openLink(url), openTelegramLink(url) — ссылка наружу / в Telegram (бот, канал)
 //   onActivated(cb) — мини-приложение снова на экране (Telegram 'activated', Bot API 8.0; вне Telegram — нет:
 //                     там хватает visibilitychange). Для перечитывания прогресса (бета 'sync-refresh').
+//   deviceStorage: get(key) → Promise<строка | null>, set(key, value) → Promise<boolean> — хранилище ЭТОГО устройства
+//                  (Telegram DeviceStorage, Bot API 9.0; с другими устройствами не синхронизируется, в отличие от
+//                  CloudStorage). Номер устройства для счётчиков по устройствам (бета 'sync-merge'). Нет — null/false.
 
 import { el, loadCss } from '../shared/dom.js';
 import { isMobilePlatform } from './device.js';
@@ -28,6 +31,22 @@ const FAKE_USER = { id: 1, first_name: 'Тестер', username: 'tester', langu
 const webApp = window.Telegram?.WebApp;
 // telegram-web-app.js создаёт WebApp и в обычном браузере, но initData там пустая.
 const inTelegram = Boolean(webApp?.initData);
+
+/** Вызов Telegram DeviceStorage (Bot API 9.0) с ответом через колбэк; нет хранилища или ошибка — fallback. */
+function deviceCall(run, fallback) {
+  return new Promise((resolve) => {
+    const ds = webApp?.DeviceStorage;
+    if (!ds || !webApp.isVersionAtLeast?.('9.0')) {
+      resolve(fallback);
+      return;
+    }
+    try {
+      run(ds, resolve);
+    } catch {
+      resolve(fallback);
+    }
+  });
+}
 
 export const platform = inTelegram ? createTelegramPlatform(webApp) : createBrowserPlatform();
 
@@ -114,6 +133,10 @@ function createTelegramPlatform(tg) {
       } catch {
         // старый клиент — остаётся visibilitychange
       }
+    },
+    deviceStorage: {
+      get: (key) => deviceCall((ds, done) => ds.getItem(key, (err, value) => done(err ? null : value ?? null)), null),
+      set: (key, value) => deviceCall((ds, done) => ds.setItem(key, value, (err, ok) => done(!err && ok !== false)), false),
     },
 
     /**
@@ -276,6 +299,7 @@ function createBrowserPlatform() {
     openLink: (url) => window.open(url, '_blank', 'noopener'),
     openTelegramLink: (url) => window.open(url, '_blank', 'noopener'),
     onActivated: () => {},
+    deviceStorage: { get: async () => null, set: async () => false },
     lockSwipes: () => log('lockSwipes()'),
     fullscreen: {
       supported: false,

@@ -63,6 +63,7 @@ export function openGame(container, entry, {
 
   return {
     close,
+    gameId: entry.id,
     /** Прогресс на сервере новее: всё, что эта сессия сохранит дальше, отбрасывается. */
     markStale() {
       staleBefore = run;

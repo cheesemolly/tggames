@@ -1,5 +1,5 @@
 // СОБРАННЫЙ ФАЙЛ — не редактировать руками.
-// Источники: server/worker.js и server/lib.js, пересборка: node server/tools/bundle.js
+// Источники: server/worker.js, server/lib.js и server/merge.js, пересборка: node server/tools/bundle.js
 // Это то, что вставляется в редактор Cloudflare Worker.
 
 // Общие части серверного обработчика: проверка подписи Telegram, разбор данных, лимиты.
@@ -259,6 +259,7 @@ function progressLines(state) {
 const SERVER_BETA = [
   // >>> серверная бета
   'sync-refresh',
+  'sync-merge',
   // <<< конец серверной беты
 ];
 
@@ -579,6 +580,664 @@ function shiftEntities(entities, cut, textLength) {
   return out;
 }
 
+// Слияние прогресса между устройствами по ключам (бета 'sync-merge'). Один файл на сервер и клиент: сервер
+// (worker.js, в сборку встраивается целиком) сливает присланное со своей копией, клиент (shell/sync.js)
+// превращает свои изменения в записи слияния и так же сливает ответ сервера со своим неотправленным.
+//
+// Прогресс — это ключи хранилища (snapshot() в platform/storage.js): «game:loop:current» → значение. У каждого ключа
+// на сервере есть запись: { v — значение, t — время записи по часам СЕРВЕРА, e — эпоха (правка в панели, переход
+// на слияние), f — счётчики по устройствам, del — ключ удалён }. Как сливать значение, решает правило ключа (RULES):
+//   lww    — целиком побеждает записанное позже (t); так — по умолчанию (настройки, начатые партии);
+//   level  — партия с уровнем внутри («Петля»): больший уровень, при равном — позже записанное;
+//   fields — объект по полям: у поля своё правило, остальное — от записанного позже; вложенные объекты с правилами
+//            внутри объединяются (вариант статистики, заведённый на другом устройстве, не пропадает).
+// Правила полей:
+//   max / min — рекорд (min — «меньше лучше»; 0 и пусто = рекорда нет);
+//   union     — множество (массив без повторов);
+//   count     — счётчик по устройствам: f = { l: перенесённое при переходе, d: { устройство: сколько } },
+//               значение = l + сумма d; каждое устройство увеличивает только своё, при слиянии — максимум;
+//   spend     — расходуемое (подсказки, бонусы): f = { s: стартовое, d: { устройство: [начислено, потрачено] } },
+//               значение = s + сумма начисленного − сумма потраченного, не меньше 0.
+// Слияние коммутативно и идемпотентно: merge(a, b) = merge(b, a), merge(a, a) = a (тест shell/tests/merge.test.js).
+
+const MERGE_PROTOCOL = 3;
+const MAX_DEVICES = 50;           // устройств на одно поле: больше не бывает, а мусор раздувал бы запись
+const DEVICE_RE = /^[A-Za-z0-9-]{8,64}$/;
+const isDeviceId = (id) => typeof id === 'string' && DEVICE_RE.test(id);
+
+// ---------- правила ----------
+
+const COUNT4 = (prefix) => ({
+  [`${prefix}played`]: 'count', [`${prefix}wins`]: 'count', [`${prefix}losses`]: 'count', [`${prefix}draws`]: 'count',
+});
+const CARDS = {
+  '*.played': 'count', '*.wins': 'count', '*.bestTime': 'min', '*.fewestMoves': 'min', '*.bestStreak': 'max',
+  // '*.streak' — серия: растёт и сбрасывается (спорное, пока — от записанного позже)
+};
+
+// Правило ключа: { type: 'level', at: 'level' } | { type: 'fields', fields: { путь: правило } }; нет правила — lww.
+// Путь поля — через точку, '*' — любой ключ объекта или индекс массива, '' — всё значение целиком.
+// Правило поля: 'max' | 'min' | 'union' | 'count' | { spend: стартовое } | { union: true, sort: true, keep: N }.
+// Ключ — как в snapshot() (без «tggames:»); '*' в конце — любое продолжение. Берётся первое подходящее.
+// Карта ключей всех игр с объяснением — в заметках (раздел «Слияние прогресса»).
+const RULES = [
+  // ---- оболочка ----
+  ['shell:stats:__v', { type: 'fields', fields: { '': 'max' } }],
+  // у Паука рекорда нет с 2026-09-28 (очки убраны), migrateStats обнуляет старый: best — от записанного позже,
+  // иначе максимум возвращал бы обнулённое
+  ['shell:stats:spider', { type: 'fields', fields: { played: 'count', wins: 'count' } }],
+  ['shell:stats:spider:*', { type: 'fields', fields: { played: 'count', wins: 'count' } }],
+  ['shell:stats:*', { type: 'fields', fields: { played: 'count', wins: 'count', best: 'max' } }],
+  ['shell:player:visits', { type: 'fields', fields: { '': { union: true, sort: true, keep: 400 } } }],
+  // shell:saves:*, shell:progress:*, shell:player:favs — lww
+
+  // ---- игры ----
+  ['game:words:progress', { type: 'fields', fields: {
+    'levels.*.found': 'union', 'levels.*.hinted.*': 'max', hints: { spend: 5 }, passedCount: 'max',
+  } }],
+  ['game:flags:stats', { type: 'fields', fields: {
+    games: 'count', answers: 'count', correct: 'count', 'best.test': 'max', 'best.type': 'max', bestStreak: 'max',
+    'misses.*': 'count',
+  } }],
+  ['game:checkers:stats', { type: 'fields', fields: COUNT4('*.*.') }],
+  ['game:flappy-burger:stats', { type: 'fields', fields: { games: 'count', best: 'max', total: 'count', streets: 'count' } }],
+  ['game:bongo-cat:stats', { type: 'fields', fields: { hits: 'count', meows: 'count', songs: 'count', 'by.*': 'count' } }],
+  ['game:snake:stats', { type: 'fields', fields: {
+    games: 'count', 'best.*': 'max', bestLength: 'max', apples: 'count', levelsCleared: 'count', bestLevel: 'max',
+  } }],
+  ['game:snake:levels', { type: 'fields', fields: { best: 'max' } }],   // level — выбранный уровень, от записанного позже
+  ['game:snake:seenPowers', { type: 'fields', fields: { '': 'union' } }],
+  ['game:memory:progress', { type: 'fields', fields: { level: 'max' } }],
+  ['game:memory:stats', { type: 'fields', fields: {
+    levelsCleared: 'count', bestLevel: 'max', stars: 'count', perfect: 'count', fails: 'count', bestCombo: 'max',
+    'free.*.played': 'count', 'free.*.bestMoves': 'min',
+  } }],
+  ['game:memory:boosters', { type: 'fields', fields: { peek: { spend: 2 }, magnet: { spend: 2 } } }],
+  ['game:memory:seenSpecials', { type: 'fields', fields: { '': 'union' } }],
+  ['game:bubble-shooter:stats', { type: 'fields', fields: { played: 'count', cleared: 'count', bestLevel: 'max', bestScore: 'max' } }],
+  ['game:brick-blast:stats', { type: 'fields', fields: {
+    cleared: 'count', bestLevel: 'max', bricks: 'count', shots: 'count', fails: 'count',
+  } }],
+  ['game:loop:current', { type: 'level', at: 'level' }],
+  ['game:loop:stats', { type: 'fields', fields: { solved: 'count', taps: 'count', bestLevel: 'max' } }],
+  ['game:connect-dots:stats', { type: 'fields', fields: { played: 'count', bestRound: 'max', rounds: 'count' } }],
+  ['game:mahjong:stats', { type: 'fields', fields: { '*.played': 'count', '*.wins': 'count', '*.clean': 'count' } }],
+  ['game:2048:stats', { type: 'fields', fields: { '*.played': 'count', '*.wins': 'count', '*.bestTile': 'max' } }],
+  ['game:boggle:stats', { type: 'fields', fields: { '*.played': 'count', '*.best': 'max', '*.bonus': 'count' } }],
+  ['game:block-blast:stats', { type: 'fields', fields: {
+    played: 'count', best: 'max', totalScore: 'count', maxCombo: 'max', lines: 'count',
+  } }],
+  ['game:sudoku:stats', { type: 'fields', fields: {
+    '*.played': 'count', '*.wins': 'count', '*.maxStreak': 'max', '*.bestMs': 'min', '*.totalWinMs': 'count',
+  } }],
+  ['game:tictactoe:stats', { type: 'fields', fields: {
+    ...COUNT4('*.*.'), 'friend.played': 'count', 'friend.x': 'count', 'friend.o': 'count', 'friend.draws': 'count',
+    bestStreak: 'max',
+  } }],
+  ['game:wordle:stats', { type: 'fields', fields: {
+    '*.played': 'count', '*.wins': 'count', '*.maxStreak': 'max', '*.dist.*': 'count',
+  } }],
+  ['game:chess:stats', { type: 'fields', fields: COUNT4('*.') }],
+  ['game:spider:stats', { type: 'fields', fields: CARDS }],
+  ['game:klondike:stats', { type: 'fields', fields: CARDS }],
+  ['game:match3:progress', { type: 'fields', fields: {
+    'done.*': 'max',
+    'boosters.hammer': { spend: 3 }, 'boosters.row': { spend: 2 }, 'boosters.shuffle': { spend: 2 }, 'boosters.moves': { spend: 1 },
+  } }],
+  ['game:pinball:stats', { type: 'fields', fields: {
+    played: 'count', best: 'max', bestRank: 'max', missions: 'count', jackpots: 'count', hyper: 'count',
+  } }],
+];
+
+const compiled = new Map();
+
+function compile(rule) {
+  if (rule.type !== 'fields') return rule;
+  const list = Object.entries(rule.fields).map(([path, spec]) => ({
+    segs: path === '' ? [] : path.split('.'),
+    spec: normalizeSpec(spec),
+  }));
+  return { ...rule, list };
+}
+
+function normalizeSpec(spec) {
+  if (typeof spec === 'string' && ['max', 'min', 'union', 'count'].includes(spec)) return { kind: spec };
+  if (spec && typeof spec === 'object' && 'spend' in spec) return { kind: 'spend', start: Number(spec.spend) || 0 };
+  if (spec && typeof spec === 'object' && spec.union) return { kind: 'union', sort: Boolean(spec.sort), keep: spec.keep ?? 0 };
+  throw new Error(`непонятное правило поля: ${JSON.stringify(spec)}`);
+}
+
+const keyMatch = (pattern, key) => (pattern.endsWith('*') ? key.startsWith(pattern.slice(0, -1)) : pattern === key);
+
+/** Правило ключа (с разобранными путями полей). */
+function ruleFor(key, rules = RULES) {
+  const cache = rules === RULES ? compiled : null;
+  if (cache?.has(key)) return cache.get(key);
+  let found = { type: 'lww' };
+  for (const [pattern, rule] of rules) {
+    if (keyMatch(pattern, key)) {
+      found = compile(rule);
+      break;
+    }
+  }
+  cache?.set(key, found);
+  return found;
+}
+
+function specAt(rule, segs) {
+  if (rule.type !== 'fields') return null;
+  for (const field of rule.list) {
+    if (field.segs.length !== segs.length) continue;
+    if (field.segs.every((s, i) => s === '*' || s === String(segs[i]))) return field.spec;
+  }
+  return null;
+}
+
+/** Вид правила поля по пути (для тестов и заметок): 'count' | 'spend' | 'max' | 'min' | 'union' | null. */
+function kindAt(key, path, rules = RULES) {
+  return specAt(ruleFor(key, rules), Array.isArray(path) ? path : splitPath(path))?.kind ?? null;
+}
+
+/** Есть ли правила глубже этого пути (тогда объекты и массивы здесь сливаются по частям). */
+function rulesBelow(rule, segs) {
+  if (rule.type !== 'fields') return false;
+  return rule.list.some((field) => field.segs.length > segs.length
+    && segs.every((s, i) => field.segs[i] === '*' || field.segs[i] === String(s)));
+}
+
+// ---------- мелочи ----------
+
+const isObj = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
+const isNum = (x) => typeof x === 'number' && Number.isFinite(x);
+const hasOwn = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+const clone = (x) => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
+
+/**
+ * Строка для сравнения значений: ключи объектов по порядку — {a,b} и {b,a} одинаковы; числа — до 6 знаков после
+ * запятой (сумма счётчика по устройствам может отличаться от того же числа на устройстве на 1e-12).
+ */
+function canon(value) {
+  if (Array.isArray(value)) return `[${value.map(canon).join(',')}]`;
+  if (isObj(value)) return `{${Object.keys(value).sort().map((k) => `${JSON.stringify(k)}:${canon(value[k])}`).join(',')}}`;
+  if (isNum(value)) return String(Math.round(value * 1e6) / 1e6);
+  return JSON.stringify(value) ?? 'undefined';
+}
+
+const same = (a, b) => canon(a) === canon(b);
+
+const splitPath = (p) => (p === '' ? [] : p.split('.'));
+
+function getAt(value, segs) {
+  let cur = value;
+  for (const s of segs) {
+    if (cur === null || typeof cur !== 'object' || !hasOwn(cur, s)) return undefined;
+    cur = cur[s];
+  }
+  return cur;
+}
+
+/** Записать по пути, создавая промежуточные объекты. Возвращает корень (путь '' — само значение). */
+function setAt(root, segs, value) {
+  if (segs.length === 0) return value;
+  const out = root !== null && typeof root === 'object' ? root : {};
+  let cur = out;
+  for (let i = 0; i < segs.length - 1; i += 1) {
+    // числовой ключ ниже корня — индекс массива (распределение попыток Wordle), иначе объект
+    if (cur[segs[i]] === null || typeof cur[segs[i]] !== 'object') cur[segs[i]] = /^\d+$/.test(segs[i + 1]) ? [] : {};
+    cur = cur[segs[i]];
+  }
+  cur[segs[segs.length - 1]] = value;
+  return out;
+}
+
+/** Пути полей нужных видов (count/spend), встреченные в значении: ['classic.played', …]. */
+function counterPaths(rule, value, kinds) {
+  const out = [];
+  if (rule.type !== 'fields') return out;
+  const walk = (node, segs) => {
+    const spec = specAt(rule, segs);
+    if (spec) {
+      if (kinds.includes(spec.kind) && isNum(node)) out.push(segs.join('.'));
+      return;
+    }
+    if (!rulesBelow(rule, segs)) return;
+    if (Array.isArray(node)) node.forEach((x, i) => walk(x, [...segs, String(i)]));
+    else if (isObj(node)) for (const k of Object.keys(node)) walk(node[k], [...segs, k]);
+  };
+  walk(value, []);
+  return out;
+}
+
+// ---------- счётчики по устройствам ----------
+
+const nonNeg = (x) => (isNum(x) && x > 0 ? x : 0);
+
+function cleanCount(f) {
+  const out = { l: 0, d: {} };
+  if (!isObj(f)) return out;
+  out.l = nonNeg(f.l);
+  if (isObj(f.d)) {
+    for (const [dev, n] of Object.entries(f.d)) if (isDeviceId(dev) && nonNeg(n)) out.d[dev] = n;
+  }
+  return out;
+}
+
+function cleanSpend(f, start) {
+  const out = { s: start, d: {} };
+  if (!isObj(f)) return out;
+  if (isNum(f.s) && f.s >= 0) out.s = Math.floor(f.s);
+  if (isObj(f.d)) {
+    for (const [dev, pair] of Object.entries(f.d)) {
+      if (!isDeviceId(dev) || !Array.isArray(pair)) continue;
+      const e = Math.floor(nonNeg(pair[0]));
+      const s = Math.floor(nonNeg(pair[1]));
+      if (e || s) out.d[dev] = [e, s];
+    }
+  }
+  return out;
+}
+
+function mergeDevices(a, b, pick) {
+  const out = {};
+  const keys = [...new Set([...Object.keys(a), ...Object.keys(b)])].sort().slice(0, MAX_DEVICES);
+  for (const k of keys) out[k] = hasOwn(a, k) && hasOwn(b, k) ? pick(a[k], b[k]) : (hasOwn(a, k) ? a[k] : b[k]);
+  return out;
+}
+
+const mergeCount = (a, b) => ({ l: Math.max(a.l, b.l), d: mergeDevices(a.d, b.d, (x, y) => Math.max(x, y)) });
+const mergeSpend = (a, b) => ({
+  s: Math.max(a.s, b.s),
+  d: mergeDevices(a.d, b.d, (x, y) => [Math.max(x[0], y[0]), Math.max(x[1], y[1])]),
+});
+
+function countValue(f) {
+  let sum = f.l;
+  for (const n of Object.values(f.d)) sum += n;
+  return sum;
+}
+
+function spendValue(f) {
+  let sum = f.s;
+  for (const [e, s] of Object.values(f.d)) sum += e - s;
+  return Math.max(0, sum);
+}
+
+const fieldValue = (spec, f) => (spec.kind === 'count' ? countValue(f) : spendValue(f));
+const cleanField = (spec, f) => (spec.kind === 'count' ? cleanCount(f) : cleanSpend(f, spec.start));
+
+// ---------- записи ----------
+
+/** Запись ключа в порядок: чистые счётчики (только поля, для которых есть правило), числа — числа. */
+function cleanEntry(key, entry, rules = RULES) {
+  const rule = ruleFor(key, rules);
+  const out = { t: isNum(entry?.t) ? entry.t : 0, e: isNum(entry?.e) ? entry.e : 0 };
+  if (entry?.del || entry?.v === undefined) out.del = true;
+  else out.v = entry.v;
+  if (rule.type === 'fields') {
+    out.f = {};
+    for (const [path, raw] of Object.entries(isObj(entry?.f) ? entry.f : {})) {
+      const spec = specAt(rule, splitPath(path));
+      if (spec && (spec.kind === 'count' || spec.kind === 'spend')) out.f[path] = cleanField(spec, raw);
+    }
+  }
+  return out;
+}
+
+/**
+ * Кто записан позже. Одновременно (переход двух устройств с одним и тем же прошлым обменом) — «большее» значение,
+ * чтобы слияние было коммутативным; у объектов по полям сравнивается только то, что берётся от победителя (без
+ * накопленного — оно при слиянии меняется, и порядок слияний менял бы победителя).
+ */
+function winner(a, b, rule) {
+  if (a.t !== b.t) return a.t > b.t ? a : b;
+  const ca = a.del ? '' : canon(rule?.type === 'fields' ? ownOnly(rule, [], a.v) : a.v);
+  const cb = b.del ? '' : canon(rule?.type === 'fields' ? ownOnly(rule, [], b.v) : b.v);
+  return ca >= cb ? a : b;
+}
+
+function entryLevel(entry, at) {
+  if (entry.del) return null;
+  const lv = getAt(entry.v, splitPath(at));
+  return isNum(lv) ? lv : null;
+}
+
+/** Слить две записи одного ключа. */
+function mergeEntry(key, a, b, rules = RULES) {
+  if (!a) return b;
+  if (!b) return a;
+  const rule = ruleFor(key, rules);
+  const t = Math.max(a.t, b.t);
+  const e = Math.max(a.e, b.e);
+
+  if (rule.type !== 'fields') {
+    let win = null;
+    if (rule.type === 'level') {
+      // больший уровень; удалённое или без уровня — ниже любого (иначе порядок слияний менял бы итог)
+      const la = entryLevel(a, rule.at) ?? -Infinity;
+      const lb = entryLevel(b, rule.at) ?? -Infinity;
+      if (la !== lb) win = la > lb ? a : b;
+    }
+    win ??= winner(a, b);
+    // время — победителя: иначе при равных уровнях порядок слияний менял бы итог
+    return win.del ? { t: win.t, e, del: true } : { t: win.t, e, v: win.v };
+  }
+
+  // у кого эпоха новее (правка в панели, новый переход на слияние), того и накопленное — у другой стороны сброшено
+  const aOld = a.e < b.e;
+  const bOld = b.e < a.e;
+  const f = {};
+  for (const path of new Set([...Object.keys(a.f ?? {}), ...Object.keys(b.f ?? {})])) {
+    const spec = specAt(rule, splitPath(path));
+    if (!spec) continue;
+    const fa = aOld ? undefined : a.f?.[path];
+    const fb = bOld ? undefined : b.f?.[path];
+    if (fa && fb) f[path] = spec.kind === 'count' ? mergeCount(fa, fb) : mergeSpend(fa, fb);
+    else if (fa || fb) f[path] = fa ?? fb;
+  }
+  // Ключи с полями (статистика, прогресс) игры не удаляют: удаление такого ключа ничего не стирает — накопленное
+  // (счётчики других устройств, рекорды) удалением не отменяется, а «частичное» воскрешение сломало бы проверки игр.
+  if (a.del && b.del) return { t, e, f, del: true };
+  if (a.del) return b;
+  if (b.del) return a;
+  const win = winner(a, b, rule);
+  const lose = win === a ? b : a;
+  // значение из старой эпохи приходит без накопленного — его сбросила правка
+  const v = mergeValue(rule, [], win.v, lose.v, { winOld: win.e < lose.e, loseOld: lose.e < win.e });
+  return { t, e, f, v: materialize(rule, v, f) };
+}
+
+/** Значение без полей с правилами (без накопленного) — то, что при слиянии берётся целиком от победителя. */
+function ownOnly(rule, segs, value) {
+  if (specAt(rule, segs)) return undefined;
+  if (!rulesBelow(rule, segs) || value === null || typeof value !== 'object') return value;
+  const out = Array.isArray(value) ? [] : {};
+  for (const k of Object.keys(value)) {
+    const child = ownOnly(rule, [...segs, k], value[k]);
+    if (child !== undefined) out[k] = child;
+  }
+  return out;
+}
+
+function mergeValue(rule, segs, win, lose, epochs) {
+  const spec = specAt(rule, segs);
+  if (spec) return mergeLeaf(spec, win, lose, epochs);
+  // без правил внутри — целиком от записанного позже (в том числе «поля нет»: игра его убрала — не возвращаем)
+  if (!rulesBelow(rule, segs)) return win;
+  if (win === undefined) return epochs.loseOld ? ownOnly(rule, segs, lose) : lose;
+  if (lose === undefined) return epochs.winOld ? ownOnly(rule, segs, win) : win;
+  if (isObj(win) && isObj(lose)) {
+    const out = {};
+    for (const k of [...Object.keys(win), ...Object.keys(lose).filter((x) => !hasOwn(win, x))]) {
+      const child = mergeValue(rule, [...segs, k], win[k], lose[k], epochs);
+      if (child !== undefined) out[k] = child;
+    }
+    return out;
+  }
+  if (Array.isArray(win) && Array.isArray(lose)) {
+    const out = [];
+    for (let i = 0; i < Math.max(win.length, lose.length); i += 1) {
+      out.push(mergeValue(rule, [...segs, String(i)], win[i], lose[i], epochs));
+    }
+    while (out.length && out[out.length - 1] === undefined) out.pop();   // сброшенное правкой — без «дыр» в конце
+    return out;
+  }
+  return win;
+}
+
+function mergeLeaf(spec, win, lose, { winOld, loseOld }) {
+  if (winOld) return lose;                        // эпоха старше — накопленное у той стороны сброшено правкой
+  if (loseOld) return win;
+  if (spec.kind === 'count' || spec.kind === 'spend') return win ?? lose;   // число потом берётся из f
+  if (spec.kind === 'max' || spec.kind === 'min') {
+    const ok = (x) => isNum(x) && (spec.kind === 'max' || x > 0);
+    if (!ok(win)) return ok(lose) || win === undefined ? lose : win;     // «нет рекорда»: null лучше, чем ничего
+    if (!ok(lose)) return win;
+    return spec.kind === 'max' ? Math.max(win, lose) : Math.min(win, lose);
+  }
+  // union
+  if (!Array.isArray(win)) return Array.isArray(lose) ? lose : win;
+  if (!Array.isArray(lose)) return win;
+  const seen = new Set();
+  let out = [];
+  for (const x of [...win, ...lose]) {
+    const c = canon(x);
+    if (!seen.has(c)) {
+      seen.add(c);
+      out.push(x);
+    }
+  }
+  if (spec.sort) out.sort((x, y) => (canon(x) < canon(y) ? -1 : canon(x) > canon(y) ? 1 : 0));
+  if (spec.keep && out.length > spec.keep) out = out.slice(out.length - spec.keep);
+  return out;
+}
+
+/** Поставить в значение числа счётчиков и расходуемого из f. */
+function materialize(rule, value, f) {
+  let out = clone(value);
+  for (const [path, meta] of Object.entries(f)) {
+    const segs = splitPath(path);
+    const spec = specAt(rule, segs);
+    if (spec) out = setAt(out, segs, fieldValue(spec, meta));
+  }
+  return out;
+}
+
+function sameEntry(a, b) {
+  if (!a || !b) return !a && !b;
+  if (Boolean(a.del) !== Boolean(b.del)) return false;
+  if ((a.e ?? 0) !== (b.e ?? 0)) return false;
+  if (!a.del && !same(a.v, b.v)) return false;
+  return same(a.f ?? {}, b.f ?? {});
+}
+
+// ---------- устройство: свои изменения → запись ----------
+
+/**
+ * Вписать значение ключа на устройстве в его запись: на сколько счётчик вырос с последнего известного (из f) —
+ * столько прибавляется «своему» устройству; расходуемое — в начислено или потрачено. Уменьшение счётчика не
+ * учитывается (счётчики только растут). Возвращает { t, e, v | del, f } (t и e — из прежней записи).
+ */
+function absorb(key, entry, value, device, rules = RULES) {
+  const rule = ruleFor(key, rules);
+  const out = { t: entry?.t ?? 0, e: entry?.e ?? 0 };
+  if (value === undefined) out.del = true;
+  else out.v = value;
+  if (rule.type !== 'fields') return out;
+  const f = {};
+  for (const [path, meta] of Object.entries(entry?.f ?? {})) f[path] = clone(meta);
+  if (value !== undefined && isDeviceId(device)) {
+    for (const path of counterPaths(rule, value, ['count', 'spend'])) {
+      const segs = splitPath(path);
+      const spec = specAt(rule, segs);
+      const meta = f[path] ?? cleanField(spec, null);
+      const delta = getAt(value, segs) - fieldValue(spec, meta);
+      if (spec.kind === 'count') {
+        if (delta > 1e-9) meta.d[device] = (meta.d[device] ?? 0) + delta;
+      } else if (Math.round(delta) !== 0) {
+        const pair = meta.d[device] ?? [0, 0];
+        const n = Math.round(delta);
+        meta.d[device] = n > 0 ? [pair[0] + n, pair[1]] : [pair[0], pair[1] - n];
+      }
+      f[path] = meta;
+    }
+  }
+  out.f = f;
+  return out;
+}
+
+// ---------- переход на слияние ----------
+
+/**
+ * Запись из старого прогресса (без счётчиков по устройствам): всё насчитанное — «перенесённое» (l у счётчика,
+ * s у расходуемого). Так прогресс переходит на слияние один раз и без удвоения.
+ */
+function legacyEntry(key, value, t, e = 0, rules = RULES) {
+  const rule = ruleFor(key, rules);
+  const out = { t, e };
+  if (value === undefined) out.del = true;
+  else out.v = value;
+  if (rule.type !== 'fields') return out;
+  out.f = {};
+  if (value === undefined) return out;
+  for (const path of counterPaths(rule, value, ['count', 'spend'])) {
+    const segs = splitPath(path);
+    const spec = specAt(rule, segs);
+    const n = nonNeg(getAt(value, segs));
+    out.f[path] = spec.kind === 'count' ? { l: n, d: {} } : { s: Math.floor(n), d: {} };
+  }
+  return out;
+}
+
+// ---------- документ на сервере ----------
+
+/**
+ * Документ из хранимого: data — прогресс (ключ → значение), meta — { at, mig, acks, k: { ключ: { t, e, f, del } } }
+ * или null. Без meta прогресс ещё не переходил на слияние: записи выводятся из значений как перенесённые; момент
+ * перехода (mig) и эпоха — время последней записи (updatedAt), поэтому документ одинаков при каждом чтении.
+ * meta.at — к какой записи прогресса относятся записи слияния: если прогресс потом записали без них (старый
+ * обработчик после отката), они устарели и выводятся заново — иначе старые счётчики перекрыли бы новый прогресс.
+ */
+function loadDoc(data, meta, updatedAt = 0, rules = RULES) {
+  const values = isObj(data) ? data : {};
+  if (isObj(meta) && isObj(meta.k) && (meta.at === undefined || meta.at === updatedAt)) {
+    const doc = { mig: isNum(meta.mig) ? meta.mig : 0, acks: {}, k: {} };
+    if (isObj(meta.acks)) {
+      for (const [dev, n] of Object.entries(meta.acks)) if (isDeviceId(dev) && isNum(n)) doc.acks[dev] = n;
+    }
+    for (const [key, raw] of Object.entries(meta.k)) {
+      const has = hasOwn(values, key);
+      doc.k[key] = cleanEntry(key, { ...raw, v: has ? values[key] : undefined, del: !has }, rules);
+    }
+    // значение без записи (не бывает, но на всякий случай) — как перенесённое
+    for (const key of Object.keys(values)) {
+      if (!doc.k[key]) doc.k[key] = legacyEntry(key, values[key], updatedAt, doc.mig, rules);
+    }
+    return doc;
+  }
+  const doc = { mig: updatedAt, acks: {}, k: {} };
+  for (const key of Object.keys(values)) doc.k[key] = legacyEntry(key, values[key], updatedAt, updatedAt, rules);
+  return doc;
+}
+
+/** Документ → прогресс (ключ → значение, как хранится и отдаётся старым клиентам) и meta для записи с временем at. */
+function saveDoc(doc, at = 0) {
+  const data = {};
+  const k = {};
+  for (const key of Object.keys(doc.k).sort()) {
+    const entry = doc.k[key];
+    if (!entry.del) data[key] = entry.v;
+    const m = { t: entry.t };
+    if (entry.e) m.e = entry.e;
+    if (entry.del) m.del = 1;
+    if (entry.f && Object.keys(entry.f).length) m.f = entry.f;
+    k[key] = m;
+  }
+  return { data, meta: { at, mig: doc.mig, acks: doc.acks, k } };
+}
+
+/** Запись для ответа клиенту. */
+function wireEntry(entry) {
+  const out = { t: entry.t };
+  if (entry.e) out.e = entry.e;
+  if (entry.del) out.del = 1;
+  else out.v = entry.v;
+  if (entry.f && Object.keys(entry.f).length) out.f = entry.f;
+  return out;
+}
+
+/** Ключи, изменившиеся на сервере позже since (0 — всё, что есть), и ещё extra. */
+function entriesSince(doc, since, extra = []) {
+  const out = {};
+  for (const [key, entry] of Object.entries(doc.k)) {
+    if (since > 0 ? entry.t > since : !entry.del) out[key] = wireEntry(entry);
+  }
+  for (const key of extra) if (doc.k[key] && !out[key]) out[key] = wireEntry(doc.k[key]);
+  return out;
+}
+
+/**
+ * Принять сохранение устройства: push = { device, seq, keys: { ключ: { v | del, e, f, s } }, migrate?: { oldBase } }.
+ * Время записи ставит сервер (stamp): часам устройства не доверяем.
+ *   s — номер отправки, в которой это значение ушло впервые: если сервер уже принял отправку с таким номером от
+ *       этого устройства (acks), ключ пропускается — повтор (ответ не дошёл) не перебьёт то, что позже записало
+ *       другое устройство.
+ *   migrate — первый обмен устройства по-новому (раньше — снимком целиком): его значения записаны «сразу после
+ *       oldBase» (его последнего обмена по-старому), поэтому всё, что на сервере менялось позже, побеждает.
+ *       Счётчики — «перенесённое» по максимуму, если его прогресс не новее перехода сервера (mig); если новее
+ *       (взят у сервера уже после перехода), устройству засчитывается только прибавка сверх серверного итога.
+ * Возвращает { doc, changed: ключи, у которых изменилось что-то кроме времени, dirty: документ надо записать }.
+ */
+function applyPush(doc, push, stamp, rules = RULES) {
+  const next = { mig: doc.mig, acks: { ...doc.acks }, k: { ...doc.k } };
+  const changed = [];
+  const device = isDeviceId(push?.device) ? push.device : null;
+  const seq = isNum(push?.seq) ? push.seq : 0;
+  const acked = device ? (doc.acks[device] ?? 0) : 0;
+  const migrate = isObj(push?.migrate);
+  const oldBase = migrate && isNum(push.migrate.oldBase) ? Math.max(0, Math.min(push.migrate.oldBase, stamp)) : 0;
+  for (const [key, raw] of Object.entries(isObj(push?.keys) ? push.keys : {})) {
+    if (!key || key.length > 200 || !isObj(raw)) continue;
+    if (!migrate && device && isNum(raw.s) && raw.s > 0 && raw.s <= acked) continue;   // повтор уже принятого
+    const stored = next.k[key];
+    const value = raw.del ? undefined : raw.v;
+    let incoming;
+    if (migrate) {
+      const at = oldBase + 0.5;
+      if (!stored || oldBase <= doc.mig) incoming = legacyEntry(key, value, at, stored?.e ?? 0, rules);
+      else incoming = excessEntry(key, stored, value, at, device, rules);
+    } else {
+      incoming = cleanEntry(key, { ...raw, t: stamp }, rules);
+      incoming.e = stored ? Math.min(incoming.e, stored.e) : 0;   // эпоху устройство знает только от сервера
+    }
+    const merged = mergeEntry(key, stored, incoming, rules);
+    if (!stored || !sameEntry(stored, merged)) {
+      merged.t = stamp;
+      next.k[key] = merged;
+      changed.push(key);
+    }
+  }
+  let dirty = changed.length > 0;
+  if (device && seq > acked) {
+    next.acks[device] = seq;
+    dirty = true;
+  }
+  return { doc: next, changed, dirty };
+}
+
+/** Устройство взяло уже слитый прогресс старым клиентом: засчитать ему только то, что сверх серверного итога. */
+function excessEntry(key, stored, value, t, device, rules) {
+  const rule = ruleFor(key, rules);
+  const out = { t, e: stored.e };
+  if (value === undefined) out.del = true;
+  else out.v = value;
+  if (rule.type !== 'fields') return out;
+  out.f = {};
+  if (value === undefined || !device) return out;
+  for (const path of counterPaths(rule, value, ['count'])) {
+    const have = stored.f?.[path] ?? { l: 0, d: {} };
+    const extra = getAt(value, splitPath(path)) - countValue(have);
+    if (extra > 1e-9) out.f[path] = { l: 0, d: { [device]: (have.d[device] ?? 0) + extra } };
+  }
+  return out;
+}
+
+/**
+ * Правка в панели владельца: присланное значение ключа становится новым началом — эпоха e = stamp, счётчики
+ * перенесены заново. Записи устройств старой эпохи при слиянии отбрасываются — иначе правка «вниз» не прошла бы.
+ */
+function applyAdmin(doc, data, stamp, rules = RULES) {
+  const next = { mig: doc.mig, acks: { ...doc.acks }, k: { ...doc.k } };
+  const values = isObj(data) ? data : {};
+  for (const key of new Set([...Object.keys(next.k), ...Object.keys(values)])) {
+    const stored = next.k[key];
+    const has = hasOwn(values, key);
+    if (stored && !stored.del && has && same(stored.v, values[key])) continue;
+    if ((!stored || stored.del) && !has) continue;
+    next.k[key] = legacyEntry(key, has ? values[key] : undefined, stamp, stamp, rules);
+  }
+  return next;
+}
+
 // Обработчик Cloudflare Worker: вход через Telegram, прогресс игроков, панель владельца и сам бот.
 // База — Cloudflare D1 (привязка `DB`, схема в schema.sql). Как это выкладывается — в README.md.
 //
@@ -683,7 +1342,10 @@ export default {
           perks: admin ? Object.keys(PERKS) : await perksOf(env, player.id),
         }, 200, origin);
       }
-      if (path === '/state' && request.method === 'GET') return await getState(env, player, origin);
+      if (path === '/state' && request.method === 'GET') {
+        if (url.searchParams.get('sync') === String(MERGE_PROTOCOL)) return await getMerged(env, player, url, origin);
+        return await getState(env, player, origin);
+      }
       if (path === '/state' && request.method === 'PUT') return await putState(request, env, player, user, origin, admin);
       if (path === '/top' || path.startsWith('/top/')) return await topRoutes(request, env, path, player, admin, origin);
       if (path === '/report' && request.method === 'POST') {
@@ -761,12 +1423,26 @@ async function getState(env, player, origin) {
 }
 
 async function putState(request, env, player, user, origin, admin = false) {
-  const { data, base, sync } = await body(request);
-  // бета 'sync-refresh': у того, кому она открыта, сохранение принимается только от нового клиента (sync: 2) —
-  // старый после 409 отправил бы уровень из памяти игры и откатил прогресс. Ему отказ: прогресс остаётся на
-  // устройстве, после перезапуска приложения уйдёт уже новым клиентом. Тестера спрашиваем, только если sync нет.
-  if (sync !== SYNC_PROTOCOL && betaOpen('sync-refresh', admin || await isTester(env, player.id))) {
-    return fail('update_required', 426, origin);
+  const text = await request.text();
+  // прогресс и его записи по устройствам (переход на слияние шлёт весь прогресс сразу)
+  if (text.length > MAX_PUSH_CHARS) return fail('state_big', 400, origin);
+  let payload = {};
+  try {
+    payload = JSON.parse(text);
+  } catch {
+    payload = {};
+  }
+  if (payload?.sync === MERGE_PROTOCOL) return await putMerged(env, player, user, payload, origin);
+  const { data, base, sync } = payload ?? {};
+  // Старый клиент у того, кому открыта бета, прогресс не пишет: прогресс остаётся у него на устройстве и уйдёт
+  // новым клиентом после перезапуска приложения. 'sync-merge' — только слияние (иначе старый снимок целиком затёр
+  // бы записи устройств), 'sync-refresh' — хотя бы клиент, который перезапускает устаревшую игру (sync: 2) —
+  // старый после 409 отправил бы уровень из памяти игры и откатил прогресс. Тестера спрашиваем, только если нужно.
+  if (sync !== MERGE_PROTOCOL) {
+    const beta = admin || await isTester(env, player.id);
+    if (betaOpen('sync-merge', beta) || (sync !== SYNC_PROTOCOL && betaOpen('sync-refresh', beta))) {
+      return fail('update_required', 426, origin);
+    }
   }
   const bad = validateState(data);
   if (bad) return fail(bad, 400, origin);
@@ -789,11 +1465,120 @@ async function putState(request, env, player, user, origin, admin = false) {
   return json({ updatedAt: stamp }, 200, origin);
 }
 
-function saveState(env, userId, data, stamp) {
+/** Записать прогресс снимком (старый обмен, панель). Записи слияния (meta) при этом сбрасываются: снимок их не знает. */
+async function saveState(env, userId, data, stamp, meta = null) {
+  await ensureStateMeta(env);
   return env.DB.prepare(
-    `INSERT INTO states (user_id, data, updated_at) VALUES (?, ?, ?)
-     ON CONFLICT(user_id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`,
-  ).bind(userId, data, stamp).run();
+    `INSERT INTO states (user_id, data, updated_at, meta) VALUES (?, ?, ?, ?)
+     ON CONFLICT(user_id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at, meta = excluded.meta`,
+  ).bind(userId, data, stamp, meta).run();
+}
+
+// ---------- слияние по ключам (бета 'sync-merge', server/merge.js) ----------
+
+// Весь прогресс (до 400 КБ) и записи по устройствам — с запасом на них и на обёртку запроса.
+const MAX_PUSH_CHARS = 2 * 400 * 1024;
+const MERGE_TRIES = 3;           // два устройства записали одновременно — слить заново поверх записанного
+const stateMetaReady = new WeakSet();
+
+/**
+ * Откат слияния без wrangler: при первом переходе игрока на слияние его прежний прогресс (как он был записан старым
+ * обменом) один раз копируется в states_premerge. Вернуть — в консоли D1:
+ *   UPDATE states SET data = (SELECT data FROM states_premerge p WHERE p.user_id = states.user_id), meta = NULL
+ *   WHERE user_id IN (SELECT user_id FROM states_premerge);
+ * (Time Travel D1 тоже есть — 7 дней на бесплатном плане, но только через wrangler или API.)
+ * Когда слияние выйдет из беты и обкатается — таблицу можно удалить (DROP TABLE states_premerge).
+ */
+async function keepPremerge(env, userId, row) {
+  try {
+    await env.DB.prepare(`CREATE TABLE IF NOT EXISTS states_premerge (
+      user_id INTEGER PRIMARY KEY, data TEXT NOT NULL, updated_at INTEGER NOT NULL, saved_at INTEGER NOT NULL)`).run();
+    await env.DB.prepare('INSERT OR IGNORE INTO states_premerge (user_id, data, updated_at, saved_at) VALUES (?, ?, ?, ?)')
+      .bind(userId, row.data, row.updated_at, Date.now()).run();
+  } catch (err) {
+    console.error('не удалось сохранить копию прогресса до слияния', err);
+  }
+}
+
+/** Столбец meta (записи слияния: время, эпоха, счётчики по устройствам) добавлен позже — заводим сами. */
+async function ensureStateMeta(env) {
+  if (stateMetaReady.has(env.DB)) return;
+  try {
+    await env.DB.prepare('ALTER TABLE states ADD COLUMN meta TEXT').run();
+  } catch {
+    // уже есть
+  }
+  stateMetaReady.add(env.DB);
+}
+
+async function readDoc(env, userId) {
+  await ensureStateMeta(env);
+  const row = await env.DB.prepare('SELECT data, meta, updated_at FROM states WHERE user_id = ?').bind(userId).first();
+  const parse = (s) => {
+    try {
+      return JSON.parse(s ?? 'null');
+    } catch {
+      return null;
+    }
+  };
+  return {
+    row: row ?? null,
+    doc: loadDoc(parse(row?.data) ?? {}, parse(row?.meta), row?.updated_at ?? 0),
+  };
+}
+
+/** GET /state?sync=3&since=<время>&device=<id>: изменившееся на сервере позже since (0 — всё) и что принято от устройства. */
+async function getMerged(env, player, url, origin) {
+  const since = Math.max(0, Number(url.searchParams.get('since')) || 0);
+  const device = url.searchParams.get('device');
+  const { row, doc } = await readDoc(env, player.id);
+  return json({
+    updatedAt: row?.updated_at ?? 0,
+    full: since === 0,
+    ack: isDeviceId(device) ? (doc.acks[device] ?? 0) : 0,
+    keys: entriesSince(doc, since),
+  }, 200, origin);
+}
+
+/**
+ * PUT /state { sync: 3, device, seq, base, keys, migrate? } — сохранение по-новому: сервер не отвергает устаревшее,
+ * а сливает его со своей копией (server/merge.js) и отдаёт итог: всё, что изменилось позже base, и присланные ключи.
+ * Записывается, только если что-то изменилось. Два устройства одновременно: запись — только если со времени
+ * чтения никто не писал (updated_at тот же), иначе слияние заново поверх записанного.
+ */
+async function putMerged(env, player, user, payload, origin) {
+  if (!isDeviceId(payload.device)) return fail('bad_device', 400, origin);
+  const base = Number(payload.base) || 0;
+  const sent = Object.keys(payload.keys ?? {});
+  for (let attempt = 0; attempt < MERGE_TRIES; attempt += 1) {
+    const { row, doc } = await readDoc(env, player.id);
+    const stored = row?.updated_at ?? 0;
+    const since = Date.now() - stored;
+    if (row && since >= 0 && since < Number(env.STATE_MIN_GAP_MS ?? STATE_MIN_GAP_MS)) return fail('too_many', 429, origin);
+    const stamp = Math.max(Date.now(), stored + 1);
+    const res = applyPush(doc, payload, stamp);
+    if (!res.dirty) {
+      return json({ updatedAt: stored, ack: doc.acks[payload.device] ?? 0, keys: entriesSince(doc, base, sent) }, 200, origin);
+    }
+    const saved = saveDoc(res.doc, stamp);
+    const data = JSON.stringify(saved.data);
+    const bad = validateState(data);
+    if (bad) return fail(bad, 400, origin);
+    const meta = JSON.stringify(saved.meta);
+    if (meta.length > MAX_PUSH_CHARS) return fail('state_big', 400, origin);
+    const written = row
+      ? await env.DB.prepare('UPDATE states SET data = ?, meta = ?, updated_at = ? WHERE user_id = ? AND updated_at = ?')
+        .bind(data, meta, stamp, player.id, stored).run()
+      : await env.DB.prepare(
+        `INSERT INTO states (user_id, data, meta, updated_at) VALUES (?, ?, ?, ?)
+         ON CONFLICT(user_id) DO NOTHING`,
+      ).bind(player.id, data, meta, stamp).run();
+    if (!written?.meta?.changes) continue;       // между чтением и записью успело записать другое устройство
+    if (row && !row.meta) await keepPremerge(env, player.id, row);
+    if (res.changed.length) await indexBoard(env, player.id, saved.data, user?.first_name);
+    return json({ updatedAt: stamp, ack: res.doc.acks[payload.device] ?? 0, keys: entriesSince(res.doc, base, sent) }, 200, origin);
+  }
+  return fail('too_many', 429, origin);
 }
 
 // ---------- рейтинг ----------
@@ -1284,7 +2069,15 @@ async function adminRoutes(request, env, path, url, origin) {
     // Отметка заведомо новее всего, что есть у игрока: его устройство при следующем обмене
     // получит конфликт и применит правку, а не затрёт её своим старым прогрессом.
     const stamp = Date.now() + 1000;
-    await saveState(env, id, data, stamp);
+    // прогресс уже на слиянии (бета 'sync-merge'): изменённые ключи начинаются заново (новая эпоха) — счётчики
+    // устройств из старой эпохи отбрасываются, иначе правка «вниз» не прошла бы
+    const { row, doc } = await readDoc(env, id);
+    let meta = null;
+    if (row?.meta) {
+      const saved = saveDoc(applyAdmin(doc, JSON.parse(data), stamp), stamp);
+      meta = JSON.stringify(saved.meta);
+    }
+    await saveState(env, id, data, stamp, meta);
     await indexBoard(env, id, JSON.parse(data));
     return json({ ok: true, updatedAt: stamp }, 200, origin);
   }
@@ -1314,6 +2107,11 @@ async function adminRoutes(request, env, path, url, origin) {
     await env.DB.prepare('DELETE FROM board_scores WHERE user_id = ?').bind(id).run();
     await env.DB.prepare('DELETE FROM board_players WHERE user_id = ?').bind(id).run();
     await env.DB.prepare('DELETE FROM states WHERE user_id = ?').bind(id).run();
+    try {
+      await env.DB.prepare('DELETE FROM states_premerge WHERE user_id = ?').bind(id).run();
+    } catch {
+      // копий до слияния ещё не было — таблицы нет
+    }
     // отзывы тоже: политика конфиденциальности (privacy.html) обещает удалить всё, что связано с игроком
     await ensureReports(env);
     await env.DB.prepare('DELETE FROM reports WHERE tg_id = ?').bind(player.tg_id).run();

@@ -656,9 +656,16 @@ test('заблокированный игрок не может писать о�
 
 // ---------- рейтинг ----------
 
-// сохраняет новый клиент (sync: 2) — после релиза беты sync-refresh сервер других не принимает
+// сохраняет новый клиент (слияние, sync: 3) — после релиза беты sync-merge сервер других не принимает.
+// Без записей по устройствам (f) значения ложатся как есть: для рейтинга этого достаточно.
+let saveSeq = 0;
 const save = (env, initData, state) => call(env, '/state', {
-  method: 'PUT', initData, payload: { data: JSON.stringify(state), base: Number.MAX_SAFE_INTEGER, sync: 2 },
+  method: 'PUT',
+  initData,
+  payload: {
+    sync: 3, device: 'test-device-1', seq: ++saveSeq, base: 0,
+    keys: Object.fromEntries(Object.entries(state).map(([k, v]) => [k, { v }])),
+  },
 });
 
 test('рейтинг: места по очкам, при равенстве — кто раньше; в ответе только имя, без id и ника', async () => {
@@ -990,10 +997,10 @@ test('бета-тестер: видит бету (игры в рейтинге, 
 
 // ---------- бета sync-refresh: сохранения — только от нового клиента ----------
 
-test('бета sync-refresh: у владельца и тестера сохранение принимается только от нового клиента, у игрока — любое; после релиза — у всех', async () => {
+test('старый клиент: у владельца и тестера (бета sync-merge) — только слияние, у игрока — любой; после релиза — у всех', async () => {
   const lib = await import('../lib.js');
   const wasBeta = [...lib.SERVER_BETA];
-  lib.SERVER_BETA.splice(0, lib.SERVER_BETA.length, 'sync-refresh');
+  lib.SERVER_BETA.splice(0, lib.SERVER_BETA.length, 'sync-refresh', 'sync-merge');
   try {
     const env = createEnv();
     const masha = await asUser(USER);
@@ -1001,26 +1008,38 @@ test('бета sync-refresh: у владельца и тестера сохра�
     const put = (initData, data, sync) => call(env, '/state', {
       method: 'PUT', initData, payload: { data: JSON.stringify(data), base: Number.MAX_SAFE_INTEGER, ...(sync ? { sync } : {}) },
     });
+    let seq = 0;
+    const merged = (initData, keys) => call(env, '/state', {
+      method: 'PUT', initData, payload: { sync: 3, device: 'owner-phone-1', seq: ++seq, base: 0, keys },
+    });
     const state = async (initData) => JSON.parse((await call(env, '/state', { initData })).data.data);
 
     assert.equal((await put(masha, { a: 1 })).status, 200, 'игрок без беты — старый клиент, как раньше');
-    const old = await put(owner, { level: 35 });
-    assert.equal(old.status, 426, 'владелец (видит бету) со старым клиентом — отказ');
-    assert.equal(old.data.error, 'update_required');
+    assert.equal((await put(masha, { a: 2 }, lib.SYNC_PROTOCOL)).status, 200);
+    for (const sync of [undefined, lib.SYNC_PROTOCOL]) {
+      const old = await put(owner, { level: 35 }, sync);
+      assert.equal(old.status, 426, `владелец (видит бету) со старым клиентом (sync: ${sync}) — отказ`);
+      assert.equal(old.data.error, 'update_required');
+    }
     assert.deepEqual(await state(owner), {}, 'старый клиент ничего не записал');
-    assert.equal((await put(owner, { level: 60 }, lib.SYNC_PROTOCOL)).status, 200, 'новый клиент — принят');
-    assert.equal((await put(owner, { level: 35 })).status, 426, 'и потом старый не откатит');
-    assert.deepEqual(await state(owner), { level: 60 });
+    assert.equal((await merged(owner, { 'game:loop:current': { v: { level: 60 } } })).status, 200, 'слияние — принято');
+    assert.equal((await put(owner, { 'game:loop:current': { level: 35 } }, lib.SYNC_PROTOCOL)).status, 426, 'и потом старый не откатит');
+    assert.deepEqual(await state(owner), { 'game:loop:current': { level: 60 } });
 
     const id = (await call(env, '/me', { initData: masha })).data.id;
     await call(env, `/admin/player/${id}/tester`, { method: 'POST', initData: owner, payload: { on: true } });
-    assert.equal((await put(masha, { a: 2 })).status, 426, 'тестер со старым клиентом — отказ');
-    assert.equal((await put(masha, { a: 3 }, lib.SYNC_PROTOCOL)).status, 200);
+    assert.equal((await put(masha, { a: 3 }, lib.SYNC_PROTOCOL)).status, 426, 'тестер со старым клиентом — отказ');
+    assert.equal((await merged(masha, { a: { v: 4 } })).status, 200);
 
-    lib.SERVER_BETA.splice(0, lib.SERVER_BETA.length);           // релиз
+    // шаг 1 выпущен, слияние ещё в бете: игроку — хотя бы sync: 2
+    lib.SERVER_BETA.splice(0, lib.SERVER_BETA.length, 'sync-merge');
     await call(env, `/admin/player/${id}/tester`, { method: 'POST', initData: owner, payload: { on: false } });
-    assert.equal((await put(masha, { a: 4 })).status, 426, 'после релиза старый клиент не пишет ни у кого');
-    assert.equal((await put(masha, { a: 5 }, lib.SYNC_PROTOCOL)).status, 200);
+    assert.equal((await put(masha, { a: 5 })).status, 426, 'игроку без sync: 2 — отказ');
+    assert.equal((await put(masha, { a: 6 }, lib.SYNC_PROTOCOL)).status, 200);
+
+    lib.SERVER_BETA.splice(0, lib.SERVER_BETA.length);           // релиз всего
+    assert.equal((await put(masha, { a: 7 }, lib.SYNC_PROTOCOL)).status, 426, 'после релиза старый клиент не пишет ни у кого');
+    assert.equal((await merged(masha, { a: { v: 8 } })).status, 200);
   } finally {
     lib.SERVER_BETA.splice(0, lib.SERVER_BETA.length, ...wasBeta);
   }
@@ -1262,4 +1281,123 @@ test('старая рассылка без номеров: ответ коман
   } finally {
     tg.restore();
   }
+});
+
+// ---------- слияние по ключам (бета sync-merge, server/merge.js) ----------
+
+const pushMerged = (env, initData, device, seq, keys, base = 0) => call(env, '/state', {
+  method: 'PUT', initData, payload: { sync: 3, device, seq, base, keys },
+});
+
+test('слияние: два устройства пишут одновременно — сохраняется и то и другое (запись только поверх прочитанного)', async () => {
+  const env = createEnv();
+  const masha = await asUser(USER);
+  // чтение прогресса «идёт по сети»: оба сохранения успевают прочитать базу до того, как одно из них запишет
+  const prepare = env.DB.prepare.bind(env.DB);
+  let lost = 0;
+  env.DB.prepare = (sql) => {
+    const stmt = prepare(sql);
+    const slow = (b) => ({
+      ...b,
+      first: () => {
+        const row = b.first();                     // прочитано сейчас, ответ приходит позже
+        return new Promise((r) => setTimeout(() => r(row), 5));
+      },
+      run: () => {
+        const res = b.run();
+        if (/^UPDATE states/.test(sql) && !res.meta.changes) lost += 1;
+        return res;
+      },
+    });
+    if (!/FROM states|UPDATE states/.test(sql)) return stmt;
+    return { ...slow(stmt), bind: (...args) => slow(stmt.bind(...args)) };
+  };
+  await pushMerged(env, masha, 'device-aaaa-01', 1, { 'shell:stats:chess': { v: { played: 1, wins: 0, best: null }, f: { played: { d: { 'device-aaaa-01': 1 } } } } });
+  const [a, b] = await Promise.all([
+    pushMerged(env, masha, 'device-aaaa-01', 2, { 'game:loop:current': { v: { v: 1, level: 7 } } }),
+    pushMerged(env, masha, 'device-bbbb-02', 1, {
+      'game:2048:settings': { v: { size: 5, skin: 'neon' } },
+      'shell:stats:chess': { v: { played: 1, wins: 1, best: null }, f: { played: { d: { 'device-bbbb-02': 1 } }, wins: { d: { 'device-bbbb-02': 1 } } } },
+    }),
+  ]);
+  assert.equal(a.status, 200);
+  assert.equal(b.status, 200);
+  const state = JSON.parse((await call(env, '/state', { initData: masha })).data.data);
+  assert.equal(state['game:loop:current'].level, 7);
+  assert.equal(state['game:2048:settings'].skin, 'neon');
+  assert.deepEqual(state['shell:stats:chess'], { played: 2, wins: 1, best: null }, 'партии обоих устройств');
+  assert.ok(lost >= 1, 'второе сохранение не записалось поверх первого вслепую, а слилось заново');
+});
+
+test('слияние: чтение изменившегося с прошлого обмена и принятая отправка устройства (ack)', async () => {
+  const env = createEnv();
+  const masha = await asUser(USER);
+  const first = await pushMerged(env, masha, 'device-aaaa-01', 5, { 'game:2048:sound': { v: false } });
+  const since = first.data.updatedAt;
+  await pushMerged(env, masha, 'device-bbbb-02', 1, { 'game:chess:setup': { v: { level: 4, color: 'white' } } });
+  const read = await call(env, `/state?sync=3&since=${since}&device=device-aaaa-01`, { initData: masha });
+  assert.deepEqual(Object.keys(read.data.keys), ['game:chess:setup'], 'только изменённое другим устройством');
+  assert.equal(read.data.ack, 5, 'сервер помнит, какую отправку A уже принял');
+  const all = await call(env, '/state?sync=3&since=0&device=device-aaaa-01', { initData: masha });
+  assert.equal(all.data.full, true);
+  assert.deepEqual(Object.keys(all.data.keys).sort(), ['game:2048:sound', 'game:chess:setup']);
+  // и прогресс для старых мест (рейтинг, панель, /me) — обычной строкой
+  assert.deepEqual(JSON.parse((await call(env, '/state', { initData: masha })).data.data), {
+    'game:2048:sound': false, 'game:chess:setup': { level: 4, color: 'white' },
+  });
+});
+
+test('слияние: правка владельца в панели — новая эпоха, старые счётчики устройства её не отменяют', async () => {
+  const env = createEnv();
+  const masha = await asUser(USER);
+  const owner = await asUser(ADMIN);
+  const id = (await call(env, '/me', { initData: masha })).data.id;
+  const words = (hints) => ({ v: 1, levels: {}, current: 0, hints, passedCount: 0 });
+  await pushMerged(env, masha, 'device-aaaa-01', 1, { 'game:words:progress': { v: words(9) } });
+  const known = (await call(env, '/state?sync=3&since=0&device=device-aaaa-01', { initData: masha })).data.keys['game:words:progress'];
+  // владелец ставит 2 подсказки
+  const data = JSON.parse((await call(env, `/admin/player/${id}`, { initData: owner })).data.data);
+  data['game:words:progress'].hints = 2;
+  assert.equal((await call(env, `/admin/player/${id}/state`, { method: 'PUT', initData: owner, payload: { data: JSON.stringify(data) } })).status, 200);
+  // устройство, не знающее о правке, тратит подсказку «из своих 9» — со старой эпохой
+  const f = { hints: { s: 9, d: { 'device-aaaa-01': [0, 1] } } };
+  await pushMerged(env, masha, 'device-aaaa-01', 2, { 'game:words:progress': { v: words(8), f, e: known.e } });
+  assert.equal(JSON.parse((await call(env, '/state', { initData: masha })).data.data)['game:words:progress'].hints, 2, 'правка устояла');
+});
+
+test('слияние: старый клиент снимком (игрок без беты) сбрасывает записи слияния — потом они выводятся заново', async () => {
+  const env = createEnv();
+  const masha = await asUser(USER);
+  await pushMerged(env, masha, 'device-aaaa-01', 1, { 'shell:stats:flags': { v: { played: 3, wins: 1, best: 2 }, f: { played: { d: { 'device-aaaa-01': 3 } }, wins: { d: { 'device-aaaa-01': 1 } } } } });
+  const snap = await call(env, '/state', { method: 'PUT', initData: masha, payload: { data: JSON.stringify({ 'shell:stats:flags': { played: 5, wins: 2, best: 2 } }), base: Number.MAX_SAFE_INTEGER } });
+  assert.equal(snap.status, 200);
+  const read = await call(env, '/state?sync=3&since=0&device=device-aaaa-01', { initData: masha });
+  const entry = read.data.keys['shell:stats:flags'];
+  assert.deepEqual(entry.v, { played: 5, wins: 2, best: 2 });
+  assert.deepEqual(entry.f.played, { l: 5, d: {} }, 'счётчик — заново «перенесённое», без старых записей устройства');
+  assert.equal(entry.e, snap.data.updatedAt, 'новая эпоха: старые записи устройства отбросятся');
+});
+
+test('слияние: откат — копия прогресса до перехода (states_premerge) один раз; прогресс, записанный в обход записей слияния, не перекрывается старыми счётчиками', async () => {
+  const env = createEnv();
+  const masha = await asUser(USER);
+  const owner = await asUser(ADMIN);
+  const id = (await call(env, '/me', { initData: masha })).data.id;
+  const before = { 'shell:stats:flags': { played: 3, wins: 1, best: 2 } };
+  env.DB.prepare('INSERT INTO states (user_id, data, updated_at) VALUES (?, ?, 1000)').bind(id, JSON.stringify(before)).run();
+  await pushMerged(env, masha, 'device-aaaa-01', 1, { 'game:2048:sound': { v: false } });
+  await pushMerged(env, masha, 'device-aaaa-01', 2, { 'game:2048:sound': { v: true } });
+  const copy = env.DB.prepare('SELECT data, updated_at FROM states_premerge WHERE user_id = ?').bind(id).first();
+  assert.deepEqual(JSON.parse(copy.data), before, 'в копии — прогресс до слияния, и только одна');
+  assert.equal(copy.updated_at, 1000);
+
+  // откат обработчика: старый код записал прогресс, не зная о записях слияния (meta осталась прежней)
+  env.DB.prepare('UPDATE states SET data = ?, updated_at = updated_at + 5 WHERE user_id = ?')
+    .bind(JSON.stringify({ 'shell:stats:flags': { played: 9, wins: 4, best: 2 } }), id).run();
+  const read = await call(env, '/state?sync=3&since=0&device=device-aaaa-01', { initData: masha });
+  assert.equal(read.data.keys['shell:stats:flags'].v.played, 9, 'прогресс, записанный старым кодом, не перекрыт');
+  assert.deepEqual(read.data.keys['shell:stats:flags'].f.played, { l: 9, d: {} });
+
+  assert.equal((await call(env, `/admin/player/${id}`, { method: 'DELETE', initData: owner })).status, 200);
+  assert.equal(env.DB.prepare('SELECT 1 FROM states_premerge WHERE user_id = ?').bind(id).first(), null, 'удаление игрока стирает и копию');
 });
