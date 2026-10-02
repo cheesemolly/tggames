@@ -23,7 +23,7 @@ import {
 import { chooseMove, hintMove, estimateDead } from './bot.js';
 import {
   LEVEL_IDS, SKINS, HANDICAPS, normalizeSetup, normalizeSettings, defaultSettings, needConfirm,
-  emptyStats, isValidStats, recordGame, fmtScore,
+  emptyStats, isValidStats, recordGame, fmtScore, playerFor,
 } from './logic.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -46,7 +46,11 @@ const T = {
   opponent: 'Соперник',
   side: 'Играю',
   handicap: 'Фора чёрным',
-  handicapHint: 'Камни на звёздах до начала — слабому игроку легче',
+  handicapMe: 'Фора мне',
+  handicapHint: 'Слабый игрок берёт чёрные: его камни заранее стоят на звёздах, первыми ходят белые',
+  handicapHintBot: 'Ты играешь чёрными: твои камни заранее стоят на звёздах, первыми ходят белые',
+  handicapStart: (n, bot) => (bot ? `Фора: ${n} твоих камней уже на доске — первыми ходят белые`
+    : `Фора: ${n} чёрных камней уже на доске — первыми ходят белые`),
   noHandicap: 'Нет',
   start: 'Играть',
   rules: 'Ставь камни на пересечения. Камень или группа без свободных соседних пересечений снимается с доски. Побеждает тот, у кого больше камней и окружённой пустоты; белые получают коми.',
@@ -913,15 +917,20 @@ function showNewGame(first = false) {
   const renderHandicap = () => {
     const list = HANDICAPS.filter((h) => h <= maxHandicap(draft.size));
     if (!list.includes(draft.handicap)) draft.handicap = 0;
+    const bot = draft.vs === 'bot';
     handicapBox.replaceChildren(
-      el('h3', { class: 'go-section' }, T.handicap),
-      radios(list.map((h) => ({ id: h, title: h ? String(h) : T.noHandicap })), draft.handicap, (id) => { draft.handicap = id; }, 'go-option go-option-xs'),
-      el('p', { class: 'go-note' }, T.handicapHint),
+      el('h3', { class: 'go-section' }, bot ? T.handicapMe : T.handicap),
+      radios(list.map((h) => ({ id: h, title: h ? String(h) : T.noHandicap })), draft.handicap, (id) => {
+        draft.handicap = id;
+        sideBlock.hidden = draft.vs !== 'bot' || draft.handicap >= 2;
+      }, 'go-option go-option-xs'),
+      el('p', { class: 'go-note' }, bot ? T.handicapHintBot : T.handicapHint),
     );
   };
+  // с форой против бота цвет не выбирается: фора — чёрные камни, и они игрока
   const sync = () => {
-    sideBlock.hidden = draft.vs !== 'bot';
     renderHandicap();
+    sideBlock.hidden = draft.vs !== 'bot' || draft.handicap >= 2;
   };
   const opponents = [
     ...LEVEL_IDS.map((id) => ({ id, title: T.levels[id][0], hint: T.levels[id][1] })),
@@ -957,8 +966,9 @@ function showNewGame(first = false) {
 
 function startGame() {
   request++;
-  const player = setup.side === 'random' ? (Math.random() < 0.5 ? BLACK : WHITE) : setup.side === 'white' ? WHITE : BLACK;
+  const player = playerFor(setup);
   game = newGame({ size: setup.size, vs: setup.vs, level: setup.level, player, handicap: setup.handicap });
+  if (game.handicap) later(() => toast?.show(T.handicapStart(game.handicap, game.vs === 'bot'), 3200), 400);
   pos = replay(game);
   busy = false;
   finishing = false;

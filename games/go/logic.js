@@ -41,6 +41,17 @@ export function normalizeSettings(s) {
   };
 }
 
+/**
+ * Чем играет человек против бота. Фора по правилам го — всегда чёрные камни слабому игроку (дальше первыми ходят
+ * белые), поэтому с форой человек играет чёрными, какой бы цвет ни выбрал: иначе камни форы доставались боту (так и
+ * было — тестер, 2026-10-02: выбрал белых и фору 5, а пять камней получил бот). rnd — для «случайно».
+ */
+export function playerFor(setup, rnd = Math.random) {
+  if (setup.handicap >= 2) return 1;
+  if (setup.side === 'random') return rnd() < 0.5 ? 1 : 2;
+  return setup.side === 'white' ? 2 : 1;
+}
+
 /** Нужно ли подтверждать ход вторым касанием на этой доске. */
 export const needConfirm = (settings, size) => settings.confirm === 'always' || (settings.confirm === 'big' && size >= 13);
 

@@ -9,7 +9,7 @@ import {
 } from '../rules.js';
 import { chooseMove, estimateDead, LEVELS } from '../bot.js';
 import { makeRng, PAT3 } from '../engine.js';
-import { emptyStats, recordGame, isValidStats, normalizeSetup, normalizeSettings } from '../logic.js';
+import { emptyStats, recordGame, isValidStats, normalizeSetup, normalizeSettings, playerFor } from '../logic.js';
 
 const at = (n, r, c) => r * n + c;
 /** Партия из ходов [r, c] или 'pass'. */
@@ -129,6 +129,19 @@ test('слабые уровни доигрывают партию 9×9 до дв
   }
   assert.equal(pos.passes, 2, `партия закончилась (ходов ${s.moves.length})`);
   assert.ok(isValidGame(s));
+});
+
+test('фора против бота — всегда игроку: он играет чёрными, первыми ходят белые (бот)', () => {
+  const half = () => 0.9;
+  assert.equal(playerFor({ side: 'white', handicap: 5 }, half), BLACK, 'выбрал белых, но с форой — чёрные');
+  assert.equal(playerFor({ side: 'random', handicap: 3 }, half), BLACK);
+  assert.equal(playerFor({ side: 'white', handicap: 0 }, half), WHITE, 'без форы — как выбрал');
+  assert.equal(playerFor({ side: 'random', handicap: 0 }, half), WHITE);
+  const s = newGame({ size: 9, vs: 'bot', handicap: 5, player: playerFor({ side: 'white', handicap: 5 }) });
+  const pos = replay(s);
+  assert.equal(s.player, BLACK);
+  assert.equal(pos.turn, WHITE, 'первым после форы ходит бот белыми');
+  assert.equal([...Array(81).keys()].filter((i) => pos.board.color[pos.board.fromIndex(i)] === BLACK).length, 5);
 });
 
 test('статистика, выбор партии и настройки', () => {
