@@ -1,13 +1,13 @@
 // Звуки пятнашек — деревянные и тихие (из shared/sfx.js):
 //   ход — мягкий «тк» деревянной плитки о рамку (высота чуть гуляет); несколько плиток разом — быстрые «тк» по одной
 //   на плитку (не больше пяти); нельзя — глухой «тук»; ряд или столбец встал на место — тихий «плип» (выше с номером
-//   ряда); отмена — шорох назад; подсказка — два «плипа»; перемешивание — шорох и россыпь «тк»; собрано — тёплый
-//   аккорд и колокольчики снизу вверх; окна — щелчок.
+//   ряда); отмена — шорох назад; перемешивание — шорох и россыпь «тк»; собрано — тёплый аккорд и колокольчики
+//   снизу вверх; окна — щелчок.
 // createSounds(ctx) принимает готовый AudioContext — в тестах подставляется поддельный.
 
 import { createSfx, freqOf, pentaStep } from '../../shared/sfx.js';
 
-export const SOUNDS = ['move', 'multi', 'blocked', 'line', 'undo', 'hint', 'shuffle', 'win', 'click'];
+export const SOUNDS = ['move', 'multi', 'blocked', 'line', 'undo', 'shuffle', 'win', 'click'];
 
 export function createSounds(ctx) {
   const { now, tock, grain, plip, thud, swoosh, pad, bell, rustle } = createSfx(ctx, { volume: 0.55 });
@@ -27,7 +27,6 @@ export function createSounds(ctx) {
     blocked: (t) => thud(150, t, { peak: 0.12, decay: 0.12 }),
     line: (t, { step = 0 }) => plip(freqOf(pentaStep(Math.min(8, step)) + 7), t + 0.05, { peak: 0.06, decay: 0.1 }),
     undo: (t) => swoosh(t, 2400, 900, 0.16, 0.04),
-    hint: (t) => [0, 7].forEach((s, k) => plip(freqOf(s + 7), t + k * 0.07, { peak: 0.055, decay: 0.08 })),
     shuffle: (t) => {
       rustle(t, 0.35, { peak: 0.04, from: 1400, to: 2800 });
       for (let k = 0; k < 6; k++) clack(t + 0.05 + k * 0.05 + Math.random() * 0.02, 0.06);

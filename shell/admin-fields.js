@@ -37,7 +37,6 @@ export const GAME_FIELDS = [
   { game: 'go', key: 'current', path: ['hints'], label: 'Подсказки', min: 0, max: 99, run: true },
   { game: 'nonogram', key: 'run', path: ['hints'], label: 'Подсказки', min: 0, max: 99, run: true },
   { game: 'minesweeper', key: 'current', path: ['hints'], label: 'Подсказки', min: 0, max: 99, run: true },
-  { game: 'fifteen', key: 'current', path: ['hints'], label: 'Взято подсказок (из 3)', min: 0, max: 3, run: true },
   { game: '2048', key: 'current', path: ['undoLeft'], label: 'Отмены хода', min: 0, max: 99, run: true },
 
   { game: 'flags', key: 'stats', path: ['correct'], label: 'Угадано флагов всего', min: 0, max: 1e9, note: 'по нему место в рейтинге' },

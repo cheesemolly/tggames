@@ -7,7 +7,6 @@
 // нерешаемая, меняются местами две плитки (не пустая) — это меняет чётность и не портит равномерность.
 
 export const SIZES = [3, 4, 5, 6, 7, 8];
-export const HINTS = 3;
 export const DEFAULT_SIZE = 4;
 
 /** Собранное поле: 1, 2, …, n²−1, 0. */
@@ -101,7 +100,7 @@ export function lineTo(grid, n, i) {
 
 export function newGame(n = DEFAULT_SIZE, rng = Math.random) {
   const grid = scramble(n, rng);
-  return { v: 1, n, grid, start: grid.slice(), moves: 0, time: 0, history: [], hints: 0, done: false };
+  return { v: 1, n, grid, start: grid.slice(), moves: 0, time: 0, history: [], done: false };
 }
 
 /**
@@ -162,7 +161,7 @@ export function isValidGame(g) {
   if (!okGrid(g.grid) || !okGrid(g.start) || !isSolvable(g.grid, g.n)) return false;
   if (!Array.isArray(g.history) || !g.history.every((h) => Array.isArray(h) && h.every((v) => Number.isInteger(v) && v > 0 && v < len))) return false;
   return Number.isInteger(g.moves) && g.moves >= 0 && Number.isFinite(g.time) && g.time >= 0
-    && Number.isInteger(g.hints) && g.hints >= 0 && g.hints <= 99 && typeof g.done === 'boolean';
+    && typeof g.done === 'boolean';
 }
 
 const emptyRow = () => ({ played: 0, wins: 0, bestMoves: 0, bestTime: 0, totalMoves: 0 });
@@ -175,17 +174,15 @@ export function isValidStats(s) {
   });
 }
 
-/** Записать партию: собрана — победа, рекорды ходов и времени (без подсказок); брошена — только «сыграно». */
+/** Записать партию: собрана — победа, рекорды ходов и времени; брошена — только «сыграно». */
 export function recordGame(stats, game, { win }) {
   const r = stats[game.n] ?? (stats[game.n] = emptyRow());
   r.played++;
   if (win) {
     r.wins++;
     r.totalMoves += game.moves;
-    if (!game.hints) {
-      if (!r.bestMoves || game.moves < r.bestMoves) r.bestMoves = game.moves;
-      if (game.time > 0 && (!r.bestTime || game.time < r.bestTime)) r.bestTime = Math.round(game.time);
-    }
+    if (!r.bestMoves || game.moves < r.bestMoves) r.bestMoves = game.moves;
+    if (game.time > 0 && (!r.bestTime || game.time < r.bestTime)) r.bestTime = Math.round(game.time);
   }
   return stats;
 }

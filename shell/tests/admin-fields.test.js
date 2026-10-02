@@ -15,7 +15,6 @@ import * as dots from '../../games/connect-dots/logic.js';
 import * as flags from '../../games/flags/logic.js';
 import * as bongo from '../../games/bongo-cat/logic.js';
 import * as mines from '../../games/minesweeper/logic.js';
-import * as fifteen from '../../games/fifteen/logic.js';
 
 const rng = () => 0.42;
 const id = (game, key, path) => fieldId({ game, key, path: path.split('.') });
@@ -76,7 +75,6 @@ test('поля панели: после правки на границах со�
     'game:flags:stats': flags.emptyStats(),
     'game:bongo-cat:stats': bongo.emptyStats(),
     'game:minesweeper:current': mines.serialize(mines.newGame({ diff: 'easy', ...mines.DIFFS.easy })),
-    'game:fifteen:current': fifteen.newGame(4, rng),
   };
   const checks = {
     'game:words:progress': (p) => words.isValidProgress(p, levels),
@@ -89,7 +87,6 @@ test('поля панели: после правки на границах со�
     'game:flags:stats': flags.isValidStats,
     'game:bongo-cat:stats': bongo.isValidStats,
     'game:minesweeper:current': mines.isValidState,
-    'game:fifteen:current': fifteen.isValidGame,
   };
   for (const [key, ok] of Object.entries(checks)) assert.ok(ok(data[key]), `исходное ${key}`);
   const fields = gameFieldsOf(data).flatMap((g) => g.fields);

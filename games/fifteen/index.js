@@ -2,10 +2,9 @@
 // свайпа (стрелки и WASD — тоже; в настройках можно «двигать пустую»), касание плитки в одной строке или столбце
 // с пустой — и свайп, начатый на ней в сторону пустой, — сдвигает весь ряд разом; на компьютере по желанию —
 // «наведение» (ряд едет, когда на плитку заходит курсор). Поля 3×3…8×8, отмена без ограничений (каждая — ход),
-// 3 подсказки за партию (решение считается один раз, подсказка ведёт по нему несколько ходов; свернул — путь
-// забыт), «вслепую» (цифры гаснут после первого хода), цвета рядов, рекорды по размерам; после победы — скорость
-// (ходов в секунду) и оптимум (3×3, 4×4 — если быстро нашёлся). Правила — logic.js, решатель — solver.js,
-// картинки — pictures.js, звуки — sounds.js.
+// «вслепую» (цифры гаснут после первого хода), цвета рядов, рекорды по размерам; после победы — скорость (ходов в
+// секунду) и оптимум (3×3, 4×4 — если быстро нашёлся). Подсказок нет (решение владельца: бесполезны). Правила —
+// logic.js, решатель — solver.js, картинки — pictures.js, звуки — sounds.js.
 //
 // Плитки — абсолютные элементы с --x/--y (где стоит) и --hx/--hy (своё место — для картинок и градиента), ход —
 // CSS-переход transform, ввод никогда не ждёт анимацию. Плитка на своём месте — с точкой, собранный ряд — «плип»
@@ -20,15 +19,14 @@ import { createAudio } from '../../shared/sfx.js';
 import { createSounds } from './sounds.js';
 import { pictureUrl } from './pictures.js';
 import {
-  SIZES, DEFAULT_SIZE, HINTS, newGame, moveDir, tapCell, undo, lineTo, isValidGame, emptyStats, isValidStats,
+  SIZES, DEFAULT_SIZE, newGame, moveDir, tapCell, undo, lineTo, isValidGame, emptyStats, isValidStats,
   recordGame, fmtTime,
 } from './logic.js';
-import { solvePath, optimal } from './solver.js';
+import { optimal } from './solver.js';
 
 const SKINS = ['telegram', 'wood', 'gradient', 'neon', 'candy', 'sunset', 'sea'];
 const PICTURE_SKINS = new Set(['sunset', 'sea']);
 const SWIPE_MIN = 22;
-const GUIDE = 12;                // столько ходов ведёт одна подсказка
 const INVERT = { up: 'down', down: 'up', left: 'right', right: 'left' };
 const KEYS = {
   ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
@@ -41,11 +39,6 @@ const T = {
   time: 'Время',
   best: 'Рекорд',
   undo: 'Отменить',
-  hint: 'Подсказка',
-  hintOpt: (k) => `До сборки ${k} ${plural(k, 'ход', 'хода', 'ходов')} — двигай подсвеченную плитку`,
-  hintStaged: 'Двигай подсвеченную плитку — собираем по рядам сверху',
-  hintNote: 'С подсказкой партия не идёт в рекорды',
-  noHints: 'Подсказки на эту партию закончились',
   nothingToUndo: 'Нечего отменять',
   newGame: 'Новая игра',
   restartAsk: 'Начать заново? Эта партия засчитается несобранной.',
@@ -54,7 +47,7 @@ const T = {
   rules: [
     'Собери плитки по порядку: 1, 2, 3… слева направо и сверху вниз, пустая клетка — в конце.',
     'Свайп двигает плитку в пустую клетку, как в 2048. Коснись плитки в одной строке или столбце с пустой — сдвинется весь ряд.',
-    'Каждая сдвинутая плитка — ход. Подсказка ведёт по решению несколько ходов.',
+    'Каждая сдвинутая плитка — ход. Отменять можно сколько угодно — отмена тоже ход.',
   ],
   gotIt: 'Играть',
   win: 'Собрано!',
@@ -62,7 +55,6 @@ const T = {
   result: (moves, n) => `${n}×${n} · ${moves} ${plural(moves, 'ход', 'хода', 'ходов')}`,
   optimum: (k) => `можно было за ${k}`,
   speed: (v) => `${v} хода/с`,
-  withHints: 'с подсказками',
   bestLine: (m, t) => `рекорд: ${m} ${plural(m, 'ход', 'хода', 'ходов')} · ${t}`,
   menuBest: (t, n) => `Лучшее ${n}×${n}: ${t}`,
   stats: 'Статистика',
@@ -101,7 +93,6 @@ const svgIcon = (body) => `<svg viewBox="0 0 24 24" width="22" height="22" aria-
 const ICONS = {
   plus: svgIcon('<path d="M12 5v14M5 12h14"/>'),
   undo: svgIcon('<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>'),
-  hint: svgIcon('<path d="M9 18h6"/><path d="M10 21h4"/><path d="M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1.1 2.2h5c.1-1 .5-1.7 1.1-2.2A6 6 0 0 0 12 3Z"/>'),
   stats: svgIcon('<rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="7" width="4" height="14" rx="1"/><rect x="17" y="3" width="4" height="18" rx="1"/>'),
   gear: svgIcon('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/>'),
   soundOn: svgIcon('<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/>'),
@@ -126,7 +117,6 @@ let finishing = false;
 let swipe = null;
 let runSince = 0;
 let clockTimer = 0;
-let plan = null;                 // подсказка: { key, path, optimal, left } — путь от расстановки key
 let lastHover = -1;
 let doneLines = new Set();
 const timers = new Set();
@@ -226,18 +216,14 @@ function applyOptions() {
   root.classList.toggle('ff-blind', settings.blind && Boolean(game?.moves) && !game.done);
 }
 
-const hintTile = () => (plan && plan.left > 0 && plan.key === game.grid.join(',') ? plan.path[0] : 0);
-
 function paintTiles() {
   const { grid, n } = game;
-  const hinted = hintTile();
   grid.forEach((v, i) => {
     if (!v) return;
     const node = ui.tileOf.get(v);
     node.style.setProperty('--x', i % n);
     node.style.setProperty('--y', Math.floor(i / n));
     node.classList.toggle('ff-home', v === i + 1);
-    node.classList.toggle('ff-hinted', v === hinted);
   });
 }
 
@@ -251,9 +237,6 @@ function paintInfo() {
   ui.best.textContent = r?.bestMoves ? `${r.bestMoves} · ${fmtTime(r.bestTime || 0)}` : '—';
   ui.sub.textContent = T.sub(game.n);
   ui.undoBtn.disabled = !game.history.length || game.done;
-  const left = Math.max(0, HINTS - game.hints);
-  ui.hintBadge.textContent = String(left);
-  ui.hintBtn.classList.toggle('ff-spent', !left);
 }
 
 /** Собранные «слои»: верхние строки и левые столбцы (ключи 'r0', 'c0'…), пустая клетка в углу не мешает. */
@@ -293,15 +276,6 @@ function afterMove(moved, node = null) {
   if (game.moves === moved.length) {
     syncClock();                   // первый ход — часы пошли
     applyOptions();                // «вслепую» — цифры гаснут
-  }
-  // подсказка: игрок пошёл по пути — путь продолжается, свернул — забыт
-  if (plan) {
-    const values = moved.map((m) => m.value);
-    if (values.every((v, k) => plan.path[k] === v)) {
-      plan.path.splice(0, values.length);
-      plan.left -= values.length;
-      plan.key = game.grid.join(',');
-    } else plan = null;
   }
   paintTiles();
   if (moved.length === 1) sfx('move');
@@ -353,35 +327,11 @@ function onUndo() {
     toast.show(T.nothingToUndo, 1400);
     return;
   }
-  plan = null;
   doneLines = new Set(linesDone());
   paintTiles();
   paintInfo();
   sfx('undo');
   api.platform.haptic.selection();
-  save();
-}
-
-function onHint() {
-  if (!game || game.done || finishing) return;
-  if (game.hints >= HINTS) {
-    toast.show(T.noHints, 1800);
-    refuse(ui.hintBtn);
-    return;
-  }
-  const key = game.grid.join(',');
-  if (!plan || plan.key !== key || !plan.path.length) {
-    const r = solvePath(game.grid, game.n);
-    if (!r || !r.path.length) return;
-    plan = { key, path: r.path, optimal: r.optimal, left: 0 };
-  }
-  plan.left = GUIDE;
-  game.hints++;
-  paintTiles();
-  paintInfo();
-  sfx('hint', {}, 0);
-  api.platform.haptic.selection();
-  toast.show(`${plan.optimal ? T.hintOpt(plan.path.length) : T.hintStaged}. ${T.hintNote}`, 3200);
   save();
 }
 
@@ -453,10 +403,6 @@ function onKeydown(e) {
     return;
   }
   if (e.ctrlKey || e.metaKey || e.altKey) return;
-  if (e.key === 'h' || e.key === 'р') {
-    onHint();
-    return;
-  }
   const dir = KEYS[e.key] ?? KEYS[e.key.toLowerCase()];
   if (dir) {
     e.preventDefault();
@@ -478,10 +424,8 @@ function win() {
   api.storage.set('stats', stats);
   api.storage.remove('current');
   sendProgress();
-  const record = !game.hints && (!prevMoves || game.moves < prevMoves || !prevTime || ms < prevTime);
+  const record = (!prevMoves || game.moves < prevMoves || !prevTime || ms < prevTime);
   const speed = ms >= 1000 ? (game.moves / (ms / 1000)).toFixed(1).replace('.', ',') : null;
-  plan = null;
-  paintTiles();
   sfx('win', {}, 0);
   api.platform.haptic.notification('success');
   const motion = !reducedMotion();
@@ -517,7 +461,6 @@ function win() {
         T.result(game.moves, n),
         best && best < game.moves ? T.optimum(best) : null,
         speed ? T.speed(speed) : null,
-        game.hints ? T.withHints : null,
         row.bestMoves && !record ? T.bestLine(row.bestMoves, fmtTime(row.bestTime)) : null,
       ].filter(Boolean).join(' · '),
     });
@@ -569,7 +512,6 @@ function startGame() {
   game = newGame(settings.size);
   runSince = 0;
   finishing = false;
-  plan = null;
   buildBoard();
   sfx('shuffle', {}, 0);
   if (!reducedMotion()) {
@@ -767,9 +709,6 @@ export default {
       modal: el('div', { class: 'ff-modal', hidden: true }),
     };
     ui.undoBtn = toolButton(ICONS.undo, T.undo, onUndo);
-    ui.hintBtn = toolButton(ICONS.hint, T.hint, onHint);
-    ui.hintBadge = el('span', { class: 'ff-badge' }, String(HINTS));
-    ui.hintBtn.append(ui.hintBadge);
     ui.board.append(ui.cells, ui.tiles);
     ui.board.addEventListener('pointerdown', onPointerDown);
     ui.board.addEventListener('pointerup', onPointerUp);
@@ -789,7 +728,7 @@ export default {
       ),
       el('div', { class: 'ff-bar' }, stat(T.moves, ui.moves), stat(T.time, ui.clock), stat(T.best, ui.best)),
       el('div', { class: 'ff-wrap' }, ui.board),
-      el('div', { class: 'ff-tools' }, ui.undoBtn, ui.hintBtn),
+      el('div', { class: 'ff-tools' }, ui.undoBtn),
       ui.modal,
       toast.el,
     );
@@ -810,10 +749,8 @@ export default {
     if (new URLSearchParams(location.search).has('ffdebug')) {
       window.__ff = {
         get game() { return game; },
-        get plan() { return plan; },
         dir: (d) => doDir(d),
         tap: (i) => doTap(i),
-        hint: () => onHint(),
         undo: () => onUndo(),
         skin: (id) => { settings.skin = id; applyOptions(); },
         set: (key, value) => { settings[key] = value; applyOptions(); },
@@ -825,7 +762,6 @@ export default {
           [game.grid[n * n - 1], game.grid[n * n - 2]] = [game.grid[n * n - 2], game.grid[n * n - 1]];
           game.start = game.grid.slice();
           game.moves = Math.max(1, game.moves);
-          plan = null;
           buildBoard();
         },
       };
@@ -855,7 +791,7 @@ export default {
       delete host.dataset.skin;
       host.style.removeProperty('--pic');
     }
-    api = host = root = ui = toast = fx = game = swipe = plan = null;
+    api = host = root = ui = toast = fx = game = swipe = null;
     modalActive = finishing = false;
     runSince = 0;
     clockTimer = 0;

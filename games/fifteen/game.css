@@ -31,7 +31,6 @@
   --glow-r: 0px; --glow-a: transparent; --glow-b: transparent;
   --depth: inset 0 -0.1em 0 rgb(0 0 0 / 0.2), 0 0.05em 0.12em rgb(0 0 0 / 0.18);
   --dot: currentColor;
-  --hint-ring: #ffb020;
   --toast-top: 120px;
   --toast-bg: var(--text);
   --toast-fg: var(--bg);
@@ -52,7 +51,6 @@
   --radius: 0.18em;
   --depth: inset 0 -0.09em 0 rgb(120 70 30 / 0.45), inset 0 0.05em 0 rgb(255 245 225 / 0.6), 0 0.06em 0.12em rgb(40 20 5 / 0.45);
   --dot: #3f7a2a;
-  --hint-ring: #ff8a00;
 }
 
 /* Градиент: цвет плитки — по её родному месту, собранное поле — плавный переход от синего к розовому */
@@ -69,7 +67,6 @@
   --radius: 0.34em;
   --depth: inset 0 -0.08em 0 rgb(0 0 0 / 0.14), 0 0.06em 0.16em rgb(60 40 140 / 0.25);
   --dot: #ffffff;
-  --hint-ring: #ff9f1a;
 }
 
 /* Неон: тёмное поле, плитки — светящиеся контуры; на своём месте контур становится розовым */
@@ -87,7 +84,6 @@
   --glow-r: 0.32em; --glow-a: rgb(61 242 255 / 0.45); --glow-b: rgb(255 61 242 / 0.5);
   --depth: 0 0 0 transparent;
   --dot: #ff3df2;
-  --hint-ring: #ffe23d;
 }
 
 /* Конфета: пастель, глянец; цвет плитки — по её ряду */
@@ -105,7 +101,6 @@
   --radius: 0.42em;
   --depth: inset 0 -0.1em 0 rgb(180 60 120 / 0.22), 0 0.06em 0.14em rgb(180 60 120 / 0.25);
   --dot: #ff2f8a;
-  --hint-ring: #8b5cf6;
 }
 
 /* Картинки (сама картинка — --pic, ставится из кода): цифры — маленькие в углу */
@@ -121,7 +116,6 @@
   --radius: 0.16em;
   --depth: inset 0 0 0 0.03em rgb(255 255 255 / 0.25), 0 0.05em 0.14em rgb(0 0 0 / 0.4);
   --dot: #ffd166;
-  --hint-ring: #ffd166;
 }
 [data-game="fifteen"][data-skin="sea"], [data-game="fifteen"] [data-skin="sea"] {
   --bg: #e8f6fd; --surface: #d0ecf8; --text: #0d3b5e; --hint: #5b86a6; --accent: #1679c4; --accent-text: #ffffff;
@@ -135,7 +129,6 @@
   --radius: 0.16em;
   --depth: inset 0 0 0 0.03em rgb(255 255 255 / 0.35), 0 0.05em 0.14em rgb(0 30 60 / 0.35);
   --dot: #ffe27a;
-  --hint-ring: #ff8a3d;
 }
 
 /* ---------- раскладка ---------- */
@@ -309,15 +302,6 @@
   box-shadow: 0 0 0 0.02em rgb(255 255 255 / 0.6);
 }
 
-/* подсказка — пульсирующая рамка */
-[data-game="fifteen"] .ff-hinted > .ff-face {
-  outline: 0.09em solid var(--hint-ring);
-  outline-offset: 0.04em;
-  animation: ff-hint 0.9s ease-in-out infinite;
-}
-@keyframes ff-hint { 50% { outline-offset: 0.12em; outline-color: color-mix(in srgb, var(--hint-ring) 45%, transparent); } }
-[data-game="fifteen"] .ff-hinted { z-index: 1; }
-
 /* вслепую и картинки без цифр */
 [data-game="fifteen"] .ff-blind .ff-num,
 [data-game="fifteen"] .ff-nonum .ff-num { opacity: 0; }
@@ -345,7 +329,7 @@
 [data-game="fifteen"] .ff-joined .ff-face::before { opacity: 0; }
 
 /* инструменты */
-[data-game="fifteen"] .ff-tools { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 0 4px; }
+[data-game="fifteen"] .ff-tools { display: grid; grid-template-columns: minmax(0, 220px); justify-content: center; padding: 0 4px; }
 [data-game="fifteen"] .ff-tool {
   position: relative;
   display: flex;
@@ -366,20 +350,6 @@
 [data-game="fifteen"] .ff-tool:active { transform: scale(0.96); }
 [data-game="fifteen"] .ff-tool:disabled { opacity: 0.45; cursor: default; }
 [data-game="fifteen"] .ff-tool-icon { display: grid; }
-[data-game="fifteen"] .ff-badge {
-  display: grid;
-  place-items: center;
-  min-width: 20px;
-  height: 20px;
-  padding: 0 5px;
-  border-radius: 10px;
-  background: var(--accent);
-  color: var(--accent-text);
-  font-size: 12px;
-  font-weight: 800;
-}
-[data-game="fifteen"] .ff-tool.ff-spent { opacity: 0.55; }
-[data-game="fifteen"] .ff-tool.ff-spent .ff-badge { background: var(--hint); }
 
 [data-game="fifteen"] .ff-fx { position: absolute; inset: 0; z-index: 7; width: 100%; height: 100%; pointer-events: none; }
 
