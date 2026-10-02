@@ -194,6 +194,22 @@ h1, h2 { margin: 0 0 8px; line-height: 1.2; }
 }
 .back-chip:active { opacity: 0.7; }
 
+/* рейтинг игры: «Играть» — сразу в игру */
+.top-play {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 12px;
+  padding: 11px 16px;
+  border-radius: 12px;
+  background: var(--cat, var(--tg-theme-button-color));
+  color: #fff;
+  font-weight: 700;
+  text-decoration: none;
+  transition: transform 0.12s ease, opacity 0.2s ease;
+}
+.top-play:active { transform: scale(0.97); opacity: 0.85; }
+
 .badge {
   padding: 4px 8px;
   border-radius: 8px;

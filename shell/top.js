@@ -59,7 +59,7 @@ function avatar(name, size = '') {
   return el('span', { class: `top-avatar ${size}`.trim(), style: `--cat: var(${AVATAR_COLORS[h % AVATAR_COLORS.length]})` }, letter);
 }
 
-function head({ back, backLabel, title, hint, style = '' }) {
+function head({ back, backLabel, title, hint, style = '', action = null }) {
   return el('div', { class: 'folder-head', style },
     back && el('button', { class: 'back-chip', onclick: back, 'aria-label': backLabel }, `‹ ${backLabel}`),
     el('div', { class: 'folder-head-text' },
@@ -67,13 +67,16 @@ function head({ back, backLabel, title, hint, style = '' }) {
       el('div', { class: 'title-rule' }),
       hint && el('p', { class: 'hint' }, hint),
     ),
+    action,
   );
 }
 
 // tabbed — рейтинг открыт вкладкой нового интерфейса (в бете 'new-ui'): у сводки нет «‹ Все игры», внизу вкладки;
 // skeleton — что показать, пока грузится (вместо «Загрузка…»).
+// play — в таблице игры кнопка «Играть»: сразу в игру, не выходя из рейтинга (в бете 'top-play'; просьба владельца,
+// 2026-10-02); «Назад» из игры в новом интерфейсе вернёт в эту же таблицу.
 export async function renderTop(container, {
-  route, games, source, onBack, overall = false, search = false, tabbed = false, skeleton = null,
+  route, games, source, onBack, overall = false, search = false, tabbed = false, skeleton = null, play = false,
 }) {
   const titleOf = (id) => games.find((g) => g.id === id)?.title ?? id;
   const screen = el('div', { class: 'scroll top-screen' });
@@ -148,7 +151,10 @@ export async function renderTop(container, {
 
   // ---------- таблица игры ----------
   if (route.game && route.game !== 'games') {
-    const header = head({ back: onBack, backLabel: 'Рейтинг', title: titleOf(route.game), style: catStyle(route.game) });
+    // кнопка «Играть» — только для игр, которые игрок видит (игры в бете — тем, кому видна бета)
+    const action = () => play && games.some((g) => g.id === route.game)
+      && el('a', { class: 'top-play', href: `#/game/${encodeURIComponent(route.game)}` }, '▶ Играть');
+    const header = head({ back: onBack, backLabel: 'Рейтинг', title: titleOf(route.game), style: catStyle(route.game), action: action() });
     const load = async () => {
       loading(header);
       const res = await source.game(route.game);
@@ -170,7 +176,7 @@ export async function renderTop(container, {
       show(
         head({
           back: onBack, backLabel: 'Рейтинг', title: titleOf(route.game), style: catStyle(route.game),
-          hint: `Место — ${b.by}. Игроков: ${b.total}`,
+          hint: `Место — ${b.by}. Игроков: ${b.total}`, action: action(),
         }),
         b.rows.length === 0
           ? el('p', { class: 'hint top-empty' }, 'Здесь пока никого — сыграй первым!')

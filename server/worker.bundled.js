@@ -664,6 +664,7 @@ const RULES = [
   } }],
   ['game:memory:boosters', { type: 'fields', fields: { peek: { spend: 2 }, magnet: { spend: 2 } } }],
   ['game:memory:seenSpecials', { type: 'fields', fields: { '': 'union' } }],
+  ['game:connect-dots:tips', { type: 'fields', fields: { '': 'union' } }],
   ['game:bubble-shooter:stats', { type: 'fields', fields: { played: 'count', cleared: 'count', bestLevel: 'max', bestScore: 'max' } }],
   ['game:brick-blast:stats', { type: 'fields', fields: {
     cleared: 'count', bestLevel: 'max', bricks: 'count', shots: 'count', fails: 'count',

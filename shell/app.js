@@ -159,6 +159,7 @@ function show(route) {
         suggest: feature('player-suggest') ? (q) => account.suggestPlayers(q) : null,
       },
       search: feature('player-search'),
+      play: feature('top-play'),
       onBack: () => backFrom(route),
     }).catch((err) => console.error(err));
     return;
@@ -371,6 +372,7 @@ function renderNui(screen, route) {
         suggest: feature('player-suggest') ? (q) => account.suggestPlayers(q) : null,
       },
       search: feature('player-search'),
+      play: feature('top-play'),
       tabbed: true,
       skeleton: () => skeleton('row', 6),
       onBack: () => backFrom(route),

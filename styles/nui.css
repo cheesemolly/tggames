@@ -704,6 +704,16 @@
 .nui .nscreen .title-rule { display: none; }
 .nui .nscreen .folder-head .hint { font-size: 13px; }
 .nui .nscreen .back-chip { border: 2px solid #000; border-radius: 4px; box-shadow: 3px 3px 0 #000; background: var(--n-s1); color: var(--n-text); font-weight: 700; }
+.nui .nscreen .top-play {
+  border: 2px solid #000;
+  border-radius: 6px;
+  box-shadow: var(--n-sh);
+  background: var(--n-acc);
+  color: var(--n-on);
+  font: 800 15px var(--n-font);
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+.nui .nscreen .top-play:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 #000; opacity: 1; }
 .nui .nscreen .top-tabs { padding: 4px; border: 2px solid #000; border-radius: 6px; box-shadow: var(--n-sh); background: var(--n-s1); margin-bottom: 16px; }
 .nui .nscreen .top-tab { border-radius: 4px; }
 .nui .nscreen .top-tab.on { background: var(--n-s2); color: var(--n-text); box-shadow: none; }

@@ -66,6 +66,8 @@ let host = null;
 let root = null;
 let ui = null;
 let toast = null;
+// подсказки, которые игрок уже видел (бета 'connect-dots-tips': показываются один раз, а не каждую партию)
+let seenTips = [];
 let fx = null;
 let game = null;
 let bank = null;                // банк уровней levels.json (грузится один раз)
@@ -379,7 +381,7 @@ function onPointerUp(e) {
   if (check.complete) roundCleared();
   else if (check.valid && check.connected.every(Boolean)) {
     sfx('unfilled');
-    toast.show(T.fillAll, 2200);
+    tip('fillAll', 2200);
     shake(ui.board, { distance: 4, duration: 300 });
   }
 }
@@ -422,8 +424,8 @@ function roundCleared() {
       renderBoard();
       renderInfo();
       introRound();
-      if (params.walls && !prev.walls) toast.show(T.walls, 2600);
-      else if (params.tunnels && !prev.tunnels) toast.show(T.tunnels, 3200);
+      if (params.walls && !prev.walls) tip('walls', 2600);
+      else if (params.tunnels && !prev.tunnels) tip('tunnels', 3200);
       startClock();
       renderTimer();
       save();
@@ -589,6 +591,17 @@ function askRestart() {
   ));
 }
 
+/** Подсказка-обучение: в бете — только в первый раз (отметка в 'tips', едет на другие устройства). */
+function tip(id, ms) {
+  if (!toast || !api) return;
+  if (api.feature('connect-dots-tips')) {
+    if (seenTips.includes(id)) return;
+    seenTips = [...seenTips, id];
+    api.storage.set('tips', seenTips);
+  }
+  toast.show(T[id], ms);
+}
+
 function startGame(saved = null) {
   // брошенная посреди игра (пройден хотя бы один уровень) засчитывается как сыгранная
   if (!saved && game && !over && game.round > 1) {
@@ -596,7 +609,7 @@ function startGame(saved = null) {
     api.storage.set('stats', stats);
   }
   game = saved ?? newGame(bank);
-  if (!saved) later(() => toast?.show(T.rules, 2800), 350);
+  if (!saved) later(() => tip('rules', 2800), 350);
   over = false;
   busy = false;
   drawing = null;
@@ -635,11 +648,12 @@ export default {
     api = gameApi;
     host = container;
     toast = createToast();
-    const [savedGame, savedStats, savedSettings, levels, savedSound] = await Promise.all([
+    const [savedGame, savedStats, savedSettings, levels, savedSound, savedTips] = await Promise.all([
       api.storage.get('current'), api.storage.get('stats'), api.storage.get('settings'),
       bank ?? fetch(new URL('./levels.json', import.meta.url)).then((r) => r.json()),
-      api.storage.get('sound'),
+      api.storage.get('sound'), api.storage.get('tips'),
     ]);
+    seenTips = Array.isArray(savedTips) ? savedTips.filter((t) => typeof t === 'string') : [];
     bank = levels;
     if (!api) return;
     soundOn = savedSound !== false;
