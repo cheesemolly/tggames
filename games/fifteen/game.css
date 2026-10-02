@@ -1,0 +1,491 @@
+/*
+ * Пятнашки. Все цвета — переменные оформления (data-skin на контейнере игры и на образцах в настройках): «По
+ * умолчанию» — из темы Telegram, остальные — свои палитры, одинаковые в обеих темах. Блок «по умолчанию» ниже задаёт
+ * ВСЕ переменные каждому элементу с data-skin — так образец в настройках не наследует оформление самой игры.
+ *
+ * Плитка: .ff-tile (место на поле — transform по --x/--y) → .ff-face (лицо: цвет, текстура, картинка) → .ff-num.
+ * Всё, что зависит от плитки (--hx/--hy — её родное место, --n), считается на .ff-face: var() внутри переменной
+ * подставляется там, где переменная объявлена. Тени и скругления лица — в em (шрифт лица пропорционален плитке).
+ * Цвет лица — --tile-color, а если его нет (initial) — оттенок по родному месту: --h0 + (hx + hy) × --hstep.
+ */
+
+[data-game="fifteen"], [data-game="fifteen"] [data-skin] {
+  --bg: var(--tg-theme-bg-color);
+  --surface: var(--tg-theme-secondary-bg-color);
+  --text: var(--tg-theme-text-color);
+  --hint: var(--tg-theme-hint-color);
+  --accent: var(--tg-theme-button-color);
+  --accent-text: var(--tg-theme-button-text-color);
+  --board: color-mix(in srgb, var(--tg-theme-hint-color) 14%, var(--tg-theme-secondary-bg-color));
+  --board-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tg-theme-hint-color) 22%, transparent);
+  --well: color-mix(in srgb, var(--tg-theme-hint-color) 22%, var(--tg-theme-secondary-bg-color));
+  --tile-color: var(--tg-theme-button-color);
+  --h0: 210; --hstep: 0; --sat: 70%; --lit: 55%;
+  --tex: linear-gradient(180deg, rgb(255 255 255 / 0.2), rgb(255 255 255 / 0) 50%, rgb(0 0 0 / 0.1));
+  --pic: none;
+  --tile-text: var(--tg-theme-button-text-color);
+  --home-text: var(--tg-theme-button-text-color);
+  --num-shadow: 0 0.04em 0 rgb(0 0 0 / 0.18);
+  --radius: 0.3em;
+  --ring-w: 0px; --ring-a: transparent; --ring-b: transparent;
+  --glow-r: 0px; --glow-a: transparent; --glow-b: transparent;
+  --depth: inset 0 -0.1em 0 rgb(0 0 0 / 0.2), 0 0.05em 0.12em rgb(0 0 0 / 0.18);
+  --dot: currentColor;
+  --hint-ring: #ffb020;
+  --toast-top: 120px;
+  --toast-bg: var(--text);
+  --toast-fg: var(--bg);
+}
+
+/* Дерево: тёмная рамка, светлые плитки клёна с волокнами, цифры «выжжены» */
+[data-game="fifteen"][data-skin="wood"], [data-game="fifteen"] [data-skin="wood"] {
+  --bg: #f3e6d1; --surface: #e8d3b3; --text: #4a2f1a; --hint: #8c6c4d; --accent: #8b5a2b; --accent-text: #fff8ec;
+  --board: repeating-linear-gradient(92deg, #6e4427 0 7px, #794b2b 7px 10px, #66401f 10px 17px, #714629 17px 22px);
+  --board-shadow: inset 0 0 0 3px #4d2d16, inset 0 4px 10px rgb(0 0 0 / 0.35), 0 3px 10px rgb(60 30 10 / 0.35);
+  --well: #4f2f18;
+  --tile-color: #e7c28c;
+  --tex: repeating-linear-gradient(97deg, rgb(140 85 35 / 0) 0 0.32em, rgb(140 85 35 / 0.13) 0.32em 0.38em, rgb(140 85 35 / 0) 0.38em 0.55em),
+    radial-gradient(ellipse at 30% 25%, rgb(255 245 220 / 0.45), rgb(255 245 220 / 0) 60%),
+    linear-gradient(180deg, rgb(255 255 255 / 0.15), rgb(90 50 20 / 0.12));
+  --tile-text: #6a3c19; --home-text: #3f7a2a;
+  --num-shadow: 0 0.035em 0 rgb(255 240 210 / 0.8), 0 -0.02em 0 rgb(80 40 10 / 0.35);
+  --radius: 0.18em;
+  --depth: inset 0 -0.09em 0 rgb(120 70 30 / 0.45), inset 0 0.05em 0 rgb(255 245 225 / 0.6), 0 0.06em 0.12em rgb(40 20 5 / 0.45);
+  --dot: #3f7a2a;
+  --hint-ring: #ff8a00;
+}
+
+/* Градиент: цвет плитки — по её родному месту, собранное поле — плавный переход от синего к розовому */
+[data-game="fifteen"][data-skin="gradient"], [data-game="fifteen"] [data-skin="gradient"] {
+  --bg: #f2efff; --surface: #e4defc; --text: #29214f; --hint: #7b72a8; --accent: #6c5ce7; --accent-text: #ffffff;
+  --board: #d8d1f6;
+  --board-shadow: inset 0 0 0 1px #c6bdef;
+  --well: #c4bbec;
+  --tile-color: initial;
+  --h0: 205; --hstep: 150; --sat: 78%; --lit: 60%;
+  --tex: linear-gradient(160deg, rgb(255 255 255 / 0.3), rgb(255 255 255 / 0) 45%, rgb(0 0 0 / 0.08));
+  --tile-text: #ffffff; --home-text: #ffffff;
+  --num-shadow: 0 0.05em 0.1em rgb(30 10 60 / 0.35);
+  --radius: 0.34em;
+  --depth: inset 0 -0.08em 0 rgb(0 0 0 / 0.14), 0 0.06em 0.16em rgb(60 40 140 / 0.25);
+  --dot: #ffffff;
+  --hint-ring: #ff9f1a;
+}
+
+/* Неон: тёмное поле, плитки — светящиеся контуры; на своём месте контур становится розовым */
+[data-game="fifteen"][data-skin="neon"], [data-game="fifteen"] [data-skin="neon"] {
+  --bg: #07070f; --surface: #15152a; --text: #f0f0ff; --hint: #8a8ab0; --accent: #ff3df2; --accent-text: #07070f;
+  --board: #0c0c1c;
+  --board-shadow: inset 0 0 0 1px #2a2a55, 0 0 24px rgb(61 242 255 / 0.12);
+  --well: #121228;
+  --tile-color: #0f0f24;
+  --tex: radial-gradient(ellipse at 50% 0%, rgb(61 242 255 / 0.14), rgb(61 242 255 / 0) 70%);
+  --tile-text: #7ff6ff; --home-text: #ff8af6;
+  --num-shadow: 0 0 0.18em currentColor;
+  --radius: 0.28em;
+  --ring-w: 0.055em; --ring-a: #3df2ff; --ring-b: #ff3df2;
+  --glow-r: 0.32em; --glow-a: rgb(61 242 255 / 0.45); --glow-b: rgb(255 61 242 / 0.5);
+  --depth: 0 0 0 transparent;
+  --dot: #ff3df2;
+  --hint-ring: #ffe23d;
+}
+
+/* Конфета: пастель, глянец; цвет плитки — по её ряду */
+[data-game="fifteen"][data-skin="candy"], [data-game="fifteen"] [data-skin="candy"] {
+  --bg: #fff0f6; --surface: #ffe0ee; --text: #7a2e55; --hint: #b77599; --accent: #ff5fa2; --accent-text: #ffffff;
+  --board: #f8c3d8;
+  --board-shadow: inset 0 0 0 2px #f3a9c7;
+  --well: #f4b2cc;
+  --tile-color: initial;
+  --h0: 325; --hstep: 115; --sat: 90%; --lit: 77%;
+  --tex: radial-gradient(ellipse at 32% 22%, rgb(255 255 255 / 0.85), rgb(255 255 255 / 0) 42%),
+    linear-gradient(180deg, rgb(255 255 255 / 0.25), rgb(255 255 255 / 0) 60%, rgb(180 60 120 / 0.12));
+  --tile-text: #7a2e55; --home-text: #7a2e55;
+  --num-shadow: 0 0.04em 0 rgb(255 255 255 / 0.7);
+  --radius: 0.42em;
+  --depth: inset 0 -0.1em 0 rgb(180 60 120 / 0.22), 0 0.06em 0.14em rgb(180 60 120 / 0.25);
+  --dot: #ff2f8a;
+  --hint-ring: #8b5cf6;
+}
+
+/* Картинки (сама картинка — --pic, ставится из кода): цифры — маленькие в углу */
+[data-game="fifteen"][data-skin="sunset"], [data-game="fifteen"] [data-skin="sunset"] {
+  --bg: #1b1236; --surface: #2a1d4f; --text: #fbe9f2; --hint: #b49ac8; --accent: #ff7a59; --accent-text: #1b1236;
+  --board: #120b29;
+  --board-shadow: inset 0 0 0 1px #3d2b6b, 0 4px 16px rgb(0 0 0 / 0.35);
+  --well: #22163f;
+  --tile-color: #3a2560;
+  --tex: none;
+  --tile-text: #ffffff; --home-text: #ffffff;
+  --num-shadow: none;
+  --radius: 0.16em;
+  --depth: inset 0 0 0 0.03em rgb(255 255 255 / 0.25), 0 0.05em 0.14em rgb(0 0 0 / 0.4);
+  --dot: #ffd166;
+  --hint-ring: #ffd166;
+}
+[data-game="fifteen"][data-skin="sea"], [data-game="fifteen"] [data-skin="sea"] {
+  --bg: #e8f6fd; --surface: #d0ecf8; --text: #0d3b5e; --hint: #5b86a6; --accent: #1679c4; --accent-text: #ffffff;
+  --board: #0d4a7a;
+  --board-shadow: inset 0 0 0 1px #0a3a61, 0 4px 14px rgb(13 74 122 / 0.3);
+  --well: #0a3a61;
+  --tile-color: #2a8fc9;
+  --tex: none;
+  --tile-text: #ffffff; --home-text: #ffffff;
+  --num-shadow: none;
+  --radius: 0.16em;
+  --depth: inset 0 0 0 0.03em rgb(255 255 255 / 0.35), 0 0.05em 0.14em rgb(0 30 60 / 0.35);
+  --dot: #ffe27a;
+  --hint-ring: #ff8a3d;
+}
+
+/* ---------- раскладка ---------- */
+
+.game-root[data-game="fifteen"] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+  background: var(--bg);
+  color: var(--text);
+  transition: background-color 0.3s ease, color 0.3s ease;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+[data-game="fifteen"] .btn { background: var(--accent); color: var(--accent-text); }
+[data-game="fifteen"] .btn-secondary { background: var(--bg); color: var(--text); }
+
+[data-game="fifteen"] .ff { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+[data-game="fifteen"] .ff-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 4px; }
+[data-game="fifteen"] .ff-head-text { min-width: 0; }
+[data-game="fifteen"] .ff-title { font-size: 24px; font-weight: 800; line-height: 1.1; white-space: nowrap; }
+[data-game="fifteen"] .ff-sub { font-size: 13px; color: var(--hint); }
+[data-game="fifteen"] .ff-actions { display: flex; gap: 6px; flex: none; }
+[data-game="fifteen"] .ff-icon-btn {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+  cursor: pointer;
+  transition: transform 0.1s ease, background-color 0.3s ease, color 0.3s ease;
+}
+[data-game="fifteen"] .ff-icon-btn:active { transform: scale(0.92); }
+@media (max-width: 360px) {
+  [data-game="fifteen"] .ff-icon-btn { width: 32px; height: 32px; }
+  [data-game="fifteen"] .ff-title { font-size: 20px; }
+  [data-game="fifteen"] .ff-actions { gap: 4px; }
+}
+
+/* ходы, время, рекорд */
+[data-game="fifteen"] .ff-bar { display: grid; grid-template-columns: 1fr 1fr 1.25fr; gap: 6px; padding: 0 4px; }
+[data-game="fifteen"] .ff-stat {
+  display: grid;
+  justify-items: center;
+  padding: 5px 4px;
+  border-radius: 10px;
+  background: var(--surface);
+  transition: background-color 0.3s ease;
+  min-width: 0;
+}
+[data-game="fifteen"] .ff-stat span { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--hint); }
+[data-game="fifteen"] .ff-stat b { font-size: 19px; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+
+/* поле — квадрат по меньшей стороне свободного места */
+[data-game="fifteen"] .ff-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  container-type: size;
+  touch-action: none;
+}
+[data-game="fifteen"] .ff-board {
+  --size: min(100cqw, 100cqh);
+  --pk: 0.028;
+  --g: calc(var(--size) * var(--gk, 0.024));
+  --pad: calc(var(--size) * var(--pk));
+  --s: calc((var(--size) - 2 * var(--pad) - (var(--n) - 1) * var(--g)) / var(--n));
+  --fill: calc(1.012 + var(--gk, 0.024) * var(--n) / (1 - 2 * var(--pk) - (var(--n) - 1) * var(--gk, 0.024)));
+  position: relative;
+  width: var(--size);
+  height: var(--size);
+  border-radius: calc(var(--size) * 0.045);
+  background: var(--board);
+  box-shadow: var(--board-shadow);
+  transition: box-shadow 0.3s ease;
+  cursor: pointer;
+}
+[data-game="fifteen"] .ff-cells {
+  position: absolute;
+  inset: var(--pad);
+  display: grid;
+  grid-template-columns: repeat(var(--n), 1fr);
+  grid-template-rows: repeat(var(--n), 1fr);
+  gap: var(--g);
+}
+[data-game="fifteen"] .ff-cell {
+  border-radius: calc(var(--s) * 0.14);
+  background: var(--well);
+  box-shadow: inset 0 calc(var(--s) * 0.04) calc(var(--s) * 0.08) rgb(0 0 0 / 0.22);
+}
+[data-game="fifteen"] .ff-tiles { position: absolute; inset: 0; }
+
+/* плитка: место — --x/--y, скольжение — переход transform с лёгким «пружинящим» доездом */
+[data-game="fifteen"] .ff-tile {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--s);
+  height: var(--s);
+  transform: translate(
+    calc(var(--pad) + var(--x) * (var(--s) + var(--g))),
+    calc(var(--pad) + var(--y) * (var(--s) + var(--g)))
+  );
+  transition: transform 0.12s cubic-bezier(0.25, 0.9, 0.35, 1.12);
+}
+[data-game="fifteen"] .ff-face,
+[data-game="fifteen"] .ff-sw-tile .ff-face {
+  --base: var(--tile-color, hsl(calc(var(--h0) + (var(--hx) + var(--hy)) * var(--hstep) / (2 * (var(--n) - 1))) var(--sat) var(--lit)));
+  --ring: var(--ring-a);
+  --glow-c: var(--glow-a);
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius);
+  background-color: var(--base);
+  background-image: var(--pic), var(--tex);
+  background-size: calc(var(--n) * 100%) calc(var(--n) * 100%), 100% 100%;
+  background-position: calc(var(--hx) * 100% / (var(--n) - 1)) calc(var(--hy) * 100% / (var(--n) - 1)), center;
+  background-repeat: no-repeat;
+  color: var(--tile-text);
+  box-shadow: inset 0 0 0 var(--ring-w) var(--ring), 0 0 var(--glow-r) var(--glow-c), var(--depth);
+  font-size: calc(var(--s) * 0.44);
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  text-shadow: var(--num-shadow);
+  transition: color 0.25s ease, box-shadow 0.25s ease, transform 0.45s cubic-bezier(0.3, 0.8, 0.3, 1), border-radius 0.45s ease, outline-color 0.2s ease;
+}
+[data-game="fifteen"] .ff-home > .ff-face { --ring: var(--ring-b); --glow-c: var(--glow-b); color: var(--home-text); }
+[data-game="fifteen"] .ff-num { transition: opacity 0.5s ease; }
+
+/* на своём месте — точка в углу */
+[data-game="fifteen"] .ff-face::after {
+  content: '';
+  position: absolute;
+  right: 0.17em;
+  bottom: 0.17em;
+  width: 0.13em;
+  height: 0.13em;
+  border-radius: 50%;
+  background: var(--dot);
+  opacity: 0;
+  scale: 0.3;
+  transition: opacity 0.2s ease, scale 0.25s cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+[data-game="fifteen"] .ff-home > .ff-face::after { opacity: 0.85; scale: 1; }
+
+/* цвета рядов: полоска внизу — в какой ряд (слой сборки) плитка идёт */
+[data-game="fifteen"] .ff-rows .ff-face::before {
+  content: '';
+  position: absolute;
+  left: 22%;
+  right: 22%;
+  bottom: 0.12em;
+  height: 0.075em;
+  border-radius: 1em;
+  background: hsl(var(--hue) 85% 52%);
+  box-shadow: 0 0 0 0.02em rgb(255 255 255 / 0.6);
+}
+
+/* подсказка — пульсирующая рамка */
+[data-game="fifteen"] .ff-hinted > .ff-face {
+  outline: 0.09em solid var(--hint-ring);
+  outline-offset: 0.04em;
+  animation: ff-hint 0.9s ease-in-out infinite;
+}
+@keyframes ff-hint { 50% { outline-offset: 0.12em; outline-color: color-mix(in srgb, var(--hint-ring) 45%, transparent); } }
+[data-game="fifteen"] .ff-hinted { z-index: 1; }
+
+/* вслепую и картинки без цифр */
+[data-game="fifteen"] .ff-blind .ff-num,
+[data-game="fifteen"] .ff-nonum .ff-num { opacity: 0; }
+
+/* картинки: цифра — плашка в углу */
+[data-game="fifteen"] .ff-picture .ff-face { place-items: start; }
+[data-game="fifteen"] .ff-picture .ff-num {
+  margin: 0.14em 0 0 0.14em;
+  padding: 0.12em 0.32em;
+  border-radius: 1em;
+  background: rgb(0 0 0 / 0.42);
+  color: #fff;
+  font-size: max(9px, 0.38em);
+  text-shadow: none;
+}
+
+/* последняя плитка — появляется на победе */
+[data-game="fifteen"] .ff-last > .ff-face { opacity: 0; scale: 0.4; transition: opacity 0.3s ease, scale 0.4s cubic-bezier(0.3, 1.5, 0.5, 1), transform 0.45s cubic-bezier(0.3, 0.8, 0.3, 1), border-radius 0.45s ease; }
+[data-game="fifteen"] .ff-last.ff-show > .ff-face { opacity: 1; scale: 1; }
+
+/* победа: зазоры схлопываются — поле складывается в одно целое */
+[data-game="fifteen"] .ff-won .ff-face::after { opacity: 0; }
+[data-game="fifteen"] .ff-joined .ff-face { transform: scale(var(--fill)); border-radius: 0; box-shadow: none; }
+[data-game="fifteen"] .ff-joined.ff-picture .ff-num { opacity: 0; }
+[data-game="fifteen"] .ff-joined .ff-face::before { opacity: 0; }
+
+/* инструменты */
+[data-game="fifteen"] .ff-tools { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 0 4px; }
+[data-game="fifteen"] .ff-tool {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 11px 8px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.1s ease, opacity 0.2s ease, background-color 0.3s ease, color 0.3s ease;
+}
+[data-game="fifteen"] .ff-tool:active { transform: scale(0.96); }
+[data-game="fifteen"] .ff-tool:disabled { opacity: 0.45; cursor: default; }
+[data-game="fifteen"] .ff-tool-icon { display: grid; }
+[data-game="fifteen"] .ff-badge {
+  display: grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: 12px;
+  font-weight: 800;
+}
+[data-game="fifteen"] .ff-tool.ff-spent { opacity: 0.55; }
+[data-game="fifteen"] .ff-tool.ff-spent .ff-badge { background: var(--hint); }
+
+[data-game="fifteen"] .ff-fx { position: absolute; inset: 0; z-index: 7; width: 100%; height: 100%; pointer-events: none; }
+
+/* ---------- окна ---------- */
+
+[data-game="fifteen"] .ff-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+}
+[data-game="fifteen"] .ff-card {
+  width: 100%;
+  max-width: 380px;
+  max-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: 0 8px 28px rgb(0 0 0 / 0.18);
+}
+[data-game="fifteen"] .ff-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+[data-game="fifteen"] .ff-card-head h2 { margin: 0; font-size: 18px; }
+[data-game="fifteen"] .ff-card .ff-icon-btn { background: var(--bg); }
+[data-game="fifteen"] .ff-note { margin: 8px 0 0; font-size: 13px; line-height: 1.4; color: var(--hint); }
+[data-game="fifteen"] .ff-rules { font-size: 14px; color: var(--text); }
+[data-game="fifteen"] .ff-play { width: 100%; margin-top: 14px; }
+[data-game="fifteen"] .ff-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
+[data-game="fifteen"] .ff-section { margin: 16px 0 8px; font-size: 14px; }
+[data-game="fifteen"] .ff-card-head + .ff-section { margin-top: 0; }
+
+[data-game="fifteen"] .ff-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+[data-game="fifteen"] .ff-option {
+  display: grid;
+  gap: 2px;
+  padding: 8px 2px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+[data-game="fifteen"] .ff-option b { font-size: 16px; }
+[data-game="fifteen"] .ff-option span { font-size: 11px; color: var(--hint); }
+[data-game="fifteen"] .ff-option[aria-checked="true"] { background: var(--accent); color: var(--accent-text); }
+[data-game="fifteen"] .ff-option[aria-checked="true"] span { color: inherit; opacity: 0.85; }
+
+[data-game="fifteen"] .ff-skins { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px 6px; }
+[data-game="fifteen"] .ff-skin {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+/* у кнопки образца свой data-skin — цвета подписи и рамки берутся из окна (--ui-*), а не из образца */
+[data-game="fifteen"] .ff-card { --ui-text: var(--text); --ui-accent: var(--accent); }
+[data-game="fifteen"] .ff-skin-name { color: var(--ui-text); }
+[data-game="fifteen"] .ff-swatch {
+  --n: 2;
+  --s: 21px;
+  display: grid;
+  grid-template-columns: repeat(2, var(--s));
+  grid-template-rows: repeat(2, var(--s));
+  gap: 3px;
+  padding: 4px;
+  border-radius: 11px;
+  background: var(--board);
+  box-shadow: var(--board-shadow);
+  transition: transform 0.2s ease;
+}
+[data-game="fifteen"] .ff-sw-tile { display: block; width: var(--s); height: var(--s); font-style: normal; }
+[data-game="fifteen"] .ff-sw-empty { display: block; border-radius: 5px; background: var(--well); }
+[data-game="fifteen"] .ff-sw-picture .ff-num { display: none; }
+[data-game="fifteen"] .ff-skin:active .ff-swatch { transform: scale(0.92); }
+[data-game="fifteen"] .ff-skin[aria-checked="true"] .ff-swatch { outline: 3px solid var(--ui-accent); outline-offset: 3px; }
+
+[data-game="fifteen"] .ff-toggle { display: flex; align-items: center; gap: 10px; margin-top: 10px; font-size: 14px; line-height: 1.3; cursor: pointer; }
+[data-game="fifteen"] .ff-toggle input { flex: none; width: 20px; height: 20px; margin: 0; accent-color: var(--accent); }
+
+[data-game="fifteen"] .ff-tabs { display: grid; grid-template-columns: repeat(6, 1fr); padding: 2px; margin-bottom: 12px; border-radius: 10px; background: var(--bg); }
+[data-game="fifteen"] .ff-tab {
+  padding: 6px 0;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--hint);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+[data-game="fifteen"] .ff-tab[aria-selected="true"] { background: var(--accent); color: var(--accent-text); }
+[data-game="fifteen"] .ff-stat-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 8px; text-align: center; }
+[data-game="fifteen"] .ff-stat-tile { display: grid; gap: 2px; }
+[data-game="fifteen"] .ff-stat-tile b { font-size: 24px; font-weight: 800; }
+[data-game="fifteen"] .ff-stat-tile span { font-size: 12px; color: var(--hint); }

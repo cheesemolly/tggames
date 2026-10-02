@@ -34,6 +34,10 @@ export const GAME_ICONS = {
   minesweeper: svg('<circle cx="10" cy="14" r="4.6" fill="currentColor" stroke="none"/>'
     + '<path d="M10 7v2.2M10 18.8V21M3 14h2.2M14.8 14H17M5.1 9.1l1.6 1.6M13.3 17.3l1.6 1.6M5.1 18.9l1.6-1.6M13.3 10.7l1.6-1.6"/>'
     + '<path d="M17 3v7" stroke-width="1.6"/><path d="M17 3.2h4l-1.4 1.7L21 6.6h-4" fill="currentColor" stroke-width="1.2"/>'),
+  // пятнашки: три плитки и пустая клетка пунктиром
+  fifteen: svg('<rect x="3.5" y="3.5" width="7.5" height="7.5" rx="1.8" fill="currentColor" stroke="none"/>'
+    + '<rect x="13" y="3.5" width="7.5" height="7.5" rx="1.8"/><rect x="3.5" y="13" width="7.5" height="7.5" rx="1.8"/>'
+    + '<rect x="13" y="13" width="7.5" height="7.5" rx="1.8" stroke-width="1.4" stroke-dasharray="2 1.7" opacity="0.6"/>'),
   loop: svg('<path d="M5 19v-6.5A4.5 4.5 0 0 1 9.5 8H19"/><circle cx="5" cy="19" r="2.2"/><circle cx="19" cy="8" r="2.2"/>'),
   'connect-dots': svg('<circle cx="5.5" cy="6" r="2.4" fill="currentColor" stroke="none"/>'
     + '<circle cx="18.5" cy="18" r="2.4" fill="currentColor" stroke="none"/>'

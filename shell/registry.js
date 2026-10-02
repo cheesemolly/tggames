@@ -128,6 +128,13 @@ export const games = [
     menu: { best: false, progress: 'append' },           // «Сыграно · Побед · Лучшее: 1:23 · средний»
   },
   {
+    id: 'fifteen',
+    title: 'Пятнашки',
+    load: () => import('../games/fifteen/index.js'),
+    css: new URL('../games/fifteen/game.css', import.meta.url),
+    menu: { best: false, progress: 'append' },           // «Сыграно · Побед · Лучшее 4×4: 1:23»
+  },
+  {
     id: 'wordle',
     title: 'Wordle',
     load: () => import('../games/wordle/index.js'),
