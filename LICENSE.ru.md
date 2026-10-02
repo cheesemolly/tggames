@@ -48,6 +48,10 @@ Copyright (c) 2026 cheesemolly (https://github.com/cheesemolly). Все прав
 - `games/chess/engine.js` — значения таблиц полей взяты из «Simplified Evaluation Function»
   Томаша Михневского, опубликованной в Chess Programming Wiki
   (https://www.chessprogramming.org/Simplified_Evaluation_Function);
+- `games/go/engine.js` — шаблоны 3×3 для розыгрышей повторяют шаблоны MoGo (С. Желли, Я. Ван, Р. Мюнос,
+  О. Тейто, «Modification of UCT with Patterns in Monte-Carlo Go», 2006) в виде, как они записаны в движке
+  michi Петра Баудиша (https://github.com/pasky/michi, лицензия MIT); параметры поиска (эквивалент RAVE,
+  априорные значения) — по мотивам michi. Сам код — свой;
 - `styles/fonts/press-start-2p-*.woff2` — шрифт «Press Start 2P» (CodeMan38; Copyright 2012 The Press Start 2P
   Project Authors), SIL Open Font License 1.1, см. `styles/fonts/OFL-press-start-2p.txt`;
 - `styles/fonts/golos-text-*.woff2` — шрифт «Golos Text» (Copyright 2019 The Golos Text Project Authors,

@@ -41,6 +41,10 @@ These are not owned by the copyright holder; their own licenses and notices appl
   - games/chess/engine.js — the piece-square table values follow the "Simplified Evaluation
     Function" by Tomasz Michniewski, published on the Chess Programming Wiki
     (https://www.chessprogramming.org/Simplified_Evaluation_Function).
+  - games/go/engine.js — the 3x3 playout patterns follow the MoGo patterns (S. Gelly, Y. Wang, R. Munos,
+    O. Teytaud, "Modification of UCT with Patterns in Monte-Carlo Go", 2006) in the form listed by the
+    michi engine by Petr Baudis (https://github.com/pasky/michi, MIT License); the search parameters
+    (RAVE equivalence, prior values) are inspired by michi. The code itself is original.
   - styles/fonts/press-start-2p-*.woff2 — the "Press Start 2P" font by CodeMan38
     (Copyright 2012 The Press Start 2P Project Authors), SIL Open Font License 1.1,
     see styles/fonts/OFL-press-start-2p.txt.

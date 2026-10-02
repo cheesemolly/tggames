@@ -109,6 +109,9 @@ export const RULES = [
     '*.played': 'count', '*.wins': 'count', '*.maxStreak': 'max', '*.dist.*': 'count',
   } }],
   ['game:chess:stats', { type: 'fields', fields: COUNT4('*.') }],
+  ['game:go:stats', { type: 'fields', fields: {
+    ...COUNT4('*.*.'), 'friend.played': 'count', 'friend.black': 'count', 'friend.white': 'count', bestStreak: 'max',
+  } }],
   ['game:spider:stats', { type: 'fields', fields: CARDS }],
   ['game:klondike:stats', { type: 'fields', fields: CARDS }],
   ['game:match3:progress', { type: 'fields', fields: {

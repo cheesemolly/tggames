@@ -1,0 +1,345 @@
+/*
+ * Го. Доска — SVG; цвета — переменные скина (--go-*): «По умолчанию» — из темы Telegram (доска — фон темы с
+ * оттенком кнопки), остальные — свои «материалы» (кая, орех, ночь, бумага), одинаковые в обеих темах: это
+ * картинка доски. Камни — радиальные градиенты (сланец и раковина), тень — градиент, без фильтров (361 камень).
+ */
+
+[data-game="go"], [data-game="go"] [data-skin="telegram"] {
+  --go-board0: color-mix(in srgb, var(--tg-theme-button-color) 22%, var(--tg-theme-secondary-bg-color));
+  --go-board1: color-mix(in srgb, var(--tg-theme-button-color) 12%, var(--tg-theme-secondary-bg-color));
+  --go-line: color-mix(in srgb, var(--tg-theme-text-color) 38%, transparent);
+  --go-grain: transparent;
+  --go-coord: color-mix(in srgb, var(--tg-theme-text-color) 60%, transparent);
+  --go-b0: #707070; --go-b1: #2c2c2c; --go-b2: #060606;
+  --go-w0: #ffffff; --go-w1: #f1efe8; --go-w2: #bdb8aa;
+  --go-shell: rgb(150 140 120 / 0.1);
+  --go-rim: transparent;
+  --go-wedge: rgb(0 0 0 / 0.18);
+  --go-terr-b: #111;
+  --go-terr-w: #f4f2ec;
+  --go-accent: var(--tg-theme-button-color);
+  --go-accent-text: var(--tg-theme-button-text-color);
+  --go-hint: #ff9f1c;
+  --go-atari: #ef4444;
+  --toast-top: 120px;
+}
+/* тёмная тема: чёрным камням на тёмной доске — светлый ободок, иначе они теряются */
+:root[data-theme="dark"] [data-game="go"], :root[data-theme="dark"] [data-game="go"] [data-skin="telegram"] {
+  --go-rim: rgb(255 255 255 / 0.2);
+}
+[data-game="go"][data-skin="kaya"], [data-game="go"] [data-skin="kaya"] {
+  --go-board0: #ecc887; --go-board1: #d3a255; --go-line: rgb(43 29 14 / 0.85); --go-grain: rgb(150 95 30 / 0.16);
+  --go-coord: rgb(60 38 14 / 0.75); --go-rim: transparent;
+  --go-accent: #a86a2c; --go-accent-text: #fff;
+}
+[data-game="go"][data-skin="walnut"], [data-game="go"] [data-skin="walnut"] {
+  --go-board0: #b07c47; --go-board1: #7a4e27; --go-line: rgb(25 14 4 / 0.82); --go-grain: rgb(60 30 8 / 0.24);
+  --go-coord: rgb(255 235 200 / 0.7); --go-rim: transparent;
+  --go-accent: #c4874a; --go-accent-text: #fff;
+}
+[data-game="go"][data-skin="night"], [data-game="go"] [data-skin="night"] {
+  --go-board0: #2a2e40; --go-board1: #191c29; --go-line: rgb(190 200 235 / 0.4); --go-grain: transparent;
+  --go-coord: rgb(200 210 240 / 0.6);
+  --go-b0: #5c6170; --go-b1: #23262f; --go-b2: #07080b;
+  --go-w0: #ffffff; --go-w1: #e9edf5; --go-w2: #a9b2c6;
+  --go-rim: rgb(255 255 255 / 0.22);
+  --go-terr-w: #e9edf5;
+  --go-accent: #7c8cff; --go-accent-text: #fff;
+}
+[data-game="go"][data-skin="paper"], [data-game="go"] [data-skin="paper"] {
+  --go-board0: #fbfaf6; --go-board1: #f3f1ea; --go-line: #2a2a2a; --go-grain: transparent;
+  --go-coord: #555; --go-rim: transparent;
+  --go-terr-w: #fff;
+  --go-accent: #2a2a2a; --go-accent-text: #fff;
+}
+
+/* ---------- раскладка ---------- */
+
+.game-root[data-game="go"] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+[data-game="go"] .btn { background: var(--go-accent); color: var(--go-accent-text); }
+[data-game="go"] .btn-secondary { background: var(--tg-theme-secondary-bg-color); color: var(--tg-theme-text-color); }
+[data-game="go"] .go { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+[data-game="go"] .go-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 4px; }
+[data-game="go"] .go-head-text { min-width: 0; }
+[data-game="go"] .go-title { font-size: 20px; font-weight: 700; line-height: 1.2; }
+[data-game="go"] .go-sub { font-size: 13px; color: var(--tg-theme-hint-color); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+[data-game="go"] .go-actions { display: flex; gap: 6px; flex: none; }
+[data-game="go"] .go-icon-btn {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: var(--tg-theme-secondary-bg-color);
+  color: var(--tg-theme-text-color);
+  font: inherit;
+  cursor: pointer;
+  transition: transform 0.12s ease, opacity 0.2s ease;
+}
+[data-game="go"] .go-icon-btn:active { transform: scale(0.9); }
+[data-game="go"] .go-icon-btn:disabled { opacity: 0.35; }
+@media (max-width: 420px) {
+  [data-game="go"] .go-icon-btn { width: 32px; height: 32px; }
+  [data-game="go"] .go-actions { gap: 5px; }
+}
+@media (max-width: 350px) {
+  [data-game="go"] .go-icon-btn { width: 30px; height: 30px; }
+  [data-game="go"] .go-actions { gap: 4px; }
+}
+
+/* игроки: камень, имя, сколько взято */
+[data-game="go"] .go-bar { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+[data-game="go"] .go-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 7px 10px;
+  border-radius: 14px;
+  background: var(--tg-theme-secondary-bg-color);
+  border: 2px solid transparent;
+  opacity: 0.62;
+  transition: border-color 0.25s ease, opacity 0.25s ease, transform 0.25s ease;
+}
+[data-game="go"] .go-pill-w { flex-direction: row-reverse; text-align: right; }
+[data-game="go"] .go-pill.on { opacity: 1; border-color: var(--go-accent); transform: scale(1.02); }
+[data-game="go"] .go-pill-stone, [data-game="go"] .go-swatch-stone {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 36% 30%, #707070, #2c2c2c 38%, #060606);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.35);
+}
+[data-game="go"] .go-pill-w .go-pill-stone, [data-game="go"] .go-swatch-stone.w {
+  background: radial-gradient(circle at 36% 30%, #fff, #f1efe8 55%, #bdb8aa);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.35), inset 0 0 0 1px rgb(0 0 0 / 0.08);
+}
+[data-game="go"] .go-pill-text { display: grid; min-width: 0; }
+[data-game="go"] .go-pill-name { font-weight: 700; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+[data-game="go"] .go-pill-cap { font-size: 12px; color: var(--tg-theme-hint-color); white-space: nowrap; }
+[data-game="go"] .go-status-row { min-height: 20px; text-align: center; }
+[data-game="go"] .go-status { font-weight: 700; font-size: 14px; }
+[data-game="go"] .go-status.go-thinking { animation: go-blink 1s ease-in-out infinite; }
+@keyframes go-blink { 50% { opacity: 0.45; } }
+
+/* доска — квадрат по меньшей стороне свободного места */
+[data-game="go"] .go-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  container-type: size;
+  max-height: 100cqw;
+}
+[data-game="go"] .go { container-type: inline-size; }
+[data-game="go"] .go-board {
+  width: min(100cqw, 100cqh);
+  height: min(100cqw, 100cqh);
+  touch-action: none;
+  cursor: pointer;
+  border-radius: 10px;
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.22);
+}
+[data-game="go"] .go-grain path { fill: none; stroke: var(--go-grain); }
+[data-game="go"] .go-grid line { stroke: var(--go-line); stroke-linecap: square; }
+[data-game="go"] .go-star { fill: var(--go-line); }
+[data-game="go"] .go-coords text { fill: var(--go-coord); text-anchor: middle; dominant-baseline: central; font-weight: 600; }
+[data-game="go"] .go-stone { pointer-events: none; }
+[data-game="go"] .go-b .go-body { stroke: var(--go-rim); stroke-width: 0.025; }
+[data-game="go"] .go-w .go-body { stroke: var(--go-wedge); stroke-width: 0.018; }
+[data-game="go"] .go-shell path { fill: none; stroke: var(--go-shell); stroke-width: 0.012; }
+[data-game="go"] .go-gloss { fill: #fff; opacity: 0.1; }
+[data-game="go"] .go-w .go-gloss { opacity: 0.5; }
+[data-game="go"] .go-dim { opacity: 0.45; }
+[data-game="go"] .go-ghost-stone { opacity: 0.55; }
+[data-game="go"] .go-ghost, [data-game="go"] .go-cross { pointer-events: none; }
+[data-game="go"] .go-cross line { stroke: var(--go-accent); stroke-width: 0.06; opacity: 0.55; }
+/* «Бумага» — плоские камни, как в задачниках */
+[data-game="go"][data-skin="paper"] .go-b .go-body { fill: #151515; }
+[data-game="go"][data-skin="paper"] .go-w .go-body { fill: #fff; stroke: #151515; stroke-width: 0.055; }
+
+/* последний ход — кольцо цвета, противоположного камню */
+[data-game="go"] .go-last { fill: none; stroke-width: 0.07; }
+[data-game="go"] .go-last.on-b { stroke: #f4f2ec; }
+[data-game="go"] .go-last.on-w { stroke: #151515; }
+[data-game="go"] .go-hint-ring { fill: none; stroke: var(--go-hint); stroke-width: 0.1; animation: go-pulse 1s ease-in-out infinite; }
+@keyframes go-pulse { 50% { stroke-width: 0.18; opacity: 0.6; } }
+[data-game="go"] .go-atari { fill: none; stroke: var(--go-atari); stroke-width: 0.06; opacity: 0.85; }
+[data-game="go"] .go-dead-x { stroke: #e03131; stroke-width: 0.09; stroke-linecap: round; }
+[data-game="go"] .go-terr-b { fill: var(--go-terr-b); }
+[data-game="go"] .go-terr-w { fill: var(--go-terr-w); stroke: rgb(0 0 0 / 0.35); stroke-width: 0.02; }
+[data-game="go"] .go-terr rect { transition: opacity 0.25s ease; }
+
+[data-game="go"] .go-confirm { text-align: center; font-size: 13px; color: var(--tg-theme-hint-color); margin-top: -2px; }
+
+/* инструменты под доской: пас, подсказка, оценка, сдаться */
+[data-game="go"] .go-tools { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 6px; }
+[data-game="go"] .go-tool {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: 8px 2px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--tg-theme-secondary-bg-color);
+  color: var(--tg-theme-text-color);
+  font: inherit;
+  cursor: pointer;
+  transition: transform 0.12s ease, opacity 0.2s ease, background-color 0.2s ease;
+}
+[data-game="go"] .go-tool[hidden] { display: none; }
+[data-game="go"] .go-tool:active { transform: scale(0.94); }
+[data-game="go"] .go-tool:disabled { opacity: 0.4; }
+[data-game="go"] .go-tool.on { background: color-mix(in srgb, var(--go-accent) 30%, var(--tg-theme-secondary-bg-color)); }
+[data-game="go"] .go-tool-icon { display: grid; }
+[data-game="go"] .go-tool-label { font-size: 12px; white-space: nowrap; }
+[data-game="go"] .go-badge {
+  position: absolute;
+  top: 4px;
+  left: calc(50% + 8px);
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: var(--go-accent);
+  color: var(--go-accent-text);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 17px;
+}
+[data-game="go"] .go-over-panel { display: grid; }
+[data-game="go"] .go-over-panel[hidden] { display: none; }
+[data-game="go"] .go-score-panel { display: grid; gap: 4px; }
+[data-game="go"] .go-score-panel[hidden] { display: none; }
+[data-game="go"] .go-score-panel .go-note { text-align: center; margin: 0; }
+
+/* ---------- окна ---------- */
+
+[data-game="go"] .go-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  background: rgb(0 0 0 / 0.45);
+}
+[data-game="go"] .go-card {
+  width: min(380px, 100%);
+  max-height: 100%;
+  overflow: auto;
+  padding: 16px;
+  border-radius: 18px;
+  background: var(--tg-theme-bg-color);
+  color: var(--tg-theme-text-color);
+  box-shadow: 0 16px 40px rgb(0 0 0 / 0.3);
+}
+[data-game="go"] .go-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+[data-game="go"] .go-card h2 { margin: 0; font-size: 20px; }
+[data-game="go"] .go-section { margin: 12px 0 6px; font-size: 13px; font-weight: 700; color: var(--tg-theme-hint-color); text-transform: uppercase; letter-spacing: 0.04em; }
+[data-game="go"] .go-note { margin: 6px 0 0; font-size: 13px; line-height: 1.35; color: var(--tg-theme-hint-color); }
+[data-game="go"] .go-rules { margin: 0 0 4px; }
+[data-game="go"] .go-text { margin: 4px 0 0; font-size: 15px; }
+[data-game="go"] .go-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 6px; }
+[data-game="go"] .go-option {
+  display: grid;
+  gap: 2px;
+  padding: 9px 10px;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  background: var(--tg-theme-secondary-bg-color);
+  color: var(--tg-theme-text-color);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.2s ease;
+}
+[data-game="go"] .go-option span { font-size: 12px; color: var(--tg-theme-hint-color); }
+[data-game="go"] .go-option[aria-checked="true"] { border-color: var(--go-accent); }
+[data-game="go"] .go-option-sm { text-align: center; padding: 8px 6px; }
+[data-game="go"] .go-options:has(.go-option-wide) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+[data-game="go"] .go-option-xs { text-align: center; padding: 8px 2px; }
+[data-game="go"] .go-options:has(.go-option-xs) { grid-template-columns: repeat(auto-fit, minmax(40px, 1fr)); }
+[data-game="go"] .go-play { width: 100%; margin-top: 14px; }
+[data-game="go"] .go-btns { display: flex; gap: 8px; margin-top: 12px; }
+[data-game="go"] .go-btns .btn { flex: 1; }
+[data-game="go"] .go-score-panel .go-btns { margin-top: 4px; }
+[data-game="go"] .go-danger { background: var(--tg-theme-destructive-text-color, #e5484d); color: #fff; }
+[data-game="go"] .go-result-stone { display: grid; place-items: center; margin: 8px 0; }
+[data-game="go"] .go-result-stone .go-swatch-stone { width: 64px; height: 64px; }
+[data-game="go"] .go-result-how { text-align: center; font-weight: 700; margin: 0; }
+[data-game="go"] .go-result-score { text-align: center; color: var(--tg-theme-hint-color); font-size: 13px; margin: 4px 0 0; }
+[data-game="go"] .go-friend-score { text-align: center; color: var(--tg-theme-hint-color); font-size: 14px; margin-top: 6px; }
+
+[data-game="go"] .go-stat-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+[data-game="go"] .go-tile { display: grid; justify-items: center; padding: 10px; border-radius: 12px; background: var(--tg-theme-secondary-bg-color); }
+[data-game="go"] .go-tile b { font-size: 22px; }
+[data-game="go"] .go-tile span { font-size: 12px; color: var(--tg-theme-hint-color); }
+[data-game="go"] .go-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin: 12px 0 8px; padding: 3px; border-radius: 10px; background: var(--tg-theme-secondary-bg-color); }
+[data-game="go"] .go-tab { padding: 6px; border: 0; border-radius: 8px; background: none; color: var(--tg-theme-hint-color); font: inherit; font-weight: 700; font-size: 13px; cursor: pointer; }
+[data-game="go"] .go-tab[aria-selected="true"] { background: var(--go-accent); color: var(--go-accent-text); }
+[data-game="go"] .go-stats-table { display: grid; gap: 4px; }
+[data-game="go"] .go-stats-row { display: grid; grid-template-columns: 1.6fr 1fr 1fr; gap: 4px; align-items: center; padding: 6px 8px; border-radius: 10px; background: var(--tg-theme-secondary-bg-color); text-align: center; }
+[data-game="go"] .go-stats-row span:first-child { text-align: left; }
+[data-game="go"] .go-stats-head { background: none; font-size: 12px; color: var(--tg-theme-hint-color); }
+
+[data-game="go"] .go-skins { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+[data-game="go"] .go-skin {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 8px 4px;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  background: var(--tg-theme-secondary-bg-color);
+  color: var(--tg-theme-text-color);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+[data-game="go"] .go-skin[aria-checked="true"] { border-color: var(--go-accent); }
+[data-game="go"] .go-swatch {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  width: 64px;
+  height: 40px;
+  border-radius: 10px;
+  background:
+    linear-gradient(var(--go-line), var(--go-line)) center / 100% 1px no-repeat,
+    linear-gradient(90deg, var(--go-line), var(--go-line)) center / 1px 100% no-repeat,
+    linear-gradient(135deg, var(--go-board0), var(--go-board1));
+}
+[data-game="go"] .go-swatch i {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 36% 30%, var(--go-b0), var(--go-b1) 38%, var(--go-b2));
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.35), 0 0 0 1px var(--go-rim);
+}
+[data-game="go"] .go-swatch .go-sw-w { background: radial-gradient(circle at 36% 30%, var(--go-w0), var(--go-w1) 55%, var(--go-w2)); box-shadow: 0 1px 2px rgb(0 0 0 / 0.35); }
+[data-game="go"] .go-skin[data-skin="paper"] .go-sw-b { background: #151515; box-shadow: none; }
+[data-game="go"] .go-skin[data-skin="paper"] .go-sw-w { background: #fff; box-shadow: inset 0 0 0 1.5px #151515; }
+[data-game="go"] .go-toggle { display: flex; align-items: center; gap: 10px; margin-top: 12px; font-size: 14px; }
+[data-game="go"] .go-toggle input { width: 20px; height: 20px; flex: none; accent-color: var(--go-accent); }
+
+@media (prefers-reduced-motion: reduce) {
+  [data-game="go"] .go-hint-ring, [data-game="go"] .go-status.go-thinking { animation: none; }
+}

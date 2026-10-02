@@ -142,6 +142,13 @@ export const games = [
     menu: { best: false },                               // «Сыграно · Побед» — рекорда нет
   },
   {
+    id: 'go',
+    title: 'Го',
+    load: () => import('../games/go/index.js'),
+    css: new URL('../games/go/game.css', import.meta.url),
+    menu: { best: false },                               // «Сыграно · Побед» — партии с ботом
+  },
+  {
     id: 'match3',
     title: 'Три в ряд',
     load: () => import('../games/match3/index.js'),

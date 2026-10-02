@@ -191,6 +191,7 @@ const GAMES = [
   { id: 'memory', title: 'Мемори', emoji: '🃏', about: 'найди пары одинаковых карточек' },
   { id: 'bongo-cat', title: 'Bongo Cat', emoji: '🐱', about: 'кот играет на инструментах, разучи мелодию' },
   { id: 'tictactoe', title: 'Крестики-нолики', emoji: '❌', about: 'классика 3×3 и гомоку — пять в ряд на большом поле' },
+  { id: 'go', title: 'Го', emoji: '⚫', about: 'древняя игра: против бота или вдвоём, доски 9×9, 13×13, 19×19', beta: true },
   { id: 'match3', title: 'Три в ряд', emoji: '💎', about: 'меняй фишки местами и собирай по три — 100 уровней с боссами' },
   { id: 'chess', title: 'Шахматы', emoji: '♟️', about: 'против бота: семь уровней, от новичка до полной силы' },
   { id: 'spider', title: 'Паук', emoji: '🕷️', about: 'пасьянс как в Windows: 1, 2 или 4 масти' },
@@ -405,6 +406,7 @@ const BOARDS = {
   memory: { by: 'уровень', score: menuLevel('memory'), text: levelText },
   'bongo-cat': { by: 'ударов за всё время', score: gameStats('bongo-cat', 'hits'), text: count(['удар', 'удара', 'ударов']) },
   tictactoe: { by: 'победы над ботом', score: shellStats('tictactoe', 'wins'), text: WINS },
+  go: { by: 'победы над ботом', score: shellStats('go', 'wins'), text: WINS },
   // «Три в ряд»: сколько уровней пройдено (звёзд в игре нет)
   match3: { by: 'пройденные уровни', score: match3Levels, text: count(['уровень пройден', 'уровня пройдено', 'уровней пройдено']) },
   chess: { by: 'победы над ботом', score: shellStats('chess', 'wins'), text: WINS },
@@ -431,9 +433,10 @@ const BOARD_LIMITS = {
   klondike: 1e5,
   pinball: 1e9,
   'killer-sudoku': 1e5,
+  go: 1e5,
 };
 // побед не может быть больше сыгранных партий
-const WINS_FROM = { checkers: 'checkers', mahjong: 'mahjong', sudoku: 'sudoku', wordle: 'wordle', tictactoe: 'tictactoe', chess: 'chess', spider: 'spider', klondike: 'klondike', 'killer-sudoku': 'killer-sudoku' };
+const WINS_FROM = { checkers: 'checkers', mahjong: 'mahjong', sudoku: 'sudoku', wordle: 'wordle', tictactoe: 'tictactoe', chess: 'chess', spider: 'spider', klondike: 'klondike', 'killer-sudoku': 'killer-sudoku', go: 'go' };
 
 function plausible(id, value, state) {
   if (value > (BOARD_LIMITS[id] ?? MAX_SCORE)) return false;
@@ -692,6 +695,9 @@ const RULES = [
     '*.played': 'count', '*.wins': 'count', '*.maxStreak': 'max', '*.dist.*': 'count',
   } }],
   ['game:chess:stats', { type: 'fields', fields: COUNT4('*.') }],
+  ['game:go:stats', { type: 'fields', fields: {
+    ...COUNT4('*.*.'), 'friend.played': 'count', 'friend.black': 'count', 'friend.white': 'count', bestStreak: 'max',
+  } }],
   ['game:spider:stats', { type: 'fields', fields: CARDS }],
   ['game:klondike:stats', { type: 'fields', fields: CARDS }],
   ['game:match3:progress', { type: 'fields', fields: {

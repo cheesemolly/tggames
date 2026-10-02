@@ -9,6 +9,15 @@ import { digits, plural, placeOn } from './logic.js';
 
 export const STORIES = [
   {
+    id: 'go-new',
+    label: 'Го',
+    games: ['go'],
+    slides: [
+      { kicker: 'Новая игра', title: 'Го', text: 'Окружай территорию и снимай камни соперника. Против бота пяти уровней или вдвоём на одном телефоне.' },
+      { kicker: 'Совет', title: 'Начни с 9×9', text: 'Маленькая доска — быстрые партии. «Оценка» покажет, чья где территория, а красное кольцо — что группа в атари.', play: 'go' },
+    ],
+  },
+  {
     id: 'killer-new',
     label: 'Киллер',
     games: ['killer-sudoku'],
@@ -141,6 +150,7 @@ export function pickStories({ visible, rated = false, seen = [], week = null }) 
 
 /** Что показать баннером «Новая игра»: первая видимая игроку из списка (новые — выше). */
 export const NEW_GAMES = [
+  { id: 'go', text: 'Против бота или вдвоём, 9×9–19×19' },
   { id: 'killer-sudoku', text: 'Суммы в группах, подсказки с объяснением' },
   { id: 'pinball', text: 'Миссии и звания, как в Windows XP' },
   { id: 'klondike', text: 'Только решаемые раскладки' },

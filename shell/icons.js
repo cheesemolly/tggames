@@ -36,6 +36,10 @@ export const GAME_ICONS = {
     + '<path d="M9.2 11.5 5 8.5 3.5 4.5M8.8 13.5H4.5L2.5 11M9.2 15.5 5.5 18.5 4.5 21.5M14.8 11.5 19 8.5l1.5-4M15.2 13.5h4.3l2-2.5M14.8 15.5l3.7 3 1 3"/>'),
   match3: svg('<circle cx="6" cy="7" r="3"/><circle cx="12" cy="7" r="3"/><circle cx="18" cy="7" r="3"/>'
     + '<path d="M9 14.5 12 12l3 2.5-3 5.5Z"/><path d="M3.5 17h5M15.5 17h5" opacity="0.5"/>'),
+  // го: сетка, чёрный и белый камни
+  go: svg('<path d="M3 7h18M3 12h18M3 17h18M7 3v18M12 3v18M17 3v18" opacity="0.45"/>'
+    + '<circle cx="12" cy="7" r="3.3" fill="currentColor" stroke="none"/><circle cx="7" cy="12" r="3.3" fill="currentColor" stroke="none"/>'
+    + '<circle cx="17" cy="12" r="3.1"/><circle cx="12" cy="17" r="3.1"/>'),
   tictactoe: svg('<path d="M9 3v18M15 3v18M3 9h18M3 15h18" opacity="0.45"/><path d="m4.5 4.5 3 3m0-3-3 3"/><circle cx="12" cy="12" r="1.6"/><path d="m16.5 16.5 3 3m0-3-3 3"/>'),
   memory: svg('<rect x="3" y="4" width="8" height="10" rx="1.8"/><rect x="13" y="10" width="8" height="10" rx="1.8"/>'
     + '<path d="M5.5 7.5l3 3M8.5 7.5l-3 3" opacity="0.55"/><circle cx="17" cy="15" r="2.2" fill="currentColor" stroke="none"/>'),
