@@ -92,6 +92,7 @@ export const RULES = [
   ['game:connect-dots:stats', { type: 'fields', fields: { played: 'count', bestRound: 'max', rounds: 'count' } }],
   ['game:mahjong:stats', { type: 'fields', fields: { '*.played': 'count', '*.wins': 'count', '*.clean': 'count' } }],
   ['game:2048:stats', { type: 'fields', fields: { '*.played': 'count', '*.wins': 'count', '*.bestTile': 'max' } }],
+  ['game:rubik:stats', { type: 'fields', fields: { count: 'count', dnf: 'count', best: 'min', bestMoves: 'min', bestAo5: 'min', bestAo12: 'min' } }],
   ['game:fifteen:stats', { type: 'fields', fields: { '*.played': 'count', '*.wins': 'count', '*.totalMoves': 'count', '*.bestMoves': 'min', '*.bestTime': 'min' } }],
   ['game:boggle:stats', { type: 'fields', fields: { '*.played': 'count', '*.best': 'max', '*.bonus': 'count' } }],
   ['game:block-blast:stats', { type: 'fields', fields: {

@@ -38,6 +38,9 @@ export const GAME_ICONS = {
   fifteen: svg('<rect x="3.5" y="3.5" width="7.5" height="7.5" rx="1.8" fill="currentColor" stroke="none"/>'
     + '<rect x="13" y="3.5" width="7.5" height="7.5" rx="1.8"/><rect x="3.5" y="13" width="7.5" height="7.5" rx="1.8"/>'
     + '<rect x="13" y="13" width="7.5" height="7.5" rx="1.8" stroke-width="1.4" stroke-dasharray="2 1.7" opacity="0.6"/>'),
+  // кубик Рубика: куб в изометрии с сеткой на гранях
+  rubik: svg('<path d="M12 2.6 20.2 7.3v9.4L12 21.4l-8.2-4.7V7.3Z"/><path d="M3.8 7.3 12 12l8.2-4.7M12 12v9.4"/>'
+    + '<path d="M6.5 5.7l8.2 4.7M9.3 4.2l8.2 4.7M6.5 10.4v9.4M9.2 12v9.4M14.8 13.5v6.4M17.5 11.9v6.4" stroke-width="1.1" opacity="0.55"/>'),
   loop: svg('<path d="M5 19v-6.5A4.5 4.5 0 0 1 9.5 8H19"/><circle cx="5" cy="19" r="2.2"/><circle cx="19" cy="8" r="2.2"/>'),
   'connect-dots': svg('<circle cx="5.5" cy="6" r="2.4" fill="currentColor" stroke="none"/>'
     + '<circle cx="18.5" cy="18" r="2.4" fill="currentColor" stroke="none"/>'

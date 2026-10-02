@@ -1,0 +1,239 @@
+/*
+ * Кубик Рубика. Интерфейс — цвета темы Telegram; сам кубик рисует WebGL своими плоскими цветами (оформление —
+ * палитра в index.js, не CSS). Таймер — крупные цифры одинаковой ширины.
+ */
+
+[data-game="rubik"] {
+  --rb-bg: var(--tg-theme-bg-color);
+  --rb-surface: var(--tg-theme-secondary-bg-color);
+  --rb-text: var(--tg-theme-text-color);
+  --rb-hint: var(--tg-theme-hint-color);
+  --rb-accent: var(--tg-theme-button-color);
+  --rb-accent-text: var(--tg-theme-button-text-color);
+  --rb-inspect: #f59e0b;
+  --rb-final: #22c55e;
+  --toast-top: 210px;
+  --toast-bg: var(--rb-text);
+  --toast-fg: var(--rb-bg);
+}
+
+.game-root[data-game="rubik"] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+  background: var(--rb-bg);
+  color: var(--rb-text);
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+[data-game="rubik"] .btn { background: var(--rb-accent); color: var(--rb-accent-text); }
+[data-game="rubik"] .btn-secondary { background: var(--rb-bg); color: var(--rb-text); }
+
+[data-game="rubik"] .rb { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 6px; }
+[data-game="rubik"] .rb-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 4px; }
+[data-game="rubik"] .rb-head-text { min-width: 0; }
+[data-game="rubik"] .rb-title { font-size: 22px; font-weight: 800; line-height: 1.1; white-space: nowrap; }
+[data-game="rubik"] .rb-sub { font-size: 13px; color: var(--rb-hint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+[data-game="rubik"] .rb-actions { display: flex; gap: 6px; flex: none; }
+[data-game="rubik"] .rb-icon-btn {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: var(--rb-surface);
+  color: var(--rb-text);
+  font: inherit;
+  font-size: 16px;
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+[data-game="rubik"] .rb-icon-btn:active { transform: scale(0.92); }
+@media (max-width: 360px) {
+  [data-game="rubik"] .rb-icon-btn { width: 32px; height: 32px; }
+  [data-game="rubik"] .rb-title { font-size: 19px; }
+  [data-game="rubik"] .rb-actions { gap: 4px; }
+}
+
+/* таймер */
+[data-game="rubik"] .rb-timer { display: grid; justify-items: center; gap: 2px; }
+[data-game="rubik"] .rb-time {
+  font-size: 46px;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  transition: color 0.25s ease, opacity 0.25s ease;
+}
+[data-game="rubik"] .rb-time.rb-dim { opacity: 0.35; }
+[data-game="rubik"] .rb-time.rb-inspect { color: var(--rb-inspect); }
+[data-game="rubik"] .rb-time.rb-final { color: var(--rb-final); }
+[data-game="rubik"] .rb-meta { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; font-size: 12px; color: var(--rb-hint); }
+[data-game="rubik"] .rb-meta-item { display: inline-flex; gap: 5px; align-items: baseline; white-space: nowrap; }
+[data-game="rubik"] .rb-meta-item b { color: var(--rb-text); font-size: 14px; font-variant-numeric: tabular-nums; }
+
+/* перемешивание / решение */
+[data-game="rubik"] .rb-scramble {
+  min-height: 2.6em;
+  padding: 4px 8px;
+  border-radius: 10px;
+  background: var(--rb-surface);
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.3;
+  text-align: center;
+  word-spacing: 0.2em;
+}
+[data-game="rubik"] .rb-scramble:empty { visibility: hidden; }
+[data-game="rubik"] .rb-label { margin-right: 6px; font-family: inherit; color: var(--rb-hint); }
+[data-game="rubik"] .rb-mv { display: inline-block; min-width: 1.6em; transition: opacity 0.2s ease, color 0.2s ease; }
+[data-game="rubik"] .rb-mv.rb-done { opacity: 0.32; }
+
+/* кубик */
+[data-game="rubik"] .rb-stage {
+  position: relative;
+  flex: 1;
+  min-height: 160px;
+  touch-action: none;
+  cursor: grab;
+}
+[data-game="rubik"] .rb-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+[data-game="rubik"] .rb-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 6px;
+  max-width: calc(100% - 24px);
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--rb-surface) 92%, transparent);
+  color: var(--rb-hint);
+  font-size: 13px;
+  text-align: center;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, 6px);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+[data-game="rubik"] .rb-hint.rb-show { opacity: 1; transform: translate(-50%, 0); }
+
+/* инструменты */
+[data-game="rubik"] .rb-tools { display: grid; grid-template-columns: 1fr 1.25fr 1fr; gap: 8px; padding: 0 4px; }
+[data-game="rubik"] .rb-tool {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 11px 6px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--rb-surface);
+  color: var(--rb-text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.1s ease, opacity 0.2s ease;
+}
+[data-game="rubik"] .rb-tool span:last-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+[data-game="rubik"] .rb-tool:active { transform: scale(0.96); }
+[data-game="rubik"] .rb-tool:disabled { opacity: 0.45; cursor: default; }
+[data-game="rubik"] .rb-tool-icon { display: grid; flex: none; }
+[data-game="rubik"] .rb-primary { background: var(--rb-accent); color: var(--rb-accent-text); }
+[data-game="rubik"] .rb-primary.rb-wait .rb-tool-icon { animation: rb-spin 0.8s linear infinite; }
+@keyframes rb-spin { to { transform: rotate(360deg); } }
+@media (max-width: 380px) {
+  [data-game="rubik"] .rb-tool { flex-direction: column; gap: 2px; padding: 7px 4px; font-size: 12px; }
+  [data-game="rubik"] .rb-tool-icon svg { width: 20px; height: 20px; }
+}
+
+[data-game="rubik"] .rb-fx { position: absolute; inset: 0; z-index: 7; width: 100%; height: 100%; pointer-events: none; }
+
+/* ---------- окна ---------- */
+
+[data-game="rubik"] .rb-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  background: color-mix(in srgb, var(--rb-bg) 82%, transparent);
+}
+[data-game="rubik"] .rb-card {
+  width: 100%;
+  max-width: 380px;
+  max-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--rb-surface);
+  box-shadow: 0 8px 28px rgb(0 0 0 / 0.18);
+}
+[data-game="rubik"] .rb-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+[data-game="rubik"] .rb-card-head h2 { margin: 0; font-size: 18px; }
+[data-game="rubik"] .rb-card .rb-icon-btn { background: var(--rb-bg); }
+[data-game="rubik"] .rb-note { margin: 8px 0 0; font-size: 13px; line-height: 1.4; color: var(--rb-hint); }
+[data-game="rubik"] .rb-rules { font-size: 14px; color: var(--rb-text); }
+[data-game="rubik"] .rb-play { width: 100%; margin-top: 14px; }
+[data-game="rubik"] .rb-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
+[data-game="rubik"] .rb-section { margin: 16px 0 8px; font-size: 14px; }
+[data-game="rubik"] .rb-card-head + .rb-section { margin-top: 0; }
+
+[data-game="rubik"] .rb-skins { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 6px; }
+[data-game="rubik"] .rb-skin {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 6px 0;
+  border: 0;
+  border-radius: 12px;
+  background: none;
+  color: var(--rb-text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+[data-game="rubik"] .rb-skin[aria-checked="true"] { background: color-mix(in srgb, var(--rb-accent) 18%, transparent); box-shadow: inset 0 0 0 2px var(--rb-accent); }
+[data-game="rubik"] .rb-swatch { display: grid; }
+[data-game="rubik"] .rb-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+[data-game="rubik"] .rb-option {
+  padding: 9px 2px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--rb-bg);
+  color: var(--rb-text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+[data-game="rubik"] .rb-option[aria-checked="true"] { background: var(--rb-accent); color: var(--rb-accent-text); }
+[data-game="rubik"] .rb-toggle { display: flex; align-items: center; gap: 10px; margin-top: 14px; font-size: 14px; line-height: 1.3; cursor: pointer; }
+[data-game="rubik"] .rb-toggle input { flex: none; width: 20px; height: 20px; margin: 0; accent-color: var(--rb-accent); }
+
+[data-game="rubik"] .rb-stat-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 8px; text-align: center; }
+[data-game="rubik"] .rb-stat-tile { display: grid; gap: 2px; }
+[data-game="rubik"] .rb-stat-tile b { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; }
+[data-game="rubik"] .rb-stat-tile span { font-size: 12px; color: var(--rb-hint); }
+[data-game="rubik"] .rb-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+[data-game="rubik"] .rb-list li {
+  display: grid;
+  grid-template-columns: 2.2em 1fr auto;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--rb-bg);
+  font-variant-numeric: tabular-nums;
+}
+[data-game="rubik"] .rb-n { color: var(--rb-hint); font-size: 12px; }
+[data-game="rubik"] .rb-m { color: var(--rb-hint); font-size: 12px; }

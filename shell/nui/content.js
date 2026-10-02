@@ -9,6 +9,15 @@ import { digits, plural, placeOn } from './logic.js';
 
 export const STORIES = [
   {
+    id: 'rubik-new',
+    label: 'Кубик',
+    games: ['rubik'],
+    slides: [
+      { kicker: 'Новая игра', title: 'Кубик Рубика', text: 'Свайп по наклейкам поворачивает слой, мимо кубика — весь кубик. Перемешай — время пойдёт с первого поворота.' },
+      { kicker: 'Совет', title: 'Не знаешь, как собрать?', text: '«Собрать» покажет решение по ходам — следи за подсвеченными буквами и повторяй.', play: 'rubik' },
+    ],
+  },
+  {
     id: 'fifteen-new',
     label: 'Пятнашки',
     games: ['fifteen'],
@@ -177,6 +186,7 @@ export function pickStories({ visible, rated = false, seen = [], week = null }) 
 
 /** Что показать баннером «Новая игра»: первая видимая игроку из списка (новые — выше). */
 export const NEW_GAMES = [
+  { id: 'rubik', text: 'На время, перемешивание как на соревнованиях' },
   { id: 'fifteen', text: 'Свайпы как в 2048, поля 3×3–8×8' },
   { id: 'nonogram', text: '100 картинок, от 5×5 до 20×20' },
   { id: 'minesweeper', text: 'Без угадываний, от 9×9 до 16×30' },

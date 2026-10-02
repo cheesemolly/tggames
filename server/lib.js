@@ -186,6 +186,7 @@ export const GAMES = [
   { id: 'nonogram', title: 'Японский кроссворд', emoji: '🖼️', about: 'нонограмма: закрашивай клетки по числам — получится картинка, 100 уровней' },
   { id: 'minesweeper', title: 'Сапёр', emoji: '💣', about: 'открой поле и не наступи на мину: от 9×9 до 16×30, есть режим без угадываний' },
   { id: 'fifteen', title: 'Пятнашки', emoji: '🔀', about: 'собери плитки по порядку: свайпы как в 2048, поля от 3×3 до 8×8', beta: true },
+  { id: 'rubik', title: 'Кубик Рубика', emoji: '🧊', about: 'собери кубик 3×3 на время: перемешивание как на соревнованиях, среднее из 5', beta: true },
   { id: 'wordle', title: 'Wordle', emoji: '🟩', about: 'угадай слово из пяти букв: русский, украинский, английский', best: false },
   { id: 'memory', title: 'Мемори', emoji: '🃏', about: 'найди пары одинаковых карточек' },
   { id: 'bongo-cat', title: 'Bongo Cat', emoji: '🐱', about: 'кот играет на инструментах, разучи мелодию' },
@@ -411,6 +412,7 @@ export const BOARDS = {
   nonogram: { by: 'решённые картинки', score: nonogramSolved, text: count(['картинка', 'картинки', 'картинок']) },
   minesweeper: { by: 'разминированные поля', score: shellStats('minesweeper', 'wins'), text: count(['поле', 'поля', 'полей']) },
   fifteen: { by: 'собранные поля', score: shellStats('fifteen', 'wins'), text: count(['поле', 'поля', 'полей']) },
+  rubik: { by: 'собранные кубики', score: shellStats('rubik', 'wins'), text: count(['кубик', 'кубика', 'кубиков']) },
   wordle: { by: 'угаданные слова', score: shellStats('wordle', 'wins'), text: count(['слово', 'слова', 'слов']) },
   memory: { by: 'уровень', score: menuLevel('memory'), text: levelText },
   'bongo-cat': { by: 'ударов за всё время', score: gameStats('bongo-cat', 'hits'), text: count(['удар', 'удара', 'ударов']) },
@@ -445,10 +447,11 @@ export const BOARD_LIMITS = {
   go: 1e5,
   minesweeper: 1e6,
   fifteen: 1e6,
+  rubik: 1e6,
   nonogram: 100,              // уровней в игре 100
 };
 // побед не может быть больше сыгранных партий
-const WINS_FROM = { checkers: 'checkers', mahjong: 'mahjong', sudoku: 'sudoku', wordle: 'wordle', tictactoe: 'tictactoe', chess: 'chess', spider: 'spider', klondike: 'klondike', 'killer-sudoku': 'killer-sudoku', go: 'go', minesweeper: 'minesweeper', fifteen: 'fifteen' };
+const WINS_FROM = { checkers: 'checkers', mahjong: 'mahjong', sudoku: 'sudoku', wordle: 'wordle', tictactoe: 'tictactoe', chess: 'chess', spider: 'spider', klondike: 'klondike', 'killer-sudoku': 'killer-sudoku', go: 'go', minesweeper: 'minesweeper', fifteen: 'fifteen', rubik: 'rubik' };
 
 function plausible(id, value, state) {
   if (value > (BOARD_LIMITS[id] ?? MAX_SCORE)) return false;

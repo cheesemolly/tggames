@@ -135,6 +135,13 @@ export const games = [
     menu: { best: false, progress: 'append' },           // «Сыграно · Побед · Лучшее 4×4: 1:23»
   },
   {
+    id: 'rubik',
+    title: 'Кубик Рубика',
+    load: () => import('../games/rubik/index.js'),
+    css: new URL('../games/rubik/game.css', import.meta.url),
+    menu: { best: false, progress: 'append' },           // «Сыграно · Побед · Лучшее: 23.45»
+  },
+  {
     id: 'wordle',
     title: 'Wordle',
     load: () => import('../games/wordle/index.js'),
