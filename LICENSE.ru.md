@@ -56,6 +56,11 @@ Copyright (c) 2026 cheesemolly (https://github.com/cheesemolly). Все прав
   Project Authors), SIL Open Font License 1.1, см. `styles/fonts/OFL-press-start-2p.txt`;
 - `styles/fonts/golos-text-*.woff2` — шрифт «Golos Text» (Copyright 2019 The Golos Text Project Authors,
   https://github.com/googlefonts/golos-text), SIL Open Font License 1.1, см. `styles/fonts/OFL-golos-text.txt`;
+- `games/nonogram/levels.js` — картинки уровней «Вкусное» сделаны из набора «16x16 Food»
+  (ARoachIFoundOnMyPillow, https://opengameart.org/content/16x16-food), CC0 1.0; «Зверята» — из «Tiny Creatures»
+  (Clint Bellanger, https://clintbellanger.net), CC0 1.0; «Эмодзи» и «Большие картинки» — из Microsoft Fluent Emoji
+  (https://github.com/microsoft/fluentui-emoji), Copyright (c) Microsoft Corporation, лицензия MIT, см.
+  `games/nonogram/LICENSE-fluent-emoji.txt`. Картинки уменьшены до сеток головоломки; рисунки «Разминки» — свои;
 - скрипт Telegram Web App загружается с telegram.org во время работы и не входит в репозиторий.
 
 Правила и механики известных игровых жанров (2048, судоку, маджонг-пасьянс, шашки, шахматы, игры со словами

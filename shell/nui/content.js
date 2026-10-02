@@ -9,6 +9,15 @@ import { digits, plural, placeOn } from './logic.js';
 
 export const STORIES = [
   {
+    id: 'nonogram-new',
+    label: 'Кроссворд',
+    games: ['nonogram'],
+    slides: [
+      { kicker: 'Новая игра', title: 'Японский кроссворд', text: 'Числа у строк и столбцов — сколько клеток подряд закрашено. Закрашивай по логике — получится картинка. 100 уровней.' },
+      { kicker: 'Совет', title: 'Начни с больших чисел', text: 'Если число больше половины строки — середина точно закрашена. Крестиком отмечай то, что точно пусто.', play: 'nonogram' },
+    ],
+  },
+  {
     id: 'minesweeper-new',
     label: 'Сапёр',
     games: ['minesweeper'],
@@ -159,6 +168,7 @@ export function pickStories({ visible, rated = false, seen = [], week = null }) 
 
 /** Что показать баннером «Новая игра»: первая видимая игроку из списка (новые — выше). */
 export const NEW_GAMES = [
+  { id: 'nonogram', text: '100 картинок, от 5×5 до 20×20' },
   { id: 'minesweeper', text: 'Без угадываний, от 9×9 до 16×30' },
   { id: 'go', text: 'Против бота или вдвоём, 9×9–19×19' },
   { id: 'killer-sudoku', text: 'Суммы в группах, подсказки с объяснением' },

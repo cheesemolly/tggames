@@ -114,6 +114,13 @@ export const games = [
     css: new URL('../games/killer-sudoku/game.css', import.meta.url),
   },
   {
+    id: 'nonogram',
+    title: 'Японский кроссворд',
+    load: () => import('../games/nonogram/index.js'),
+    css: new URL('../games/nonogram/game.css', import.meta.url),
+    menu: { progress: 'replace' },                       // «Решено: 12 из 100»
+  },
+  {
     id: 'minesweeper',
     title: 'Сапёр',
     load: () => import('../games/minesweeper/index.js'),

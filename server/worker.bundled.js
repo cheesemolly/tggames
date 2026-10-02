@@ -187,6 +187,7 @@ const GAMES = [
   { id: 'block-blast', title: 'Block Blast', emoji: '🟦', about: 'ставь фигуры, собирай линии' },
   { id: 'sudoku', title: 'Судоку', emoji: '🧩', about: 'классика 9×9, четыре сложности и подсказки' },
   { id: 'killer-sudoku', title: 'Судоку-киллер', emoji: '➕', about: 'судоку с суммами: цифры группы складываются в число в её углу', beta: true },
+  { id: 'nonogram', title: 'Японский кроссворд', emoji: '🖼️', about: 'нонограмма: закрашивай клетки по числам — получится картинка, 100 уровней', beta: true },
   { id: 'minesweeper', title: 'Сапёр', emoji: '💣', about: 'открой поле и не наступи на мину: от 9×9 до 16×30, есть режим без угадываний', beta: true },
   { id: 'wordle', title: 'Wordle', emoji: '🟩', about: 'угадай слово из пяти букв: русский, украинский, английский', best: false },
   { id: 'memory', title: 'Мемори', emoji: '🃏', about: 'найди пары одинаковых карточек' },
@@ -384,6 +385,13 @@ function match3Levels(state) {
   return list.slice(0, 100).reduce((sum, v) => sum + (Number(v) > 0 ? 1 : 0), 0);
 }
 
+/** Решённые картинки японского кроссворда: game:nonogram:progress.done — 100 отметок 0/1/2 (2 — чисто). */
+function nonogramSolved(state) {
+  const list = state?.['game:nonogram:progress']?.done;
+  if (!Array.isArray(list)) return null;
+  return list.slice(0, 100).reduce((sum, v) => sum + (Number(v) > 0 ? 1 : 0), 0);
+}
+
 const POINTS = count(['очко', 'очка', 'очков']);
 const WINS = count(['победа', 'победы', 'побед']);
 
@@ -403,6 +411,7 @@ const BOARDS = {
   'block-blast': { by: 'рекорд', score: shellStats('block-blast', 'best'), text: POINTS },
   sudoku: { by: 'решённые судоку', score: shellStats('sudoku', 'wins'), text: count(['судоку', 'судоку', 'судоку']) },
   'killer-sudoku': { by: 'решённые судоку', score: shellStats('killer-sudoku', 'wins'), text: count(['судоку', 'судоку', 'судоку']) },
+  nonogram: { by: 'решённые картинки', score: nonogramSolved, text: count(['картинка', 'картинки', 'картинок']) },
   minesweeper: { by: 'разминированные поля', score: shellStats('minesweeper', 'wins'), text: count(['поле', 'поля', 'полей']) },
   wordle: { by: 'угаданные слова', score: shellStats('wordle', 'wins'), text: count(['слово', 'слова', 'слов']) },
   memory: { by: 'уровень', score: menuLevel('memory'), text: levelText },
@@ -437,6 +446,7 @@ const BOARD_LIMITS = {
   'killer-sudoku': 1e5,
   go: 1e5,
   minesweeper: 1e6,
+  nonogram: 100,              // уровней в игре 100
 };
 // побед не может быть больше сыгранных партий
 const WINS_FROM = { checkers: 'checkers', mahjong: 'mahjong', sudoku: 'sudoku', wordle: 'wordle', tictactoe: 'tictactoe', chess: 'chess', spider: 'spider', klondike: 'klondike', 'killer-sudoku': 'killer-sudoku', go: 'go', minesweeper: 'minesweeper' };
@@ -703,6 +713,8 @@ const RULES = [
     ...COUNT4('*.*.'), 'friend.played': 'count', 'friend.black': 'count', 'friend.white': 'count', bestStreak: 'max',
   } }],
   ['game:spider:stats', { type: 'fields', fields: CARDS }],
+  // японский кроссворд: решён — максимум (0/1/2), лучшее время — минимум без нуля
+  ['game:nonogram:progress', { type: 'fields', fields: { 'done.*': 'max', 'best.*': 'min' } }],
   ['game:minesweeper:stats', { type: 'fields', fields: {
     '*.played': 'count', '*.wins': 'count', '*.best': 'min', '*.bestNg': 'min', '*.bestStreak': 'max',
   } }],

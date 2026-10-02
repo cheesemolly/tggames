@@ -114,6 +114,8 @@ export const RULES = [
     ...COUNT4('*.*.'), 'friend.played': 'count', 'friend.black': 'count', 'friend.white': 'count', bestStreak: 'max',
   } }],
   ['game:spider:stats', { type: 'fields', fields: CARDS }],
+  // японский кроссворд: решён — максимум (0/1/2), лучшее время — минимум без нуля
+  ['game:nonogram:progress', { type: 'fields', fields: { 'done.*': 'max', 'best.*': 'min' } }],
   ['game:minesweeper:stats', { type: 'fields', fields: {
     '*.played': 'count', '*.wins': 'count', '*.best': 'min', '*.bestNg': 'min', '*.bestStreak': 'max',
   } }],

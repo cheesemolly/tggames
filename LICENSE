@@ -51,6 +51,12 @@ These are not owned by the copyright holder; their own licenses and notices appl
   - styles/fonts/golos-text-*.woff2 — the "Golos Text" font (Copyright 2019 The Golos Text Project
     Authors, https://github.com/googlefonts/golos-text), SIL Open Font License 1.1,
     see styles/fonts/OFL-golos-text.txt.
+  - games/nonogram/levels.js — the pictures of the "Вкусное" levels are derived from "16x16 Food" by
+    ARoachIFoundOnMyPillow (https://opengameart.org/content/16x16-food), CC0 1.0; the "Зверята" levels — from
+    "Tiny Creatures" by Clint Bellanger (https://clintbellanger.net), CC0 1.0; the "Эмодзи" and "Большие
+    картинки" levels — from Microsoft Fluent Emoji (https://github.com/microsoft/fluentui-emoji),
+    Copyright (c) Microsoft Corporation, MIT License, see games/nonogram/LICENSE-fluent-emoji.txt. The pictures
+    were reduced to puzzle grids; the "Разминка" pictures are original.
   - The Telegram Web App script is loaded from telegram.org at runtime and is not part of this
     repository.
 

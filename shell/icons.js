@@ -24,6 +24,12 @@ export const GAME_ICONS = {
   'killer-sudoku': svg('<rect x="3" y="3" width="18" height="18" rx="3"/>'
     + '<path d="M11.5 7H17v10H7v-5.5" stroke-width="1.6" stroke-dasharray="2 1.8"/>'
     + '<path d="M8.2 5.9v4.6M5.9 8.2h4.6" stroke-width="1.8"/>'),
+  // японский кроссворд: сетка с числами сверху и слева, закрашенные клетки
+  nonogram: svg('<rect x="8" y="8" width="13" height="13" rx="2"/><path d="M8 12.3h13M8 16.6h13M12.3 8v13M16.6 8v13" opacity="0.45"/>'
+    + '<rect x="8.6" y="12.9" width="3.1" height="3.1" fill="currentColor" stroke="none"/>'
+    + '<rect x="12.9" y="12.9" width="3.1" height="3.1" fill="currentColor" stroke="none"/>'
+    + '<rect x="12.9" y="17.2" width="3.1" height="3.1" fill="currentColor" stroke="none"/>'
+    + '<path d="M3.2 13.5h2.2M3.2 18h2.2M13.6 3.2v2.2M18 3.2v2.2" stroke-width="1.8"/>'),
   // сапёр: мина с шипами и флажок рядом
   minesweeper: svg('<circle cx="10" cy="14" r="4.6" fill="currentColor" stroke="none"/>'
     + '<path d="M10 7v2.2M10 18.8V21M3 14h2.2M14.8 14H17M5.1 9.1l1.6 1.6M13.3 17.3l1.6 1.6M5.1 18.9l1.6-1.6M13.3 10.7l1.6-1.6"/>'
