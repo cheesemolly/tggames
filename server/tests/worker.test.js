@@ -291,7 +291,7 @@ test('инлайн: пустой запрос — приглашение и вс
   assert.equal(res.is_personal, true);
   assert.equal(res.results[0].id, 'all', 'первым — «позвать играть»');
   const games = res.results.filter((r) => r.id.startsWith('g:'));
-  assert.equal(games.length, 23);
+  assert.equal(games.length, 27);
   for (const r of res.results) {
     const btn = r.reply_markup.inline_keyboard[0][0];
     assert.equal(btn.web_app, undefined, 'web_app в чужих чатах запрещён');
@@ -314,7 +314,7 @@ test('инлайн: поиск игры по названию и свои рек
   });
 
   const found = await inline(env, USER.id, 'судо');
-  assert.deepEqual(found.results.map((r) => r.id), ['g:sudoku']);
+  assert.deepEqual(found.results.map((r) => r.id), ['g:sudoku', 'g:killer-sudoku']);
   const byWord = await inline(env, USER.id, 'точки');
   assert.deepEqual(byWord.results.map((r) => r.id), ['g:connect-dots'], 'по любому слову названия');
   const none = await inline(env, USER.id, 'бильярд');

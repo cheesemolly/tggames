@@ -116,7 +116,7 @@ test('список игр бота совпадает с реестром мин
 });
 
 test('поиск игр: начало названия, слово названия, ё = е', () => {
-  assert.deepEqual(findGames('суд').map((g) => g.id), ['sudoku']);
+  assert.deepEqual(findGames('суд').map((g) => g.id), ['sudoku', 'killer-sudoku']);
   assert.deepEqual(findGames('СЛОВ').map((g) => g.id), ['words'], 'регистр не важен');
   assert.deepEqual(findGames('blast').map((g) => g.id), ['brick-blast', 'block-blast'], 'второе слово');
   assert.equal(findGames('').length, GAMES.filter((g) => !g.beta).length, 'игры в бете бот игрокам не показывает');
