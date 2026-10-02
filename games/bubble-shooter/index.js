@@ -1069,7 +1069,10 @@ function endGame(outcome) {
     return;
   }
   sfx('lose');
-  api.storage.remove('current');
+  // бета 'bubble-keep-level' (владелец, 2026-10-02: «был на 30-м, проиграл — стал 1-й»): после проигрыша — тот же
+  // уровень заново, а не первый; раньше сохранение стиралось, и «Ещё раз» начинал с 1-го
+  if (api.feature('bubble-keep-level')) api.storage.set('current', newLevel(game.level));
+  else api.storage.remove('current');
   api.finish({
     outcome: 'lose',
     title: T.resultLose,

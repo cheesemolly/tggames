@@ -24,6 +24,7 @@ const T = {
   score: 'Очки',
   fuel: 'Топливо',
   pause: 'Пауза',
+  nudge: 'Толчок стола',
   resume: 'Продолжить',
   newGame: 'Новая игра',
   howTo: 'Как играть',
@@ -53,6 +54,8 @@ const strokeIcon = (body) => '<svg viewBox="0 0 24 24" width="22" height="22" ar
 const ICON_SOUND_ON = strokeIcon('<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/>');
 const ICON_SOUND_OFF = strokeIcon('<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="m16 9 5 6"/><path d="m21 9-5 6"/>');
 const ICON_PAUSE = strokeIcon('<path d="M9 5v14"/><path d="M15 5v14"/>');
+// толчок стола: рамка стола и дуги «тряски» по бокам
+const ICON_NUDGE = strokeIcon('<rect x="7" y="4" width="10" height="16" rx="2"/><path d="M4 9c-1 2-1 4 0 6"/><path d="M20 9c1 2 1 4 0 6"/>');
 
 const HOLD_TIME = 1.5;             // с — пружина от нуля до полной
 const PLUNGE_MIN = 900;            // скорость запуска: слабый…полный
@@ -749,7 +752,10 @@ function onPointerMove(e) {
   if (!p || p.nudged || p.kind !== 'flip') return;
   const dy = e.clientY - p.y0;
   const dx = e.clientX - p.x0;
-  if (dy < -70 && performance.now() - p.t0 < 300) {
+  // бета 'pinball-nudge' (владелец, 2026-10-02: «на телефоне нельзя делать толчок»): взмах мягче — 45 px за 0,45 с
+  // (было 70 px за 0,3 с: пальцем, который держит флиппер, так резко почти не выходит); и кнопка в панели
+  const soft = api.feature('pinball-nudge');
+  if (dy < (soft ? -45 : -70) && performance.now() - p.t0 < (soft ? 450 : 300)) {
     p.nudged = true;
     nudge(dx < -30 ? -1 : dx > 30 ? 1 : 0);
   }
@@ -922,7 +928,7 @@ function showHowTo() {
     el('span', {}, ids.map((id) => R.MISSIONS[id].name).join(' · '))));
   openModal(dialog(T.howTo,
     el('h3', { class: 'pb-section' }, 'Управление'),
-    p('Левая половина экрана — левый флиппер, правая — правый. Пока шарик на пружине, держи правую половину: чем дольше, тем сильнее запуск. Взмах пальцем вверх — толчок стола, но часто толкать нельзя — будет наклон.'),
+    p(`Левая половина экрана — левый флиппер, правая — правый. Пока шарик на пружине, держи правую половину: чем дольше, тем сильнее запуск. ${api.feature('pinball-nudge') ? 'Толчок стола — кнопка вверху (рамка стола) или быстрый взмах пальцем вверх' : 'Взмах пальцем вверх — толчок стола'}, но часто толкать нельзя — будет наклон.`),
     p('Клавиатура: Z и / — флипперы, пробел — пружина, X, точка и ↑ — толчок, Esc — пауза.'),
     el('h3', { class: 'pb-section' }, 'Миссии и звания'),
     p('Сбей зелёную мишень миссии слева — загорится миссия; въезд на рампу запуска её принимает. Выполненная миссия даёт очки и огни звания: 18 огней вокруг колодца — повышение. Миссия идёт, пока есть топливо: заправка — топливные дорожки и мишени слева вверху, бонусная дорожка и запуск.'),
@@ -995,6 +1001,17 @@ function buildUi() {
   const soundBtn = el('button', { class: 'pb-icon-btn', onclick: toggleSound });
   const pauseBtn = el('button', { class: 'pb-icon-btn', 'aria-label': T.pause, title: T.pause, onclick: showMenu });
   pauseBtn.innerHTML = ICON_PAUSE;
+  // кнопка «Толчок» (бета 'pinball-nudge'): на телефоне — понятный способ толкнуть стол; срабатывает на нажатие
+  const nudgeBtn = api.feature('pinball-nudge') && el('button', {
+    class: 'pb-icon-btn pb-nudge-btn', 'aria-label': T.nudge, title: T.nudge,
+    onpointerdown: (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      audio.get();
+      nudge(0);
+    },
+  });
+  if (nudgeBtn) nudgeBtn.innerHTML = ICON_NUDGE;
   const score = el('div', { class: 'pb-score' }, '0');
   const balls = el('div', { class: 'pb-balls' });
   const rank = el('div', { class: 'pb-rank' });
@@ -1006,7 +1023,7 @@ function buildUi() {
   const hud = el('div', { class: 'pb-hud' },
     el('div', { class: 'pb-hud-top' },
       el('div', { class: 'pb-score-box' }, score, el('div', { class: 'pb-sub' }, balls, rank, mult)),
-      el('div', { class: 'pb-btns' }, soundBtn, pauseBtn),
+      el('div', { class: 'pb-btns' }, nudgeBtn, soundBtn, pauseBtn),
     ),
     el('div', { class: 'pb-hud-bottom' }, mission, el('div', { class: 'pb-fuel-box' }, el('span', {}, T.fuel), fuel)),
   );

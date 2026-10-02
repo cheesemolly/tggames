@@ -28,10 +28,13 @@ import { renderProfile, renderNoRating, streakSheet } from './nui/profile.js';
 import { tabBar, skeleton } from './nui/ui.js';
 import { installAudioGate, applyPrefs, DEFAULT_PREFS } from './nui/prefs.js';
 import { markVisit, noteOpened } from './nui/store.js';
+import { installMouseDrag } from './nui/drag.js';
 
 const root = document.getElementById('app');
 // ряды игр и баннеры нового интерфейса листаются вбок — там палец не гасим
 lockPageScroll(document, { horizontal: () => nuiOn() });
+// ряды вбок — перетаскиванием мышью на компьютере (бета 'mouse-drag')
+installMouseDrag(document, () => nuiOn() && feature('mouse-drag'));
 let session = null;
 
 const toast = createToast();
