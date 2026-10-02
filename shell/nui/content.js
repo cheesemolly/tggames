@@ -9,6 +9,15 @@ import { digits, plural, placeOn } from './logic.js';
 
 export const STORIES = [
   {
+    id: 'minesweeper-new',
+    label: 'Сапёр',
+    games: ['minesweeper'],
+    slides: [
+      { kicker: 'Новая игра', title: 'Сапёр', text: 'Цифра — сколько мин вокруг клетки. Открой всё, кроме мин. Первый ход всегда безопасен.' },
+      { kicker: 'Совет', title: 'Без угадываний', text: 'В этом режиме каждое поле решается логикой: если кажется, что надо угадывать, — посмотри на соседние цифры ещё раз или возьми подсказку.', play: 'minesweeper' },
+    ],
+  },
+  {
     id: 'go-new',
     label: 'Го',
     games: ['go'],
@@ -150,6 +159,7 @@ export function pickStories({ visible, rated = false, seen = [], week = null }) 
 
 /** Что показать баннером «Новая игра»: первая видимая игроку из списка (новые — выше). */
 export const NEW_GAMES = [
+  { id: 'minesweeper', text: 'Без угадываний, от 9×9 до 16×30' },
   { id: 'go', text: 'Против бота или вдвоём, 9×9–19×19' },
   { id: 'killer-sudoku', text: 'Суммы в группах, подсказки с объяснением' },
   { id: 'pinball', text: 'Миссии и звания, как в Windows XP' },

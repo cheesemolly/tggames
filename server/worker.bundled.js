@@ -187,6 +187,7 @@ const GAMES = [
   { id: 'block-blast', title: 'Block Blast', emoji: '🟦', about: 'ставь фигуры, собирай линии' },
   { id: 'sudoku', title: 'Судоку', emoji: '🧩', about: 'классика 9×9, четыре сложности и подсказки' },
   { id: 'killer-sudoku', title: 'Судоку-киллер', emoji: '➕', about: 'судоку с суммами: цифры группы складываются в число в её углу', beta: true },
+  { id: 'minesweeper', title: 'Сапёр', emoji: '💣', about: 'открой поле и не наступи на мину: от 9×9 до 16×30, есть режим без угадываний', beta: true },
   { id: 'wordle', title: 'Wordle', emoji: '🟩', about: 'угадай слово из пяти букв: русский, украинский, английский', best: false },
   { id: 'memory', title: 'Мемори', emoji: '🃏', about: 'найди пары одинаковых карточек' },
   { id: 'bongo-cat', title: 'Bongo Cat', emoji: '🐱', about: 'кот играет на инструментах, разучи мелодию' },
@@ -402,6 +403,7 @@ const BOARDS = {
   'block-blast': { by: 'рекорд', score: shellStats('block-blast', 'best'), text: POINTS },
   sudoku: { by: 'решённые судоку', score: shellStats('sudoku', 'wins'), text: count(['судоку', 'судоку', 'судоку']) },
   'killer-sudoku': { by: 'решённые судоку', score: shellStats('killer-sudoku', 'wins'), text: count(['судоку', 'судоку', 'судоку']) },
+  minesweeper: { by: 'разминированные поля', score: shellStats('minesweeper', 'wins'), text: count(['поле', 'поля', 'полей']) },
   wordle: { by: 'угаданные слова', score: shellStats('wordle', 'wins'), text: count(['слово', 'слова', 'слов']) },
   memory: { by: 'уровень', score: menuLevel('memory'), text: levelText },
   'bongo-cat': { by: 'ударов за всё время', score: gameStats('bongo-cat', 'hits'), text: count(['удар', 'удара', 'ударов']) },
@@ -434,9 +436,10 @@ const BOARD_LIMITS = {
   pinball: 1e9,
   'killer-sudoku': 1e5,
   go: 1e5,
+  minesweeper: 1e6,
 };
 // побед не может быть больше сыгранных партий
-const WINS_FROM = { checkers: 'checkers', mahjong: 'mahjong', sudoku: 'sudoku', wordle: 'wordle', tictactoe: 'tictactoe', chess: 'chess', spider: 'spider', klondike: 'klondike', 'killer-sudoku': 'killer-sudoku', go: 'go' };
+const WINS_FROM = { checkers: 'checkers', mahjong: 'mahjong', sudoku: 'sudoku', wordle: 'wordle', tictactoe: 'tictactoe', chess: 'chess', spider: 'spider', klondike: 'klondike', 'killer-sudoku': 'killer-sudoku', go: 'go', minesweeper: 'minesweeper' };
 
 function plausible(id, value, state) {
   if (value > (BOARD_LIMITS[id] ?? MAX_SCORE)) return false;
@@ -700,6 +703,9 @@ const RULES = [
     ...COUNT4('*.*.'), 'friend.played': 'count', 'friend.black': 'count', 'friend.white': 'count', bestStreak: 'max',
   } }],
   ['game:spider:stats', { type: 'fields', fields: CARDS }],
+  ['game:minesweeper:stats', { type: 'fields', fields: {
+    '*.played': 'count', '*.wins': 'count', '*.best': 'min', '*.bestNg': 'min', '*.bestStreak': 'max',
+  } }],
   ['game:klondike:stats', { type: 'fields', fields: CARDS }],
   ['game:match3:progress', { type: 'fields', fields: {
     'done.*': 'max',

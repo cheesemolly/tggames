@@ -326,7 +326,8 @@ async function cases() {
   const everyBucket = (m) => (v) => Object.values(v).every((s) => m.isValidStats(s));
   const g = {};
   for (const id of ['flags', 'checkers', 'flappy-burger', 'bongo-cat', 'snake', 'memory', 'bubble-shooter', 'brick-blast',
-    'loop', 'connect-dots', 'mahjong', '2048', 'boggle', 'block-blast', 'sudoku', 'tictactoe', 'wordle', 'chess', 'spider', 'klondike']) {
+    'loop', 'connect-dots', 'mahjong', '2048', 'boggle', 'block-blast', 'sudoku', 'tictactoe', 'wordle', 'chess', 'spider', 'klondike',
+    'minesweeper']) {
     g[id] = await mod(id);
   }
   const pinball = await mod('pinball', 'rules.js');
@@ -353,6 +354,7 @@ async function cases() {
     ['game:spider:stats', g.spider.emptyStats(), g.spider.isValidStats],
     ['game:klondike:stats', g.klondike.emptyStats(), g.klondike.isValidStats],
     ['game:pinball:stats', pinball.emptyStats(), pinball.isValidStats],
+    ['game:minesweeper:stats', g.minesweeper.emptyStats(), g.minesweeper.isValidStats],
     ['game:match3:progress', { v: 2, done: Array(100).fill(0), boosters: { hammer: 3, row: 2, shuffle: 2, moves: 1 } },
       (v) => v.v === 2 && v.done.length === 100 && v.done.every((x) => x === 0 || x === 1)
         && ['hammer', 'row', 'shuffle', 'moves'].every((k) => Number.isInteger(v.boosters[k]) && v.boosters[k] >= 0)],

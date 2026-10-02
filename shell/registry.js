@@ -114,6 +114,13 @@ export const games = [
     css: new URL('../games/killer-sudoku/game.css', import.meta.url),
   },
   {
+    id: 'minesweeper',
+    title: 'Сапёр',
+    load: () => import('../games/minesweeper/index.js'),
+    css: new URL('../games/minesweeper/game.css', import.meta.url),
+    menu: { best: false, progress: 'append' },           // «Сыграно · Побед · Лучшее: 1:23 · средний»
+  },
+  {
     id: 'wordle',
     title: 'Wordle',
     load: () => import('../games/wordle/index.js'),

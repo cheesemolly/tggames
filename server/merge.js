@@ -114,6 +114,9 @@ export const RULES = [
     ...COUNT4('*.*.'), 'friend.played': 'count', 'friend.black': 'count', 'friend.white': 'count', bestStreak: 'max',
   } }],
   ['game:spider:stats', { type: 'fields', fields: CARDS }],
+  ['game:minesweeper:stats', { type: 'fields', fields: {
+    '*.played': 'count', '*.wins': 'count', '*.best': 'min', '*.bestNg': 'min', '*.bestStreak': 'max',
+  } }],
   ['game:klondike:stats', { type: 'fields', fields: CARDS }],
   ['game:match3:progress', { type: 'fields', fields: {
     'done.*': 'max',
