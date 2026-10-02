@@ -16,6 +16,7 @@ import { createWorld } from './physics.js';
 import { buildTable, W, BALL_R, PLUNGER_Y, LANE_X } from './table.js';
 import { createRenderer, SKINS } from './render.js';
 import * as R from './rules.js';
+import { missionHelp } from './help.js';
 
 const T = {
   title: 'Пинбол',
@@ -25,6 +26,8 @@ const T = {
   fuel: 'Топливо',
   pause: 'Пауза',
   nudge: 'Толчок стола',
+  missionHelp: 'Что делать в миссии',
+  gotIt: 'Понятно',
   resume: 'Продолжить',
   newGame: 'Новая игра',
   howTo: 'Как играть',
@@ -79,6 +82,7 @@ let lastTs = 0;
 let paused = false;
 let modalActive = false;
 let modalToken = 0;
+let helpShown = false;              // открыта подсказка миссии (перерисовать при изменении размера)
 let finished = false;
 let mode = 'plunger';              // plunger | play | ride | held | over
 let pull = 0;
@@ -817,8 +821,10 @@ function nudge(dir) {
 
 // ---------- окна ----------
 
-function openModal(content) {
+function openModal(content, { clear = false } = {}) {
   modalToken++;
+  helpShown = false;
+  ui.modal.classList.toggle('pb-clear', clear);    // подсказка миссии затемняет сама (с вырезами под элементы)
   ui.modal.replaceChildren(content);
   if (!modalActive) showLayer(ui.modal);
   modalActive = true;
@@ -830,6 +836,7 @@ function openModal(content) {
 function closeModal() {
   if (!modalActive) return;
   modalActive = false;
+  helpShown = false;
   const token = ++modalToken;
   hideLayer(ui.modal, () => token === modalToken).then(() => {
     if (ui && token === modalToken) ui.modal.replaceChildren();
@@ -921,6 +928,118 @@ function showStats() {
   ));
 }
 
+// ---------- подсказка миссии (бета 'pinball-mission-help') ----------
+
+const SVGNS = 'http://www.w3.org/2000/svg';
+const svgEl = (tag, attrs = {}) => {
+  const n = document.createElementNS(SVGNS, tag);
+  for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, String(v));
+  return n;
+};
+
+/** Фигура метки в координатах стола: круг или капсула вокруг отрезка. */
+function markShape(m, attrs) {
+  if (m.c) return svgEl('circle', { cx: m.c[0], cy: m.c[1], r: m.r, ...attrs });
+  const [ax, ay] = m.a;
+  const [bx, by] = m.b;
+  const l = Math.hypot(bx - ax, by - ay) || 1;
+  const nx = (-(by - ay) / l) * m.r;
+  const ny = ((bx - ax) / l) * m.r;
+  const d = `M${ax + nx} ${ay + ny}L${bx + nx} ${by + ny}A${m.r} ${m.r} 0 0 0 ${bx - nx} ${by - ny}`
+    + `L${ax - nx} ${ay - ny}A${m.r} ${m.r} 0 0 0 ${ax + nx} ${ay + ny}Z`;
+  return svgEl('path', { d, ...attrs });
+}
+
+/** Где на метке номер: справа сверху от круга, сбоку от середины капсулы. */
+function badgeAt(m) {
+  if (m.c) return [m.c[0] + m.r * 0.72, m.c[1] - m.r * 0.72];
+  const [ax, ay] = m.a;
+  const [bx, by] = m.b;
+  const l = Math.hypot(bx - ax, by - ay) || 1;
+  return [(ax + bx) / 2 - ((by - ay) / l) * (m.r + 6), (ay + by) / 2 + ((bx - ax) / l) * (m.r + 6)];
+}
+
+/** Слой подсказки: затемнение с вырезами под нужные элементы, их контуры с номерами и карточка с текстом. */
+function buildHelp() {
+  const h = missionHelp(g, table.elements);
+  const box = ui.root.getBoundingClientRect();
+  const cv = ui.canvas.getBoundingClientRect();
+  const s = cv.width / W;
+  const ox = cv.left - box.left;
+  const oy = cv.top - box.top;
+  const place = `translate(${ox} ${oy}) scale(${s})`;
+  const svg = svgEl('svg', { class: 'pb-help-svg', width: box.width, height: box.height, viewBox: `0 0 ${box.width} ${box.height}` });
+  const mask = svgEl('mask', { id: 'pb-help-mask', maskUnits: 'userSpaceOnUse', x: 0, y: 0, width: box.width, height: box.height });
+  mask.append(svgEl('rect', { x: 0, y: 0, width: box.width, height: box.height, fill: '#fff' }));
+  const holes = svgEl('g', { transform: place });
+  for (const m of h.marks) holes.append(markShape(m, { fill: '#000' }));
+  mask.append(holes);
+  const defs = svgEl('defs');
+  defs.append(mask);
+  svg.append(defs, svgEl('rect', { class: 'pb-help-dim', x: 0, y: 0, width: box.width, height: box.height, mask: 'url(#pb-help-mask)' }));
+  const marks = svgEl('g', { transform: place });
+  for (const m of h.marks) {
+    const tone = `pb-help-mark pb-tone-${m.tone ?? 'go'}`;
+    marks.append(markShape(m, { class: `${tone} pb-help-glow`, 'stroke-width': 14 / s }));
+    marks.append(markShape(m, { class: tone, 'stroke-width': 3 / s, 'stroke-dasharray': `${9 / s} ${6 / s}` }));
+  }
+  // номера не налезают друг на друга: на узком экране мишени миссий ближе, чем размер номера, — сдвигаем вправо
+  const gap = (2 * 13 + 3) / s;
+  const badges = [];
+  for (const m of h.marks) {
+    if (m.n == null) continue;
+    let [x, y] = badgeAt(m);
+    for (const p of badges) if (Math.abs(p.y - y) < gap && Math.abs(p.x - x) < gap) x = p.x + gap;
+    badges.push({ x, y, m });
+  }
+  for (const { x, y, m } of badges) {
+    const b = svgEl('g', { class: `pb-help-badge pb-tone-${m.tone ?? 'go'}` });
+    b.append(svgEl('circle', { cx: x, cy: y, r: 13 / s }));
+    const t = svgEl('text', { x, y, 'font-size': 15 / s, 'text-anchor': 'middle', 'dominant-baseline': 'central' });
+    t.textContent = String(m.n);
+    b.append(t);
+    marks.append(b);
+  }
+  svg.append(marks);
+  svg.addEventListener('click', closeModal);
+
+  // карточка — над или под отмеченным (где места больше), чтобы не закрывать то, куда бить
+  const ys = h.marks.flatMap((m) => (m.c ? [m.c[1] - m.r, m.c[1] + m.r] : [Math.min(m.a[1], m.b[1]) - m.r, Math.max(m.a[1], m.b[1]) + m.r]))
+    .map((y) => oy + y * s);
+  const above = Math.min(...ys) - 8;
+  const below = box.height - Math.max(...ys) - 8;
+  const top = above >= below;
+  // широкий экран: сбоку от стола хватает места — карточка там и ничего не закрывает
+  const side = box.right - cv.right - 20;
+  const where = side >= 240 ? 'pb-help-side' : top ? 'pb-help-top' : 'pb-help-bottom';
+  const card = el('div', { class: `pb-help-card ${where}`, role: 'dialog', 'aria-label': T.missionHelp },
+    el('b', { class: 'pb-help-title' }, h.title),
+    h.now && el('div', { class: 'pb-help-now' }, h.now),
+    h.steps && el('ol', { class: 'pb-help-steps' }, ...h.steps.map((st) => el('li', { class: `pb-${st.state}` }, st.text))),
+    ...h.lines.map((line) => el('p', {}, line)),
+    el('button', { class: 'btn pb-wide-btn', onclick: closeModal }, T.gotIt),
+  );
+  if (where === 'pb-help-side') {
+    card.style.left = `${cv.right - box.left + 12}px`;
+    card.style.maxHeight = `${box.height - 16}px`;
+  } else card.style.maxHeight = `${Math.max(top ? above : below, box.height * 0.42)}px`;
+  const frag = document.createDocumentFragment();
+  frag.append(card, svg);                       // карточка первой: showLayer «выдвигает» первый элемент
+  return frag;
+}
+
+function showMissionHelp() {
+  if (!g || !ui) return;
+  sfx('click');
+  if (!settings.helpSeen) {
+    settings.helpSeen = true;
+    api.storage.set('settings', settings);
+    ui.helpBtn?.classList.remove('pb-new');
+  }
+  openModal(buildHelp(), { clear: true });
+  helpShown = true;
+}
+
 function showHowTo() {
   const p = (text) => el('p', { class: 'pb-note' }, text);
   const tiers = R.TIERS.map((ids, k) => el('li', {},
@@ -994,6 +1113,7 @@ function onResize() {
   const scale = renderer.scale;
   ui.callout.style.setProperty('--pb-w', `${W * scale}px`);
   if (!raf) renderer.draw(view(), 0);
+  if (helpShown) ui.modal.replaceChildren(buildHelp());      // стол сдвинулся — метки тоже
 }
 
 function buildUi() {
@@ -1018,14 +1138,21 @@ function buildUi() {
   const mult = el('div', { class: 'pb-mult' }, '×1');
   const missionTitle = el('b', {});
   const missionText = el('span', {});
-  const mission = el('div', { class: 'pb-mission' }, missionTitle, missionText);
+  // «?» у миссии (бета 'pinball-mission-help'): обводит на столе, куда бить, и объясняет, что делать; панель миссии
+  // тоже открывает подсказку. Пока подсказку ни разу не открывали — «?» мягко светится.
+  const help = api.feature('pinball-mission-help');
+  const mission = el('div', { class: `pb-mission${help ? ' pb-mission-tap' : ''}`, onclick: help ? showMissionHelp : null }, missionTitle, missionText);
+  const helpBtn = help && el('button', {
+    class: `pb-icon-btn pb-help-btn${settings.helpSeen ? '' : ' pb-new'}`, 'aria-label': T.missionHelp, title: T.missionHelp,
+    onclick: showMissionHelp,
+  }, '?');
   const fuel = el('div', { class: 'pb-fuel', title: T.fuel });
   const hud = el('div', { class: 'pb-hud' },
     el('div', { class: 'pb-hud-top' },
       el('div', { class: 'pb-score-box' }, score, el('div', { class: 'pb-sub' }, balls, rank, mult)),
       el('div', { class: 'pb-btns' }, nudgeBtn, soundBtn, pauseBtn),
     ),
-    el('div', { class: 'pb-hud-bottom' }, mission, el('div', { class: 'pb-fuel-box' }, el('span', {}, T.fuel), fuel)),
+    el('div', { class: 'pb-hud-bottom' }, mission, helpBtn, el('div', { class: 'pb-fuel-box' }, el('span', {}, T.fuel), fuel)),
   );
   const callout = el('div', { class: 'pb-callout', 'aria-live': 'polite' });
   const touch = matchMedia?.('(pointer: coarse)').matches;
@@ -1033,7 +1160,7 @@ function buildUi() {
   const stage = el('div', { class: 'pb-stage' }, canvas, callout, hint);
   const modal = el('div', { class: 'pb-modal', hidden: true });
   const r = el('div', { class: 'pb' }, hud, stage, modal);
-  return { root: r, canvas, soundBtn, score, balls, rank, mult, mission, missionTitle, missionText, fuel, callout, hint, stage, modal };
+  return { root: r, canvas, soundBtn, helpBtn, score, balls, rank, mult, mission, missionTitle, missionText, fuel, callout, hint, stage, modal };
 }
 
 export default {
@@ -1106,6 +1233,7 @@ export default {
         get renderer() { return renderer; },
         view: () => view(),
         get quality() { return quality; },
+        help: () => showMissionHelp(),
       };
     }
     schedule();
