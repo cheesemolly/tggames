@@ -66,7 +66,12 @@ const bumper = (id, x, y, r, extra = {}) => {
 };
 
 /** Собрать стол: препятствия для physics.js и описание элементов для правил и рисования. */
-export function buildTable() {
+/**
+ * fixPlatform — платформа без ловушек (бета 'pinball-unstick', видео владельца 2026-10-02: шарик застревал в верхней
+ * дорожке платформы навсегда): верхние бамперы раздвинуты к стенкам, разделители дорожек короче, у поп-бамперов толчок
+ * с отклонением. false — как было (у игроков до релиза).
+ */
+export function buildTable({ fixPlatform = true } = {}) {
   colliders = [];
   const { cx, cy, r, rIn, exit } = TOP;
   const at = (rad, deg) => [cx + Math.cos((deg * Math.PI) / 180) * rad, cy + Math.sin((deg * Math.PI) / 180) * rad];
@@ -109,15 +114,18 @@ export function buildTable() {
   wall([...block, block[0]], { ...L1, kind: 'platform' });
   // разделители дорожек — без стоек на концах: со стойками проход между ними был уже шарика, и он застревал
   const laneGuides = [[150, 1010], [200, 1021]].map(([x, y]) => {
-    wall([[x, y], [x, y + 46]], { ...L1, kind: 'guide' });
-    return { x, y0: y, y1: y + 46 };
+    const len = fixPlatform ? 30 : 46;
+    wall([[x, y], [x, y + len]], { ...L1, kind: 'guide' });
+    return { x, y0: y, y1: y + len };
   });
   const launchLanes = [[128, 1052], [175, 1060], [221, 1068]].map(([x, y], k) => {
     sensorC(`launchLane${k}`, x, y, 14, L1);
     return { id: `launchLane${k}`, x, y };
   });
   // бамперы треугольником остриём вниз: между верхними и под ними шарик проходит (зазоры шире шарика)
-  const launchBumpers = [[140, 1108], [210, 1108], [175, 1170]].map(([x, y], k) => bumper(`lbump${k}`, x, y, 15, { kick: 480, ...L1 }));
+  // fixPlatform: верхние бамперы у стенок (под дорожками нет «кармана»: проход посередине широкий)
+  const lb = fixPlatform ? [[128, 1108], [222, 1108], [175, 1170]] : [[140, 1108], [210, 1108], [175, 1170]];
+  const launchBumpers = lb.map(([x, y], k) => bumper(`lbump${k}`, x, y, 15, { kick: 480, ...L1 }));
   // пол платформы — воронка к лунке выхода
   wall([[105, 1215], [164, 1247]], { ...L1, kind: 'platform' });
   wall([[245, 1215], [188, 1247]], { ...L1, kind: 'platform' });
@@ -249,7 +257,11 @@ export function buildTable() {
     orbit: { x0: 852, x1: 915, y0: 402, y1: 1004 },
     post: { x: 500, y: 1722, r: 12 },
   };
-  const out = { colliders, flippers: [flipL, flipR], paths, elements };
+  // платформа наклонена к лунке выхода (fixPlatform): шарик слегка тянет к её середине
+  const slopes = fixPlatform ? [{ layer: 1, x: 176, accel: 700 }] : [];
+  const out = { colliders, flippers: [flipL, flipR], paths, elements, slopes };
+  // поп-бамперы: толчок с отклонением от точки удара (не подбрасывают шарик строго вверх-вниз бесконечно)
+  if (fixPlatform) for (const c of colliders) if (c.kickAlways) c.kickTwist = 0.35;
   colliders = null;
   return out;
 }

@@ -83,7 +83,7 @@ const KICK_THRESHOLD = 120;    // толчок бампера и рогатки 
  * e = e0 / (1 + falloff · |vn| / 1000). Трение — ограниченный импульс (не больше μ от нормального).
  * kick — толчок активного элемента по нормали. → скорость удара (для звука и очков) или 0, если шарик уже отлетал.
  */
-function bounce(ball, nx, ny, e0, friction, kick = 0, sx = 0, sy = 0, falloff = 0, always = false) {
+function bounce(ball, nx, ny, e0, friction, kick = 0, sx = 0, sy = 0, falloff = 0, always = false, twist = 0) {
   const rvx = ball.vx - sx;
   const rvy = ball.vy - sy;
   const vn = rvx * nx + rvy * ny;
@@ -102,8 +102,21 @@ function bounce(ball, nx, ny, e0, friction, kick = 0, sx = 0, sy = 0, falloff = 
   let nvx = tx + e * speed * nx;
   let nvy = ty + e * speed * ny;
   if (kick && (always || speed > KICK_THRESHOLD)) {
-    nvx += nx * kick;
-    nvy += ny * kick;
+    // поп-бампер толкает не строго от центра: отклонение до ±twist рад зависит от точки удара (детерминированно) —
+    // иначе шарик, упавший точно на макушку бампера у стенки, прыгал строго вверх-вниз бесконечно (видео владельца,
+    // 2026-10-02: шарик навсегда застрял на платформе, очки росли)
+    let kx = nx;
+    let ky = ny;
+    if (twist) {
+      const h = Math.sin(ball.x * 12.9898 + ball.y * 78.233) * 43758.5453;
+      const a = ((h - Math.floor(h)) - 0.5) * 2 * twist;
+      const c = Math.cos(a);
+      const s = Math.sin(a);
+      kx = nx * c - ny * s;
+      ky = nx * s + ny * c;
+    }
+    nvx += kx * kick;
+    nvy += ky * kick;
   }
   ball.vx = nvx + sx;
   ball.vy = nvy + sy;
@@ -111,9 +124,12 @@ function bounce(ball, nx, ny, e0, friction, kick = 0, sx = 0, sy = 0, falloff = 
 }
 
 /** Мир: шарики, препятствия, гравитация. */
-export function createWorld({ gravity = 1900, colliders = [] } = {}) {
+// slopes — «наклон пола» слоя: { layer, x, accel } — шарик на этом слое тянет по горизонтали к x (платформа наклонена к
+// своей лунке выхода, как в настоящем столе: шарик не может стоять на макушке бампера у стенки).
+export function createWorld({ gravity = 1900, colliders = [], slopes = [] } = {}) {
   const world = {
     gravity,
+    slopes,
     colliders,
     balls: [],
     /** Сделать шаг dt (с): подшаги, события [{ type: 'hit'|'enter'|'leave', id, ball, speed }]. */
@@ -139,6 +155,11 @@ function substep(world, h, events) {
   for (const ball of world.balls) {
     if (ball.frozen) continue;
     ball.vy += world.gravity * h;
+    for (const sl of world.slopes) {
+      if (ball.layer !== sl.layer) continue;
+      const dx = sl.x - ball.x;
+      if (Math.abs(dx) > 3) ball.vx += Math.sign(dx) * sl.accel * h;
+    }
     const sp = len(ball.vx, ball.vy);
     if (sp > MAX_SPEED) {
       ball.vx *= MAX_SPEED / sp;
@@ -205,7 +226,7 @@ function collide(ball, c) {
     const ny = dy / d;
     ball.x = c.x + nx * min;
     ball.y = c.y + ny * min;
-    return bounce(ball, nx, ny, c.restitution ?? 0.5, c.friction ?? 0.1, c.kick ?? 0, 0, 0, c.falloff ?? 0, c.kickAlways) || -1;
+    return bounce(ball, nx, ny, c.restitution ?? 0.5, c.friction ?? 0.1, c.kick ?? 0, 0, 0, c.falloff ?? 0, c.kickAlways, c.kickTwist ?? 0) || -1;
   }
   if (c.type === 'seg') {
     const bx = boxOf(c);

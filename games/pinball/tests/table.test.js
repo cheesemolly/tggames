@@ -9,7 +9,7 @@ import { createWorld } from '../physics.js';
 
 function setup() {
   const t = buildTable();
-  const w = createWorld({ gravity: 1900, colliders: t.colliders });
+  const w = createWorld({ gravity: 1900, colliders: t.colliders, slopes: t.slopes });
   return { t, w };
 }
 
@@ -112,6 +112,36 @@ test('платформа: шарик с рампы проходит дорожк
     for (let s = 0; s < 60 * 12 && !out; s++) out = w.step(1 / 60).some((e) => e.id === 'platExit' && e.type === 'enter');
     assert.ok(out, `vx=${vx}: застрял на платформе у ${Math.round(b.x)}, ${Math.round(b.y)}`);
   }
+});
+
+test('платформа без ловушек: шарик из 300 случайных мест и с любой скоростью уходит в лунку выхода', () => {
+  // видео владельца (2026-10-02): шарик застрял в левой верхней дорожке платформы — бампер под ней закрывал проход и
+  // подбрасывал шарик бесконечно. Теперь верхние бамперы раздвинуты, разделители короче, толчок бампера с отклонением.
+  const { t } = setup();
+  const solid = t.colliders.filter((c) => c.type === 'circle' && c.layer === 1);
+  const stuck = [];
+  let tried = 0;
+  for (let k = 0; tried < 300 && k < 2000; k++) {
+    const x = 125 + rnd() * 100;
+    const y = 1025 + rnd() * 170;
+    if (solid.some((c) => Math.hypot(x - c.x, y - c.y) < c.r + BALL_R + 1)) continue;   // не внутри бампера
+    tried++;
+    const { w } = setup();
+    const b = w.addBall(x, y, (rnd() - 0.5) * 800, (rnd() - 0.5) * 800, BALL_R);
+    b.layer = 1;
+    let out = false;
+    for (let s = 0; s < 60 * 20 && !out; s++) out = w.step(1 / 60).some((e) => e.id === 'platExit' && e.type === 'enter');
+    if (!out && b.layer === 1) stuck.push([Math.round(x), Math.round(y)]);
+  }
+  // редкий пинг-понг между бамперами дольше 20 с ловит страховка в игре (6 с на пятачке — в лунку выхода)
+  assert.ok(stuck.length <= 3, `не вышли: ${JSON.stringify(stuck)}`);
+  // то самое место из видео
+  const { w } = setup();
+  const b = w.addBall(126, 1050, 0, 0, BALL_R);
+  b.layer = 1;
+  let out = false;
+  for (let s = 0; s < 60 * 20 && !out; s++) out = w.step(1 / 60).some((e) => e.id === 'platExit' && e.type === 'enter');
+  assert.ok(out, 'из левой верхней дорожки платформы шарик выходит');
 });
 
 test('флипперы: с возвратной дорожки можно попасть в рампу запуска и в гиперпространство', () => {

@@ -83,6 +83,9 @@ let pullVisual = 0;
 let ride = null;                   // { pts, lens, total, d, speed, path }
 let held = null;                   // { t, exit, kind }
 let slowFor = 0;
+// пятачок, по которому мечется шарик последние секунды: { x0, x1, y0, y1, t } — ловит петли между бамперами
+let loopBox = null;
+let platformFor = 0;   // сколько секунд шарик на платформе (слой 1) подряд
 let clock = 0;
 let noCatchUntil = 0;
 let spin = { left: 0, rate: 0, acc: 0, angle: 0 };
@@ -183,6 +186,8 @@ function restOnPlunger() {
   mode = 'plunger';
   pull = 0;
   slowFor = 0;
+  loopBox = null;
+  platformFor = 0;
 }
 
 function launch() {
@@ -205,6 +210,16 @@ function startRide(name) {
   ball.frozen = true;
   ball.riding = true;
   ball.trail = [];
+}
+
+/** Вывести шарик из петли: с платформы — в лунку выхода (как будто докатился), на столе — толчок вверх-вбок. */
+function unstick() {
+  if (ball.layer === 1) {
+    capture('platExit', 0.45, 'platExit');
+    return;
+  }
+  ball.vx += (ball.x < 500 ? 1 : -1) * (220 + Math.random() * 160);
+  ball.vy -= 650;
 }
 
 function capture(id, holdSec, exit) {
@@ -643,8 +658,31 @@ function step(dt) {
         ball.vx += (Math.random() < 0.5 ? -1 : 1) * 260;
         ball.vy -= 420;
       }
+      // петля: 6 с шарик не выходит из пятачка 120×120 (бамперы перекидывают его друг другу или подбрасывают у
+      // стенки) — вывести: на платформе — в лунку выхода, на столе — толчок. Видео владельца, 2026-10-02: шарик
+      // навсегда застрял в углу платформы, очки росли.
+      // на платформе дольше 8 с (бамперы гоняют шарик по всей ней) — в лунку выхода
+      platformFor = ball.layer === 1 ? platformFor + dt : 0;
+      if (platformFor > 8 && api.feature('pinball-unstick')) {
+        platformFor = 0;
+        loopBox = null;
+        unstick();
+      } else if (cradled || !api.feature('pinball-unstick')) loopBox = null;
+      else {
+        if (!loopBox) loopBox = { x0: ball.x, x1: ball.x, y0: ball.y, y1: ball.y, t: 0 };
+        loopBox.x0 = Math.min(loopBox.x0, ball.x);
+        loopBox.x1 = Math.max(loopBox.x1, ball.x);
+        loopBox.y0 = Math.min(loopBox.y0, ball.y);
+        loopBox.y1 = Math.max(loopBox.y1, ball.y);
+        loopBox.t += dt;
+        if (loopBox.t > 6) {
+          const small = loopBox.x1 - loopBox.x0 < 120 && loopBox.y1 - loopBox.y0 < 120;
+          loopBox = null;
+          if (small) unstick();
+        }
+      }
     }
-  }
+  } else loopBox = null;
 
   // флажок-спиннер
   if (spin.left > 0 || spin.rate > 0.2) {
@@ -995,11 +1033,11 @@ export default {
     stats = R.isValidStats(savedStats) ? { ...R.emptyStats(), ...savedStats } : R.emptyStats();
     if (stats.played) api.progress(T.menuProgress(R.RANKS[stats.bestRank]));
 
-    table = buildTable();
+    table = buildTable({ fixPlatform: api.feature('pinball-unstick') });
     table.byId = new Map();
     for (const c of table.colliders) if (c.id) table.byId.set(c.id, c);
     for (const p of Object.values(table.paths)) p.dense = densify(p.points);
-    world = createWorld({ gravity: 1900, colliders: table.colliders });
+    world = createWorld({ gravity: 1900, colliders: table.colliders, slopes: table.slopes });
     ball = world.addBall(LANE_X, PLUNGER_Y - BALL_R - 0.5, 0, 0, BALL_R);
     ball.trail = [];
 
@@ -1091,6 +1129,8 @@ export default {
     pull = pullVisual = 0;
     ride = held = null;
     slowFor = 0;
+    loopBox = null;
+    platformFor = 0;
     clock = 0;
     noCatchUntil = 0;
     spin = { left: 0, rate: 0, acc: 0, angle: 0 };
