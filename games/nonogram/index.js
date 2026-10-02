@@ -913,6 +913,9 @@ function showWin(ms, clean) {
 
 function leaveLevel() {
   if (!run) return showMap();
+  // бета 'nonogram-back-fix' (владелец, 2026-10-02: «кнопка выхода в меню не работает»): часы шли, пока экран был
+  // «уровнем», партию обнуляли, и showMap() падал на подсчёте времени — сначала остановить часы, потом уходить
+  if (api.feature('nonogram-back-fix')) screen = 'map';
   syncClock();
   saveRun();
   ui.savedRun = run.done || !run.cells.some((c) => c !== EMPTY) ? null : serializeRun({ ...run, time: elapsed() });
