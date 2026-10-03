@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { categories, findCategory, categoryOfGame, gamesOf, gameWord, visibleCategories } from '../categories.js';
+import { categories, findCategory, categoryOfGame, gamesOf, gameWord, visibleCategories, byFolderAndPlace } from '../categories.js';
 import { games } from '../registry.js';
 import { GAME_ICONS, CATEGORY_ICONS } from '../icons.js';
 
@@ -74,4 +74,14 @@ test('Змейка открыта для всех, лежит в «Аркада�
   const snake = games.find((g) => g.id === 'snake');
   assert.ok(snake && !snake.admin, 'Змейка вышла из обкатки (решение владельца)');
   assert.equal(categoryOfGame('snake')?.id, 'arcade');
+});
+
+test('рейтинг по играм: папками по порядку, внутри — от лучшего своего места, без места — в конце папки', () => {
+  const rows = [
+    { game: 'flags', me: { place: 1 } }, { game: 'checkers', me: null }, { game: 'wordle', me: { place: 3 } },
+    { game: 'words', me: { place: 3 } }, { game: 'boggle', me: { place: 1 } }, { game: 'chess', me: { place: 7 } },
+    { game: 'sudoku', me: null }, { game: 'match3', me: null },
+  ];
+  const sorted = byFolderAndPlace(rows, (r) => r.game, (r) => r.me?.place ?? null).map((r) => r.game);
+  assert.deepEqual(sorted, ['boggle', 'words', 'wordle', 'match3', 'sudoku', 'chess', 'checkers', 'flags']);
 });

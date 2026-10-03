@@ -160,6 +160,7 @@ export function newGame(cfg, rng = Math.random) {
     powerCount: 0,
     steps: 0,
     freeze: 0,
+    hold: false,
     goal: map?.goal ?? 0,
     foodCount: map ? LEVEL_FOOD : size.food,      // сколько еды одновременно на поле
     pairSeq: 0,
@@ -312,10 +313,17 @@ function twinClash(s, main, mainGrows, twinCell, twinGrows) {
  *   { type: 'eat', kind, idx, points, who }   { type: 'power', power }   { type: 'teleport', from, to }
  *   { type: 'shield' }   { type: 'die', reason, idx }   { type: 'win' }   { type: 'spawn', kind, idx }
  *   { type: 'poison', removed }   { type: 'brick', idx }
+ * shieldHold — после удара со щитом не «стоять 3 шага», а остановить всё до поворота игрока (s.hold).
  */
-export function step(s, rng = Math.random) {
+export function step(s, rng = Math.random, { shieldHold = false } = {}) {
   const events = [];
   if (s.dead || s.won || !s.started) return events;
+
+  // щит сработал (в бете 'snake-shield-stop'): мир стоит целиком, пока игрок не повернёт — тогда сразу шаг
+  if (s.hold) {
+    if (!s.queue.length) return events;
+    s.hold = false;
+  }
 
   if (s.freeze > 0) {
     // после удара со щитом змейка стоит, но повороты уже принимаются
@@ -359,7 +367,8 @@ export function step(s, rng = Math.random) {
   if (hit) {
     if (s.effects.shield > 0) {
       s.effects.shield = 0;
-      s.freeze = SHIELD_FREEZE;
+      if (shieldHold) s.hold = true;
+      else s.freeze = SHIELD_FREEZE;
       s.queue = [];
       events.push({ type: 'shield', reason: hit });
       s.steps++;

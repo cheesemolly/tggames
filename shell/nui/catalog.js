@@ -1,5 +1,5 @@
 // Вкладка «Игры» нового интерфейса (в бете 'new-ui'): поиск по названию, папки таблетками (можно несколько),
-// «Избранное», сортировка («Сначала недавние» / «По названию») и список игр с сердечком и местом в рейтинге.
+// «Избранное», сортировка («Сначала недавние» / «Ещё не пробовал» — в бете 'catalog-untried' / «По названию») и список игр с сердечком и местом в рейтинге.
 // Фильтры и поиск помнятся, пока приложение открыто. #/games/<папка> (из «Все ›» на главной) — сразу с ней.
 
 import { el } from '../../shared/dom.js';
@@ -10,7 +10,8 @@ import { UI, icon } from './icons.js';
 import { gameRow, fillPlaces, skeleton } from './ui.js';
 import { collectGames } from './games.js';
 import { flipFav } from './store.js';
-import { filterGames, sortGames, SORTS, placesOf, plural } from './logic.js';
+import { filterGames, sortGames, sortModes, SORTS, placesOf, plural } from './logic.js';
+import { feature } from '../beta.js';
 
 const state = { query: '', cats: [], fav: false, sort: 'recent', preset: null };
 
@@ -24,6 +25,7 @@ export async function renderCatalog(container, { games, route, account, summary,
     state.cats = preset && preset !== 'fav' && categories.some((c) => c.id === preset) ? [preset] : [];
   }
 
+  if (!sortModes(feature('catalog-untried')).includes(state.sort)) state.sort = 'recent';
   const list = el('div', { class: 'nlist' }, skeleton('row', 5));
   const count = el('span', { class: 'nsort-count' });
   const sortBtn = el('button', { class: 'nsort-btn' }, icon('sort'), el('span', {}, SORTS[state.sort]));
@@ -90,7 +92,7 @@ export async function renderCatalog(container, { games, route, account, summary,
     if (e.key === 'Enter') search.blur();
   });
   sortBtn.addEventListener('click', () => {
-    const modes = Object.keys(SORTS);
+    const modes = sortModes(feature('catalog-untried'));
     state.sort = modes[(modes.indexOf(state.sort) + 1) % modes.length];
     sortBtn.lastChild.textContent = SORTS[state.sort];
     pop(sortBtn, { from: 0.92 });

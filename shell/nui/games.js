@@ -7,6 +7,7 @@ import { progress } from '../progress.js';
 import { menuLine } from '../menu-line.js';
 import { categories } from '../categories.js';
 import { getFavs, getRecent } from './store.js';
+import { triedGame } from './logic.js';
 
 /** Игры в порядке папок (порядок в реестре — про загрузку, а не про вид). */
 export function inFolderOrder(games) {
@@ -14,7 +15,7 @@ export function inFolderOrder(games) {
   return [...games].sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
 }
 
-/** [{ id, title, cat, line, save, fav, at }] для всех переданных игр, в порядке папок. */
+/** [{ id, title, cat, line, save, fav, at, tried }] для всех переданных игр, в порядке папок. */
 export async function collectGames(games) {
   const [favs, recent] = await Promise.all([getFavs(), getRecent()]);
   return Promise.all(inFolderOrder(games).map(async (g) => {
@@ -27,6 +28,7 @@ export async function collectGames(games) {
       save: save != null,
       fav: favs.includes(g.id),
       at: Number(recent[g.id]) || 0,
+      tried: triedGame({ played: stats?.played, progress: line, save: save != null, at: Number(recent[g.id]) || 0 }),
     };
   }));
 }

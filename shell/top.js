@@ -15,7 +15,8 @@
 
 import { el } from '../shared/dom.js';
 import { GAME_ICONS } from './icons.js';
-import { categoryOfGame } from './categories.js';
+import { categoryOfGame, byFolderAndPlace } from './categories.js';
+import { feature } from './beta.js';
 import { message } from '../platform/errors.js';
 import { showLayer, hideLayer, pop, shake } from '../shared/motion.js';
 
@@ -289,7 +290,8 @@ export async function renderTop(container, {
       );
     }
 
-    const list = res.data.games.filter((g) => games.some((x) => x.id === g.game));
+    let list = res.data.games.filter((g) => games.some((x) => x.id === g.game));
+    if (feature('top-sort')) list = byFolderAndPlace(list, (g) => g.game, (g) => g.me?.place ?? null);
     show(
       header,
       tabs,

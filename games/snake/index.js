@@ -47,7 +47,8 @@ const DEATH_TEXT = {
 };
 const PALETTE_KEYS = ['floor1', 'floor2', 'edge', 'rimTop', 'wallTop', 'wallSide', 'brick', 'snakeHead', 'snakeTail',
   'twinHead', 'twinTail', 'apple', 'mover', 'spike', 'spikeSide'];
-const SWIPE = 18;
+// свайп срабатывает, когда палец прошёл столько px (в бете 'snake-turns' — раньше: меньше задержка поворота)
+const swipeDist = () => (api?.feature?.('snake-turns') ? 12 : 18);
 const FRUIT_COLORS = {
   apple: '#ef4444', pear: '#a3c94a', orange: '#fb923c', banana: '#fde047', grapes: '#8b5cf6', strawberry: '#ef233c', watermelon: '#f43f5e',
 };
@@ -97,6 +98,11 @@ let soundOn = true;
 const audio = createAudio(createSounds);
 
 const soundFeature = () => Boolean(api?.feature?.('snake-sounds'));
+// щит останавливает игру до поворота (в бете 'snake-shield-stop'; раньше — стоять 3 шага, мир шёл дальше)
+const shieldStop = () => Boolean(api?.feature?.('snake-shield-stop'));
+// поворот без задержки (в бете 'snake-turns'): голова прошла больше половины клетки — шаг с поворотом сразу
+const quickTurns = () => Boolean(api?.feature?.('snake-turns'));
+const QUICK_TURN_FROM = 0.5;
 
 function sfx(name, opts) {
   if (!soundFeature() || !soundOn) return;
@@ -247,6 +253,11 @@ function renderEffects() {
 }
 
 function showHint() {
+  if (game?.hold && !game.dead) {
+    ui.hint.hidden = false;
+    ui.hint.textContent = 'Щит спас! Поверни — игра ждёт';
+    return;
+  }
   const started = game?.started;
   ui.hint.hidden = Boolean(started);
   if (!started) {
@@ -271,7 +282,8 @@ function frame(now) {
   const dt = Math.min(100, now - (lastFrame || now));
   lastFrame = now;
   if (!game) return;
-  const running = game.started && !paused && !modalActive && !game.dead && !game.won && !document.hidden && !dying;
+  const running = game.started && !paused && !modalActive && !game.dead && !game.won && !document.hidden && !dying
+    && !game.hold;
   if (running) {
     acc += dt;
     const ms = tickMs(game);
@@ -316,7 +328,7 @@ function scaleBump(bump, p) {
 function doStep() {
   prevSnake = game.snake.slice();
   prevTwin = game.twin?.snake.slice() ?? null;
-  const events = step(game);
+  const events = step(game, Math.random, { shieldHold: shieldStop() });
   let hudDirty = false;
   // за шаг — один звук еды (у близнеца в «Инь-ян» могут съесть разом): самый «вкусный»
   const eaten = events.filter((ev) => ev.type === 'eat');
@@ -351,7 +363,8 @@ function doStep() {
     } else if (ev.type === 'shield') {
       hudDirty = true;
       sfx('saved');
-      toast.show('Щит спас! Поворачивай', 1400);
+      if (game.hold) showHint();
+      else toast.show('Щит спас! Поворачивай', 1400);
       shake(ui.stage, { distance: 4, duration: 260 });
       api.platform.haptic.notification('warning');
     } else if (ev.type === 'teleport') {
@@ -496,7 +509,23 @@ function doTurn(dir) {
     showHint();
     lastFrame = performance.now();
   }
-  if (ok) api.platform.haptic.selection();
+  if (!ok) return;
+  api.platform.haptic.selection();
+  if (game.hold) {
+    // щит остановил игру — поворот её продолжает, сразу шагом в новую сторону
+    acc = 0;
+    lastFrame = performance.now();
+    doStep();
+    showHint();
+    return;
+  }
+  // голова уже прошла больше половины клетки — не ждать конца шага: шаг с поворотом сейчас
+  // (иначе поворот наступал до целого шага позже свайпа — игроки чувствовали задержку)
+  if (quickTurns() && wasStarted && game.queue.length === 1 && game.freeze === 0 && !paused
+    && acc >= tickMs(game) * QUICK_TURN_FROM) {
+    acc = 0;
+    doStep();
+  }
 }
 
 function onPointerDown(e) {
@@ -509,7 +538,7 @@ function onPointerMove(e) {
   if (!swipe || swipe.id !== e.pointerId) return;
   const dx = e.clientX - swipe.x;
   const dy = e.clientY - swipe.y;
-  if (Math.max(Math.abs(dx), Math.abs(dy)) < SWIPE) return;
+  if (Math.max(Math.abs(dx), Math.abs(dy)) < swipeDist()) return;
   const dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'R' : 'L') : (dy > 0 ? 'D' : 'U');
   doTurn(dir);
   // следующий поворот — от этой точки: можно вести палец «змейкой», не отрывая
@@ -763,7 +792,9 @@ function openHelp() {
     el('div', { class: 'sn-help' },
       row({ food: { kind: 'power', power: 'magnet', ttl: 60 } }, 'Магнит', 'еда рядом сама плавно ползёт к голове'),
       row({ food: { kind: 'power', power: 'slow', ttl: 60 } }, 'Замедление', 'змейка ползёт медленнее — проще проскочить'),
-      row({ food: { kind: 'power', power: 'shield', ttl: 60 } }, 'Щит', 'один удар простится: змейка остановится на пару шагов — успей повернуть'),
+      row({ food: { kind: 'power', power: 'shield', ttl: 60 } }, 'Щит', shieldStop()
+        ? 'один удар простится: игра остановится и подождёт, пока повернёшь'
+        : 'один удар простится: змейка остановится на пару шагов — успей повернуть'),
       row({ food: { kind: 'power', power: 'double', ttl: 60 } }, '×2', 'очки за еду удваиваются'),
     ),
     el('div', { class: 'sn-section' }, 'Препятствия на уровнях'),

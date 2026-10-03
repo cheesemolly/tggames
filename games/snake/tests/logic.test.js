@@ -191,6 +191,34 @@ test('щит прощает удар: змейка стоит пару шаго�
   assert.equal(s.dead, true);
 });
 
+test('щит с остановкой: мир стоит, пока игрок не повернёт, — поворот сразу шагает', () => {
+  const s = classic();
+  s.started = true;
+  s.effects.shield = 1;
+  s.snake = [idx(s, 12, 8), idx(s, 11, 8), idx(s, 10, 8)];
+  s.dir = 'R';
+  const hold = { shieldHold: true };
+  const ev = step(s, Math.random, hold);
+  assert.ok(ev.some((e) => e.type === 'shield'));
+  assert.equal(s.hold, true);
+  assert.equal(s.freeze, 0);
+  const before = JSON.stringify({ snake: s.snake, foods: s.foods, steps: s.steps });
+  for (let k = 0; k < 20; k++) assert.deepEqual(step(s, Math.random, hold), []);
+  assert.equal(JSON.stringify({ snake: s.snake, foods: s.foods, steps: s.steps }), before, 'ничего не двигалось');
+  assert.equal(turn(s, 'R'), false, 'в ту же сторону — не поворот');
+  assert.equal(s.hold, true);
+  assert.ok(turn(s, 'U'));
+  step(s, Math.random, hold);
+  assert.equal(s.hold, false);
+  assert.equal(s.dead, false);
+  assert.deepEqual(head(s), { x: 12, y: 7 });
+  // второй удар уже без щита
+  s.snake = [idx(s, 12, 0), idx(s, 12, 1)];
+  s.dir = 'U';
+  step(s, Math.random, hold);
+  assert.equal(s.dead, true);
+});
+
 test('замедление, ×2 очки, магнит', () => {
   const s = classic();
   s.started = true;

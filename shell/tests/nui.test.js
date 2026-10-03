@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  addVisit, streakOf, shiftDay, monthCells, MAX_DAYS, fold, filterGames, sortGames, touchRecent, toggleFav,
+  addVisit, streakOf, shiftDay, monthCells, MAX_DAYS, fold, filterGames, sortGames, sortModes, triedGame, touchRecent, toggleFav,
   placesOf, bestPlaces, pickBanners,
 } from '../nui/logic.js';
 import { STORIES, NEW_GAMES, pickStories, weekStory, weekId, firstName } from '../nui/content.js';
@@ -72,6 +72,21 @@ test('сортировка: недавние сверху (остальные в
   assert.deepEqual(sortGames(items, 'recent', { c: 200, b: 100 }).map((g) => g.id), ['c', 'b', 'a']);
   assert.deepEqual(sortGames(items, 'recent', {}).map((g) => g.id), ['a', 'b', 'c']);
   assert.deepEqual(sortGames(items, 'name').map((g) => g.title), ['Арбуз', 'Бонго', 'Шашки']);
+});
+
+test('сортировка «Ещё не пробовал»: сначала нетронутые в прежнем порядке, потом остальные — недавние выше', () => {
+  const items = [
+    { id: 'a', title: 'А', tried: true }, { id: 'b', title: 'Б', tried: false },
+    { id: 'c', title: 'В', tried: true }, { id: 'd', title: 'Г', tried: false },
+  ];
+  assert.deepEqual(sortGames(items, 'untried', { a: 100, c: 200 }).map((g) => g.id), ['b', 'd', 'c', 'a']);
+  assert.deepEqual(sortModes(false), ['recent', 'name'], 'без беты — как раньше');
+  assert.deepEqual(sortModes(true), ['recent', 'untried', 'name']);
+  assert.equal(triedGame({}), false);
+  assert.equal(triedGame({ played: 1 }), true);
+  assert.equal(triedGame({ progress: 'Уровень 2' }), true);
+  assert.equal(triedGame({ save: true }), true);
+  assert.equal(triedGame({ at: 5 }), true);
 });
 
 test('недавние и избранное: не больше 60 записей, сердечко переключается', () => {

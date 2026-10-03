@@ -24,6 +24,10 @@ const T = {
   over: 'Игра окончена',
   result: (n) => `Пролетел препятствий: ${n}`,
   share: (n) => `🍔 Flappy Burger: ${n}`,
+  pause: 'Пауза',
+  paused: 'Пауза',
+  resume: 'Продолжить',
+  pauseNote: 'После «Продолжить» — 3 секунды, чтобы приготовиться.',
   stats: { open: 'Статистика', title: 'Статистика', games: 'Игр', best: 'Рекорд', total: 'Всего препятствий', streets: 'Выходов на улицу', close: 'Закрыть' },
 };
 
@@ -33,6 +37,7 @@ const strokeIcon = (body) => '<svg viewBox="0 0 24 24" width="22" height="22" ar
   + `stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
 const ICON_SOUND_ON = strokeIcon('<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/>');
 const ICON_SOUND_OFF = strokeIcon('<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="m16 9 5 6"/><path d="m21 9-5 6"/>');
+const ICON_PAUSE = svgIcon('<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>');
 const ICON_STATS = svgIcon('<rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="7" width="4" height="14" rx="1"/><rect x="17" y="3" width="4" height="18" rx="1"/>');
 
 let api = null;
@@ -51,6 +56,13 @@ let flashT = -1;                   // вспышка удара (время s.t)
 let shakeT = -1;
 let scorePopT = -1;
 let modalActive = false;
+// пауза и отсчёт перед продолжением (в бете: api.feature('flappy-pause')): countdown — сколько секунд осталось
+// до продолжения (−1 — нет отсчёта); пока идёт отсчёт, мир стоит и нажатия не взмахивают
+let countdown = -1;
+const PAUSE_COUNT = 3;
+const pauseFeature = () => Boolean(api?.feature?.('flappy-pause'));
+/** Идёт забег: бургер уже летит (после «Нажми, чтобы играть»), а игра ещё не кончилась. */
+const running = () => Boolean(game) && !finished && (game.phase === 'glide' || game.phase === 'play');
 let modalToken = 0;
 let title = null;                  // заставка: { logo, canvas, ctx, t, leaveT } — пока на экране
 let soundOn = true;
@@ -840,6 +852,15 @@ function render() {
     lc.fillStyle = `rgba(255, 255, 255, ${0.85 * (1 - (s.t - flashT) / 0.3)})`;
     lc.fillRect(0, 0, W, H);
   }
+  // отсчёт после паузы: мир затемнён, крупная цифра «впрыгивает» в начале каждой секунды
+  if (countdown >= 0) {
+    lc.fillStyle = 'rgba(16, 10, 30, 0.35)';
+    lc.fillRect(0, 0, W, H);
+    const n = Math.max(1, Math.ceil(countdown));
+    const into = n - countdown;                       // 0…1 — сколько прошло от начала этой цифры
+    const size = into < 0.12 && !reducedMotion() ? 9 : 8;
+    pixelText(String(n), W / 2, Math.round(PLAY_H / 2 - size * 2.5), size, '#ffd23f', '#3b2412');
+  }
   // заставка — поверх всего; по нажатию уезжает вверх и открывает игру
   if (title) {
     const p = title.leaveT < 0 ? 0 : Math.min(1, (s.t - title.leaveT) / TITLE_LEAVE);
@@ -888,7 +909,14 @@ function loop(now) {
     if (title.leaveT >= 0 && game.t - title.leaveT >= TITLE_LEAVE) title = null;
     else title.logo.draw(title.ctx, reducedMotion() ? 2.5 : title.t, reducedMotion() ? 0 : dt);
   }
-  if (!modalActive) {
+  if (!modalActive && countdown >= 0) {
+    const before = Math.ceil(countdown);
+    countdown -= dt;
+    if (countdown <= 0) {
+      countdown = -1;
+      sfx('count', { n: 0 });
+    } else if (Math.ceil(countdown) < before) sfx('count', { n: Math.ceil(countdown) });
+  } else if (!modalActive) {
     const events = step(game, dt);
     for (const e of events) onEvent(e);
     // крошки падают и гаснут
@@ -954,13 +982,14 @@ function onEvent(e) {
 }
 
 function onFlap() {
-  if (!game || modalActive || finished) return;
+  if (!game || modalActive || finished || countdown >= 0) return;
   if (title && title.leaveT < 0) {
     // «Нажми, чтобы играть»: заставка уезжает, мир поехал, бургер планирует до первого взмаха
     title.leaveT = game.t;
     if (reducedMotion()) title = null;
     launch(game);
     sfx('start');
+    syncPauseBtn();
     ui.hint.classList.add('fb-hint-hide');
     api.platform.haptic.impact('light');
     kick();
@@ -978,6 +1007,7 @@ function onFlap() {
 function gameOver() {
   if (finished) return;
   finished = true;
+  syncPauseBtn();
   const score = game.score;
   const isBest = score > stats.best;
   stats = recordGame(stats, game);
@@ -1003,11 +1033,27 @@ function openModal(content) {
 function closeModal() {
   if (!modalActive) return;
   modalActive = false;
+  // после паузы (и любого окна посреди забега) — 3 секунды, чтобы приготовиться
+  if (pauseFeature() && running()) countdown = PAUSE_COUNT;
   const token = ++modalToken;
   hideLayer(ui.modal, () => token === modalToken).then(() => {
     if (ui && token === modalToken) ui.modal.replaceChildren();
   });
   kick();
+}
+
+function syncPauseBtn() {
+  if (ui?.pauseBtn) ui.pauseBtn.hidden = !running();
+}
+
+function showPause() {
+  if (!running() || modalActive) return;
+  countdown = -1;
+  openModal(el('div', { class: 'fb-card fb-pause', role: 'dialog', 'aria-label': T.paused },
+    el('h2', {}, T.paused),
+    el('p', { class: 'fb-pause-note' }, T.pauseNote),
+    el('button', { class: 'btn fb-resume', onclick: closeModal }, T.resume),
+  ));
 }
 
 function showStats() {
@@ -1029,6 +1075,11 @@ function onKeydown(e) {
     closeModal();
     return;
   }
+  if (pauseFeature() && (e.key === 'Escape' || e.code === 'KeyP') && !e.repeat && running()) {
+    e.preventDefault();
+    showPause();
+    return;
+  }
   if ((e.key === ' ' || e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') && !e.repeat) {
     e.preventDefault();
     onFlap();
@@ -1037,6 +1088,7 @@ function onKeydown(e) {
 
 function onVisibility() {
   if (document.visibilityState === 'visible') kick();
+  else if (pauseFeature() && running()) showPause();       // свернул посреди забега — пауза, а не падение
 }
 
 export default {
@@ -1069,11 +1121,15 @@ export default {
     statsButton.innerHTML = ICON_STATS;
     ui.soundBtn = soundFeature() ? el('button', { class: 'fb-icon-btn', onclick: toggleSound }) : null;
     renderSoundBtn();
+    ui.pauseBtn = pauseFeature()
+      ? el('button', { class: 'fb-icon-btn', 'aria-label': T.pause, title: T.pause, hidden: true, onclick: showPause })
+      : null;
+    if (ui.pauseBtn) ui.pauseBtn.innerHTML = ICON_PAUSE;
 
     root = el('div', { class: 'fb' },
       el('div', { class: 'fb-header' },
         el('div', {}, el('div', { class: 'fb-title' }, T.title), ui.sub),
-        el('div', { class: 'fb-actions' }, ui.soundBtn, statsButton),
+        el('div', { class: 'fb-actions' }, ui.pauseBtn, ui.soundBtn, statsButton),
       ),
       ui.stage,
       ui.modal,
@@ -1104,7 +1160,9 @@ export default {
     };
     title.logo.draw(title.ctx, reducedMotion() ? 2.5 : 0, 0);
     // для проверки (страница-обёртка с автопилотом): ?fbdebug в адресе
-    if (new URLSearchParams(location.search).has('fbdebug')) window.__flappy = { get game() { return game; }, flap: onFlap };
+    if (new URLSearchParams(location.search).has('fbdebug')) window.__flappy = {
+      get game() { return game; }, get countdown() { return countdown; }, flap: onFlap, pause: showPause, resume: closeModal,
+    };
     ui.resizeObserver = new ResizeObserver(() => resize());
     ui.resizeObserver.observe(ui.stage);
     pop(ui.hint, { from: 0.8, duration: 400 });
@@ -1130,5 +1188,6 @@ export default {
     flashT = shakeT = scorePopT = -1;
     finished = false;
     modalActive = false;
+    countdown = -1;
   },
 };

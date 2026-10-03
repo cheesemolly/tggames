@@ -73,3 +73,15 @@ export const gameWord = (n) => {
   if (last >= 2 && last <= 4) return 'игры';
   return 'игр';
 };
+
+/** Сводка рейтинга «По играм» (в бете 'top-sort'): игры сгруппированы по папкам — по цвету значка, в порядке
+ *  папок, — внутри папки сначала лучшие свои места, потом игры, где тебя ещё нет (в порядке папки).
+ *  place(item) — твоё место в игре или null. */
+export function byFolderAndPlace(items, idOf, place) {
+  const order = categories.flatMap((c) => c.games);
+  const folder = (id) => categories.findIndex((c) => c.games.includes(id));
+  const rank = (x) => place(x) ?? Infinity;
+  return [...items].sort((a, b) => folder(idOf(a)) - folder(idOf(b))
+    || rank(a) - rank(b)
+    || order.indexOf(idOf(a)) - order.indexOf(idOf(b)));
+}

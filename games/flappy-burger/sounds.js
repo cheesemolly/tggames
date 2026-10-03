@@ -2,13 +2,13 @@
 //   старт — «пиу-пиу-ПИУ»; взмах — короткий «фьюп» вверх (высота чуть гуляет, чтобы частые взмахи не звенели
 //   одинаково); препятствие пройдено — монетка, каждое десятое — перелив вверх; переход на улицу — ночной
 //   мотив (минор), обратно на кухню — бодрый (мажор); удар — треск и писк вниз; падение — «бум» и «ва-ваа»;
-//   новый рекорд — короткая фанфара.
+//   новый рекорд — короткая фанфара; отсчёт после паузы — «пип» на 3, 2, 1 и «пиу» вверх на старт.
 // createSounds(ctx) принимает готовый AudioContext — в тестах подставляется поддельный.
 // play(name, { step }) — step: счёт (score: каждое десятое — перелив).
 
 import { createSfx, freqOf } from '../../shared/sfx.js';
 
-export const SOUNDS = ['start', 'flap', 'score', 'street', 'kitchen', 'hit', 'over', 'best', 'click'];
+export const SOUNDS = ['start', 'flap', 'score', 'street', 'kitchen', 'hit', 'over', 'best', 'click', 'count'];
 
 export function createSounds(ctx) {
   const { now, chip, grain, thud } = createSfx(ctx, { volume: 0.55 });
@@ -55,6 +55,10 @@ export function createSounds(ctx) {
       chip(freqOf(11), t + 0.5, { dur: 0.3, type: 'triangle', peak: 0.07 });
     },
     click: (t) => chip(freqOf(12), t, { dur: 0.03, peak: 0.04 }),
+    // отсчёт после паузы: n = 3, 2, 1 — короткий «пип», n = 0 — полетели
+    count: (t, { n = 3 }) => (n > 0
+      ? chip(freqOf(7), t, { dur: 0.08, peak: 0.05 })
+      : chip(freqOf(12), t, { dur: 0.14, slideTo: freqOf(19), peak: 0.06 })),
   };
 
   return {

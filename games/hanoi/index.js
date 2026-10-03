@@ -959,8 +959,9 @@ export default {
     api = gameApi;
     host = container;
     toast = createToast();
-    const [saved, savedStats, savedSettings, savedSound] = await Promise.all([
+    const [saved, savedStats, savedSettings, savedSound, rulesSeen] = await Promise.all([
       api.storage.get('current'), api.storage.get('stats'), api.storage.get('settings'), api.storage.get('sound'),
+      api.storage.get('rules'),
     ]);
     if (!api) return;
     soundOn = savedSound !== false;
@@ -1034,7 +1035,12 @@ export default {
       buildScene();
     } else startGame();
     sendProgress();
-    if (!savedSettings && !saved) showRules();
+    // правила — только при самом первом запуске (раньше признаком были сохранённые настройки, а их без изменений
+    // в окне настроек нет — окно открывалось при каждом входе)
+    if (rulesSeen !== true) {
+      if (!saved && !savedSettings) showRules();
+      api.storage.set('rules', true);
+    }
 
     if (new URLSearchParams(location.search).has('thdebug')) {
       window.__th = {

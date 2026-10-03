@@ -91,13 +91,26 @@ export function filterGames(items, { query = '', cats = [], fav = false } = {}) 
 
 export const SORTS = {
   recent: 'Сначала недавние',
+  untried: 'Ещё не пробовал',
   name: 'По названию',
 };
 
-/** recent — сначала те, во что играл недавно (recent: id → время), остальные в прежнем порядке; name — по алфавиту. */
+/** Режимы сортировки по кругу; «Ещё не пробовал» — в бете 'catalog-untried'. */
+export const sortModes = (untried) => Object.keys(SORTS).filter((m) => untried || m !== 'untried');
+
+/** Пробовал ли игрок игру: есть сыгранные партии, строка прогресса, начатая партия или открывал на этом устройстве. */
+export const triedGame = ({ played = 0, progress = null, save = false, at = 0 }) =>
+  played > 0 || (progress != null && progress !== '') || Boolean(save) || at > 0;
+
+/** recent — сначала те, во что играл недавно (recent: id → время), остальные в прежнем порядке; name — по алфавиту;
+ *  untried — сначала игры, которые ещё не пробовал (в порядке папок), потом остальные как в recent. */
 export function sortGames(items, mode, recent = {}) {
   const list = [...items];
   if (mode === 'name') return list.sort((a, b) => a.title.localeCompare(b.title, 'ru'));
+  if (mode === 'untried') {
+    const fresh = list.filter((g) => !g.tried);
+    return [...fresh, ...sortGames(list.filter((g) => g.tried), 'recent', recent)];
+  }
   return list
     .map((g, i) => ({ g, i, t: Number(recent[g.id]) || 0 }))
     .sort((a, b) => b.t - a.t || a.i - b.i)
