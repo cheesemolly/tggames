@@ -291,7 +291,7 @@ test('инлайн: пустой запрос — приглашение и вс
   assert.equal(res.is_personal, true);
   assert.equal(res.results[0].id, 'all', 'первым — «позвать играть»');
   const games = res.results.filter((r) => r.id.startsWith('g:'));
-  assert.equal(games.length, 27);
+  assert.equal(games.length, 30);
   for (const r of res.results) {
     const btn = r.reply_markup.inline_keyboard[0][0];
     assert.equal(btn.web_app, undefined, 'web_app в чужих чатах запрещён');
