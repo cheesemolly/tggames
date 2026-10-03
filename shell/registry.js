@@ -142,6 +142,13 @@ export const games = [
     menu: { best: false, progress: 'append' },           // «Сыграно · Побед · Лучшее: 23.45»
   },
   {
+    id: 'hanoi',
+    title: 'Ханойская башня',
+    load: () => import('../games/hanoi/index.js'),
+    css: new URL('../games/hanoi/game.css', import.meta.url),
+    menu: { best: false, progress: 'append' },           // «Сыграно · Побед · Рекорд: 7 дисков»
+  },
+  {
     id: 'wordle',
     title: 'Wordle',
     load: () => import('../games/wordle/index.js'),
