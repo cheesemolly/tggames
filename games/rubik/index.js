@@ -17,7 +17,7 @@ import { createAudio } from '../../shared/sfx.js';
 import { createSounds } from './sounds.js';
 import { createRenderer, quatAxis, quatMul, quatNorm, quatSlerp, quatToMat3 } from './render.js';
 import {
-  FACE_NORMAL, FACES, MOVE_DEF, newModel, turnModel, isSolvedModel, parseMove, moveToTurn, relativeFacelets,
+  FACE_NORMAL, FACES, MOVE_DEF, newModel, turnModel, isSolvedModel, wrongStickers, MIXED_STICKERS, parseMove, moveToTurn, relativeFacelets,
   encodeModel, decodeModel,
 } from './cube.js';
 import { randomMoveScramble, solveFacelets, buildTables } from './solver.js';
@@ -30,7 +30,9 @@ const PALETTES = {
   classic: { colors: ['#ffffff', '#c41e3a', '#009e60', '#ffd500', '#ff5800', '#0051ba'], body: '#121212', size: 0.86, radius: 0.12 },
   stickerless: { colors: ['#f4f6f8', '#ef2b40', '#16c24f', '#fde21f', '#ff8c00', '#1f6ff0'], body: '#1c1d21', size: 0.955, radius: 0.08 },
   light: { colors: ['#ffffff', '#d8263b', '#0aa45a', '#ffd21a', '#ff6a13', '#1d5fd1'], body: '#bfc6d1', size: 0.86, radius: 0.12 },
-  pastel: { colors: ['#fbfbfb', '#f2898b', '#8bd49a', '#f6df86', '#f7b07a', '#8db3f2'], body: '#353a47', size: 0.88, radius: 0.17 },
+  // пастель — не бледные классические, а мягкие соседние оттенки: красный → розовый, синий → голубой, зелёный → мятный,
+  // оранжевый → персиковый, жёлтый → сливочный, белый → молочный; корпус — приглушённый сливовый
+  pastel: { colors: ['#fff8ef', '#ff9cc6', '#8fe3bf', '#fff0a0', '#ffc396', '#9ccfff'], body: '#4a4560', size: 0.88, radius: 0.17 },
   neon: { colors: ['#f2f2ff', '#ff2e63', '#20ff8a', '#f5ff3d', '#ff9500', '#00c8ff'], body: '#07070d', size: 0.84, radius: 0.1 },
   retro: { colors: ['#f1eee2', '#c8102e', '#00843d', '#f6d000', '#f47920', '#0057b8'], body: '#1a1a1a', size: 0.8, radius: 0.035 },
 };
@@ -163,7 +165,9 @@ let worker = null;
 let workerReady = null;
 let workerId = 0;
 
-const newSession = (over = {}) => ({ status: 'free', scramble: [], solution: null, progress: 0, moves: 0, time: 0, inspect: 0, penalty: 0, turns: [], beeps: 0, ...over });
+// peak — насколько кубик был перемешан (наклеек не на месте) с последней сборки: «Собрано!» в свободной игре — только
+// если он был перемешан по-настоящему (R и R′ — не сборка)
+const newSession = (over = {}) => ({ status: 'free', scramble: [], solution: null, progress: 0, moves: 0, time: 0, inspect: 0, penalty: 0, turns: [], beeps: 0, peak: 0, ...over });
 
 function sfx(name, opts, gap = 30) {
   if (!soundOn) return;
@@ -343,7 +347,7 @@ function save() {
   api.storage.set('current', {
     v: 1, cubies: encodeModel(model), status: session.status, scramble: session.scramble.join(' '),
     moves: session.moves, time: Math.round(elapsed()), inspect: Math.round(inspectElapsed()), penalty: session.penalty,
-    turns: session.turns.slice(-500),
+    turns: session.turns.slice(-500), peak: session.peak || 0,
   });
 }
 
@@ -452,12 +456,15 @@ function commitUser(axis, layer, q) {
 
 function afterTurn() {
   paintInfo();
+  session.peak = Math.max(session.peak || 0, wrongStickers(model));
   if (isSolvedModel(model)) {
+    const mixed = session.peak >= MIXED_STICKERS;
+    session.peak = 0;
     if (session.status === 'running') {
       finishSolve();
       return;
     }
-    if (session.status === 'free' && session.moves && !busy) {
+    if (session.status === 'free' && session.moves && mixed && !busy) {
       toast.show(T.solvedFree, 1400);
       sfx('solved', {}, 0);
       session.moves = 0;
@@ -1114,7 +1121,7 @@ export default {
       session = newSession({
         status: saved.status, scramble: saved.scramble ? saved.scramble.split(' ') : [], moves: saved.moves,
         time: saved.time, inspect: saved.inspect, penalty: saved.penalty === 2000 || saved.penalty === DNF ? saved.penalty : 0,
-        turns: saved.turns.slice(), beeps: saved.inspect >= 12000 ? 2 : saved.inspect >= 8000 ? 1 : 0,
+        turns: saved.turns.slice(), peak: Number.isInteger(saved.peak) && saved.peak >= 0 ? saved.peak : 0, beeps: saved.inspect >= 12000 ? 2 : saved.inspect >= 8000 ? 1 : 0,
       });
     } else {
       model = newModel();

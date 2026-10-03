@@ -5,7 +5,7 @@
 import { test, before } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  newModel, cloneModel, turnModel, applyMoves, parseMoves, formatMove, invertMoves, moveToTurn, turnToMove,
+  newModel, cloneModel, wrongStickers, MIXED_STICKERS, turnModel, applyMoves, parseMoves, formatMove, invertMoves, moveToTurn, turnToMove,
   faceletsOf, relativeFacelets, isSolvedModel, encodeModel, decodeModel, ROTATIONS,
 } from '../cube.js';
 import {
@@ -145,4 +145,22 @@ test('сохранение модели: туда и обратно; испор�
   const copy = cloneModel(model);
   turnModel(copy, 1, 'all', 1);
   assert.ok(!same(faceletsOf(copy), faceletsOf(model)));
+});
+
+test('перемешанность: ход и его отмена — не сборка, три разные грани — уже да', () => {
+  const peak = (str) => {
+    const m = newModel();
+    let top = 0;
+    for (const mv of parseMoves(str)) {
+      applyMoves(m, [mv]);
+      top = Math.max(top, wrongStickers(m));
+    }
+    return top;
+  };
+  assert.equal(wrongStickers(newModel()), 0);
+  assert.ok(peak("R R'") < MIXED_STICKERS);
+  assert.ok(peak("R2 R2") < MIXED_STICKERS);
+  assert.ok(peak("R U U' R'") < MIXED_STICKERS);
+  assert.ok(peak("M M'") < MIXED_STICKERS);
+  assert.ok(peak("R U F F' U' R'") >= MIXED_STICKERS);
 });
