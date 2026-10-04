@@ -188,6 +188,7 @@ export const GAMES = [
   { id: 'fifteen', title: 'Пятнашки', emoji: '🔀', about: 'собери плитки по порядку: свайпы как в 2048, поля от 3×3 до 8×8' },
   { id: 'rubik', title: 'Кубик Рубика', emoji: '🧊', about: 'собери кубик 3×3 на время: перемешивание как на соревнованиях, среднее из 5' },
   { id: 'hanoi', title: 'Ханойская башня', emoji: '🗼', about: 'перенеси башню дисков на другой стержень: от 3 до 10 дисков, «идеально» — за минимум ходов' },
+  { id: 'repair', title: 'Ремонт телефона', emoji: '🔧', about: 'мастерская: разбери телефон, найди поломку и почини — от вирусов до замены экрана', beta: true },
   { id: 'wordle', title: 'Wordle', emoji: '🟩', about: 'угадай слово из пяти букв: русский, украинский, английский', best: false },
   { id: 'memory', title: 'Мемори', emoji: '🃏', about: 'найди пары одинаковых карточек' },
   { id: 'bongo-cat', title: 'Bongo Cat', emoji: '🐱', about: 'кот играет на инструментах, разучи мелодию' },
@@ -391,6 +392,12 @@ export function nonogramSolved(state) {
   return list.slice(0, 100).reduce((sum, v) => sum + (Number(v) > 0 ? 1 : 0), 0);
 }
 
+/** Ремонт телефона — сданные заказы: game:repair:progress.level — номер следующего заказа. */
+export function repairDone(state) {
+  const level = state?.['game:repair:progress']?.level;
+  return Number.isInteger(level) && level > 1 ? level - 1 : null;
+}
+
 const POINTS = count(['очко', 'очка', 'очков']);
 const WINS = count(['победа', 'победы', 'побед']);
 
@@ -415,6 +422,7 @@ export const BOARDS = {
   fifteen: { by: 'собранные поля', score: shellStats('fifteen', 'wins'), text: count(['поле', 'поля', 'полей']) },
   rubik: { by: 'собранные кубики', score: shellStats('rubik', 'wins'), text: count(['кубик', 'кубика', 'кубиков']) },
   hanoi: { by: 'собранные башни', score: shellStats('hanoi', 'wins'), text: count(['башня', 'башни', 'башен']) },
+  repair: { by: 'починенные телефоны', score: repairDone, text: count(['телефон', 'телефона', 'телефонов']) },
   wordle: { by: 'угаданные слова', score: shellStats('wordle', 'wins'), text: count(['слово', 'слова', 'слов']) },
   memory: { by: 'уровень', score: menuLevel('memory'), text: levelText },
   'bongo-cat': { by: 'ударов за всё время', score: gameStats('bongo-cat', 'hits'), text: count(['удар', 'удара', 'ударов']) },
@@ -451,6 +459,7 @@ export const BOARD_LIMITS = {
   fifteen: 1e6,
   rubik: 1e6,
   hanoi: 1e6,
+  repair: 1e5,
   nonogram: 100,              // уровней в игре 100
 };
 // побед не может быть больше сыгранных партий

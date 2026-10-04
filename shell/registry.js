@@ -149,6 +149,13 @@ export const games = [
     menu: { best: false, progress: 'append' },           // «Сыграно · Побед · Рекорд: 7 дисков»
   },
   {
+    id: 'repair',
+    title: 'Ремонт телефона',
+    load: () => import('../games/repair/index.js'),
+    css: new URL('../games/repair/game.css', import.meta.url),
+    menu: { progress: 'replace' },                       // «Починено: 6 · ★ 15»
+  },
+  {
     id: 'wordle',
     title: 'Wordle',
     load: () => import('../games/wordle/index.js'),

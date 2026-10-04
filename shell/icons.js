@@ -46,6 +46,9 @@ export const GAME_ICONS = {
     + '<rect x="4" y="15.6" width="16" height="3.4" rx="1.7" fill="currentColor" stroke="none"/>'
     + '<rect x="6.5" y="11.4" width="11" height="3.4" rx="1.7" fill="currentColor" stroke="none" opacity="0.75"/>'
     + '<rect x="9" y="7.2" width="6" height="3.4" rx="1.7"/>'),
+  // ремонт телефона: телефон и гаечный ключ поверх
+  repair: svg('<rect x="4" y="2.5" width="11" height="19" rx="2.4"/><path d="M8 18.5h3"/>'
+    + '<path d="M20.6 9.4a3.4 3.4 0 0 1-4.3 4.3l-4.6 4.6a1.4 1.4 0 0 1-2-2l4.6-4.6a3.4 3.4 0 0 1 4.3-4.3l-2 2 .3 1.7 1.7.3Z" fill="currentColor" stroke-width="1.2"/>'),
   loop: svg('<path d="M5 19v-6.5A4.5 4.5 0 0 1 9.5 8H19"/><circle cx="5" cy="19" r="2.2"/><circle cx="19" cy="8" r="2.2"/>'),
   'connect-dots': svg('<circle cx="5.5" cy="6" r="2.4" fill="currentColor" stroke="none"/>'
     + '<circle cx="18.5" cy="18" r="2.4" fill="currentColor" stroke="none"/>'
