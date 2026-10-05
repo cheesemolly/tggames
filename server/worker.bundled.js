@@ -192,7 +192,7 @@ const GAMES = [
   { id: 'fifteen', title: 'Пятнашки', emoji: '🔀', about: 'собери плитки по порядку: свайпы как в 2048, поля от 3×3 до 8×8' },
   { id: 'rubik', title: 'Кубик Рубика', emoji: '🧊', about: 'собери кубик 3×3 на время: перемешивание как на соревнованиях, среднее из 5' },
   { id: 'hanoi', title: 'Ханойская башня', emoji: '🗼', about: 'перенеси башню дисков на другой стержень: от 3 до 10 дисков, «идеально» — за минимум ходов' },
-  { id: 'repair', title: 'Ремонт телефона', emoji: '🔧', about: 'мастерская: разбери телефон, найди поломку и почини — от вирусов до замены экрана', beta: true },
+  { id: 'repair', title: 'Ремонт гаджетов', emoji: '🔧', about: 'мастерская: чини смартфоны, кнопочные телефоны и приставки — закупай детали, прошивай с компьютера', beta: true },
   { id: 'wordle', title: 'Wordle', emoji: '🟩', about: 'угадай слово из пяти букв: русский, украинский, английский', best: false },
   { id: 'memory', title: 'Мемори', emoji: '🃏', about: 'найди пары одинаковых карточек' },
   { id: 'bongo-cat', title: 'Bongo Cat', emoji: '🐱', about: 'кот играет на инструментах, разучи мелодию' },
@@ -396,7 +396,7 @@ function nonogramSolved(state) {
   return list.slice(0, 100).reduce((sum, v) => sum + (Number(v) > 0 ? 1 : 0), 0);
 }
 
-/** Ремонт телефона — сданные заказы: game:repair:progress.level — номер следующего заказа. */
+/** Ремонт гаджетов — сданные заказы: game:repair:progress.level — номер следующего заказа. */
 function repairDone(state) {
   const level = state?.['game:repair:progress']?.level;
   return Number.isInteger(level) && level > 1 ? level - 1 : null;
@@ -426,7 +426,7 @@ const BOARDS = {
   fifteen: { by: 'собранные поля', score: shellStats('fifteen', 'wins'), text: count(['поле', 'поля', 'полей']) },
   rubik: { by: 'собранные кубики', score: shellStats('rubik', 'wins'), text: count(['кубик', 'кубика', 'кубиков']) },
   hanoi: { by: 'собранные башни', score: shellStats('hanoi', 'wins'), text: count(['башня', 'башни', 'башен']) },
-  repair: { by: 'починенные телефоны', score: repairDone, text: count(['телефон', 'телефона', 'телефонов']) },
+  repair: { by: 'починенные устройства', score: repairDone, text: count(['устройство', 'устройства', 'устройств']) },
   wordle: { by: 'угаданные слова', score: shellStats('wordle', 'wins'), text: count(['слово', 'слова', 'слов']) },
   memory: { by: 'уровень', score: menuLevel('memory'), text: levelText },
   'bongo-cat': { by: 'ударов за всё время', score: gameStats('bongo-cat', 'hits'), text: count(['удар', 'удара', 'ударов']) },
@@ -711,7 +711,10 @@ const RULES = [
   ['game:2048:stats', { type: 'fields', fields: { '*.played': 'count', '*.wins': 'count', '*.bestTile': 'max' } }],
   ['game:rubik:stats', { type: 'fields', fields: { count: 'count', dnf: 'count', best: 'min', bestMoves: 'min', bestAo5: 'min', bestAo12: 'min' } }],
   ['game:repair:current', { type: 'level', at: 'level' }],
-  ['game:repair:progress', { type: 'fields', fields: { level: 'max', stars: 'count', perfect: 'count', sparks: 'count' } }],
+  // деньги и склад запчастей — расходуемое: заработал/купил на одном устройстве, потратил на другом — сходится
+  ['game:repair:progress', { type: 'fields', fields: {
+    level: 'max', stars: 'count', perfect: 'count', sparks: 'count', earned: 'count', money: { spend: 1500 }, 'stock.*': { spend: 0 },
+  } }],
   ['game:repair:seen', { type: 'fields', fields: { '': 'union' } }],
   ['game:hanoi:stats', { type: 'fields', fields: { '*.played': 'count', '*.wins': 'count', '*.perfect': 'count', '*.bestMoves': 'min', '*.bestTime': 'min' } }],
   ['game:fifteen:stats', { type: 'fields', fields: { '*.played': 'count', '*.wins': 'count', '*.totalMoves': 'count', '*.bestMoves': 'min', '*.bestTime': 'min' } }],

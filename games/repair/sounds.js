@@ -7,7 +7,7 @@
 //   кисточка — шорох, спирт — шипение, чисто — искорки; лупа — стекло;
 //   зарядка — две ноты вверх (заряжается) или вниз (нет); включение — мелодия, глухая у пыльного динамика и
 //   хриплый щелчок у порванного; выключение — вниз; антивирус — «скан», жук — «буп», реклама — «плип»;
-//   прошивка — тики и аккорд; сдать — тёплый аккорд и звёзды по одной; возврат — мягкий «бум».
+//   прошивка — тики и аккорд; сдать — тёплый аккорд и звёзды по одной; возврат — мягкий «бум»; покупка — монетки.
 // createSounds(ctx) принимает готовый AudioContext — в тестах подставляется поддельный.
 
 import { freqOf } from '../../shared/sfx.js';
@@ -15,7 +15,7 @@ import { freqOf } from '../../shared/sfx.js';
 export const SOUNDS = [
   'click', 'tool', 'flip', 'heat', 'heated', 'suction', 'unscrew', 'screw', 'clink', 'unplug', 'plug', 'spark', 'lift',
   'place', 'newpart', 'scrub', 'fizz', 'clean', 'inspect', 'charge', 'nocharge', 'boot', 'off', 'blink', 'scan',
-  'squash', 'ad', 'flash', 'flashed', 'deliver', 'star', 'return', 'error', 'hint',
+  'squash', 'ad', 'flash', 'flashed', 'deliver', 'star', 'return', 'error', 'hint', 'cash',
 ];
 
 export function createSounds(ctx) {
@@ -235,6 +235,11 @@ export function createSounds(ctx) {
       sine(150, t, { peak: 0.1, decay: 0.12, slide: 1.3, type: 'triangle' });
     },
     hint: (t) => glass(freqOf(16), t, { peak: 0.045, decay: 0.5 }),
+    // касса: два мягких «динь» монеток
+    cash: (t) => {
+      glass(freqOf(19) * wobble(0.02), t, { peak: 0.04, decay: 0.3 });
+      glass(freqOf(24) * wobble(0.02), t + 0.08, { peak: 0.035, decay: 0.45 });
+    },
   };
 
   return {

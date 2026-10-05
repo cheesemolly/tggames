@@ -44,6 +44,10 @@
   --soot: #2a1a10;
   --ind: #f6f6f6;
   --ind-wet: #e53935;
+  --dark-plastic: #2b2e36;
+  --joy-l: #ff6a5c;
+  --joy-r: #3fc6e0;
+  --lcd-ink: #22361a;
 }
 
 [data-game="repair"], [data-game="repair"] [data-skin] {
@@ -129,6 +133,7 @@
 }
 [data-game="repair"] .pr-icon-btn:active { transform: scale(0.92); }
 @media (max-width: 360px) {
+  [data-game="repair"] .pr-title { font-size: 15px; }
   [data-game="repair"] .pr-icon-btn { width: 32px; height: 32px; }
   [data-game="repair"] .pr-actions { gap: 4px; }
 }
@@ -161,7 +166,9 @@
   font-size: 13px;
   line-height: 1.25;
 }
+[data-game="repair"] .pr-ticket-side { display: grid; justify-items: end; gap: 2px; }
 [data-game="repair"] .pr-stars { display: flex; gap: 1px; font-size: 16px; color: var(--star); }
+[data-game="repair"] .pr-pay { font-size: 11px; font-weight: 700; color: var(--hint); white-space: nowrap; }
 [data-game="repair"] .pr-star { display: inline-block; transition: opacity 0.3s ease, filter 0.3s ease; }
 [data-game="repair"] .pr-star-off { opacity: 0.28; filter: grayscale(1); }
 
@@ -290,7 +297,7 @@
 [data-game="repair"] .pr-mat-cell { fill: var(--magnet-cell); }
 
 /* стороны и переворот */
-[data-game="repair"] .pr-flipper { transform-box: view-box; transform-origin: 180px 220px; }
+[data-game="repair"] .pr-flipper { transform-box: view-box; }
 [data-game="repair"] .pr-svg[data-view="back"] .pr-front,
 [data-game="repair"] .pr-svg[data-view="front"] .pr-back { display: none; }
 [data-game="repair"] .pr-part, [data-game="repair"] .pr-screwnode { transform-box: view-box; transform-origin: 0 0; }
@@ -397,6 +404,7 @@
 [data-game="repair"] [data-screen="charge"] .pr-scr-charge,
 [data-game="repair"] [data-screen="scan"] .pr-scr-scan,
 [data-game="repair"] [data-screen="clean"] .pr-scr-clean,
+[data-game="repair"] [data-screen="noos"] .pr-scr-noos,
 [data-game="repair"] [data-screen="flash"] .pr-scr-flash { display: inline; animation: pr-screen-in 0.3s ease-out; }
 @keyframes pr-screen-in { from { opacity: 0; } }
 [data-game="repair"] .pr-scr-black { fill: #000; }
@@ -588,3 +596,209 @@
 [data-game="repair"] .pr-skin[aria-checked="true"] .pr-swatch { outline: 3px solid var(--accent); outline-offset: 3px; }
 [data-game="repair"] .pr-toggle { display: flex; align-items: center; gap: 10px; margin-top: 10px; font-size: 14px; line-height: 1.3; cursor: pointer; }
 [data-game="repair"] .pr-toggle input { flex: none; width: 20px; height: 20px; margin: 0; accent-color: var(--accent); }
+
+/* ---------- кнопочный телефон, приставки ---------- */
+
+[data-game="repair"] .pr-plastic { stroke: rgb(0 0 0 / 0.14); stroke-width: 1; }
+[data-game="repair"] .pr-dark-plastic { fill: var(--dark-plastic); stroke: rgb(0 0 0 / 0.3); stroke-width: 1; }
+[data-game="repair"] .pr-shell-grip { fill: rgb(255 255 255 / 0.04); }
+[data-game="repair"] .pr-vent { fill: rgb(0 0 0 / 0.35); }
+[data-game="repair"] .pr-sticker { fill: rgb(255 255 255 / 0.1); }
+[data-game="repair"] .pr-sticker-text { fill: rgb(255 255 255 / 0.55); font-size: 8px; font-weight: 700; }
+[data-game="repair"] .pr-kickstand { fill: rgb(0 0 0 / 0.18); stroke: rgb(255 255 255 / 0.06); }
+[data-game="repair"] .pr-brand-dark { fill: rgb(255 255 255 / 0.3); font-size: 8px; font-weight: 800; letter-spacing: 0.2em; }
+[data-game="repair"] .pr-brand { fill: var(--ph-ink); font-size: 8px; font-weight: 800; letter-spacing: 0.12em; }
+[data-game="repair"] .pr-model-small { font-size: 6px; }
+[data-game="repair"] .pr-earpiece, [data-game="repair"] .pr-latch { fill: rgb(0 0 0 / 0.35); }
+[data-game="repair"] .pr-rail { fill: #8e98a5; }
+[data-game="repair"] .pr-bay { fill: rgb(0 0 0 / 0.25); }
+[data-game="repair"] .pr-dome { fill: #d4a64a; opacity: 0.85; }
+[data-game="repair"] .pr-battery-bay { fill: #1f2229; }
+[data-game="repair"] .pr-sim { fill: #e6c35c; }
+[data-game="repair"] .pr-sim-text { fill: #6a520e; font-size: 9px; font-weight: 800; }
+[data-game="repair"] .pr-gold, [data-game="repair"] .pr-gold-strip { fill: #d4a64a; }
+[data-game="repair"] .pr-label-sticker { fill: #f2f2f2; }
+[data-game="repair"] .pr-label-sticker + .pr-sticker-text { fill: #555; }
+[data-game="repair"] .pr-rubber { fill: #2c2f36; }
+[data-game="repair"] .pr-key { fill: #e9ecf0; stroke: rgb(0 0 0 / 0.2); stroke-width: 0.8; }
+[data-game="repair"] .pr-key-text { fill: #2b2e36; font-size: 10px; font-weight: 800; }
+[data-game="repair"] .pr-key-nav { fill: #c9ced6; }
+[data-game="repair"] .pr-key-dot { fill: #8e98a5; }
+[data-game="repair"] .pr-key-call { fill: #3ddc84; }
+[data-game="repair"] .pr-key-end { fill: #ff5a5a; }
+[data-game="repair"] .pr-key-worn { fill: none; stroke: #8a6a4a; stroke-width: 2; stroke-linecap: round; opacity: 0.8; }
+[data-game="repair"] .pr-sticky { fill: #a8742c; opacity: 0; transition: opacity 0.5s ease; }
+[data-game="repair"] .pr-d-keys .pr-sticky { opacity: 0.55; }
+[data-game="repair"] .pr-lcd-frame { fill: #1b1d22; }
+[data-game="repair"] .pr-lcd-ink { fill: var(--lcd-ink); }
+[data-game="repair"] .pr-lcd-big { fill: var(--lcd-ink); font-size: 18px; font-weight: 800; font-family: ui-monospace, Menlo, Consolas, monospace; }
+[data-game="repair"] .pr-lcd-small { fill: var(--lcd-ink); font-size: 8px; font-weight: 700; }
+
+[data-game="repair"] .pr-stick-cap { fill: #1b1d22; stroke: rgb(255 255 255 / 0.12); }
+[data-game="repair"] .pr-stick-top { fill: #3b3f47; stroke: rgb(255 255 255 / 0.15); }
+[data-game="repair"] .pr-dpad { fill: #1b1d22; }
+[data-game="repair"] .pr-abxy { fill: #1b1d22; stroke: rgb(255 255 255 / 0.18); }
+[data-game="repair"] .pr-pad { fill: rgb(0 0 0 / 0.22); }
+[data-game="repair"] .pr-mini-btn { fill: rgb(0 0 0 / 0.4); }
+[data-game="repair"] .pr-ssd { fill: #1f5641; stroke: #123828; }
+[data-game="repair"] .pr-fan-box { fill: #1b1d22; }
+[data-game="repair"] .pr-fan-ring { fill: #2b2e36; }
+[data-game="repair"] .pr-blade { fill: #4a4f58; }
+[data-game="repair"] .pr-fan-hub { fill: #6b7280; }
+[data-game="repair"] .pr-fan-blades { transform-box: fill-box; transform-origin: center; }
+[data-game="repair"] .pr-on .pr-fan-blades { animation: pr-spin 0.6s linear infinite; }
+@keyframes pr-spin { to { rotate: 360deg; } }
+[data-game="repair"] .pr-d-fan .pr-dust { opacity: 1; }
+[data-game="repair"] .pr-stick-module { fill: #2b2e36; }
+[data-game="repair"] .pr-stick-base { fill: #4a4f58; }
+[data-game="repair"] .pr-worn-ring { fill: none; stroke: #c7a26b; stroke-width: 2.4; stroke-dasharray: 3 2; }
+[data-game="repair"] .pr-joy { stroke: rgb(0 0 0 / 0.25); stroke-width: 1; }
+[data-game="repair"] .pr-joy-l { fill: var(--joy-l); }
+[data-game="repair"] .pr-joy-r { fill: var(--joy-r); }
+[data-game="repair"] .pr-svg[data-view="back"] .pr-face-front,
+[data-game="repair"] .pr-svg[data-view="front"] .pr-face-back { display: none; }
+[data-game="repair"] .pr-svg .pr-traylayer .pr-face-back { display: none; }
+[data-game="repair"] .pr-svg .pr-traylayer .pr-face-front { display: inline; }
+[data-game="repair"] .pr-cart-slot { fill: #0b0c0f; }
+[data-game="repair"] .pr-slot-dust { fill: none; stroke: var(--lint); stroke-width: 2; stroke-linecap: round; opacity: 0; transition: opacity 0.5s ease; }
+[data-game="repair"] .pr-d-slot .pr-slot-dust { opacity: 1; }
+[data-game="repair"] .pr-cart-reader { fill: #2b2e36; }
+[data-game="repair"] .pr-cart-mouth { fill: #0b0c0f; }
+[data-game="repair"] .pr-door-ridge { fill: none; stroke: rgb(0 0 0 / 0.15); stroke-width: 2; stroke-linecap: round; }
+[data-game="repair"] .pr-umd-window { fill: rgb(0 0 0 / 0.12); stroke: rgb(255 255 255 / 0.18); }
+[data-game="repair"] .pr-umd-hub { fill: #6b7280; }
+[data-game="repair"] .pr-umd-tray { fill: #23262c; }
+[data-game="repair"] .pr-disc { fill: #c9d3e0; stroke: #8e98a5; }
+[data-game="repair"] .pr-disc-shine { fill: none; stroke: rgb(255 255 255 / 0.5); stroke-width: 6; stroke-dasharray: 20 30; }
+[data-game="repair"] .pr-laser-rail { fill: #8e98a5; }
+[data-game="repair"] .pr-laser { fill: #3b3f47; stroke: #ff5a7a; stroke-width: 1; }
+
+/* экраны приставок */
+[data-game="repair"] .pr-ui-dark { fill: #161a22; }
+[data-game="repair"] .pr-ui-light { fill: #eef0f3; }
+[data-game="repair"] .pr-ui-title { fill: #fff; font-size: 8px; font-weight: 800; }
+[data-game="repair"] .pr-ui-time { fill: #fff; font-size: 8px; font-weight: 700; opacity: 0.8; }
+[data-game="repair"] .pr-ui-time-dark { fill: #2b2e36; }
+[data-game="repair"] .pr-ui-bar { fill: #fff; opacity: 0.25; }
+[data-game="repair"] .pr-ui-avatar { fill: #ff7a59; }
+[data-game="repair"] .pr-tile { opacity: 0.95; }
+[data-game="repair"] .pr-cursor { fill: none; stroke: #fff; stroke-width: 2; }
+[data-game="repair"] .pr-ui-light ~ .pr-cursor { stroke: #3fc6e0; }
+[data-game="repair"] [data-drift="l"] .pr-cursor { animation: pr-drift-l 1.6s ease-in-out infinite; }
+[data-game="repair"] [data-drift="r"] .pr-cursor { animation: pr-drift-r 1.6s ease-in-out infinite; }
+@keyframes pr-drift-l { 50% { translate: -14px 2px; } }
+@keyframes pr-drift-r { 50% { translate: 14px -2px; } }
+[data-game="repair"] .pr-xmb-bg { fill: #1f4fb8; }
+[data-game="repair"] .pr-xmb-wave { fill: rgb(255 255 255 / 0.18); }
+[data-game="repair"] .pr-xmb-wave-2 { fill: rgb(255 255 255 / 0.1); }
+[data-game="repair"] .pr-noos-disk { fill: none; stroke: #8e98a5; stroke-width: 3; }
+[data-game="repair"] .pr-noos-x { stroke: #ff5a5a; stroke-width: 3; stroke-linecap: round; }
+[data-game="repair"] .pr-noos-text { fill: #fff; font-size: 14px; font-weight: 800; }
+[data-game="repair"] .pr-noos-sub { fill: #9aa3ae; font-size: 11px; font-weight: 600; }
+
+/* ---------- магазин ---------- */
+
+[data-game="repair"] .pr-balance { display: flex; justify-content: space-between; align-items: baseline; padding: 10px 12px; margin-bottom: 10px; border-radius: 12px; background: var(--accent); color: var(--accent-text); }
+[data-game="repair"] .pr-balance span { font-size: 13px; opacity: 0.85; }
+[data-game="repair"] .pr-balance b { font-size: 18px; font-variant-numeric: tabular-nums; }
+[data-game="repair"] .pr-tabs { display: flex; gap: 4px; padding: 2px; margin-bottom: 10px; border-radius: 10px; background: var(--bg); }
+[data-game="repair"] .pr-tabs-scroll { overflow-x: auto; scrollbar-width: none; }
+[data-game="repair"] .pr-tabs-scroll::-webkit-scrollbar { display: none; }
+[data-game="repair"] .pr-tab {
+  flex: none;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--hint);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+[data-game="repair"] .pr-tab[aria-selected="true"] { background: var(--accent); color: var(--accent-text); }
+[data-game="repair"] .pr-shop-list { display: grid; gap: 5px; }
+[data-game="repair"] .pr-shop-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 8px 8px 12px; border-radius: 10px; background: var(--bg); }
+[data-game="repair"] .pr-shop-name { display: grid; min-width: 0; }
+[data-game="repair"] .pr-shop-name b { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+[data-game="repair"] .pr-shop-name span { font-size: 12px; color: var(--hint); }
+[data-game="repair"] .pr-buy {
+  flex: none;
+  padding: 7px 12px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+[data-game="repair"] .pr-buy:active { transform: scale(0.94); }
+[data-game="repair"] .pr-buy-short { background: color-mix(in srgb, var(--accent) 45%, var(--bg)); }
+[data-game="repair"] .pr-win-money { display: grid; justify-items: center; margin-top: 10px; font-size: 22px; font-weight: 900; color: var(--good); }
+[data-game="repair"] .pr-win-money span { font-size: 12px; font-weight: 600; color: var(--hint); }
+
+/* ---------- компьютер ---------- */
+
+[data-game="repair"] .pr-card.pr-card-pc { max-width: 440px; padding: 12px; }
+[data-game="repair"] .pr-monitor {
+  padding: 8px 10px;
+  border: 6px solid #2b2e36;
+  border-radius: 10px;
+  background: #0b1210;
+  box-shadow: inset 0 0 24px rgb(80 255 160 / 0.08);
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.35;
+  color: #7dffb0;
+}
+[data-game="repair"] .pr-term { height: 150px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; }
+[data-game="repair"] .pr-term::-webkit-scrollbar { display: none; }
+[data-game="repair"] .pr-term-line { white-space: pre-wrap; overflow-wrap: anywhere; }
+[data-game="repair"] .pr-term-head { color: #ffe27a; font-weight: 700; }
+[data-game="repair"] .pr-term-cmd { color: #e6edf3; }
+[data-game="repair"] .pr-term-ok { color: #7dffb0; }
+[data-game="repair"] .pr-term-warn { color: #ffcf5c; }
+[data-game="repair"] .pr-term-err { color: #ff7a7a; }
+[data-game="repair"] .pr-term-dim { color: #6f8f80; }
+[data-game="repair"] .pr-term-file { color: #9ad4ff; }
+[data-game="repair"] .pr-term-hint { color: #ffb627; font-style: italic; }
+[data-game="repair"] .pr-term-input { margin-top: 4px; padding-top: 4px; border-top: 1px solid rgb(125 255 176 / 0.15); white-space: pre-wrap; overflow-wrap: anywhere; color: #e6edf3; }
+[data-game="repair"] .pr-term-prompt { color: #7dffb0; }
+[data-game="repair"] .pr-term-caret { display: inline-block; width: 7px; height: 13px; margin-left: 1px; vertical-align: -2px; background: #7dffb0; animation: pr-caret 1s steps(2) infinite; }
+@keyframes pr-caret { 50% { opacity: 0; } }
+[data-game="repair"] .pr-kbd { display: grid; gap: 4px; margin-top: 8px; }
+[data-game="repair"] .pr-kbd-row { display: flex; gap: 4px; }
+[data-game="repair"] .pr-key-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 15px;
+  font-weight: 700;
+  box-shadow: 0 2px 0 rgb(0 0 0 / 0.18);
+  cursor: pointer;
+  transition: transform 0.08s ease;
+}
+[data-game="repair"] .pr-key-btn:active { transform: translateY(2px); box-shadow: none; }
+[data-game="repair"] .pr-key-btn svg { width: 18px; height: 18px; vertical-align: middle; }
+[data-game="repair"] .pr-key-fn { flex-grow: 1.4; }
+[data-game="repair"] .pr-key-space { flex-grow: 4; font-family: inherit; font-size: 12px; color: var(--hint); }
+[data-game="repair"] .pr-key-enter { flex-grow: 2; background: var(--accent); color: var(--accent-text); }
+[data-game="repair"] .pr-pc-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+[data-game="repair"] .pr-pc-btn { width: 100%; }
+@media (max-width: 360px) {
+  [data-game="repair"] .pr-key-btn { height: 32px; font-size: 13px; }
+  [data-game="repair"] .pr-kbd, [data-game="repair"] .pr-kbd-row { gap: 3px; }
+  [data-game="repair"] .pr-term { height: 120px; }
+}

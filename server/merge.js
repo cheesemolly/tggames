@@ -94,7 +94,10 @@ export const RULES = [
   ['game:2048:stats', { type: 'fields', fields: { '*.played': 'count', '*.wins': 'count', '*.bestTile': 'max' } }],
   ['game:rubik:stats', { type: 'fields', fields: { count: 'count', dnf: 'count', best: 'min', bestMoves: 'min', bestAo5: 'min', bestAo12: 'min' } }],
   ['game:repair:current', { type: 'level', at: 'level' }],
-  ['game:repair:progress', { type: 'fields', fields: { level: 'max', stars: 'count', perfect: 'count', sparks: 'count' } }],
+  // деньги и склад запчастей — расходуемое: заработал/купил на одном устройстве, потратил на другом — сходится
+  ['game:repair:progress', { type: 'fields', fields: {
+    level: 'max', stars: 'count', perfect: 'count', sparks: 'count', earned: 'count', money: { spend: 1500 }, 'stock.*': { spend: 0 },
+  } }],
   ['game:repair:seen', { type: 'fields', fields: { '': 'union' } }],
   ['game:hanoi:stats', { type: 'fields', fields: { '*.played': 'count', '*.wins': 'count', '*.perfect': 'count', '*.bestMoves': 'min', '*.bestTime': 'min' } }],
   ['game:fifteen:stats', { type: 'fields', fields: { '*.played': 'count', '*.wins': 'count', '*.totalMoves': 'count', '*.bestMoves': 'min', '*.bestTime': 'min' } }],

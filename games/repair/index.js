@@ -1,15 +1,16 @@
-// Ремонт телефона: клиент приносит сломанный телефон с жалобой — найди поломку, разбери, почини и собери.
-// Инструменты внизу (фен, присоска, отвёртка, лопатка, пинцет, запчасти, кисточка, спирт, лупа, зарядка,
-// антивирус, прошивка): выбери и коснись детали; фен держат, кисточкой и спиртом трут. Снятое ложится в лотки,
-// винты — на магнитный коврик. «Сдать» — проверка: работает — звёзды и следующий клиент, нет — возврат (−★).
-// Правила, поломки и подсказка — logic.js, рисунки — scene.js, звуки — sounds.js.
+// Ремонт гаджетов: клиент приносит сломанное устройство (смартфон, кнопочный телефон, ПарДек, Свичер, Карманка) с
+// жалобой — найди поломку, разбери, почини и собери. Инструменты внизу (фен, присоска, отвёртка, лопатка, пинцет,
+// запчасти, кисточка, спирт, лупа, зарядка, антивирус, компьютер): выбери и коснись детали; фен держат, кисточкой и
+// спиртом трут. Снятое ложится в лотки, винты — на магнитный коврик. Новые детали покупаются в магазине (деньги —
+// за сданные заказы), ставятся со склада. Прошивка — кабель от компьютера и команды в терминале на своей клавиатуре.
+// «Сдать» — проверка: работает — звёзды, оплата и следующий клиент, нет — возврат (−★).
+// Правила — logic.js (устройства — devices.js, терминал — terminal.js), рисунки — scene.js и kinds/*.js, звуки — sounds.js.
 //
-// Сцена — один SVG (viewBox 360×440): лотки, телефон (две стороны в .pr-flipper — переворот сжатием по X),
-// слой лотка и слой полёта. Деталь — узел <g class="pr-part"> с CSS translate/scale (на телефоне 0/1, в лотке —
+// Сцена — один SVG (viewBox 360×440): лотки, устройство (две стороны и «край» в .pr-flipper — переворот сжатием по X),
+// слой лотка и слой полёта. Деталь — узел <g class="pr-part"> с CSS translate/scale (на месте 0/1, в лотке —
 // уменьшенная копия на своём месте); при снятии узел переезжает в слой лотка, при установке — в своё гнездо
-// (порядок слоёв задают пустые <g data-slot>). Эффекты (тряска) — у внутреннего <g class="pr-inner">.
-// Попадание пальцем считается своим кодом по рамкам целей (scene.js), с запасом — мелкие винты и разъёмы
-// ловятся и чуть мимо.
+// (порядок слоёв задают пустые <g data-slot>, винты — сразу над своей деталью). Отстёгиваемые части (край) видны
+// с обеих сторон: сзади сдвигаются зеркально. Попадание пальцем считается своим кодом по рамкам целей.
 
 import { el } from '../../shared/dom.js';
 import { animate, showLayer, hideLayer, reducedMotion } from '../../shared/motion.js';
@@ -18,56 +19,66 @@ import { createFx } from '../../shared/fx.js';
 import { createAudio } from '../../shared/sfx.js';
 import { createSounds } from './sounds.js';
 import {
-  TOOLS, PARTS, SCREW_IDS, SCREWS, CONNS, CONN_IDS, TUTORIAL, COMPLAINTS, newOrder, act, nextStep, reach, screenOf,
-  starsFor, isValidState, emptyProgress, isValidProgress, recordWin,
+  DEVICES, KINDS, TOOLS, TUTORIAL, UNLOCK, COMPLAINTS, newOrder, act, nextStep, reach, screenOf, starsFor, isValidState,
+  normProgress, recordWin, earningsFor, shopParts, stockKey, screwsOf,
 } from './logic.js';
-import {
-  W, H, BOX, TRAY, SCREW_AT, MAT_CELL, CONN_AT, JACK, BUTTON, abs, defs, trays, backBody, frontBody, partMarkup,
-  plugMarkup, screwMarkup, avatar, TOOL_ICONS,
-} from './scene.js';
+import { run as runTerminal, greet, PROMPT } from './terminal.js';
+import { W, H, defs, avatar, TOOL_ICONS } from './scene.js';
+import phone from './kinds/phone.js';
+import button from './kinds/button.js';
+import deck from './kinds/deck.js';
+import nswitch from './kinds/switch.js';
+import psp from './kinds/psp.js';
 
+const LAYOUTS = { phone, button, deck, switch: nswitch, psp };
 const SKINS = ['telegram', 'green', 'blue', 'wood', 'night'];
 const AUTO_HINT = 2;                     // первые заказы — подсказка показывается сама и бесплатно
 const HEAT_MS = 1100;
 const SCRUB = 240;                       // сколько потереть (единиц сцены)
 const SVGNS = 'http://www.w3.org/2000/svg';
+const KEYBOARD = ['1234567890', 'qwertyuiop', 'asdfghjkl', 'zxcvbnm._-'];
 
 const T = {
-  title: 'Ремонт телефона',
-  sub: (level, stars) => `Заказ №${level} · ★ ${stars}`,
+  title: 'Ремонт гаджетов',
+  sub: (level, money) => `Заказ №${level} · ${rub(money)}`,
   tools: {
     heat: 'Фен', suction: 'Присоска', screwdriver: 'Отвёртка', spudger: 'Лопатка', tweezers: 'Пинцет', parts: 'Запчасти',
-    brush: 'Кисточка', alcohol: 'Спирт', magnifier: 'Лупа', charger: 'Зарядка', antivirus: 'Антивирус', flash: 'Прошивка',
+    brush: 'Кисточка', alcohol: 'Спирт', magnifier: 'Лупа', charger: 'Зарядка', antivirus: 'Антивирус', flash: 'Ноутбук',
   },
   toolHints: {
-    heat: 'Держи на крышке или экране, пока клей не размягчится',
+    heat: 'Держи на детали на клею, пока клей не размягчится',
     suction: 'Снимает прогретую крышку или экран',
     screwdriver: 'Выкручивает и закручивает винты',
     spudger: 'Отключает и подключает шлейфы',
     tweezers: 'Снимает детали и ставит их обратно',
-    parts: 'Ставит новую деталь на пустое место',
+    parts: 'Ставит новую деталь со склада на пустое место',
     brush: 'Потри пыльное место',
-    alcohol: 'Потри окисление на плате',
+    alcohol: 'Потри липкое или окисленное',
     magnifier: 'Коснись детали — посмотреть, что с ней',
     charger: 'Вставь в гнездо — проверить зарядку',
-    antivirus: 'Коснись экрана включённого телефона',
-    flash: 'Вставь в гнездо — перепрошить телефон',
+    antivirus: 'Коснись экрана включённого смартфона',
+    flash: 'Вставь кабель в гнездо — откроется терминал',
+  },
+  names: {
+    cover: 'задняя крышка', shield: 'экран платы', bracket: 'нижняя планка', battery: 'батарея', camera: 'камера',
+    speaker: 'динамик', port: 'плата зарядки', display: 'экран', fascia: 'передняя панель', keypad: 'клавиатура',
+    plate: 'пластина', shell: 'корпус', fan: 'вентилятор', ssd: 'диск', stickL: 'левый стик', stickR: 'правый стик',
+    joyL: 'левый контроллер', joyR: 'правый контроллер', cart: 'считыватель картриджей', door: 'дверца батареи',
+    umd: 'привод дисков', nub: 'шишечка',
   },
   flip: 'Перевернуть',
   hint: 'Подсказка',
   deliver: 'Сдать',
   pickTool: 'Выбери инструмент внизу',
   why: {
-    flip: 'Это с другой стороны — переверни телефон',
-    cover: 'Сначала сними заднюю крышку',
-    shield: 'Это под экраном платы — открути и сними его',
-    bracket: 'Это под нижней планкой — открути и сними её',
+    flip: 'Это с другой стороны — переверни',
+    blocked: (by) => `Сначала сними: ${T.names[by] ?? by}`,
     'no-holder': 'Винту некуда вкрутиться — нет детали',
     'no-part': 'Детали нет на месте',
     glue: 'Держится на клею. Прогрей края феном',
-    'flex-holds': 'Экран держит шлейф — отключи его с обратной стороны',
+    'flex-holds': 'Держит шлейф — отключи его',
     'heat-where': 'Феном греют клей крышки и экрана',
-    'suction-where': 'Присоской снимают крышку и экран',
+    'suction-where': 'Присоской снимают детали на клею',
     'no-screws': 'Тут нечего откручивать',
     'use-suction': 'Это на клею — прогрей феном и сними присоской',
     'spudger-where': 'Лопаткой отключают и подключают шлейфы',
@@ -78,62 +89,71 @@ const T = {
     flex: 'Сначала отключи шлейф лопаткой',
     'parts-where': 'Новую деталь ставят на пустое место',
     'remove-first': 'Сначала сними старую деталь',
-    'inside-missing': 'Внутри не всё собрано — проверь детали и винты',
+    'inside-missing': (by) => `Под ней не всё собрано: ${T.names[by] ?? by}`,
+    'no-stock': 'На складе нет — купи в магазине',
     clean: 'Тут и так чисто',
-    'brush-weak': 'Окисление кисточкой не взять — нужен спирт',
-    'brush-where': 'Кисточкой чистят гнездо зарядки и динамик',
+    'brush-weak': 'Кисточкой не взять — нужен спирт',
+    'brush-where': 'Кисточкой чистят пыль',
     'alcohol-dust': 'Это пыль — тут нужна кисточка',
-    'alcohol-where': 'Спиртом отмывают окисление на плате',
-    'charger-where': 'Зарядку — в гнездо внизу',
-    'antivirus-where': 'Антивирус запускают на экране',
-    'power-off': 'Сначала включи телефон — кнопка сбоку',
+    'alcohol-where': 'Спиртом отмывают липкое и окисление',
+    'charger-where': 'Зарядку — в гнездо',
+    'antivirus-where': 'Антивирус — на экране смартфона',
+    'power-off': 'Сначала включи — кнопка питания',
     'no-screen': 'Экран не работает — антивирус не запустить',
-    'flash-where': 'Кабель прошивки — в гнездо внизу',
-    'no-need': 'Телефон загружается — прошивка не нужна',
-    'no-link': 'Компьютер не видит телефон — что-то с зарядкой',
-    'no-power': 'Нет питания — прошивка не начнётся',
     'no-bug': '',
     done: '',
     nothing: '',
   },
   finds: {
     ok: 'Всё в порядке',
-    'cover-ok': 'Крышка целая',
     'cover-glass': 'Стекло камеры треснуло — нужна новая крышка',
-    'cover-bulge': 'Крышку что-то выдавливает изнутри',
-    'display-ok': 'Экран целый',
+    'cover-bulge': 'Корпус что-то выдавливает изнутри',
     'display-crack': 'Стекло экрана разбито — нужен новый экран',
-    'battery-ok': 'Батарея в порядке',
     'battery-swollen': 'Батарея вздулась! Под замену',
     'battery-worn': 'Батарея изношена: держит 38% ёмкости',
-    'camera-ok': 'Камера в порядке',
     'camera-dead': 'Модуль камеры сгорел',
-    'speaker-ok': 'Динамик в порядке',
     'speaker-torn': 'Мембрана динамика порвана',
-    'speaker-dust': 'Сетка динамика забита пылью',
-    'port-ok': 'Плата зарядки в порядке',
+    'speaker-dirty': 'Сетка динамика забита пылью',
     'port-burnt': 'Плата зарядки сгорела',
     'jack-ok': 'Гнездо чистое',
-    'jack-lint': 'В гнезде слежавшийся пух из кармана',
+    'jack-dirty': 'В гнезде слежавшийся пух из кармана',
     'jack-burnt': 'Контакты в копоти — сгорела плата зарядки',
     'board-ok': 'Плата чистая',
-    'board-corrosion': 'Окисление — плата побывала в воде',
+    'board-dirty': 'Окисление — плата побывала в воде',
     'indicator-ok': 'Индикатор влаги белый — воды не было',
-    'indicator-red': 'Индикатор влаги красный — телефон был в воде',
+    'indicator-red': 'Индикатор влаги красный — был в воде',
+    'keypad-worn': 'Контакты кнопок стёрты — нужна новая клавиатура',
+    'keys-dirty': 'Под кнопками липкий сладкий чай',
+    'keys-ok': 'Кнопки чистые',
+    'fan-dirty': 'Вентилятор забит пылью',
+    'fan-grind': 'Подшипник вентилятора разбит — скрежет',
+    'ssd-dead': 'Диск не отвечает — нужен новый',
+    'stickL-drift': 'Датчик левого стика стёрт — дрейф',
+    'stickR-drift': 'Датчик правого стика стёрт — дрейф',
+    'joyL-drift': 'Стик левого контроллера стёрт — дрейф',
+    'joyR-drift': 'Стик правого контроллера стёрт — дрейф',
+    'cart-dead': 'Считыватель картриджей сгорел',
+    'slot-dirty': 'В щели картриджа пыль на контактах',
+    'slot-ok': 'Щель картриджа чистая',
+    'umd-dead': 'Лазер привода не светит — нужен новый привод',
+    'nub-drift': 'Шишечка стёрта — дрейф',
     'bat-loose': 'Разъём батареи отошёл',
     'disp-loose': 'Шлейф экрана отошёл',
-    'cam-loose': 'Шлейф камеры отошёл',
-    'usb-loose': 'Шлейф зарядки отошёл',
     'conn-off': 'Шлейф отключён',
     'conn-ok': 'Шлейф подключён плотно',
   },
+  okPart: (p) => `${cap(T.names[p] ?? p)} в порядке`,
   problems: {
     swollen: 'батарея вздута', 'no-power': 'не включается', drains: 'сразу гаснет', bootloop: 'висит на логотипе',
     'no-screen': 'экран не показывает', cracked: 'экран разбит', 'no-charge': 'не заряжается', 'no-sound': 'нет звука',
     quiet: 'звук глухой', 'no-camera': 'камера не работает', blurry: 'фото мутные', virus: 'вирусы на месте',
+    'no-os': 'система не загружается', 'stick-l': 'левый стик дрейфует', 'stick-r': 'правый стик дрейфует',
+    'joy-l': 'левый контроллер дрейфует', 'joy-r': 'правый контроллер дрейфует', overheat: 'перегревается',
+    noisy: 'вентилятор скрежещет', 'no-cart': 'не читает картриджи', 'no-disc': 'не читает диски', nub: 'шишечка дрейфует',
+    'no-keys': 'кнопки не нажимаются', sticky: 'кнопки залипают',
   },
   returned: (list) => `Клиент вернулся: ${list}`,
-  assemble: (m) => (m.parts.length ? 'Сначала собери телефон: не хватает деталей' : `Сначала собери телефон: ${m.screws} ${plural(m.screws, 'винт', 'винта', 'винтов')} не на месте`),
+  assemble: (m) => (m.parts.length ? 'Сначала собери: не хватает деталей' : `Сначала собери: ${m.screws} ${plural(m.screws, 'винт', 'винта', 'винтов')} не на месте`),
   heated: 'Клей размягчился',
   rub: 'Потри пальцем',
   charging: '⚡ Заряжается',
@@ -144,26 +164,35 @@ const T = {
   scanFound: (n) => `Найдено ${n} ${plural(n, 'вирус', 'вируса', 'вирусов')} — дави жуков!`,
   scanClean: 'Вирусов нет',
   cured: 'Вирусы удалены',
-  flashing: 'Прошивка',
-  flashed: 'Перепрошит — загружается',
-  spark: 'Искра! Сначала отключай батарею',
+  flashed: 'Прошито — загружается',
+  spark: 'Искра! Сначала обесточь',
   wasted: 'Старая деталь была исправна',
+  noStock: (p) => `Нет на складе: ${T.names[p] ?? p}`,
   hintNote: 'С подсказкой — не больше двух звёзд за заказ',
   newFault: 'Новая поломка',
+  newKind: 'Новое в мастерской',
   gotIt: 'Понятно',
   notes: 'Что нашёл',
   noNotes: 'Пока ничего — посмотри лупой, включи, проверь зарядку',
-  complaint: 'Жалоба',
+  pay: (n) => `Оплата ${rub(n)}`,
+  prepaid: (n) => `предоплата ${rub(n)}`,
   win: (n) => `Заказ №${n} готов!`,
+  earned: (n) => `+${rub(n)}`,
   quotes: ['Как новый! Спасибо!', 'Вы волшебник!', 'Ура, работает!', 'Огонь, спасибо огромное!', 'Буду всем вас советовать!'],
   mistakes: { sparks: 'искры', waste: 'лишние детали', returns: 'возвраты', hints: 'подсказка' },
   clean: 'Без единой ошибки',
   next: 'Следующий клиент',
-  menu: (n, stars) => `Починено: ${n} · ★ ${stars}`,
+  menu: (n, money) => `Починено: ${n} · ${rub(money)}`,
   stats: 'Мастерская',
-  statRows: ['Починено телефонов', 'Звёзд', 'На три звезды', 'Искр за всё время'],
+  statRows: ['Починено', 'Заработано всего', 'Звёзд', 'На три звезды', 'Искр за всё время'],
   rank: 'Звание',
   ranks: [[0, 'Новичок'], [15, 'Подмастерье'], [45, 'Мастер'], [120, 'Профи'], [300, 'Легенда мастерской']],
+  shop: 'Магазин запчастей',
+  balance: 'На счету',
+  stock: (n) => (n ? `на складе ${n}` : 'нет на складе'),
+  prepayNote: 'Не хватает денег — клиент внесёт предоплату, её вычтут из оплаты.',
+  broke: 'Не хватает денег',
+  bought: (p) => `Куплено: ${T.names[p] ?? p}`,
   settings: 'Настройки',
   skin: 'Коврик',
   skins: { telegram: 'По умолчанию', green: 'Зелёный', blue: 'Силикон', wood: 'Верстак', night: 'Ночь' },
@@ -171,31 +200,49 @@ const T = {
   marks: 'Показывать, где работает инструмент',
   howTo: 'Как играть',
   close: 'Закрыть',
+  pc: 'Ноутбук мастера',
+  unplug: 'Отключить',
+  pcHint: 'Подсказка',
+  pcHintLine: (cmd) => `подсказка: ${cmd}`,
+  progressLine: (k) => `[${'█'.repeat(k)}${'░'.repeat(10 - k)}] ${k * 10}%`,
+  pcDone: 'Готово. Перезагрузка…',
   rules: [
-    'К тебе приходят клиенты со сломанными телефонами. Прочитай жалобу, найди поломку и почини.',
-    'Выбери инструмент внизу и коснись детали. Фен и присоска снимают крышку и экран, отвёртка — винты, лопатка — шлейфы, пинцет — детали.',
-    'Прежде чем трогать шлейфы — отключи батарею, иначе искра.',
-    'Понять, что сломано, помогут лупа, зарядка и кнопка питания. Новую деталь ставь только вместо сломанной.',
-    'Собери телефон и нажми «Сдать». Без ошибок — три звезды.',
+    'К тебе несут сломанные смартфоны, кнопочные телефоны и приставки. Прочитай жалобу, найди поломку и почини.',
+    'Выбери инструмент внизу и коснись детали. Фен и присоска снимают детали на клею, отвёртка — винты, лопатка — шлейфы, пинцет — детали.',
+    'Прежде чем трогать шлейфы — обесточь: отключи батарею или вынь её. Иначе искра.',
+    'Новые детали покупай в магазине 🛒 на деньги за заказы. Ставь только вместо сломанных.',
+    'Прошивка — «Ноутбук» в гнездо: в терминале devices, list и flash <файл>.',
+    'Собери и нажми «Сдать». Без ошибок — три звезды и чаевые.',
   ],
   play: 'В мастерскую',
   soundOn: 'Выключить звук',
   soundOff: 'Включить звук',
   intro: {
     virus: ['Вирусы', 'Включи телефон кнопкой сбоку, возьми «Антивирус» и коснись экрана — потом дави найденных жуков. Разбирать ничего не нужно.'],
-    'screen-crack': ['Разбитый экран', 'Экран на клею, а его шлейф — с обратной стороны. Сними крышку, открути экран платы, отключи батарею, потом шлейф экрана. Переверни, прогрей экран, сними присоской и поставь новый. Собери в обратном порядке.'],
+    'screen-crack': ['Разбитый экран', 'Купи экран в магазине 🛒. Сними крышку, открути экран платы, отключи батарею, потом шлейф экрана. Переверни, прогрей экран, сними присоской, поставь новый «Запчастями». Собери в обратном порядке.'],
     'port-dirty': ['Не заряжается', 'Проверь «Зарядкой» и посмотри «Лупой» в гнездо внизу. Иногда хватает кисточки.'],
     'battery-swollen': ['Вздутая батарея', 'Батарея раздулась и выдавливает крышку. Отключи её разъём лопаткой и только потом вынимай.'],
     'screen-flex': ['Чёрный экран без трещин', 'Возможно, просто отошёл шлейф. Найди его лупой и вставь обратно лопаткой — новый экран не нужен.'],
     'speaker-dust': ['Глухой звук', 'Включи телефон и послушай мелодию. Глухо — пыль в динамике, он под нижней планкой.'],
     'loose-battery': ['Не включается', 'После падения мог отойти разъём батареи. Вставить его на место — дело секунды.'],
     'camera-glass': ['Мутные фото', 'Посмотри лупой на стёклышко камеры сзади: если треснуло — менять нужно крышку, а не камеру.'],
-    bootloop: ['Висит на логотипе', 'Это программа. Подключи «Прошивку» к гнезду — телефон перепрошьётся.'],
+    bootloop: ['Висит на логотипе', 'Это программа. Вставь «Ноутбук» в гнездо: в терминале набери devices — узнаешь код модели, list — список прошивок, потом flash и имя самой свежей прошивки этой модели.'],
     'port-broken': ['Сгоревшая зарядка', 'Копоть в гнезде — плата зарядки сгорела. Она под нижней планкой, её шлейф отключай без батареи.'],
-    water: ['Утопленник', 'Внутри покраснел индикатор влаги. Отключи батарею и отмой окисление на плате спиртом.'],
+    water: ['Утопленник', 'Внутри покраснел индикатор влаги. Обесточь и отмой окисление на плате спиртом.'],
     'speaker-broken': ['Нет звука', 'Мелодии при включении нет совсем — динамик порван. Кисточка тут не поможет.'],
-    'battery-worn': ['Гаснет сразу', 'Телефон включается на миг и гаснет — батарея износилась. Лупа покажет ёмкость.'],
+    'battery-worn': ['Гаснет сразу', 'Включается на миг и гаснет — батарея износилась. Лупа покажет ёмкость.'],
     'camera-module': ['Чёрная камера', 'Стёклышко целое? Тогда сгорел модуль камеры. Его шлейф — под экраном платы.'],
+    'stick-drift-l': ['Дрейф стика', 'Включи — курсор в меню ползёт сам. Модули стиков под задней крышкой: сзади всё зеркально, левый стик — справа.'],
+    'ssd-dead': ['Система не найдена', 'Диск сломан: замени его, а новый придёт пустым — систему поставь с компьютера (flash).'],
+    'joy-drift-r': ['Дрейф контроллера', 'Контроллеры снимаются пинцетом без разборки. Сзади они меняются местами — смотри внимательно.'],
+    'umd-dead': ['Не читает диски', 'Корпус открывается только без батареи: дверца, батарея, потом 4 винта. Так и правильно — без питания искр не будет.'],
+    'cart-dirty': ['Не видит картриджи', 'Щель картриджа — на верхнем торце. Почисть её кисточкой снаружи.'],
+  },
+  kindIntro: {
+    button: ['Кнопочный телефон', 'Крышка и батарея снимаются руками — пинцетом. Вынул батарею — обесточил, шлейфы можно трогать. Спереди: панель, клавиатура, пластина на винтах, экран.'],
+    deck: ['ПарДек', 'Портативный компьютер: крышка на четырёх винтах, внутри батарея со шлейфом, вентилятор, диск и модули стиков.'],
+    switch: ['Свичер', 'Приставка с контроллерами по бокам: их снимают пинцетом, крышка — только без них.'],
+    psp: ['Карманка', 'Карманная приставка с дисками: батарея за дверцей, корпус — на винтах.'],
   },
 };
 
@@ -208,16 +255,21 @@ function plural(n, one, few, many) {
   return many;
 }
 
+const rub = (n) => `${String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ')} ₽`;
+const cap = (t) => t.charAt(0).toUpperCase() + t.slice(1);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const svgIcon = (body) => `<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
 const ICONS = {
   flip: svgIcon('<path d="M4 12a8 8 0 0 1 13.7-5.6L20 9"/><path d="M20 4v5h-5"/><path d="M20 12a8 8 0 0 1-13.7 5.6L4 15"/><path d="M4 20v-5h5"/>'),
   hint: svgIcon('<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1.1 2V16h5v-.2c.1-.8.5-1.5 1.1-2A6 6 0 0 0 12 3Z"/>'),
   deliver: svgIcon('<path d="M20 6 9 17l-5-5"/>'),
+  shop: svgIcon('<path d="M3 4h2l2.4 11.2a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 2-1.5L21 8H6"/><circle cx="10" cy="20" r="1.4"/><circle cx="17" cy="20" r="1.4"/>'),
   stats: svgIcon('<rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="7" width="4" height="14" rx="1"/><rect x="17" y="3" width="4" height="18" rx="1"/>'),
   gear: svgIcon('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/>'),
   soundOn: svgIcon('<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/>'),
   soundOff: svgIcon('<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="m16 9 5 6"/><path d="m21 9-5 6"/>'),
+  back: svgIcon('<path d="M20 12H8"/><path d="m12 6-6 6 6 6"/>'),
+  enter: svgIcon('<path d="M20 5v7a3 3 0 0 1-3 3H6"/><path d="m10 11-4 4 4 4"/>'),
 };
 
 const defaultSettings = () => ({ skin: 'telegram', marks: true });
@@ -229,7 +281,7 @@ let ui = null;
 let toast = null;
 let fx = null;
 let game = null;
-let progress = emptyProgress();
+let progress = normProgress(null);
 let settings = defaultSettings();
 let seen = [];
 let soundOn = true;
@@ -239,7 +291,7 @@ let modalToken = 0;
 let busy = 0;                            // идут анимации — касания сцены ждут
 let pd = null;                           // нажатие: { id, x, y, target, mode, last }
 let overlay = '';                        // временное состояние экрана: scan, clean, charge, empty, flash, logo
-let heatLevel = { cover: 0, display: 0 };
+let heatLevel = {};
 let scrubbed = 0;
 let mood = 'calm';
 let moodTimer = 0;
@@ -249,6 +301,7 @@ let bugs = [];
 let bugRaf = 0;
 let bugLast = 0;
 let adsGone = new Map();                 // закрытая реклама → когда вернётся
+let pc = null;                           // открытый компьютер: { lines, input, history, at, box, busy }
 const timers = new Set();
 const audio = createAudio(createSounds);
 const lastSound = new Map();
@@ -284,12 +337,14 @@ function svgEl(tag, attrs = {}, html = '') {
 }
 
 function save() {
-  if (!api || !game) return;
-  if (game.done) return;
+  if (!api || !game || game.done) return;
   api.storage.set('current', game);
 }
 
+const saveProgress = () => api?.storage.set('progress', progress);
 const tutorialAuto = () => game && game.level <= AUTO_HINT;
+const D = () => DEVICES[game.kind];
+const L = () => LAYOUTS[game.kind];
 
 // ---------- сцена: постройка ----------
 
@@ -298,20 +353,30 @@ let S = null;
 
 function buildScene() {
   const svg = ui.svg;
-  svg.innerHTML = `${defs()}<g class="pr-traybg">${trays()}</g>
+  const l = L();
+  const d = D();
+  const slots = (side) => (l.ORDER[side] ?? []).map((p) => {
+    if (p === 'plugs') return '<g class="pr-plugs"></g>';
+    // винты — сразу над своей деталью
+    const screws = screwsOf(game.kind, p).map((id) => `<g data-screwslot="${id}"></g>`).join('');
+    return `<g data-slot="${p}"></g>${screws}`;
+  }).join('');
+  const dish = (x, y, w, h) => `<rect class="pr-dish" x="${x}" y="${y}" width="${w}" height="${h}" rx="14"/>`;
+  const cells = Object.values(l.MAT_CELL).map(([x, y]) => `<circle class="pr-mat-cell" cx="${x}" cy="${y}" r="11"/>`).join('');
+  svg.innerHTML = `${defs()}<g class="pr-traybg">${l.DISHES.map((b) => dish(...b)).join('')}
+<rect class="pr-mat" x="${l.MAT.x}" y="${l.MAT.y}" width="${l.MAT.w}" height="${l.MAT.h}" rx="10"/>${cells}</g>
 <g class="pr-flipper">
-  <g class="pr-side pr-back">${backBody()}
-    <g data-slot="camera"></g><g data-slot="battery"></g><g data-slot="port"></g><g data-slot="speaker"></g>
-    <g class="pr-plugs"></g>
-    <g data-slot="shield"></g><g data-slot="bracket"></g>
-    <g class="pr-screwslots"></g>
-    <g data-slot="cover"></g>
-  </g>
-  <g class="pr-side pr-front">${frontBody()}<g data-slot="display"></g><g class="pr-bugs"></g></g>
+  <g class="pr-side pr-back">${l.backBody(game)}${slots('back')}</g>
+  <g class="pr-side pr-front">${l.frontBody(game)}${slots('front')}<g class="pr-bugs"></g></g>
+  <g class="pr-edge">${slots('edge')}</g>
 </g>
 <g class="pr-traylayer"></g>
 <g class="pr-marks"></g>
 <g class="pr-flylayer"></g>`;
+  svg.dataset.kind = game.kind;
+  // цвет модели — на самом SVG: градиенты в <defs> берут переменные от своих предков, а не от места использования
+  svg.classList.forEach((c) => { if (c.startsWith('pr-col-')) svg.classList.remove(c); });
+  svg.classList.add(`pr-col-${game.model.color}`);
   S = {
     flipper: svg.querySelector('.pr-flipper'),
     tray: svg.querySelector('.pr-traylayer'),
@@ -319,36 +384,31 @@ function buildScene() {
     marks: svg.querySelector('.pr-marks'),
     bugs: svg.querySelector('.pr-bugs'),
     slots: Object.fromEntries([...svg.querySelectorAll('[data-slot]')].map((g) => [g.dataset.slot, g])),
+    screwSlots: Object.fromEntries([...svg.querySelectorAll('[data-screwslot]')].map((g) => [g.dataset.screwslot, g])),
     parts: {},
     plugs: {},
     screws: {},
-    screwSlots: {},
   };
-  // цвет модели — на самом SVG: градиенты в <defs> берут переменные от своих предков, а не от места использования
-  svg.classList.forEach((c) => { if (c.startsWith('pr-col-')) svg.classList.remove(c); });
-  svg.classList.add(`pr-col-${game.model.color}`);
-  for (const p of PARTS) {
+  S.flipper.style.transformOrigin = `${l.origin[0]}px ${l.origin[1]}px`;
+  for (const p of Object.keys(d.parts)) {
     const node = svgEl('g', { class: 'pr-part', 'data-part': p });
-    node.append(svgEl('g', { class: 'pr-inner' }, partMarkup(p, game)));
+    node.append(svgEl('g', { class: 'pr-inner' }, l.part(p, game)));
     S.parts[p] = node;
   }
-  const plugLayer = svg.querySelector('.pr-plugs');
-  for (const c of CONN_IDS) {
-    const node = svgEl('g', { class: 'pr-plugnode', 'data-plug': c }, plugMarkup(c));
-    plugLayer.append(node);
+  for (const c of Object.keys(d.conns)) {
+    const side = d.conns[c].side;
+    const layer = svg.querySelector(`.pr-${side} .pr-plugs`);
+    const node = svgEl('g', { class: 'pr-plugnode', 'data-plug': c }, l.plug(c));
+    layer.append(node);
     S.plugs[c] = node;
   }
-  const screwLayer = svg.querySelector('.pr-screwslots');
-  for (const id of SCREW_IDS) {
-    const slot = svgEl('g', { 'data-screwslot': id });
-    screwLayer.append(slot);
-    S.screwSlots[id] = slot;
+  for (const id of Object.keys(d.screws)) {
     const node = svgEl('g', { class: 'pr-screwnode', 'data-screw': id });
-    node.append(svgEl('g', { class: 'pr-inner' }, screwMarkup(id)));
+    node.append(svgEl('g', { class: 'pr-inner' }, l.screw(id)));
     S.screws[id] = node;
   }
-  for (const p of PARTS) putNode(p);
-  for (const id of SCREW_IDS) putScrew(id);
+  for (const p of Object.keys(d.parts)) putNode(p);
+  for (const id of Object.keys(d.screws)) putScrew(id);
   stopBugs();
   bugs = [];
   adsGone = new Map();
@@ -360,24 +420,40 @@ function buildScene() {
 
 const HOME = { x: 0, y: 0, s: 1 };
 const placeAt = (cx, cy, tx, ty, s) => ({ x: tx - cx * s, y: ty - cy * s, s });
+const isEdge = (p) => D().parts[p]?.side === 'edge';
+
+/** Место детали на устройстве: у «края» сзади — зеркально. */
+function homePlace(p) {
+  if (!isEdge(p) || game.view === 'front') return HOME;
+  const b = L().BOX[p];
+  return { x: 2 * L().origin[0] - 2 * (b.x + b.w / 2), y: 0, s: 1 };
+}
+
+/** Рамка детали на сцене сейчас (с учётом стороны у «края»). */
+function boxOf(p) {
+  const b = L().BOX[p];
+  if (!b) return null;
+  const h = homePlace(p);
+  return { x: b.x + h.x, y: b.y, w: b.w, h: b.h };
+}
 
 function trayPlace(p) {
-  const b = BOX[p];
-  const t = TRAY[p];
+  const b = L().BOX[p];
+  const t = L().TRAY[p];
   const s = Math.min(t.w / b.w, t.h / b.h);
   return placeAt(b.x + b.w / 2, b.y + b.h / 2, t.cx, t.cy, s);
 }
 
 /** Откуда приезжает новая деталь — из коробки над сценой. */
 function boxPlace(p) {
-  const b = BOX[p];
+  const b = L().BOX[p];
   return placeAt(b.x + b.w / 2, b.y + b.h / 2, W / 2, -b.h / 2 - 20, 1);
 }
 
 function screwPlace(id) {
   if (game.screws[id]) return HOME;
-  const [hx, hy] = abs(SCREW_AT[id]);
-  const [mx, my] = MAT_CELL[id];
+  const [hx, hy] = L().SCREW_AT[id];
+  const [mx, my] = L().MAT_CELL[id];
   return placeAt(hx, hy, mx, my, 1.3);
 }
 
@@ -387,12 +463,11 @@ function setPlace(node, p) {
   node._place = p;
 }
 
-/** Поставить узел детали туда, где он по правилам (без анимации). */
 function putNode(p) {
   const node = S.parts[p];
   const into = game.parts[p].in ? S.slots[p] : S.tray;
   if (node.parentNode !== into) into.append(node);
-  setPlace(node, game.parts[p].in ? HOME : trayPlace(p));
+  setPlace(node, game.parts[p].in ? homePlace(p) : trayPlace(p));
 }
 
 function putScrew(id) {
@@ -402,10 +477,7 @@ function putScrew(id) {
   setPlace(node, screwPlace(id));
 }
 
-/**
- * Полёт узла из текущего места в to по дуге (через верхнюю точку). Узел на время полёта — в слое полёта
- * (поверх всего), по прилёте — в контейнер into. → Promise.
- */
+/** Полёт узла по дуге; на время полёта — в слое полёта (поверх всего), по прилёте — в into. */
 async function flyNode(node, to, into, { dur = 420, arc = 26, grow = 1.08 } = {}) {
   const from = node._place ?? HOME;
   setPlace(node, to);
@@ -434,32 +506,42 @@ function screenMode() {
   return s === 'none' ? 'off' : s;
 }
 
+/** Куда дрейфует курсор на экране (сломан стик): l, r или ''. */
+function driftOf() {
+  const P = game.parts;
+  for (const [id, dir] of [['stickL', 'l'], ['joyL', 'l'], ['nub', 'l'], ['stickR', 'r'], ['joyR', 'r']]) {
+    if (P[id] && P[id].in && P[id].broken) return dir;
+  }
+  return '';
+}
+
 function paint() {
   if (!ui || !game || !S) return;
   const svg = ui.svg;
+  const d = D();
   svg.dataset.view = game.view;
   const P = game.parts;
-  svg.classList.toggle('pr-d-jack', game.dirt.jack);
-  svg.classList.toggle('pr-d-speaker', game.dirt.speaker);
-  svg.classList.toggle('pr-d-board', game.dirt.board);
+  for (const k of Object.keys(d.spots)) svg.classList.toggle(`pr-d-${k}`, game.dirt[k]);
+  for (const k of ['jack', 'speaker', 'board', 'keys', 'fan', 'slot']) if (!(k in d.spots)) svg.classList.remove(`pr-d-${k}`);
   svg.classList.toggle('pr-wet', game.wet);
-  svg.classList.toggle('pr-swollen', P.battery.in && P.battery.broken === 'swollen');
-  svg.classList.toggle('pr-burnt', P.port.in && Boolean(P.port.broken));
-  svg.classList.toggle('pr-no-port', !P.port.in);
-  for (const c of CONN_IDS) {
+  svg.classList.toggle('pr-on', game.power);
+  svg.classList.toggle('pr-swollen', P[d.battery].in && P[d.battery].broken === 'swollen');
+  svg.classList.toggle('pr-burnt', Boolean(d.port) && P[d.port].in && Boolean(P[d.port].broken));
+  svg.classList.toggle('pr-no-port', Boolean(d.port) && !P[d.port].in);
+  for (const c of Object.keys(d.conns)) {
     const node = S.plugs[c];
     node.dataset.state = game.conns[c];
-    node.classList.toggle('pr-gone', !P[CONNS[c]].in);
+    const owner = Object.keys(d.parts).find((p) => d.parts[p].conn === c);
+    node.classList.toggle('pr-gone', !P[owner].in);
   }
-  for (const p of ['cover', 'display']) {
-    S.parts[p].style.setProperty('--heat', String(game.hot[p] ? 1 : heatLevel[p]));
-  }
-  const d = S.parts.display;
-  d.dataset.screen = screenMode();
-  const showAds = game.virus > 0 && d.dataset.screen === 'home';
-  d.dataset.virus = showAds ? '1' : '0';
+  for (const p of Object.keys(game.hot)) S.parts[p].style.setProperty('--heat', String(game.hot[p] ? 1 : heatLevel[p] ?? 0));
+  const disp = S.parts.display;
+  disp.dataset.screen = screenMode();
+  disp.dataset.drift = disp.dataset.screen === 'home' ? driftOf() : '';
+  const showAds = d.virus && game.virus > 0 && disp.dataset.screen === 'home';
+  disp.dataset.virus = showAds ? '1' : '0';
   const now = performance.now();
-  d.querySelectorAll('.pr-ad').forEach((ad) => ad.classList.toggle('pr-ad-gone', (adsGone.get(ad.dataset.ad) ?? 0) > now));
+  disp.querySelectorAll('.pr-ad').forEach((ad) => ad.classList.toggle('pr-ad-gone', (adsGone.get(ad.dataset.ad) ?? 0) > now));
   // жуки видны только на рабочем экране; после перезапуска игры найденные антивирусом — снова на месте
   S.bugs.style.display = showAds ? '' : 'none';
   if (showAds && game.scanned && !bugs.some((b) => !b.dead)) spawnBugs(game.virus);
@@ -470,9 +552,9 @@ function paint() {
 
 function paintTicket() {
   const st = starsFor(game);
-  const cap = 3;
-  ui.stars.forEach((star, k) => star.classList.toggle('pr-star-off', k >= st && k < cap));
-  ui.sub.textContent = T.sub(game.level, progress.stars);
+  ui.stars.forEach((star, k) => star.classList.toggle('pr-star-off', k >= st));
+  ui.sub.textContent = T.sub(game.level, progress.money);
+  ui.pay.textContent = T.pay(game.pay);
   ui.flipBtn.classList.toggle('pr-flipped', game.view === 'front');
 }
 
@@ -518,51 +600,51 @@ function toStage([x, y]) {
 
 const rect = (b) => ({ kind: 'rect', x: b.x, y: b.y, w: b.w, h: b.h });
 const circ = ([cx, cy], r) => ({ kind: 'circle', cx, cy, r });
+const viewOf = (o) => (o && !Array.isArray(o) && ('front' in o || 'back' in o) ? o[game.view] : o);
 
 function trayRect(p) {
-  const b = BOX[p];
+  const b = L().BOX[p];
   const pl = trayPlace(p);
   return { kind: 'rect', x: b.x * pl.s + pl.x, y: b.y * pl.s + pl.y, w: b.w * pl.s, h: b.h * pl.s };
 }
 
+/** Деталь открыта: всё, что её закрывает, снято. */
+const exposed = (p) => D().parts[p].blockers.every((b) => !game.parts[b].in);
+const onView = (side) => side === 'any' || side === 'edge' || side === game.view;
+
 /** Все цели, которые сейчас можно задеть. prio — кто главнее при наложении. */
 function targets() {
   const s = game;
-  const P = s.parts;
+  const d = D();
+  const l = L();
   const list = [];
-  const add = (target, shape, prio) => list.push({ target, prio, ...shape });
-  for (const p of PARTS) if (!P[p].in) add(p, trayRect(p), 6);
-  for (const id of SCREW_IDS) if (!s.screws[id]) add(id, circ(MAT_CELL[id], 13), 7);
-  add('button', rect(BUTTON[s.view]), 8);
-  add('jack', rect(JACK), 5);
-  if (s.view === 'back') {
-    if (P.cover.in) add('cover', rect(BOX.cover), 1);
-    else {
-      add('cover', rect(BOX.cover), 0);
-      for (const id of SCREW_IDS) if (P[SCREWS[id]].in) add(id, circ(abs(SCREW_AT[id]), 14), 9);
-      if (P.shield.in) add('shield', rect(BOX.shield), 3);
-      else {
-        for (const c of ['bat', 'disp', 'cam']) add(c, circ(abs(CONN_AT[c]), 15), 9);
-        add('board', rect(BOX.board), 2);
-      }
-      if (P.bracket.in) add('bracket', rect(BOX.bracket), 3);
-      else {
-        add('usb', circ(abs(CONN_AT.usb), 13), 9);
-        add('speaker', rect(BOX.speaker), 4);
-        add('port', rect(BOX.port), 4);
-      }
-      add('camera', rect(BOX.camera), 3);
-      add('battery', rect(BOX.battery), 2);
-      add('indicator', rect(BOX.indicator), 5);
-    }
-  } else {
-    add('display', rect(BOX.display), 1);
+  const add = (target, shape, prio) => shape && list.push({ target, prio, ...shape });
+  for (const p of Object.keys(d.parts)) if (!s.parts[p].in) add(p, trayRect(p), 6);
+  for (const id of Object.keys(d.screws)) if (!s.screws[id]) add(id, circ(l.MAT_CELL[id], 13), 7);
+  const btn = viewOf(l.BUTTON);
+  if (btn) add('button', rect(btn), 8);
+  add('jack', rect(viewOf(l.JACK)), 5);
+  for (const [k, b] of Object.entries(l.SPOT_BOX ?? {})) add(k, rect(viewOf(b)), 5);
+  const order = [...(l.ORDER.back ?? []), ...(l.ORDER.front ?? [])];
+  for (const [p, ps] of Object.entries(d.parts)) {
+    if (!onView(ps.side) || !exposed(p)) continue;
+    const layer = order.indexOf(p) * 0.01;
+    add(p, rect(boxOf(p)), (s.parts[p].in ? 2 : 0) + (isEdge(p) ? 1 : 0) + layer);
+  }
+  for (const [id, holder] of Object.entries(d.screws)) {
+    if (s.parts[holder].in && onView(d.parts[holder].side) && exposed(holder)) add(id, circ(l.SCREW_AT[id], 14), 9);
+  }
+  for (const [c, cs] of Object.entries(d.conns)) {
+    if (cs.side === s.view && cs.under.every((u) => !s.parts[u].in)) add(c, circ(l.CONN_AT[c], 15), 9);
+  }
+  const board = d.spots.board;
+  if (board && board.side === s.view && board.under.every((u) => !s.parts[u].in)) add('board', rect(l.BOX.board), 1.5);
+  if (d.indicator && s.view === 'back' && !s.parts.cover.in) add('indicator', rect(l.BOX.indicator), 5);
+  if (s.view === 'front') {
     bugs.forEach((b, k) => { if (!b.dead) add(`bug:${k}`, circ([b.x, b.y], 18), 11); });
-    if (S.parts.display.dataset.virus === '1') {
+    if (l.ADS && S.parts.display.dataset.virus === '1') {
       const now = performance.now();
-      [[130, 156], [150, 252]].forEach(([x, y], k) => {
-        if ((adsGone.get(String(k)) ?? 0) <= now) add(`ad:${k}`, circ(abs([x, y]), 13), 10);
-      });
+      l.ADS.forEach((pt, k) => { if ((adsGone.get(String(k)) ?? 0) <= now) add(`ad:${k}`, circ(pt, 13), 10); });
     }
   }
   return list;
@@ -598,85 +680,100 @@ function hitTest(pt) {
   return best?.target ?? near?.target ?? null;
 }
 
-/** Цель с поправкой на инструмент: отвёртка по крышке — «сначала сними крышку», антивирус по экрану и т. п. */
+/**
+ * Цель с поправкой на инструмент: отвёртка по крышке — её винт или «сначала сними», лопатка по детали — её шлейф или
+ * шлейф под ней, кисточка и спирт — пятно на детали или под ней, антивирус — экран.
+ */
 function mapTarget(t, target) {
-  const P = game.parts;
-  if (target === 'cover' && P.cover.in && game.view === 'back') {
-    if (t === 'screwdriver') return 's1';
-    if (t === 'spudger') return 'bat';
-    if (t === 'alcohol') return 'board';
-  }
-  if (target === 'shield' && P.shield.in) {
-    if (t === 'spudger') return 'bat';
-    if (t === 'alcohol' || t === 'brush') return 'board';
-  }
-  if (target === 'bracket' && P.bracket.in) {
-    if (t === 'spudger') return 'usb';
-    if (t === 'brush') return 'speaker';
-  }
+  const d = D();
+  const ps = d.parts[target];
   if (target === 'display' && t === 'antivirus') return 'screen';
+  if (!ps) return target;
+  if (t === 'screwdriver') {
+    const own = screwsOf(game.kind, target);
+    if (own.length) return own.find((id) => game.screws[id]) ?? own[0];
+    const under = Object.keys(d.screws).find((id) => d.parts[d.screws[id]].blockers.includes(target));
+    return under ?? target;
+  }
+  if (t === 'spudger') {
+    if (ps.conn) return ps.conn;
+    const under = Object.keys(d.conns).find((c) => d.conns[c].under.includes(target));
+    return under ?? target;
+  }
+  if (t === 'brush' || t === 'alcohol') {
+    const on = Object.keys(d.spots).find((k) => k === target || (d.spots[k].part === target && d.spots[k].side !== 'any'));
+    if (on) return on;
+    const under = Object.keys(d.spots).find((k) => d.spots[k].under.includes(target) && d.spots[k].tool === t)
+      ?? Object.keys(d.spots).find((k) => d.spots[k].under.includes(target));
+    return under ?? target;
+  }
   return target;
 }
 
-/** Центр цели в координатах сцены — для подсветок и всплывашек; slot — снятая деталь: её место на телефоне. */
+const center = (b) => [b.x + b.w / 2, b.y + b.h / 2];
+
+/** Центр цели в координатах сцены — для подсветок и всплывашек; slot — снятая деталь: её место на устройстве. */
 function centerOf(target, slot = false) {
-  if (target in SCREWS) return game.screws[target] ? abs(SCREW_AT[target]) : MAT_CELL[target];
-  if (target in CONNS) return abs(CONN_AT[target]);
-  if (target === 'jack') return [JACK.x + JACK.w / 2, JACK.y + 14];
-  if (target === 'button') {
-    const b = BUTTON[game.view];
-    return [b.x + b.w / 2, b.y + b.h / 2];
-  }
-  if (target === 'screen') return [BOX.display.x + 90, BOX.display.y + 190];
+  const d = D();
+  const l = L();
+  if (d.screws[target]) return game.screws[target] ? l.SCREW_AT[target] : l.MAT_CELL[target];
+  if (d.conns[target]) return l.CONN_AT[target];
+  if (target === 'jack') return center(viewOf(l.JACK));
+  if (target === 'button') return center(viewOf(l.BUTTON) ?? l.BUTTON.front ?? l.BUTTON.back);
+  if (target === 'screen') return center(l.SCREEN);
   if (target === 'bug') {
     const b = bugs.find((x) => !x.dead);
-    return b ? [b.x, b.y] : [BOX.display.x + 90, BOX.display.y + 190];
+    return b ? [b.x, b.y] : center(l.SCREEN);
   }
-  if (target in game.parts && !game.parts[target].in && !slot) {
-    const t = TRAY[target];
-    return [t.cx, t.cy];
+  if (d.parts[target]) {
+    if (!game.parts[target].in && !slot) return [l.TRAY[target].cx, l.TRAY[target].cy];
+    return center(boxOf(target));
   }
-  const b = BOX[target] ?? BOX.cover;
-  return [b.x + b.w / 2, b.y + b.h / 2];
+  if (l.SPOT_AT?.[target]) return viewOf(l.SPOT_AT[target]);
+  if (l.BOX[target]) return center(l.BOX[target]);
+  return center(l.SCREEN);
 }
 
 // ---------- подсветки: куда подходит инструмент, подсказка ----------
 
 function applicable(t, target) {
+  const d = D();
   const P = game.parts;
   switch (t) {
     case 'heat':
-    case 'suction': return (target === 'cover' || target === 'display') && P[target].in;
-    case 'screwdriver': return target in SCREWS;
-    case 'spudger': return target in CONNS && P[CONNS[target]].in;
-    case 'tweezers': return target in P;
-    case 'parts': return target in P && !P[target].in;
-    case 'brush': return target === 'jack' || target === 'speaker';
-    case 'alcohol': return target === 'board';
+    case 'suction': return Boolean(d.parts[target]?.glue) && P[target].in;
+    case 'screwdriver': return Boolean(d.screws[target]);
+    case 'spudger': return Boolean(d.conns[target]);
+    case 'tweezers': return Boolean(d.parts[target]) && !d.parts[target].glue;
+    case 'parts': return Boolean(d.parts[target]) && !P[target].in && d.parts[target].price > 0;
+    case 'brush':
+    case 'alcohol': return Object.entries(d.spots).some(([k, sp]) => sp.tool === t && (k === target || sp.part === target));
     case 'charger':
     case 'flash': return target === 'jack';
-    case 'antivirus': return target === 'display' && P.display.in && game.power;
+    case 'antivirus': return Boolean(d.virus) && target === 'display' && P.display.in && game.power;
     default: return false;
   }
 }
 
 function paintMarks() {
   if (!S) return;
-  S.marks.replaceChildren();
+  S.marks.querySelectorAll('.pr-mark, .pr-hint-ring').forEach((n) => n.remove());
   if (tool && settings.marks && !busy) {
     const seenT = new Set();
     for (const t of targets()) {
       if (seenT.has(t.target) || !applicable(tool, t.target)) continue;
       const m = mapTarget(tool, t.target);
-      if (reach(game, m) && !(m in game.parts && !game.parts[m].in)) continue;
+      if (reach(game, m) && !(game.parts[m] && !game.parts[m].in)) continue;
       seenT.add(t.target);
       const [x, y] = centerOf(t.target, tool === 'parts');
       S.marks.append(svgEl('circle', { class: 'pr-mark', cx: x, cy: y, r: 5 }));
     }
   }
-  if (hintShown?.target) {
-    // новая деталь — на пустое место, своя — из лотка
+  if (hintShown?.target && hintShown.tool !== 'flash' && hintShown.tool !== 'buy') {
     const [x, y] = centerOf(hintShown.target, hintShown.tool === 'parts');
+    S.marks.append(svgEl('circle', { class: 'pr-hint-ring', cx: x, cy: y, r: 16 }));
+  } else if (hintShown?.tool === 'flash') {
+    const [x, y] = centerOf('jack');
     S.marks.append(svgEl('circle', { class: 'pr-hint-ring', cx: x, cy: y, r: 16 }));
   }
 }
@@ -684,12 +781,12 @@ function paintMarks() {
 function clearHint() {
   hintShown = null;
   ui.toolBtns.forEach((b) => b.classList.remove('pr-hinted'));
-  [ui.flipBtn, ui.deliverBtn].forEach((b) => b.classList.remove('pr-hinted'));
+  [ui.flipBtn, ui.deliverBtn, ui.shopBtn].forEach((b) => b.classList.remove('pr-hinted'));
 }
 
 function showHint(free) {
   if (!game || game.done) return;
-  const st = nextStep(game);
+  const st = nextStep(game, progress);
   if (!st) return;
   if (!free) {
     if (!game.hints) toast.show(T.hintNote, 2200);
@@ -701,6 +798,7 @@ function showHint(free) {
   hintShown = st;
   if (st.tool === 'flip') ui.flipBtn.classList.add('pr-hinted');
   else if (st.tool === 'deliver') ui.deliverBtn.classList.add('pr-hinted');
+  else if (st.tool === 'buy') ui.shopBtn.classList.add('pr-hinted');
   else if (st.tool !== 'power' && st.tool !== 'squash') {
     if (tool !== st.tool) ui.toolBtns.find((b) => b.dataset.tool === st.tool)?.classList.add('pr-hinted');
   }
@@ -765,15 +863,16 @@ function nudge(node) {
 }
 
 function innerOf(target) {
-  if (target in SCREWS) return S.screws[target].firstChild;
-  if (target in game.parts) return S.parts[target].firstChild;
-  if (target in CONNS) return S.plugs[target];
+  if (S.screws[target]) return S.screws[target].firstChild;
+  if (S.parts[target]) return S.parts[target].firstChild;
+  if (S.plugs[target]) return S.plugs[target];
   return null;
 }
 
 /** Нельзя: мягкий «бум», покачивание и объяснение. */
 function refuse(r, target) {
-  const text = T.why[r.why] ?? '';
+  const w = T.why[r.why];
+  const text = typeof w === 'function' ? w(r.by) : w ?? '';
   if (r.why === 'flip') {
     ui.flipBtn.classList.add('pr-hinted');
     later(() => ui?.flipBtn.classList.remove('pr-hinted'), 1600);
@@ -832,10 +931,25 @@ async function doTool(target) {
     ui.tools.classList.add('pr-pulse');
     return;
   }
+  if (tool === 'flash') {
+    if (target !== 'jack') {
+      refuse({ why: 'charger-where' }, target);
+      return;
+    }
+    clearHint();
+    await openPc();
+    return;
+  }
   const t = mapTarget(tool, target);
   const used = tool;
-  const r = act(game, used, t);
+  const r = act(game, used, t, progress);
   if (!r.ok) {
+    if (r.why === 'no-stock') {
+      sfx('error', {}, 0);
+      toast.show(T.noStock(t), 1800);
+      showShop(t);
+      return;
+    }
     refuse(r, t);
     return;
   }
@@ -891,8 +1005,8 @@ async function perform(t, target, r) {
     case 'spudger': {
       paint();
       if (r.spark) {
-        sparkFx(abs(CONN_AT[target]));
-        bubble(T.spark, abs(CONN_AT[target]), 2200, 'bad');
+        sparkFx(L().CONN_AT[target]);
+        bubble(T.spark, L().CONN_AT[target], 2200, 'bad');
       } else {
         sfx(r.state === 'on' ? 'plug' : 'unplug', {}, 0);
         api.platform.haptic.impact('light');
@@ -902,12 +1016,10 @@ async function perform(t, target, r) {
     }
     case 'tweezers': {
       const node = S.parts[target];
-      if (r.removed) {
-        sfx('lift', {}, 0);
-        await flyNode(node, trayPlace(target), S.tray, { dur: 440, arc: 34 });
-      } else {
-        sfx('lift', {}, 0);
-        await flyNode(node, HOME, S.slots[target], { dur: 440, arc: 34 });
+      sfx('lift', {}, 0);
+      if (r.removed) await flyNode(node, trayPlace(target), S.tray, { dur: 440, arc: 34 });
+      else {
+        await flyNode(node, homePlace(target), S.slots[target], { dur: 440, arc: 34 });
         landBump(node);
       }
       sfx('place', {}, 0);
@@ -918,14 +1030,15 @@ async function perform(t, target, r) {
       const node = S.parts[target];
       // старая — в мусор, новая — из коробки сверху
       if (!reducedMotion()) await animate(node, [{ opacity: 1 }, { opacity: 0 }], { duration: 200, easing: 'ease-in' });
-      node.firstChild.innerHTML = partMarkup(target, game);
+      node.firstChild.innerHTML = L().part(target, game);
       setPlace(node, boxPlace(target));
       S.fly.append(node);
       sfx('newpart', {}, 0);
-      await flyNode(node, HOME, S.slots[target], { dur: 560, arc: 0, grow: 1 });
+      await flyNode(node, homePlace(target), S.slots[target], { dur: 560, arc: 0, grow: 1 });
       landBump(node);
       sparkle(centerOf(target), '#fff6c8', 12);
       api.platform.haptic.impact('medium');
+      saveProgress();
       if (r.wasted) {
         later(() => {
           if (!ui) return;
@@ -951,7 +1064,7 @@ async function perform(t, target, r) {
     case 'magnifier': {
       sfx('inspect', {}, 0);
       loupe(centerOf(target));
-      bubble(T.finds[r.find] ?? T.finds.ok, centerOf(target), 2400, /ok$/.test(r.find) ? 'good' : 'find');
+      bubble(findText(r.find), centerOf(target), 2400, /ok/.test(r.find) ? 'good' : 'find');
       await wait(200);
       break;
     }
@@ -966,22 +1079,6 @@ async function perform(t, target, r) {
       await wait(1200);
       if (overlay === 'charge') overlay = '';
       await cable('charger', true);
-      break;
-    }
-    case 'flash': {
-      await cable('flash');
-      overlay = 'flash';
-      paint();
-      bubble(T.flashing, centerOf('screen'), 1600);
-      for (let k = 0; k < 8; k++) {
-        await wait(200);
-        sfx('flash', { k }, 0);
-      }
-      overlay = '';
-      sfx('flashed', {}, 0);
-      await cable('flash', true);
-      await bootSequence();
-      bubble(T.flashed, centerOf('screen'), 1600, 'good');
       break;
     }
     case 'antivirus': {
@@ -1008,6 +1105,11 @@ async function perform(t, target, r) {
   }
 }
 
+function findText(key) {
+  if (key.startsWith('ok:')) return T.okPart(key.slice(3));
+  return T.finds[key] ?? T.finds.ok;
+}
+
 function landBump(node) {
   if (reducedMotion()) return;
   animate(node.firstChild, [{ scale: '1.04' }, { scale: '0.99' }, { scale: '1' }], { duration: 220, easing: 'ease-out' });
@@ -1022,20 +1124,26 @@ function loupe(at) {
     { duration: 900, easing: 'ease-out' }).then(() => ring.remove());
 }
 
-/** Кабель снизу к гнезду: зарядка (белый) или прошивка (синий). out — вынуть. */
+/** Кабель к гнезду: зарядка (белый) или компьютер (синий). Гнездо снизу — кабель снизу, сверху — сверху. out — вынуть. */
 async function cable(kind, out = false) {
   if (!S) return;
   let node = S.marks.querySelector('.pr-cable');
+  const [x, y] = centerOf('jack');
+  const top = y < H / 3;
+  const dy = top ? -70 : 70;
   if (!out) {
     node?.remove();
-    const [x, y] = [JACK.x + JACK.w / 2, JACK.y + 10];
+    const dir = top ? -1 : 1;
+    const tip = y - dir * 4;
     node = svgEl('g', { class: `pr-cable pr-cable-${kind}` },
-      `<path class="pr-cable-wire" d="M${x} ${y + 16}C${x} ${y + 40} ${x + 40} ${y + 30} ${x + 60} ${H + 20}"/><rect class="pr-cable-plug" x="${x - 9}" y="${y + 6}" width="18" height="16" rx="4"/><rect class="pr-cable-tip" x="${x - 5.5}" y="${y}" width="11" height="7" rx="2"/>`);
+      `<path class="pr-cable-wire" d="M${x} ${tip + dir * 22}C${x} ${tip + dir * 46} ${x + 40} ${tip + dir * 36} ${x + 60} ${top ? -20 : H + 20}"/>`
+      + `<rect class="pr-cable-plug" x="${x - 9}" y="${top ? tip - 22 : tip + 6}" width="18" height="16" rx="4"/>`
+      + `<rect class="pr-cable-tip" x="${x - 5.5}" y="${top ? tip - 7 : tip}" width="11" height="7" rx="2"/>`);
     S.marks.append(node);
     sfx('click', {}, 0);
-    if (!reducedMotion()) await animate(node, [{ translate: '0 70px' }, { translate: '0 0' }], { duration: 280, easing: 'cubic-bezier(0.2, 0.8, 0.3, 1)' });
+    if (!reducedMotion()) await animate(node, [{ translate: `0 ${dy}px` }, { translate: '0 0' }], { duration: 280, easing: 'cubic-bezier(0.2, 0.8, 0.3, 1)' });
   } else if (node) {
-    if (!reducedMotion()) await animate(node, [{ translate: '0 0' }, { translate: '0 70px', opacity: 0 }], { duration: 240, easing: 'ease-in' });
+    if (!reducedMotion()) await animate(node, [{ translate: '0 0' }, { translate: `0 ${dy}px`, opacity: 0 }], { duration: 240, easing: 'ease-in' });
     node.remove();
   }
 }
@@ -1043,7 +1151,7 @@ async function cable(kind, out = false) {
 /** Включение: логотип, потом экран; мелодия — по состоянию динамика. */
 async function bootSequence() {
   const P = game.parts;
-  const quality = !P.speaker.in || P.speaker.broken ? 'none' : game.dirt.speaker ? 'quiet' : 'ok';
+  const quality = P.speaker ? (!P.speaker.in || P.speaker.broken ? 'none' : game.dirt.speaker ? 'quiet' : 'ok') : 'ok';
   sfx('boot', { quality }, 0);
   if (screenOf(game) === 'home') {
     overlay = 'logo';
@@ -1088,12 +1196,14 @@ async function doPower() {
   after();
 }
 
-/** Переворот: телефон сжимается по ширине до нуля, сторона меняется, разжимается. */
+/** Переворот: устройство сжимается по ширине до нуля, сторона меняется, разжимается. */
 async function flip() {
   if (!game) return;
   act(game, 'flip');
   sfx('flip', {}, 0);
+  const edges = Object.keys(D().parts).filter((p) => isEdge(p) && game.parts[p].in);
   if (reducedMotion()) {
+    edges.forEach((p) => setPlace(S.parts[p], homePlace(p)));
     paint();
     return;
   }
@@ -1103,6 +1213,7 @@ async function flip() {
   try {
     await animate(S.flipper, [{ scale: '1 1' }, { scale: '0 1' }], { duration: 150, easing: 'ease-in' });
     game.view = other;
+    edges.forEach((p) => setPlace(S.parts[p], homePlace(p)));
     paint();
     await animate(S.flipper, [{ scale: '0 1' }, { scale: '1 1' }], { duration: 170, easing: 'ease-out' });
   } finally {
@@ -1123,7 +1234,7 @@ async function onFlip() {
 function spawnBugs(n) {
   stopBugs();
   S.bugs.replaceChildren();
-  const [x0, y0] = abs([20, 40]);
+  const sc = L().SCREEN;
   bugs = Array.from({ length: n }, (_, k) => {
     const node = svgEl('g', { class: `pr-bug pr-bug-${k % 3}` },
       '<g class="pr-bug-body"><path class="pr-bug-legs" d="M-7 -4l-5 -3M-7 0h-6M-7 4l-5 3M7 -4l5 -3M7 0h6M7 4l5 3"/>'
@@ -1131,7 +1242,7 @@ function spawnBugs(n) {
       + '<path class="pr-bug-line" d="M0 -6v16"/><circle class="pr-bug-dot" cx="-3" cy="2" r="1.6"/><circle class="pr-bug-dot" cx="3.5" cy="5" r="1.4"/></g>');
     S.bugs.append(node);
     const a = Math.random() * Math.PI * 2;
-    const b = { x: x0 + 10 + Math.random() * 120, y: y0 + 20 + Math.random() * 280, a, v: 26 + Math.random() * 22, turn: 0, node, dead: false };
+    const b = { x: sc.x + 20 + Math.random() * (sc.w - 40), y: sc.y + 40 + Math.random() * (sc.h - 80), a, v: 26 + Math.random() * 22, turn: 0, node, dead: false };
     if (!reducedMotion()) animate(node.firstChild, [{ scale: '0' }, { scale: '1.2' }, { scale: '1' }], { duration: 300, delay: k * 80, easing: 'ease-out', fill: 'backwards' });
     return b;
   });
@@ -1153,8 +1264,8 @@ function bugFrame(now) {
   }
   const dt = Math.min(0.05, Math.max(0, now - bugLast) / 1000);
   bugLast = now;
-  const [x0, y0] = abs([18, 36]);
-  const [x1, y1] = abs([162, 362]);
+  const sc = L().SCREEN;
+  const [x0, y0, x1, y1] = [sc.x + 8, sc.y + 26, sc.x + sc.w - 8, sc.y + sc.h - 8];
   for (const b of bugs) {
     if (b.dead) continue;
     b.turn += (Math.random() - 0.5) * 6 * dt;
@@ -1195,7 +1306,6 @@ function squash(k) {
   b.dead = true;
   sfx('squash', {}, 0);
   api.platform.haptic.impact('light');
-  b.node.classList.add('pr-bug-dead');
   sparkle([b.x, b.y], '#7ddc8a', 8);
   const node = b.node;
   animate(node.firstChild, [{ scale: '1 1', opacity: 1 }, { scale: '1.5 0.3', opacity: 1, offset: 0.3 }, { scale: '1.6 0.2', opacity: 0 }], { duration: 420, easing: 'ease-out' })
@@ -1231,7 +1341,7 @@ function onPointerDown(e) {
   const pt = toScene(e.clientX, e.clientY);
   const target = hitTest(pt);
   pd = { id: e.pointerId, x: e.clientX, y: e.clientY, target, mode: 'tap', last: pt };
-  if (target && (tool === 'heat') && (target === 'cover' || target === 'display')) {
+  if (target && tool === 'heat' && target in game.hot) {
     const probe = act(structuredClone(game), 'heat', target);
     if (probe.ok && !game.hot[target]) startHeat(target);
   } else if (target && (tool === 'brush' || tool === 'alcohol')) {
@@ -1251,8 +1361,7 @@ function onPointerDown(e) {
 }
 
 function onPointerMove(e) {
-  if (!pd || e.pointerId !== pd.id) return;
-  if (pd.mode !== 'scrub') return;
+  if (!pd || e.pointerId !== pd.id || pd.mode !== 'scrub') return;
   const pt = toScene(e.clientX, e.clientY);
   if (!pt || !pd.last) return;
   const d = Math.hypot(pt[0] - pd.last[0], pt[1] - pd.last[1]);
@@ -1313,7 +1422,7 @@ function heatFrame(now) {
   if (!ui || !heatTarget) return;
   const dt = Math.max(0, now - heatLast);
   heatLast = now;
-  heatLevel[heatTarget] = Math.min(1, heatLevel[heatTarget] + dt / HEAT_MS);
+  heatLevel[heatTarget] = Math.min(1, (heatLevel[heatTarget] ?? 0) + dt / HEAT_MS);
   S.parts[heatTarget].style.setProperty('--heat', String(heatLevel[heatTarget]));
   heatSound -= dt;
   if (heatSound <= 0) {
@@ -1337,6 +1446,204 @@ function stopHeat() {
   heatTarget = '';
 }
 
+// ---------- компьютер: терминал и клавиатура ----------
+
+async function openPc() {
+  busy++;
+  try {
+    await cable('flash');
+  } finally {
+    busy--;
+  }
+  if (!ui) return;
+  sfx('plug', {}, 0);
+  pc = { lines: [...greet(game)], input: '', history: [], at: -1, busy: false };
+  const screen = el('div', { class: 'pr-term', role: 'log', 'aria-live': 'polite' });
+  const line = el('div', { class: 'pr-term-input' });
+  const keys = KEYBOARD.map((row) => el('div', { class: 'pr-kbd-row' },
+    [...row].map((ch) => el('button', { class: 'pr-key-btn', onclick: () => typeKey(ch), onmousedown: (e) => e.preventDefault() }, ch))));
+  const kb = (label, cls, fn, html = '') => {
+    const b = el('button', { class: `pr-key-btn ${cls}`, onclick: fn, onmousedown: (e) => e.preventDefault(), 'aria-label': label, title: label }, html ? '' : label);
+    if (html) b.innerHTML = html;
+    return b;
+  };
+  const bottom = el('div', { class: 'pr-kbd-row' },
+    kb('↑', 'pr-key-fn', () => typeKey('ArrowUp')),
+    kb('пробел', 'pr-key-space', () => typeKey(' ')),
+    kb('Стереть', 'pr-key-fn', () => typeKey('Backspace'), ICONS.back),
+    kb('Ввод', 'pr-key-enter', () => typeKey('Enter'), ICONS.enter));
+  pc.box = { screen, line };
+  const box = card(T.pc,
+    el('div', { class: 'pr-monitor' }, screen, line),
+    el('div', { class: 'pr-kbd' }, keys, bottom),
+    el('div', { class: 'pr-pc-actions' },
+      el('button', { class: 'btn btn-secondary pr-pc-btn', onclick: () => pcHint() }, T.pcHint),
+      el('button', { class: 'btn pr-pc-btn', onclick: () => closePc() }, T.unplug)),
+  );
+  box.classList.add('pr-card-pc');
+  box.querySelector('.pr-card-head .pr-icon-btn').addEventListener('click', () => closePc(true));
+  openModal(box);
+  paintTerm();
+  if (tutorialAuto() || (TUTORIAL[game.level] && TUTORIAL[game.level][1] === 'bootloop')) pcHint(true);
+}
+
+function paintTerm() {
+  if (!pc) return;
+  const { screen, line } = pc.box;
+  screen.replaceChildren(...pc.lines.slice(-60).map((l) => el('div', { class: `pr-term-line pr-term-${l.c ?? 'dim'}` }, l.t || ' ')));
+  screen.scrollTop = screen.scrollHeight;
+  line.replaceChildren(el('span', { class: 'pr-term-prompt' }, `${PROMPT} `), el('span', {}, pc.input), el('span', { class: 'pr-term-caret' }));
+}
+
+function typeKey(k) {
+  if (!pc || pc.busy) return;
+  if (k === 'Enter') {
+    submitPc();
+    return;
+  }
+  if (k === 'Backspace') pc.input = pc.input.slice(0, -1);
+  else if (k === 'ArrowUp') {
+    if (pc.history.length) {
+      pc.at = pc.at < 0 ? pc.history.length - 1 : Math.max(0, pc.at - 1);
+      pc.input = pc.history[pc.at];
+    }
+  } else if (pc.input.length < 48) pc.input += k;
+  sfx('tool', {}, 25);
+  paintTerm();
+}
+
+async function submitPc() {
+  const text = pc.input.trim();
+  pc.input = '';
+  pc.at = -1;
+  if (text) pc.history.push(text);
+  const res = runTerminal(game, text);
+  if (res.clear) pc.lines = [];
+  pc.lines.push(...res.out);
+  sfx(res.out.at(-1)?.c === 'err' ? 'error' : 'click', {}, 0);
+  paintTerm();
+  if (res.exit) {
+    closePc();
+    return;
+  }
+  if (res.flash?.ok) {
+    pc.busy = true;
+    overlay = 'flash';
+    paint();
+    const at = pc.lines.length;
+    pc.lines.push({ t: T.progressLine(0), c: 'ok' });
+    for (let k = 1; k <= 10; k++) {
+      await wait(150);
+      if (!pc) return;
+      pc.lines[at] = { t: T.progressLine(k), c: 'ok' };
+      sfx('flash', { k }, 0);
+      paintTerm();
+    }
+    pc.lines.push({ t: T.pcDone, c: 'ok' });
+    sfx('flashed', {}, 0);
+    overlay = '';
+    pc.busy = false;
+    paintTerm();
+    await bootSequence();
+    bubble(T.flashed, centerOf('screen'), 1600, 'good');
+  }
+  save();
+}
+
+function pcHint(free = false) {
+  if (!pc || !game) return;
+  if (!free) {
+    if (!game.hints) toast.show(T.hintNote, 2200);
+    game.hints++;
+    paintTicket();
+    save();
+  }
+  const st = nextStep(game, progress);
+  const cmd = st?.tool === 'flash' ? `flash ${st.target}` : 'devices';
+  pc.lines.push({ t: T.pcHintLine(cmd), c: 'hint' });
+  sfx('hint', {}, 0);
+  paintTerm();
+}
+
+function closePc(fromX = false) {
+  if (!pc) return;
+  pc = null;
+  if (!fromX) closeModal();
+  sfx('unplug', {}, 0);
+  cable('flash', true);
+  after();
+}
+
+// ---------- магазин ----------
+
+function buyPart(kind, p, row) {
+  const price = DEVICES[kind].parts[p].price;
+  let r;
+  if (kind === game.kind && !game.done) r = act(game, 'buy', p, progress);
+  else if (progress.money >= price) {
+    progress.money -= price;
+    progress.stock[stockKey(kind, p)] = (progress.stock[stockKey(kind, p)] ?? 0) + 1;
+    r = { ok: true };
+  } else r = { ok: false };
+  if (!r.ok) {
+    sfx('error', {}, 0);
+    toast.show(T.broke, 1400);
+    return;
+  }
+  sfx('cash', {}, 0);
+  api.platform.haptic.impact('light');
+  saveProgress();
+  save();
+  if (row && !reducedMotion()) animate(row, [{ scale: '1' }, { scale: '1.03' }, { scale: '1' }], { duration: 220, easing: 'ease-out' });
+  if (hintShown?.tool === 'buy') clearHint();
+  paintTicket();
+}
+
+function showShop(want = '') {
+  const kinds = KINDS.filter((k) => UNLOCK[k] <= Math.max(progress.level, game.level));
+  let kind = game.kind;
+  const money = el('b', {});
+  const list = el('div', { class: 'pr-shop-list' });
+  const note = el('p', { class: 'pr-note' });
+  const tabs = kinds.map((k) => el('button', {
+    class: 'pr-tab', role: 'tab', 'aria-selected': String(k === kind),
+    onclick: () => {
+      kind = k;
+      tabs.forEach((t, i) => t.setAttribute('aria-selected', String(kinds[i] === k)));
+      render();
+      sfx('click');
+    },
+  }, DEVICES[k].name));
+  function render() {
+    money.textContent = rub(progress.money);
+    const rows = shopParts(kind).map((p) => {
+      const price = DEVICES[kind].parts[p].price;
+      const n = progress.stock[stockKey(kind, p)] ?? 0;
+      const row = el('div', { class: `pr-shop-row${kind === game.kind && p === want ? ' pr-hinted' : ''}` },
+        el('div', { class: 'pr-shop-name' }, el('b', {}, cap(T.names[p] ?? p)), el('span', {}, T.stock(n))));
+      const btn = el('button', {
+        class: `pr-buy${progress.money < price ? ' pr-buy-short' : ''}`,
+        onclick: () => {
+          buyPart(kind, p, row);
+          render();
+        },
+      }, rub(price));
+      row.append(btn);
+      return row;
+    });
+    list.replaceChildren(...rows);
+    const short = kind === game.kind && shopParts(kind).some((p) => progress.money < DEVICES[kind].parts[p].price);
+    note.textContent = short ? T.prepayNote : '';
+  }
+  render();
+  openModal(card(T.shop,
+    el('div', { class: 'pr-balance' }, el('span', {}, T.balance), money),
+    el('div', { class: 'pr-tabs pr-tabs-scroll', role: 'tablist' }, tabs),
+    list,
+    note,
+  ));
+}
+
 // ---------- сдача ----------
 
 async function onDeliver() {
@@ -1355,8 +1662,7 @@ async function onDeliver() {
     api.platform.haptic.notification('error');
     setMood('sad', 2400);
     starShake();
-    const list = r.problems.map((k) => T.problems[k]).join(', ');
-    toast.show(T.returned(list), 2600);
+    toast.show(T.returned(r.problems.map((k) => T.problems[k] ?? k).join(', ')), 2600);
     after();
     return;
   }
@@ -1370,21 +1676,22 @@ async function onDeliver() {
   }
   if (!ui) return;
   const finished = game;
-  const stars = recordWin(progress, finished);
-  api.storage.set('progress', progress);
+  const { stars, earned } = recordWin(progress, finished);
+  saveProgress();
   sendProgress();
   paintTicket();
   setMood('happy');
   sfx('deliver', {}, 0);
+  later(() => sfx('cash', {}, 0), 400);
   api.platform.haptic.notification('success');
   if (!reducedMotion()) fx.confetti(['#ffd23d', '#4dd0e1', '#ff7eb6', '#9ccc65', '#b388ff', '#ff9f43'], stars === 3 ? 90 : 50);
   // следующий заказ сохранён сразу: выход из окна победы не вернёт сданный
   const next = newOrder(progress.level);
   api.storage.set('current', next);
-  later(() => { if (ui) showWin(finished, stars, next); }, reducedMotion() ? 100 : 900);
+  later(() => { if (ui) showWin(finished, stars, earned, next); }, reducedMotion() ? 100 : 900);
 }
 
-function showWin(done, stars, next) {
+function showWin(done, stars, earned, next) {
   const starRow = el('div', { class: 'pr-win-stars' }, [0, 1, 2].map((k) => el('span', { class: `pr-win-star${k < stars ? ' on' : ''}` }, '★')));
   const faults = Object.entries(T.mistakes).filter(([k]) => done[k]).map(([k, v]) => (k === 'hints' ? v : `${v}: ${done[k]}`));
   const quote = T.quotes[(done.level * 7) % T.quotes.length];
@@ -1398,6 +1705,7 @@ function showWin(done, stars, next) {
   const box = card(T.win(done.level),
     el('div', { class: 'pr-win-who' }, face, el('div', { class: 'pr-win-quote' }, `«${quote}»`, el('span', {}, done.customer.name))),
     starRow,
+    el('div', { class: 'pr-win-money' }, T.earned(earned), done.prepaid ? el('span', {}, T.prepaid(done.prepaid)) : null),
     el('p', { class: 'pr-note pr-center' }, faults.length ? faults.join(' · ') : T.clean),
     el('button', { class: 'btn pr-play', onclick: goNext }, T.next),
   );
@@ -1414,7 +1722,7 @@ function showWin(done, stars, next) {
 
 function sendProgress() {
   const n = progress.level - 1;
-  api.progress(n ? T.menu(n, progress.stars) : null);
+  api.progress(n ? T.menu(n, progress.money) : null);
 }
 
 // ---------- заказ ----------
@@ -1422,7 +1730,7 @@ function sendProgress() {
 function startOrder(s) {
   game = s;
   tool = '';
-  heatLevel = { cover: 0, display: 0 };
+  heatLevel = {};
   clearHint();
   buildScene();
   buildTicket();
@@ -1432,22 +1740,30 @@ function startOrder(s) {
     animate(ui.ticket, [{ opacity: 0, translate: '-12px 0' }, { opacity: 1, translate: '0 0' }], { duration: 300, easing: 'ease-out' });
   }
   sfx('place', {}, 0);
-  introFault();
+  intro();
   if (tutorialAuto()) showHint(true);
 }
 
-/** Обучение: первая встреча с поломкой — карточка с советом. */
-function introFault() {
-  if (game.level > TUTORIAL.length) return;
-  const f = game.faults[0];
-  if (!T.intro[f] || seen.includes(f)) return;
-  seen.push(f);
+/** Обучение: первая встреча с устройством или поломкой — карточка с советом. */
+function intro() {
+  const cards = [];
+  if (T.kindIntro[game.kind] && !seen.includes(`kind:${game.kind}`)) {
+    seen.push(`kind:${game.kind}`);
+    cards.push([`${T.newKind}: ${T.kindIntro[game.kind][0]}`, T.kindIntro[game.kind][1]]);
+  }
+  const tut = TUTORIAL[game.level];
+  if (tut && tut[0] === game.kind && T.intro[tut[1]] && !seen.includes(tut[1])) {
+    seen.push(tut[1]);
+    cards.push([`${T.newFault}: ${T.intro[tut[1]][0]}`, T.intro[tut[1]][1]]);
+  }
+  if (!cards.length) return;
   api.storage.set('seen', seen);
-  const [title, text] = T.intro[f];
   later(() => {
     if (!ui || modalActive) return;
-    openModal(card(`${T.newFault}: ${title}`, el('p', { class: 'pr-note pr-rules' }, text),
-      el('button', { class: 'btn pr-play', onclick: closeModal }, T.gotIt)));
+    openModal(card(cards[0][0], ...cards.map(([title, text], k) => [
+      k ? el('h3', { class: 'pr-section' }, title) : null,
+      el('p', { class: 'pr-note pr-rules' }, text),
+    ]), el('button', { class: 'btn pr-play', onclick: closeModal }, T.gotIt)));
   }, reducedMotion() ? 0 : 450);
 }
 
@@ -1457,11 +1773,17 @@ function openModal(content, { dismissible = true } = {}) {
   if (!modalActive) sfx('click');
   modalToken++;
   ui.modal.replaceChildren(content);
-  ui.modal.onclick = dismissible ? (e) => { if (e.target === ui.modal) closeModal(); } : null;
+  ui.modal.onclick = dismissible ? (e) => { if (e.target === ui.modal) closeModalAny(); } : null;
   ui.modal.dataset.dismissible = dismissible ? '1' : '0';
   if (!modalActive) showLayer(ui.modal);
   modalActive = true;
   if (pd) onPointerCancel();
+}
+
+/** Закрыть окно; открытый компьютер при этом отключается. */
+function closeModalAny() {
+  if (pc) closePc();
+  else closeModal();
 }
 
 function closeModal() {
@@ -1486,12 +1808,12 @@ function card(title, ...children) {
 function showTicket() {
   const face = el('div', { class: 'pr-win-face' });
   face.innerHTML = avatar(game.customer, mood);
-  const notes = game.notes.filter((k) => T.finds[k]);
+  const notes = game.notes.map(findText);
   openModal(card(game.customer.name,
-    el('div', { class: 'pr-win-who' }, face, el('div', { class: 'pr-win-quote' }, `«${complaintText()}»`, el('span', {}, game.model.name))),
+    el('div', { class: 'pr-win-who' }, face, el('div', { class: 'pr-win-quote' }, `«${complaintText()}»`, el('span', {}, `${game.model.name} · ${T.pay(game.pay)}`))),
     el('h3', { class: 'pr-section' }, T.notes),
     notes.length
-      ? el('ul', { class: 'pr-notes' }, notes.map((k) => el('li', { class: /ok$/.test(k) ? 'pr-note-ok' : '' }, T.finds[k])))
+      ? el('ul', { class: 'pr-notes' }, notes.map((t) => el('li', {}, t)))
       : el('p', { class: 'pr-note' }, T.noNotes),
   ));
 }
@@ -1510,7 +1832,7 @@ function rankOf(stars) {
 }
 
 function showStats() {
-  const vals = [progress.level - 1, progress.stars, progress.perfect, progress.sparks];
+  const vals = [progress.level - 1, rub(progress.earned), progress.stars, progress.perfect, progress.sparks];
   openModal(card(T.stats,
     el('div', { class: 'pr-rank' }, el('span', {}, T.rank), el('b', {}, rankOf(progress.stars))),
     el('div', { class: 'pr-table' }, T.statRows.map((label, k) => el('div', { class: 'pr-row' }, el('span', {}, label), el('b', {}, String(vals[k]))))),
@@ -1563,6 +1885,15 @@ function actionButton(icon, label, onclick, cls = '') {
 }
 
 function onKeydown(e) {
+  if (pc) {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key === 'Escape') closePc();
+    else if (e.key === 'Enter' || e.key === 'Backspace' || e.key === 'ArrowUp') typeKey(e.key);
+    else if (/^[a-z0-9._\- ]$/i.test(e.key)) typeKey(e.key.toLowerCase());
+    else return;
+    e.preventDefault();
+    return;
+  }
   if (modalActive) {
     if (e.key === 'Escape' && ui.modal.dataset.dismissible === '1') closeModal();
     return;
@@ -1585,7 +1916,7 @@ function onVisibility() {
 
 export default {
   id: 'repair',
-  title: 'Ремонт телефона',
+  title: 'Ремонт гаджетов',
 
   async init(container, gameApi) {
     api = gameApi;
@@ -1597,7 +1928,7 @@ export default {
     ]);
     if (!api) return;
     soundOn = savedSound !== false;
-    progress = isValidProgress(savedProgress) ? { ...savedProgress } : emptyProgress();
+    progress = normProgress(savedProgress);
     seen = Array.isArray(savedSeen) ? savedSeen.filter((x) => typeof x === 'string') : [];
     if (savedSettings && typeof savedSettings === 'object') {
       settings = {
@@ -1624,6 +1955,7 @@ export default {
       name: el('div', { class: 'pr-name' }),
       complaint: el('div', { class: 'pr-complaint' }),
       stars: [0, 1, 2].map(() => el('span', { class: 'pr-star' }, '★')),
+      pay: el('div', { class: 'pr-pay' }),
       stage: el('div', { class: 'pr-stage' }),
       svg,
       bubble: el('div', { class: 'pr-bubble', hidden: true }),
@@ -1634,10 +1966,11 @@ export default {
     ui.ticket = el('button', { class: 'pr-ticket', onclick: () => { if (!modalActive && game) showTicket(); } },
       ui.avatar,
       el('div', { class: 'pr-ticket-text' }, ui.name, ui.complaint),
-      el('div', { class: 'pr-stars' }, ui.stars));
+      el('div', { class: 'pr-ticket-side' }, el('div', { class: 'pr-stars' }, ui.stars), ui.pay));
     ui.flipBtn = actionButton(ICONS.flip, T.flip, onFlip);
     ui.hintBtn = actionButton(ICONS.hint, T.hint, onHint);
     ui.deliverBtn = actionButton(ICONS.deliver, T.deliver, onDeliver, 'pr-action-main');
+    ui.shopBtn = iconButton(ICONS.shop, T.shop, () => { if (!modalActive && game) showShop(hintShown?.tool === 'buy' ? hintShown.target : ''); });
     ui.toolBtns = TOOLS.map((t) => {
       const b = el('button', { class: 'pr-tool', 'data-tool': t, 'aria-pressed': 'false', title: T.toolHints[t], onclick: () => pickTool(t), onmousedown: (e) => e.preventDefault() },
         el('span', { class: 'pr-tool-icon' }), el('span', { class: 'pr-tool-name' }, T.tools[t]));
@@ -1656,6 +1989,7 @@ export default {
         el('div', { class: 'pr-head-text' }, el('div', { class: 'pr-title' }, T.title), ui.sub),
         el('div', { class: 'pr-actions' },
           soundBtn,
+          ui.shopBtn,
           iconButton(ICONS.stats, T.stats, showStats),
           iconButton(ICONS.gear, T.settings, showSettings),
         ),
@@ -1674,7 +2008,7 @@ export default {
     document.addEventListener('keydown', onKeydown);
     document.addEventListener('visibilitychange', onVisibility);
 
-    if (isValidState(saved) && !saved.done && saved.level >= 1) {
+    if (isValidState(saved) && !saved.done) {
       game = saved;
       tool = '';
       buildScene();
@@ -1693,29 +2027,36 @@ export default {
         get progress() { return progress; },
         get busy() { return busy; },
         get modal() { return modalActive; },
+        get pc() { return pc; },
         tool: (t) => { tool = t; paintTools(); paintMarks(); },
         tap: (target) => doTool(target),
         flip: () => onFlip(),
         power: () => doPower(),
         deliver: () => onDeliver(),
         hint: () => showHint(true),
-        next: () => nextStep(game),
-        /** заказ с номером level; faults — свои поломки (['virus', 'water']) */
-        start: (level, faults) => startOrder(newOrder(level, faults)),
+        next: () => nextStep(game, progress),
+        shop: (want) => showShop(want),
+        buy: (p) => buyPart(game.kind, p, null),
+        type: (text) => { for (const ch of text) typeKey(ch); },
+        enter: () => typeKey('Enter'),
+        money: (n) => { progress.money = n; paintTicket(); },
+        /** заказ с номером level; faults — свои поломки (['virus', 'water']), kind — устройство */
+        start: (level, faults, kind) => startOrder(newOrder(level, faults ?? null, kind ?? null)),
         /** сыграть подсказками без анимации, пока не останется left шагов до сдачи */
         solveExcept: (left = 1) => {
           for (let k = 0; k < 400; k++) {
-            const st = nextStep(game);
+            const st = nextStep(game, progress);
             if (!st || st.tool === 'deliver') break;
             const copy = structuredClone(game);
+            const w = structuredClone(progress);
             let rest = 0;
             for (; rest < 400; rest++) {
-              const n = nextStep(copy);
+              const n = nextStep(copy, w);
               if (!n || n.tool === 'deliver') break;
-              act(copy, n.tool, n.target);
+              act(copy, n.tool, n.target, w);
             }
             if (rest <= left) break;
-            act(game, st.tool, st.target);
+            act(game, st.tool, st.target, progress);
           }
           clearBugs();
           buildScene();
@@ -1744,8 +2085,8 @@ export default {
     fx?.dispose();
     root?.remove();
     if (host) delete host.dataset.skin;
-    api = host = root = ui = toast = fx = game = S = pd = hintShown = null;
-    progress = emptyProgress();
+    api = host = root = ui = toast = fx = game = S = pd = hintShown = pc = null;
+    progress = normProgress(null);
     settings = defaultSettings();
     seen = [];
     bugs = [];
@@ -1753,7 +2094,7 @@ export default {
     tool = overlay = '';
     modalActive = false;
     busy = 0;
-    heatLevel = { cover: 0, display: 0 };
+    heatLevel = {};
     mood = 'calm';
   },
 };

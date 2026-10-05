@@ -1,130 +1,27 @@
-// Ремонт телефона — правила без DOM: заказ (клиент, модель, поломки), устройство телефона, действия
-// инструментами, проверка при сдаче, звёзды и подсказка «что делать дальше».
+// Ремонт гаджетов — правила без DOM: заказ (клиент, устройство, поломки, оплата), действия инструментами, проверка
+// при сдаче, звёзды, деньги и склад запчастей, прошивка с компьютера, подсказка «что делать дальше».
 //
-// Телефон устроен как настоящий (порядок — как в инструкциях iFixit), только проще:
-//   сзади — задняя крышка на клею (прогреть феном → снять присоской); под ней экран платы (4 винта) — под ним
-//   разъёмы батареи (bat), дисплея (disp) и камеры (cam) и плата; камера, батарея; внизу планка (2 винта) — под ней
-//   динамик и плата зарядки с разъёмом usb. Спереди — дисплей на клею, шлейф которого подключён с обратной стороны.
-//   Снаружи — гнездо зарядки (jack) и кнопка питания.
-// Главное правило: шлейфы (disp, cam, usb) и мокрую плату трогать только при отключённой батарее — иначе искра
-// (−1 звезда). Поставить новую деталь вместо исправной — тоже −1 звезда; сдать неисправный телефон — −1 звезда.
-// Подсказка — не больше двух звёзд за заказ. Меньше одной звезды не бывает.
+// Устройства описаны данными (devices.js): какие детали, что что закрывает, винты, шлейфы, пятна грязи. Правила
+// общие: деталь снимается, когда сняты те, что её закрывают, выкручены её винты и отключён её шлейф; деталь на клею —
+// фен, потом присоска. Главное правило: шлейфы и мокрую плату трогать только без питания (батарея отключена или
+// вынута) — иначе искра (−1 звезда). Новая деталь — со склада (покупается в магазине); вместо исправной — −1 звезда;
+// сдать неисправное — возврат, −1 звезда. Подсказка — не больше двух звёзд за заказ.
+// Прошивка: кабель от компьютера в гнездо, в терминале — нужный файл для этой модели (terminal.js).
+
+import {
+  DEVICES, KINDS, FAULT_DEFS, FAULTS, COMPLAINTS, TUTORIAL, UNLOCK, pickKind, connOwner, coveredBy, screwsOf, shopParts,
+  stockKey,
+} from './devices.js';
+
+export { DEVICES, KINDS, FAULTS, FAULT_DEFS, COMPLAINTS, TUTORIAL, UNLOCK, shopParts, stockKey, screwsOf };
 
 export const TOOLS = ['heat', 'suction', 'screwdriver', 'spudger', 'tweezers', 'parts', 'brush', 'alcohol', 'magnifier', 'charger', 'antivirus', 'flash'];
-export const PARTS = ['cover', 'shield', 'bracket', 'battery', 'camera', 'speaker', 'port', 'display'];
-/** Винт → деталь, которую он держит. */
-export const SCREWS = { s1: 'shield', s2: 'shield', s3: 'shield', s4: 'shield', s5: 'bracket', s6: 'bracket' };
-export const SCREW_IDS = Object.keys(SCREWS);
-/** Разъём → деталь, чей это шлейф. */
-export const CONNS = { bat: 'battery', disp: 'display', cam: 'camera', usb: 'port' };
-export const CONN_IDS = Object.keys(CONNS);
-/** Разъём → что его закрывает. */
-const CONN_UNDER = { bat: 'shield', disp: 'shield', cam: 'shield', usb: 'bracket' };
-const CONN_OF = { battery: 'bat', display: 'disp', camera: 'cam', port: 'usb' };
-export const SIDE = {
-  cover: 'back', shield: 'back', bracket: 'back', battery: 'back', camera: 'back', speaker: 'back', port: 'back', display: 'front',
-};
-const INSIDE = ['shield', 'bracket', 'battery', 'camera', 'speaker', 'port'];
-
-// ---------- поломки ----------
-
-export const FAULTS = [
-  'virus', 'bootloop', 'screen-crack', 'screen-flex', 'battery-swollen', 'battery-worn', 'loose-battery', 'water',
-  'port-dirty', 'port-broken', 'speaker-dust', 'speaker-broken', 'camera-glass', 'camera-module',
-];
-/** Поломки одной группы вместе не бывают (у телефона одна батарея и один экран). */
-export const GROUPS = {
-  soft: ['virus', 'bootloop'],
-  screen: ['screen-crack', 'screen-flex'],
-  battery: ['battery-swollen', 'battery-worn', 'loose-battery'],
-  water: ['water'],
-  port: ['port-dirty', 'port-broken'],
-  speaker: ['speaker-dust', 'speaker-broken'],
-  camera: ['camera-glass', 'camera-module'],
-};
-const GROUP_WEIGHT = { soft: 4, screen: 4, battery: 4, water: 2, port: 3, speaker: 2, camera: 2 };
-/** Первые заказы — по одной новой поломке, от простого к сложному. */
-export const TUTORIAL = [
-  'virus', 'screen-crack', 'port-dirty', 'battery-swollen', 'screen-flex', 'speaker-dust', 'loose-battery',
-  'camera-glass', 'bootloop', 'port-broken', 'water', 'speaker-broken', 'battery-worn', 'camera-module',
-];
-
-/** Жалобы клиентов: по несколько на поломку, похожие у разных поломок — чтобы было что диагностировать. */
-export const COMPLAINTS = {
-  virus: [
-    'Везде реклама, и телефон сам что-то качает.',
-    'Выскакивает «Вы выиграли миллион!», всё тормозит.',
-    'Поставил «ускоритель телефона» — и началось: окна, реклама, жуки какие-то.',
-  ],
-  bootloop: [
-    'Обновлялся ночью — теперь висит на логотипе.',
-    'Включается, показывает логотип — и всё, дальше никак.',
-  ],
-  'screen-crack': [
-    'Уронил на плитку — экран вдребезги.',
-    'Сел на телефон. Экран в трещинах.',
-    'Выпал из кармана на асфальт, стекло паутиной.',
-  ],
-  'screen-flex': [
-    'После падения экран чёрный, но звонки слышно.',
-    'Экран мигает и гаснет, хотя ни одной трещины.',
-  ],
-  'battery-swollen': [
-    'Крышка сзади отходит, телефон стал толще.',
-    'Телефон качается на столе, будто его раздуло.',
-  ],
-  'battery-worn': [
-    'Включается на секунду и сразу гаснет.',
-    'Садится мгновенно, даже если ничего не делать.',
-  ],
-  'loose-battery': [
-    'Уронил — и он больше не включается.',
-    'Не включается совсем, даже на зарядке.',
-  ],
-  water: [
-    'Утопил в ванной, теперь не включается.',
-    'Упал в лужу, выключился и больше не оживал.',
-  ],
-  'port-dirty': [
-    'Зарядка вставляется не до конца и не заряжает.',
-    'Заряжается, только если держать провод под углом.',
-  ],
-  'port-broken': [
-    'Не заряжается, а разъём пахнет горелым.',
-    'Поставил на дешёвую зарядку — щёлкнуло, и всё, не заряжается.',
-  ],
-  'speaker-dust': [
-    'Музыку еле слышно, звук глухой.',
-    'Звук будто через подушку.',
-  ],
-  'speaker-broken': [
-    'Динамик хрипел, а теперь молчит.',
-    'Звука нет совсем, даже будильник не слышно.',
-  ],
-  'camera-glass': [
-    'На всех фото мутное пятно.',
-    'Камера снимает как через туман.',
-  ],
-  'camera-module': [
-    'Камера показывает чёрный экран.',
-    'Камера не открывается — чёрный квадрат.',
-  ],
-};
-
-export const MODELS = [
-  { name: 'Грушафон 12', logo: 'pear' },
-  { name: 'Комета S9', logo: 'star' },
-  { name: 'Нимбус 5', logo: 'cloud' },
-  { name: 'Ёжик Мини', logo: 'dot' },
-  { name: 'Орбита Про', logo: 'ring' },
-  { name: 'Листик 8', logo: 'leaf' },
-  { name: 'Капля X', logo: 'drop' },
-];
 export const COLORS = ['graphite', 'white', 'mint', 'lavender', 'coral', 'blue', 'yellow', 'red'];
 export const NAMES = [
   'Аня', 'Борис', 'Вика', 'Гоша', 'Даша', 'Егор', 'Женя', 'Зоя', 'Илья', 'Катя', 'Лёша', 'Маша', 'Никита', 'Оля',
   'Петя', 'Рита', 'Саша', 'Тимур', 'Уля', 'Фёдор', 'Баба Валя', 'Дед Миша',
 ];
+export const START_MONEY = 1500;
 
 /** Генератор случайных чисел по зерну (mulberry32): один заказ — одно зерно. */
 export function seeded(seed) {
@@ -139,45 +36,75 @@ export function seeded(seed) {
 }
 
 const pick = (rng, list) => list[Math.floor(rng() * list.length)];
-
-/** Поломки заказа: сначала обучение по одной, дальше — 1–3 из разных групп (чем дальше, тем больше). */
-export function faultsFor(level, rng) {
-  if (level <= TUTORIAL.length) return [TUTORIAL[level - 1]];
-  const r = rng();
-  const n = level < 25 ? (r < 0.3 ? 2 : 1) : level < 50 ? (r < 0.55 ? 2 : 1) : (r < 0.3 ? 3 : r < 0.75 ? 2 : 1);
-  const groups = Object.keys(GROUPS);
-  const chosen = [];
-  while (chosen.length < n) {
-    const left = groups.filter((g) => !chosen.includes(g));
-    const total = left.reduce((a, g) => a + GROUP_WEIGHT[g], 0);
-    let x = rng() * total;
-    let g = left[left.length - 1];
-    for (const k of left) {
-      x -= GROUP_WEIGHT[k];
-      if (x < 0) {
-        g = k;
-        break;
-      }
-    }
-    chosen.push(g);
-  }
-  return chosen.map((g) => pick(rng, GROUPS[g]));
-}
-
-export const bugsFor = (level) => Math.min(8, 3 + Math.floor(level / 8));
+const spec = (s) => DEVICES[s.kind];
+const P = (s, p) => DEVICES[s.kind].parts[p];
 
 // ---------- заказ ----------
 
-/** Заказ номер level (всегда один и тот же); faults — задать поломки самому (для проверки). */
-export function newOrder(level, only = null) {
+/** Поломки заказа: 1–3 из разных групп, разрешённых этому устройству (чем дальше, тем больше). */
+export function faultsFor(kind, level, rng) {
+  const r = rng();
+  const n = level < 25 ? (r < 0.3 ? 2 : 1) : level < 50 ? (r < 0.55 ? 2 : 1) : (r < 0.3 ? 3 : r < 0.75 ? 2 : 1);
+  const left = [...DEVICES[kind].faults];
+  const out = [];
+  while (out.length < n && left.length) {
+    const f = left.splice(Math.floor(rng() * left.length), 1)[0];
+    const g = FAULT_DEFS[f].group;
+    if (out.some((x) => FAULT_DEFS[x].group === g)) continue;
+    out.push(f);
+  }
+  return out;
+}
+
+/** Версии прошивки: стоит сломанная installed, чинит только newest; в папке компьютера — файлы разных моделей. */
+function firmware(kind, model, rng) {
+  const d = DEVICES[kind];
+  const major = d.version[0] + Math.floor(rng() * (d.version[1] - d.version[0]));
+  const minor = Math.floor(rng() * 5);
+  const installed = `${major}.${minor}`;
+  const newest = `${major}.${minor + 1}`;
+  const older = `${major - 1}.${Math.floor(rng() * 9)}`;
+  const file = (code, v) => `${code.toLowerCase()}_v${v}.${d.ext}`;
+  const others = [];
+  for (const k of KINDS) {
+    const dk = DEVICES[k];
+    for (const m of dk.models) {
+      if (m.code === model.code) continue;
+      const v = dk.version[0] + Math.floor(rng() * (dk.version[1] - dk.version[0]));
+      others.push(`${m.code.toLowerCase()}_v${v}.${Math.floor(rng() * 6)}.${dk.ext}`);
+    }
+  }
+  const shuffle = (list) => {
+    for (let k = list.length - 1; k > 0; k--) {
+      const j = Math.floor(rng() * (k + 1));
+      [list[k], list[j]] = [list[j], list[k]];
+    }
+    return list;
+  };
+  // свои три версии и шесть чужих: похожие имена — читать внимательно
+  const files = shuffle([file(model.code, newest), file(model.code, installed), file(model.code, older), ...shuffle(others).slice(0, 6)]);
+  return { code: model.code, installed, newest, files };
+}
+
+/** Правильный файл прошивки заказа. */
+export const goodFirmware = (s) => `${s.fw.code.toLowerCase()}_v${s.fw.newest}.${spec(s).ext}`;
+
+/** Заказ номер level (всегда один и тот же); only — задать поломки самому, kind — устройство (для проверки). */
+export function newOrder(level, only = null, forceKind = null) {
   const rng = seeded(level * 7919 + 101);
-  const auto = faultsFor(level, rng);
-  const faults = Array.isArray(only) ? only.filter((f) => FAULTS.includes(f)) : auto;
-  const model = pick(rng, MODELS);
+  const tut = TUTORIAL[level];
+  let kind = forceKind ?? (tut ? tut[0] : pickKind(level, rng));
+  if (!DEVICES[kind]) kind = 'phone';
+  const d = DEVICES[kind];
+  let faults = tut && (!forceKind || forceKind === tut[0]) ? [tut[1]] : faultsFor(kind, level, rng);
+  if (Array.isArray(only)) faults = only.filter((f) => d.faults.includes(f));
+  const model = pick(rng, d.models);
+  const parts = Object.fromEntries(Object.keys(d.parts).map((p) => [p, { in: true, broken: '', fresh: false }]));
   const s = {
-    v: 1,
+    v: 2,
     level,
-    model: { name: model.name, logo: model.logo, color: pick(rng, COLORS), cams: rng() < 0.5 ? 2 : 3 },
+    kind,
+    model: { name: model.name, code: model.code, logo: model.logo, color: pick(rng, COLORS), cams: rng() < 0.5 ? 2 : 3 },
     customer: {
       name: pick(rng, NAMES),
       skin: Math.floor(rng() * 4),
@@ -188,18 +115,22 @@ export function newOrder(level, only = null) {
     },
     complaint: faults.map((f) => [f, Math.floor(rng() * COMPLAINTS[f].length)]),
     crack: { x: 0.25 + rng() * 0.5, y: 0.2 + rng() * 0.5, seed: Math.floor(rng() * 1e9) },
+    fw: firmware(kind, model, rng),
     faults,
     view: 'front',
-    parts: Object.fromEntries(PARTS.map((p) => [p, { in: true, broken: '', fresh: false }])),
-    screws: Object.fromEntries(SCREW_IDS.map((id) => [id, true])),
-    conns: { bat: 'on', disp: 'on', cam: 'on', usb: 'on' },
-    hot: { cover: false, display: false },
-    dirt: { jack: false, speaker: false, board: false },
+    parts,
+    screws: Object.fromEntries(Object.keys(d.screws).map((id) => [id, true])),
+    conns: Object.fromEntries(Object.keys(d.conns).map((c) => [c, 'on'])),
+    hot: Object.fromEntries(Object.keys(d.parts).filter((p) => d.parts[p].glue).map((p) => [p, false])),
+    dirt: Object.fromEntries(Object.keys(d.spots).map((k) => [k, false])),
     wet: false,
     virus: 0,
     scanned: false,
     bootloop: false,
+    blank: false,
     power: false,
+    pay: 0,
+    prepaid: 0,
     sparks: 0,
     waste: 0,
     returns: 0,
@@ -209,131 +140,211 @@ export function newOrder(level, only = null) {
     done: false,
   };
   for (const f of faults) applyFault(s, f);
+  s.pay = payFor(kind, faults);
   return s;
 }
 
+export const bugsFor = (level) => Math.min(8, 3 + Math.floor(level / 8));
+
 function applyFault(s, f) {
-  const p = s.parts;
-  switch (f) {
-    case 'virus': s.virus = bugsFor(s.level); break;
-    case 'bootloop': s.bootloop = true; break;
-    case 'screen-crack': p.display.broken = 'crack'; break;
-    case 'screen-flex': s.conns.disp = 'loose'; break;
-    case 'battery-swollen': p.battery.broken = 'swollen'; break;
-    case 'battery-worn': p.battery.broken = 'worn'; break;
-    case 'loose-battery': s.conns.bat = 'loose'; break;
-    case 'water': s.dirt.board = true; s.wet = true; break;
-    case 'port-dirty': s.dirt.jack = true; break;
-    case 'port-broken': p.port.broken = 'burnt'; break;
-    case 'speaker-dust': s.dirt.speaker = true; break;
-    case 'speaker-broken': p.speaker.broken = 'torn'; break;
-    case 'camera-glass': p.cover.broken = 'glass'; break;
-    case 'camera-module': p.camera.broken = 'dead'; break;
-    default: break;
-  }
+  const def = FAULT_DEFS[f];
+  if (def.soft === 'virus') s.virus = bugsFor(s.level);
+  if (def.soft === 'bootloop') s.bootloop = true;
+  if (def.part) s.parts[def.part].broken = def.value;
+  if (def.conn) s.conns[def.conn] = 'loose';
+  if (def.spot) s.dirt[def.spot] = true;
+  if (def.wet) s.wet = true;
 }
 
-// ---------- состояние телефона ----------
+/** Оплата заказа: работа плюс детали с наценкой, кругло до 50. */
+export function payFor(kind, faults) {
+  let sum = 0;
+  for (const f of faults) {
+    const def = FAULT_DEFS[f];
+    sum += def.labor;
+    if (def.part) sum += DEVICES[kind].parts[def.part].price * 1.3;
+  }
+  return Math.round(sum / 50) * 50;
+}
 
-/** Есть ли питание: батарея на месте и подключена, плата не залита. Изношенная батарея гаснет сразу. */
-export const canPower = (s) => s.parts.battery.in && s.conns.bat === 'on' && !s.dirt.board;
-export const chargeOk = (s) => s.parts.port.in && !s.parts.port.broken && !s.dirt.jack && s.conns.usb === 'on';
+// ---------- состояние устройства ----------
 
-/** Что на экране включённого телефона: none — выключен или нет дисплея, dark, flicker, logo, home. */
+/** Есть питание от батареи (для искр): батарея стоит и её шлейф подключён (у съёмной — просто стоит). */
+export function powered(s) {
+  const d = spec(s);
+  if (!s.parts[d.battery].in) return false;
+  const c = P(s, d.battery).conn;
+  return c ? s.conns[c] === 'on' : true;
+}
+
+/** Включится ли: питание есть и плата не залита. Изношенная батарея гаснет сразу. */
+export const canPower = (s) => powered(s) && !s.dirt.board;
+
+export function chargeOk(s) {
+  const d = spec(s);
+  if (s.dirt.jack) return false;
+  if (!d.port) return true;
+  const port = s.parts[d.port];
+  return port.in && !port.broken && s.conns[P(s, d.port).conn] === 'on';
+}
+
+/** Диск с системой (у кого он есть) в порядке. */
+const osOk = (s) => !s.parts.ssd || (s.parts.ssd.in && !s.parts.ssd.broken && !s.blank);
+
+/** Что на экране включённого устройства: none, dark, flicker, logo, noos, home. */
 export function screenOf(s) {
   if (!s.power || !s.parts.display.in) return 'none';
   if (s.conns.disp === 'loose') return 'flicker';
   if (s.conns.disp !== 'on') return 'dark';
   if (s.bootloop) return 'logo';
+  if (!osOk(s)) return 'noos';
   return 'home';
 }
 
-/** Телефон собран: все детали и винты на месте (разъёмы проверяет уже сдача). */
-export const assembled = (s) => PARTS.every((p) => s.parts[p].in) && SCREW_IDS.every((id) => s.screws[id]);
+/** Собрано: все детали и винты на месте (шлейфы проверяет уже сдача). */
+export const assembled = (s) => Object.values(s.parts).every((p) => p.in) && Object.values(s.screws).every(Boolean);
 
-/** Чего не хватает до сборки: детали и число винтов. */
 export function missing(s) {
   return {
-    parts: PARTS.filter((p) => !s.parts[p].in),
-    screws: SCREW_IDS.filter((id) => !s.screws[id]).length,
+    parts: Object.keys(s.parts).filter((p) => !s.parts[p].in),
+    screws: Object.keys(s.screws).filter((id) => !s.screws[id]).length,
   };
 }
 
-/** Что не так с телефоном (проверка при сдаче): пусто — всё работает. */
+/** Что не так (проверка при сдаче): пусто — всё работает. */
 export function symptoms(s) {
-  const p = s.parts;
-  const out = [];
-  if (p.battery.broken === 'swollen') out.push('swollen');
+  const d = spec(s);
+  const out = new Set();
+  const bat = s.parts[d.battery];
+  if (bat.in && bat.broken === 'swollen') out.add('swollen');
   if (!canPower(s)) {
-    out.push('no-power');
-    return out;
+    out.add('no-power');
+    return [...out];
   }
-  if (p.battery.broken === 'worn') out.push('drains');
-  if (s.bootloop) out.push('bootloop');
-  if (!p.display.in || s.conns.disp !== 'on') out.push('no-screen');
-  else if (p.display.broken) out.push('cracked');
-  if (!chargeOk(s)) out.push('no-charge');
-  if (!p.speaker.in || p.speaker.broken) out.push('no-sound');
-  else if (s.dirt.speaker) out.push('quiet');
-  if (!p.camera.in || p.camera.broken || s.conns.cam !== 'on') out.push('no-camera');
-  else if (p.cover.broken) out.push('blurry');
-  if (s.virus > 0 && !s.bootloop) out.push('virus');
-  return out;
+  if (bat.broken === 'worn') out.add('drains');
+  if (s.bootloop) out.add('bootloop');
+  for (const [p, ps] of Object.entries(d.parts)) {
+    if (!ps.miss && !ps.bad) continue;
+    const st = s.parts[p];
+    const works = st.in && (!ps.conn || s.conns[ps.conn] === 'on');
+    if (!works && ps.miss) out.add(ps.miss);
+    else if (st.in && st.broken && ps.bad) out.add(ps.bad);
+  }
+  if (s.blank) out.add('no-os');
+  for (const [k, sp] of Object.entries(d.spots)) if (s.dirt[k] && sp.sym) out.add(sp.sym);
+  if (!chargeOk(s)) out.add('no-charge');
+  if (s.virus > 0 && !s.bootloop) out.add('virus');
+  return [...out];
 }
 
 /** Звёзды за заказ: 3 (с подсказкой — 2) минус искры, лишние детали и возвраты; не меньше 1. */
 export const starsFor = (s) => Math.max(1, (s.hints ? 2 : 3) - s.sparks - s.waste - s.returns);
 
-// ---------- действия ----------
+/** Сколько получишь при сдаче: оплата минус предоплата за детали, плюс чаевые за звёзды. */
+export function earningsFor(s) {
+  const st = starsFor(s);
+  const tip = st === 3 ? 0.15 : st === 2 ? 0.05 : 0;
+  return Math.max(0, Math.round((s.pay * (1 + tip) - s.prepaid) / 10) * 10);
+}
+
+// ---------- доступ ----------
 
 const no = (why, extra = {}) => ({ ok: false, why, ...extra });
 const yes = (extra = {}) => ({ ok: true, ...extra });
 
-/** На какой стороне цель: back, front или any (гнездо, кнопка — видны всегда). */
-export function sideOf(target) {
-  if (SIDE[target]) return SIDE[target];
-  if (target in SCREWS || target in CONNS || target === 'board' || target === 'indicator') return 'back';
+/** На какой стороне цель: back, front или any. */
+export function sideOf(s, target) {
+  const d = spec(s);
+  if (d.parts[target]) return d.parts[target].side === 'edge' ? 'any' : d.parts[target].side;
+  if (d.screws[target]) return d.parts[d.screws[target]].side;
+  if (d.conns[target]) return d.conns[target].side;
+  if (d.spots[target]) return d.spots[target].side;
   if (target === 'screen' || target === 'bug') return 'front';
+  if (target === 'indicator') return 'back';
   return 'any';
 }
 
-/** Можно ли дотянуться до цели (с нужной стороны и ничего не мешает); '' — можно, иначе причина. */
+/** Что из списка ещё стоит (закрывает): '' — ничего. */
+const firstIn = (s, list) => list.find((p) => s.parts[p].in) ?? '';
+
+/** Можно ли дотянуться до цели; '' — можно, иначе причина ('flip', 'blocked' + by, 'no-holder', 'no-part'). */
 export function reach(s, target) {
-  const side = sideOf(target);
-  if (side !== 'any' && side !== s.view) return 'flip';
-  const p = s.parts;
-  if (target === 'cover' || target === 'display') return '';
-  if (target === 'screen') return p.display.in ? '' : 'no-part';
-  if (side === 'back' && p.cover.in) return 'cover';
-  if (target in SCREWS) return p[SCREWS[target]].in ? '' : 'no-holder';
-  if (target in CONNS) return p[CONN_UNDER[target]].in ? CONN_UNDER[target] : '';
-  if (target === 'board') return p.shield.in ? 'shield' : '';
-  if (target === 'speaker' || target === 'port') return p.bracket.in ? 'bracket' : '';
-  return '';
+  const d = spec(s);
+  const side = sideOf(s, target);
+  if (side !== 'any' && side !== s.view) return { why: 'flip' };
+  if (d.parts[target]) {
+    const by = firstIn(s, d.parts[target].blockers);
+    return by ? { why: 'blocked', by } : null;
+  }
+  if (d.screws[target]) {
+    const holder = d.screws[target];
+    if (!s.parts[holder].in) return { why: 'no-holder' };
+    const by = firstIn(s, d.parts[holder].blockers);
+    return by ? { why: 'blocked', by } : null;
+  }
+  if (d.conns[target]) {
+    const by = firstIn(s, d.conns[target].under);
+    return by ? { why: 'blocked', by } : null;
+  }
+  if (d.spots[target]) {
+    const by = firstIn(s, d.spots[target].under);
+    return by ? { why: 'blocked', by } : null;
+  }
+  if (target === 'screen') return s.parts.display.in ? null : { why: 'no-part' };
+  if (target === 'indicator') {
+    const by = firstIn(s, d.spots.board?.under.slice(0, 1) ?? []);
+    return by ? { why: 'blocked', by } : null;
+  }
+  return null;
 }
 
-function install(s, t, fresh) {
-  const part = s.parts[t];
-  const why = reach(s, t);
-  if (why) return no(why);
-  if (t === 'cover') {
-    const m = missing(s);
-    if (m.parts.some((x) => x !== 'cover' && x !== 'display') || m.screws) return no('inside-missing');
+const refuseReach = (r) => no(r.why, r.by ? { by: r.by } : {});
+
+/** Поставить деталь: всё, что она закрывает, должно стоять и быть привинчено. */
+function install(s, p, fresh, wallet) {
+  const r = reach(s, p);
+  if (r) return refuseReach(r);
+  for (const q of coveredBy(s.kind, p)) {
+    if (!s.parts[q].in || screwsOf(s.kind, q).some((id) => !s.screws[id])) return no('inside-missing', { by: q });
   }
+  const part = s.parts[p];
+  const ps = P(s, p);
   let wasted = false;
   if (fresh) {
+    const key = stockKey(s.kind, p);
+    if (!wallet || !(wallet.stock?.[key] > 0)) return no('no-stock', { part: p });
+    wallet.stock[key]--;
     if (!part.broken) {
       s.waste++;
       wasted = true;
     }
     part.broken = '';
     part.fresh = true;
-    if (t in s.hot) s.hot[t] = false;
+    if (p in s.hot) s.hot[p] = false;
+    if (ps.blank) s.blank = true;
   }
   part.in = true;
-  if (CONN_OF[t]) s.conns[CONN_OF[t]] = 'off';
-  return yes({ installed: t, fresh, wasted });
+  if (ps.conn) s.conns[ps.conn] = 'off';
+  return yes({ installed: p, fresh, wasted });
 }
+
+/** Спот: чем чистить и что мешает. */
+function clean(s, tool, t) {
+  const d = spec(s);
+  const sp = d.spots[t];
+  if (!sp) return no(`${tool}-where`);
+  const r = reach(s, t);
+  if (r) return refuseReach(r);
+  if (sp.part && !s.parts[sp.part].in) return no('no-part');
+  if (sp.tool !== tool) return no(s.dirt[t] ? (tool === 'brush' ? 'brush-weak' : 'alcohol-dust') : 'clean');
+  if (!s.dirt[t]) return no('clean');
+  const spark = Boolean(sp.power) && powered(s);
+  if (spark) s.sparks++;
+  s.dirt[t] = false;
+  return yes({ cleaned: t, spark });
+}
+
+// ---------- действия ----------
 
 const ACTIONS = {
   flip(s) {
@@ -342,9 +353,9 @@ const ACTIONS = {
   },
 
   heat(s, t) {
-    if (t !== 'cover' && t !== 'display') return no('heat-where');
-    const why = reach(s, t);
-    if (why) return no(why);
+    if (!(t in s.hot)) return no('heat-where');
+    const r = reach(s, t);
+    if (r) return refuseReach(r);
     if (!s.parts[t].in) return no('no-part');
     const already = s.hot[t];
     s.hot[t] = true;
@@ -352,101 +363,86 @@ const ACTIONS = {
   },
 
   suction(s, t) {
-    if (t !== 'cover' && t !== 'display') return no('suction-where');
-    const why = reach(s, t);
-    if (why) return no(why);
+    if (!(t in s.hot)) return no('suction-where');
+    const r = reach(s, t);
+    if (r) return refuseReach(r);
     if (!s.parts[t].in) return no('no-part');
     if (!s.hot[t]) return no('glue');
-    if (t === 'display' && s.conns.disp !== 'off') return no('flex-holds');
+    const c = P(s, t).conn;
+    if (c && s.conns[c] !== 'off') return no('flex-holds', { conn: c });
     s.parts[t].in = false;
     if (t === 'display') s.power = false;
     return yes({ removed: t });
   },
 
   screwdriver(s, t) {
-    if (!(t in SCREWS)) return no('no-screws');
-    const why = reach(s, t);
-    if (why) return no(why);
+    if (!spec(s).screws[t]) return no('no-screws');
+    const r = reach(s, t);
+    if (r) return refuseReach(r);
     s.screws[t] = !s.screws[t];
     return yes({ screw: t, in: s.screws[t] });
   },
 
   spudger(s, t) {
-    if (!(t in CONNS)) return no(t === 'cover' || t === 'display' ? 'use-suction' : 'spudger-where');
-    const why = reach(s, t);
-    if (why) return no(why);
-    if (!s.parts[CONNS[t]].in) return no('no-part');
-    const spark = t !== 'bat' && s.conns.bat === 'on';
+    const d = spec(s);
+    if (!d.conns[t]) return no(t in s.hot ? 'use-suction' : 'spudger-where');
+    const r = reach(s, t);
+    if (r) return refuseReach(r);
+    if (!s.parts[connOwner(s.kind, t)].in) return no('no-part');
+    const batConn = P(s, d.battery).conn;
+    const spark = t !== batConn && powered(s);
     if (spark) s.sparks++;
     const st = s.conns[t] === 'on' ? 'off' : 'on';
     s.conns[t] = st;
-    if (t === 'bat' && st === 'off') s.power = false;
+    if (t === batConn && st === 'off') s.power = false;
     return yes({ conn: t, state: st, spark });
   },
 
   tweezers(s, t) {
-    if (t in SCREWS) return no('use-screwdriver');
-    if (!(t in s.parts)) return no('tweezers-where');
+    const d = spec(s);
+    if (d.screws[t]) return no('use-screwdriver');
+    if (!d.parts[t]) return no('tweezers-where');
     const part = s.parts[t];
-    if (!part.in) return install(s, t, false);
-    const why = reach(s, t);
-    if (why) return no(why);
-    if (t === 'cover' || t === 'display') return no('use-suction');
-    if (t === 'shield' || t === 'bracket') {
-      if (SCREW_IDS.some((id) => SCREWS[id] === t && s.screws[id])) return no('screws');
-    }
-    if (t === 'battery' && s.conns.bat !== 'off') return no('bat-connected');
-    if (CONN_OF[t] && t !== 'battery' && s.conns[CONN_OF[t]] !== 'off') return no('flex', { conn: CONN_OF[t] });
+    if (!part.in) return install(s, t, false, null);
+    const r = reach(s, t);
+    if (r) return refuseReach(r);
+    if (t in s.hot) return no('use-suction');
+    if (screwsOf(s.kind, t).some((id) => s.screws[id])) return no('screws');
+    const c = P(s, t).conn;
+    if (c && s.conns[c] !== 'off') return no(t === d.battery ? 'bat-connected' : 'flex', { conn: c });
     part.in = false;
+    if (t === d.battery || t === 'display') s.power = false;
     return yes({ removed: t });
   },
 
-  parts(s, t) {
-    if (!(t in s.parts)) return no('parts-where');
+  parts(s, t, wallet) {
+    if (!spec(s).parts[t]) return no('parts-where');
     if (s.parts[t].in) return no('remove-first');
-    return install(s, t, true);
+    return install(s, t, true, wallet);
   },
 
-  brush(s, t) {
-    if (t === 'jack') {
-      if (!s.parts.port.in) return no('no-part');
-      if (!s.dirt.jack) return no('clean');
-      s.dirt.jack = false;
-      return yes({ cleaned: t });
+  /** Купить деталь на склад: хватает денег — за свои, нет — клиент даёт предоплату (вычтется из оплаты). */
+  buy(s, t, wallet) {
+    const ps = spec(s).parts[t];
+    if (!ps?.price || !wallet) return no('not-sold');
+    const key = stockKey(s.kind, t);
+    let prepaid = false;
+    if (wallet.money >= ps.price) wallet.money -= ps.price;
+    else {
+      s.prepaid += ps.price;
+      prepaid = true;
     }
-    if (t === 'speaker') {
-      const why = reach(s, t);
-      if (why) return no(why);
-      if (!s.parts.speaker.in) return no('no-part');
-      if (!s.dirt.speaker) return no('clean');
-      s.dirt.speaker = false;
-      return yes({ cleaned: t });
-    }
-    if (t === 'board') {
-      const why = reach(s, t);
-      if (why) return no(why);
-      return no(s.dirt.board ? 'brush-weak' : 'clean');
-    }
-    return no('brush-where');
+    wallet.stock[key] = (wallet.stock[key] ?? 0) + 1;
+    return yes({ bought: t, price: ps.price, prepaid });
   },
 
-  alcohol(s, t) {
-    if (t === 'board') {
-      const why = reach(s, t);
-      if (why) return no(why);
-      if (!s.dirt.board) return no('clean');
-      const spark = s.conns.bat === 'on';
-      if (spark) s.sparks++;
-      s.dirt.board = false;
-      return yes({ cleaned: t, spark });
-    }
-    if ((t === 'jack' && s.dirt.jack) || (t === 'speaker' && s.dirt.speaker)) return no('alcohol-dust');
-    return no('alcohol-where');
-  },
+  brush: (s, t) => clean(s, 'brush', t),
+  alcohol: (s, t) => clean(s, 'alcohol', t),
 
   magnifier(s, t) {
-    const why = t === 'jack' || t === 'button' ? '' : reach(s, t);
-    if (why) return no(why);
+    const out = sideOf(s, t) === 'any' && !spec(s).parts[t];
+    const r = out ? null : reach(s, t);
+    if (r && r.why !== 'no-holder') return refuseReach(r);
     const find = inspect(s, t);
     if (!s.notes.includes(find)) s.notes.push(find);
     return yes({ find });
@@ -454,14 +450,14 @@ const ACTIONS = {
 
   charger(s, t) {
     if (t !== 'jack') return no('charger-where');
-    if (!s.parts.port.in) return no('no-part');
-    return yes({ charge: chargeOk(s) && s.parts.battery.in && s.conns.bat === 'on' });
+    return yes({ charge: chargeOk(s) && powered(s) });
   },
 
   antivirus(s, t) {
+    if (!spec(s).virus) return no('antivirus-where');
     if (t !== 'screen' && t !== 'display') return no('antivirus-where');
-    const why = reach(s, 'screen');
-    if (why) return no(why);
+    const r = reach(s, 'screen');
+    if (r) return refuseReach(r);
     if (!s.power) return no('power-off');
     if (screenOf(s) !== 'home') return no('no-screen');
     if (!s.virus) return yes({ clean: true });
@@ -476,17 +472,24 @@ const ACTIONS = {
     return yes({ left: s.virus });
   },
 
+  /** Прошивка файлом с компьютера: t — имя файла. */
   flash(s, t) {
-    if (t !== 'jack') return no('flash-where');
-    if (!s.parts.port.in) return no('no-part');
-    if (!s.bootloop) return no('no-need');
-    if (!chargeOk(s)) return no('no-link');
-    if (!canPower(s) || s.parts.battery.broken === 'worn') return no('no-power');
+    if (!linked(s)) return no('no-link');
+    const file = String(t ?? '').trim().toLowerCase();
+    if (!s.fw.files.includes(file)) return no('no-file');
+    const m = /^(.+)_v(\d+)\.(\d+)\.(\w+)$/.exec(file);
+    if (!m || m[1] !== s.fw.code.toLowerCase() || m[4] !== spec(s).ext) return no('wrong-model', { file });
+    if (s.parts.ssd && (!s.parts.ssd.in || s.parts.ssd.broken)) return no('disk-error');
+    if (!s.bootloop && !s.blank) return no('no-need');
+    const v = `${m[2]}.${m[3]}`;
+    if (v !== s.fw.newest) return no(v === s.fw.installed && !s.blank ? 'same-version' : 'old-version', { version: v });
     s.bootloop = false;
+    s.blank = false;
     s.virus = 0;
     s.scanned = false;
+    s.fw.installed = s.fw.newest;
     s.power = true;
-    return yes({ flashed: true });
+    return yes({ flashed: file });
   },
 
   power(s) {
@@ -495,7 +498,7 @@ const ACTIONS = {
       return yes({ on: false });
     }
     if (!canPower(s)) return yes({ on: false, dead: true });
-    if (s.parts.battery.broken === 'worn') return yes({ on: false, blink: true });
+    if (s.parts[spec(s).battery].broken === 'worn') return yes({ on: false, blink: true });
     s.power = true;
     return yes({ on: true, screen: screenOf(s) });
   },
@@ -513,153 +516,138 @@ const ACTIONS = {
   },
 };
 
-/** Действие инструментом (или flip, squash, power, deliver) над целью; меняет s. → { ok, why?, … }. */
-export function act(s, tool, target) {
+/** Видит ли компьютер устройство: питание и гнездо в порядке. */
+export const linked = (s) => canPower(s) && chargeOk(s);
+
+/** Действие инструментом (или flip, squash, power, deliver, buy) над целью; меняет s (и wallet). → { ok, why?, … }. */
+export function act(s, tool, target, wallet = null) {
   if (s.done) return no('done');
   const fn = ACTIONS[tool];
   if (!fn) return no('nothing');
-  const r = fn(s, target);
-  if (r.ok && tool !== 'flip') s.moves++;
+  const r = fn(s, target, wallet);
+  if (r.ok && tool !== 'flip' && tool !== 'buy') s.moves++;
   return r;
 }
 
 /** Что видно в лупу: ключ находки (тексты — в index.js). */
 export function inspect(s, t) {
-  const p = s.parts;
-  switch (t) {
-    case 'cover':
-      if (!p.cover.in) return 'ok';
-      if (p.cover.broken) return 'cover-glass';
-      if (p.battery.broken === 'swollen') return 'cover-bulge';
-      return 'cover-ok';
-    case 'display':
-    case 'screen':
-      if (!p.display.in) return 'ok';
-      return p.display.broken ? 'display-crack' : 'display-ok';
-    case 'battery':
-      if (!p.battery.in) return 'ok';
-      return p.battery.broken === 'swollen' ? 'battery-swollen' : p.battery.broken === 'worn' ? 'battery-worn' : 'battery-ok';
-    case 'camera':
-      if (!p.camera.in) return 'ok';
-      return p.camera.broken ? 'camera-dead' : 'camera-ok';
-    case 'speaker':
-      if (!p.speaker.in) return 'ok';
-      return p.speaker.broken ? 'speaker-torn' : s.dirt.speaker ? 'speaker-dust' : 'speaker-ok';
-    case 'port':
-      if (!p.port.in) return 'ok';
-      return p.port.broken ? 'port-burnt' : 'port-ok';
-    case 'jack':
-      if (!p.port.in) return 'ok';
-      return s.dirt.jack ? 'jack-lint' : p.port.broken ? 'jack-burnt' : 'jack-ok';
-    case 'board':
-      return s.dirt.board ? 'board-corrosion' : 'board-ok';
-    case 'indicator':
-      return s.wet ? 'indicator-red' : 'indicator-ok';
-    case 'bat':
-    case 'disp':
-    case 'cam':
-    case 'usb':
-      return s.conns[t] === 'loose' ? `${t}-loose` : s.conns[t] === 'off' ? 'conn-off' : 'conn-ok';
-    default:
-      return 'ok';
+  const d = spec(s);
+  if (d.parts[t]) {
+    const st = s.parts[t];
+    if (!st.in) return 'ok';
+    if (st.broken) return `${t}-${st.broken}`;
+    if (s.parts[d.battery].broken === 'swollen' && d.parts[d.battery].blockers.includes(t)) return 'cover-bulge';
+    const spot = Object.keys(d.spots).find((k) => (k === t || d.spots[k].part === t) && s.dirt[k] && d.spots[k].side !== 'any');
+    if (spot) return `${spot}-dirty`;
+    return `ok:${t}`;
   }
+  if (d.conns[t]) return s.conns[t] === 'loose' ? `${t}-loose` : s.conns[t] === 'off' ? 'conn-off' : 'conn-ok';
+  if (t === 'jack') {
+    if (s.dirt.jack) return 'jack-dirty';
+    if (d.port && s.parts[d.port].broken) return 'jack-burnt';
+    return 'jack-ok';
+  }
+  if (d.spots[t]) return s.dirt[t] ? `${t}-dirty` : `${t}-ok`;
+  if (t === 'indicator') return s.wet ? 'indicator-red' : 'indicator-ok';
+  return 'ok';
 }
 
 // ---------- подсказка: следующий шаг ----------
 
-const step = (s, tool, target) => {
-  const side = sideOf(target);
+function step(s, tool, target) {
+  const side = sideOf(s, target);
   if (side !== 'any' && side !== s.view) return { tool: 'flip' };
   return { tool, target };
-};
+}
 
 /** Снять деталь (null — уже снята). */
 function takeOut(s, p) {
   if (!s.parts[p].in) return null;
-  if (p === 'cover') return s.hot.cover ? step(s, 'suction', 'cover') : step(s, 'heat', 'cover');
-  if (p === 'display') {
-    return connOff(s, 'disp') ?? (s.hot.display ? step(s, 'suction', 'display') : step(s, 'heat', 'display'));
+  const ps = P(s, p);
+  for (const b of ps.blockers) {
+    const r = takeOut(s, b);
+    if (r) return r;
   }
-  const open = takeOut(s, 'cover');
-  if (open) return open;
-  if (p === 'shield' || p === 'bracket') {
-    const screw = SCREW_IDS.find((id) => SCREWS[id] === p && s.screws[id]);
-    if (screw) return step(s, 'screwdriver', screw);
-    return step(s, 'tweezers', p);
+  if (ps.conn) {
+    const r = connOff(s, ps.conn);
+    if (r) return r;
   }
-  if (p === 'speaker' || p === 'port') {
-    const access = takeOut(s, 'bracket');
-    if (access) return access;
-  }
-  if (CONN_OF[p]) {
-    const flex = connOff(s, CONN_OF[p]);
-    if (flex) return flex;
-  }
+  if (ps.glue) return s.hot[p] ? step(s, 'suction', p) : step(s, 'heat', p);
+  const screw = screwsOf(s.kind, p).find((id) => s.screws[id]);
+  if (screw) return step(s, 'screwdriver', screw);
   return step(s, 'tweezers', p);
 }
 
-/** Добраться до разъёма: снять крышку и то, что его закрывает. */
-const toConn = (s, c) => takeOut(s, 'cover') ?? takeOut(s, CONN_UNDER[c]);
+/** Добраться: снять всё из списка. */
+function clear(s, list) {
+  for (const p of list) {
+    const r = takeOut(s, p);
+    if (r) return r;
+  }
+  return null;
+}
 
-/** Отключить шлейф (сначала — батарею, чтобы без искры). */
+/** Обесточить: отключить шлейф батареи или вынуть съёмную. */
+function cutPower(s) {
+  const d = spec(s);
+  const c = P(s, d.battery).conn;
+  return c ? connOff(s, c) : takeOut(s, d.battery);
+}
+
 function connOff(s, c) {
   if (s.conns[c] === 'off') return null;
-  return toConn(s, c) ?? (c !== 'bat' ? connOff(s, 'bat') : null) ?? step(s, 'spudger', c);
+  const batConn = P(s, spec(s).battery).conn;
+  return clear(s, spec(s).conns[c].under) ?? (c !== batConn && powered(s) ? cutPower(s) : null) ?? step(s, 'spudger', c);
 }
 
-/** Подключить шлейф (не батарею — только при отключённой батарее). */
 function connOn(s, c) {
-  if (s.conns[c] === 'on') return null;
-  return toConn(s, c) ?? (c !== 'bat' && s.conns.bat === 'on' ? step(s, 'spudger', 'bat') : null) ?? step(s, 'spudger', c);
+  if (s.conns[c] === 'on' || !s.parts[connOwner(s.kind, c)].in) return null;
+  const batConn = P(s, spec(s).battery).conn;
+  return clear(s, spec(s).conns[c].under) ?? (c !== batConn && powered(s) ? cutPower(s) : null) ?? step(s, 'spudger', c);
 }
 
-/** Поставить деталь: сломанную — новую, исправную — свою. */
-function putIn(s, p) {
+/** Привинтить винт (держатель стоит). */
+function screwIn(s, id) {
+  if (s.screws[id]) return null;
+  return clear(s, P(s, spec(s).screws[id]).blockers) ?? step(s, 'screwdriver', id);
+}
+
+/** Поставить деталь: всё под ней — на месте; сломанную — новую со склада (нет — купить), исправную — свою. */
+function putIn(s, p, wallet) {
   if (s.parts[p].in) return null;
-  if (p !== 'cover' && p !== 'display') {
-    const open = takeOut(s, 'cover');
-    if (open) return open;
+  for (const q of coveredBy(s.kind, p)) {
+    const r = putIn(s, q, wallet) ?? screwsOf(s.kind, q).map((id) => screwIn(s, id)).find(Boolean);
+    if (r) return r;
   }
-  if (p === 'speaker' || p === 'port') {
-    const access = takeOut(s, 'bracket');
-    if (access) return access;
-  }
-  return step(s, s.parts[p].broken ? 'parts' : 'tweezers', p);
+  const r = clear(s, P(s, p).blockers);
+  if (r) return r;
+  if (!s.parts[p].broken) return step(s, 'tweezers', p);
+  if (!(wallet?.stock?.[stockKey(s.kind, p)] > 0)) return { tool: 'buy', target: p };
+  return step(s, 'parts', p);
 }
 
-const REMOVE_ORDER = ['cover', 'display', 'battery', 'camera', 'speaker', 'port'];
-
-/** Следующий шаг к исправному собранному телефону без искр и лишних деталей: { tool, target } | null. */
-export function nextStep(s) {
+/**
+ * Следующий шаг к исправному собранному устройству без искр и лишних деталей: { tool, target } | null.
+ * wallet — деньги и склад (подсказка «купить», если нужной детали нет).
+ */
+export function nextStep(s, wallet = null) {
   if (s.done) return null;
-  const P = s.parts;
+  const d = spec(s);
   // 1. снять сломанное
-  for (const p of REMOVE_ORDER) if (P[p].in && P[p].broken) return takeOut(s, p);
+  for (const p of Object.keys(d.parts)) if (s.parts[p].in && s.parts[p].broken) return takeOut(s, p);
   // 2. почистить
-  if (s.dirt.jack && P.port.in) return step(s, 'brush', 'jack');
-  if (s.dirt.speaker && P.speaker.in) return takeOut(s, 'cover') ?? takeOut(s, 'bracket') ?? step(s, 'brush', 'speaker');
-  if (s.dirt.board) {
-    return takeOut(s, 'cover') ?? takeOut(s, 'shield') ?? connOff(s, 'bat') ?? step(s, 'alcohol', 'board');
+  for (const [k, sp] of Object.entries(d.spots)) {
+    if (!s.dirt[k] || (sp.part && !s.parts[sp.part].in)) continue;
+    return clear(s, sp.under) ?? (sp.power && powered(s) ? cutPower(s) : null) ?? step(s, sp.tool, k);
   }
-  // 3. собрать: детали, шлейфы (батарея — последней), крепёж, крышка
-  for (const p of ['battery', 'camera', 'port', 'speaker', 'display']) {
-    const r = putIn(s, p);
+  // 3. собрать по порядку
+  for (const item of d.order) {
+    const [kind, id] = item.split(':');
+    const r = kind === 'p' ? putIn(s, id, wallet) : kind === 'c' ? connOn(s, id) : screwsOf(s.kind, id).map((x) => screwIn(s, x)).find(Boolean);
     if (r) return r;
   }
-  for (const c of ['disp', 'cam', 'usb', 'bat']) {
-    const r = connOn(s, c);
-    if (r) return r;
-  }
-  for (const holder of ['shield', 'bracket']) {
-    const r = putIn(s, holder);
-    if (r) return r;
-    const screw = SCREW_IDS.find((id) => SCREWS[id] === holder && !s.screws[id]);
-    if (screw) return takeOut(s, 'cover') ?? step(s, 'screwdriver', screw);
-  }
-  const cover = putIn(s, 'cover');
-  if (cover) return cover;
   // 4. программы
-  if (s.bootloop) return step(s, 'flash', 'jack');
+  if (s.bootloop || s.blank) return { tool: 'flash', target: goodFirmware(s) };
   if (s.virus > 0) {
     if (!s.power) return { tool: 'power', target: 'button' };
     if (!s.scanned) return step(s, 'antivirus', 'screen');
@@ -668,52 +656,71 @@ export function nextStep(s) {
   return { tool: 'deliver' };
 }
 
-// ---------- сохранение и прогресс ----------
+// ---------- сохранение, деньги, прогресс ----------
 
 const isBool = (x) => typeof x === 'boolean';
 const isCount = (x) => Number.isInteger(x) && x >= 0;
 const CONN_STATES = ['on', 'off', 'loose'];
+const sameKeys = (o, keys) => Boolean(o) && typeof o === 'object' && Object.keys(o).length === keys.length && keys.every((k) => k in o);
 
 export function isValidState(s) {
   try {
-    if (!s || typeof s !== 'object' || s.v !== 1) return false;
+    if (!s || typeof s !== 'object' || s.v !== 2 || !DEVICES[s.kind]) return false;
+    const d = DEVICES[s.kind];
     if (!Number.isInteger(s.level) || s.level < 1) return false;
-    if (!Array.isArray(s.faults) || !s.faults.every((f) => FAULTS.includes(f))) return false;
+    if (!Array.isArray(s.faults) || !s.faults.every((f) => d.faults.includes(f))) return false;
     if (!s.model || typeof s.model.name !== 'string' || !COLORS.includes(s.model.color)) return false;
     if (!s.customer || typeof s.customer.name !== 'string') return false;
     if (!Array.isArray(s.complaint) || !s.complaint.every(([f, k]) => COMPLAINTS[f]?.[k])) return false;
+    if (!s.fw || typeof s.fw.code !== 'string' || !Array.isArray(s.fw.files) || typeof s.fw.newest !== 'string') return false;
     if (s.view !== 'back' && s.view !== 'front') return false;
-    if (!PARTS.every((p) => s.parts?.[p] && isBool(s.parts[p].in) && typeof s.parts[p].broken === 'string' && isBool(s.parts[p].fresh))) return false;
-    if (!SCREW_IDS.every((id) => isBool(s.screws?.[id]))) return false;
-    if (!CONN_IDS.every((c) => CONN_STATES.includes(s.conns?.[c]))) return false;
-    if (!isBool(s.hot?.cover) || !isBool(s.hot?.display)) return false;
-    if (!['jack', 'speaker', 'board'].every((k) => isBool(s.dirt?.[k]))) return false;
-    if (![s.wet, s.scanned, s.bootloop, s.power, s.done].every(isBool)) return false;
-    if (![s.virus, s.sparks, s.waste, s.returns, s.hints, s.moves].every(isCount)) return false;
+    const parts = Object.keys(d.parts);
+    if (!sameKeys(s.parts, parts) || !parts.every((p) => isBool(s.parts[p].in) && typeof s.parts[p].broken === 'string' && isBool(s.parts[p].fresh))) return false;
+    if (!sameKeys(s.screws, Object.keys(d.screws)) || !Object.values(s.screws).every(isBool)) return false;
+    if (!sameKeys(s.conns, Object.keys(d.conns)) || !Object.values(s.conns).every((c) => CONN_STATES.includes(c))) return false;
+    if (!sameKeys(s.hot, parts.filter((p) => d.parts[p].glue)) || !Object.values(s.hot).every(isBool)) return false;
+    if (!sameKeys(s.dirt, Object.keys(d.spots)) || !Object.values(s.dirt).every(isBool)) return false;
+    if (![s.wet, s.scanned, s.bootloop, s.blank, s.power, s.done].every(isBool)) return false;
+    if (![s.virus, s.sparks, s.waste, s.returns, s.hints, s.moves, s.pay, s.prepaid].every(isCount)) return false;
     if (!Array.isArray(s.notes)) return false;
-    // крепёж без держателя и закрытая крышка над разобранным — так не бывает
-    if (SCREW_IDS.some((id) => s.screws[id] && !s.parts[SCREWS[id]].in)) return false;
-    if (s.parts.cover.in && (INSIDE.some((p) => !s.parts[p].in) || SCREW_IDS.some((id) => !s.screws[id]))) return false;
+    // крепёж без держателя; деталь стоит, а то, что под ней, — нет (так не бывает)
+    if (Object.keys(d.screws).some((id) => s.screws[id] && !s.parts[d.screws[id]].in)) return false;
+    for (const q of parts) {
+      for (const b of d.parts[q].blockers) {
+        if (s.parts[b].in && (!s.parts[q].in || screwsOf(s.kind, q).some((id) => !s.screws[id]))) return false;
+      }
+    }
     return true;
   } catch {
     return false;
   }
 }
 
-/** Прогресс: следующий заказ, звёзды, заказы на 3 звезды, искры за всё время. */
-export const emptyProgress = () => ({ level: 1, stars: 0, perfect: 0, sparks: 0 });
+/** Прогресс: следующий заказ, звёзды, на три звезды, искры, деньги, склад запчастей, заработано за всё время. */
+export const emptyProgress = () => ({ level: 1, stars: 0, perfect: 0, sparks: 0, money: START_MONEY, earned: 0, stock: {} });
 
 export function isValidProgress(p) {
   return Boolean(p) && typeof p === 'object' && Number.isInteger(p.level) && p.level >= 1
-    && isCount(p.stars) && isCount(p.perfect) && isCount(p.sparks);
+    && isCount(p.stars) && isCount(p.perfect) && isCount(p.sparks)
+    && (p.money === undefined || isCount(p.money)) && (p.earned === undefined || isCount(p.earned))
+    && (p.stock === undefined || (p.stock && typeof p.stock === 'object' && Object.values(p.stock).every(isCount)));
 }
 
-/** Записать сданный заказ. → число звёзд. */
+/** Прогресс из сохранения: старый (до денег) дополняется стартовыми деньгами и пустым складом. */
+export function normProgress(p) {
+  if (!isValidProgress(p)) return emptyProgress();
+  return { ...emptyProgress(), ...p, stock: { ...(p.stock ?? {}) } };
+}
+
+/** Записать сданный заказ. → { stars, earned }. */
 export function recordWin(progress, s) {
   const stars = starsFor(s);
+  const earned = earningsFor(s);
   progress.level = Math.max(progress.level, s.level + 1);
   progress.stars += stars;
   if (stars === 3) progress.perfect++;
   progress.sparks += s.sparks;
-  return stars;
+  progress.money += earned;
+  progress.earned += earned;
+  return { stars, earned };
 }

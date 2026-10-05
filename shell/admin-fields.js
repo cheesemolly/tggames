@@ -27,6 +27,7 @@ export const GAME_FIELDS = [
   { game: 'bubble-shooter', key: 'current', path: ['bonuses', 'fire'], label: 'Бонус «Огонь»', min: 0, max: 99, run: true },
 
   { game: 'repair', key: 'progress', path: ['level'], label: 'Следующий заказ', min: 1, max: 100000, note: 'починено = номер − 1' },
+  { game: 'repair', key: 'progress', path: ['money'], label: 'Деньги, ₽', min: 0, max: 10000000 },
 
   { game: 'loop', key: 'current', path: ['level'], label: 'Уровень', min: 1, max: 100000, run: true, note: 'поле остаётся прежним, дальше — следующий номер' },
   { game: 'boggle', key: 'current', path: ['level'], label: 'Уровень', min: 1, max: 100000, run: true, note: 'поле остаётся прежним, дальше — следующий номер' },

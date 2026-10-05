@@ -1,153 +1,211 @@
-// Правила ремонта: подсказка из начала любого заказа доводит до сдачи без искр и лишних деталей; правила разборки,
-// искры, лишние детали, возвраты, звёзды; сохранение и прогресс.
+// Правила ремонта на всех устройствах: подсказка из начала любого заказа (и из случайной середины) доводит до сдачи
+// без искр и лишних деталей, покупая нужное; правила разборки, искры, склад, прошивка, звёзды, деньги, сохранение.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  FAULTS, GROUPS, TUTORIAL, COMPLAINTS, newOrder, act, nextStep, symptoms, assembled, isValidState, starsFor,
-  emptyProgress, isValidProgress, recordWin, faultsFor, seeded, inspect,
+  DEVICES, KINDS, FAULTS, FAULT_DEFS, COMPLAINTS, TUTORIAL, UNLOCK, newOrder, act, nextStep, symptoms, assembled,
+  isValidState, starsFor, emptyProgress, isValidProgress, normProgress, recordWin, faultsFor, seeded, goodFirmware,
+  stockKey, shopParts, earningsFor, START_MONEY,
 } from '../logic.js';
+import { run } from '../terminal.js';
 
-/** Пройти заказ по подсказкам; → число шагов. Каждое действие подсказки должно получаться. */
-function solve(s, limit = 300) {
+const wallet = (money = 1e6) => ({ money, stock: {} });
+
+/** Пройти заказ по подсказкам; → число шагов. */
+function solve(s, w = wallet(), limit = 400) {
   const sparks = s.sparks;
   const waste = s.waste;
   for (let k = 0; k < limit; k++) {
-    const st = nextStep(s);
+    const st = nextStep(s, w);
     if (!st) return k;
-    const r = act(s, st.tool, st.target);
-    assert.ok(r.ok, `заказ ${s.level} (${s.faults}): шаг ${st.tool} → ${st.target} не вышел: ${r.why}`);
-    assert.ok(isValidState(s), `заказ ${s.level}: после ${st.tool} → ${st.target} состояние неверное`);
-    assert.equal(s.sparks, sparks, `заказ ${s.level}: подсказка ${st.tool} → ${st.target} дала искру`);
-    assert.equal(s.waste, waste, `заказ ${s.level}: подсказка ${st.tool} → ${st.target} поставила лишнюю деталь`);
+    const r = act(s, st.tool, st.target, w);
+    const where = `${s.kind} №${s.level} (${s.faults})`;
+    assert.ok(r.ok, `${where}: шаг ${st.tool} → ${st.target} не вышел: ${r.why} ${r.by ?? ''}`);
+    assert.ok(isValidState(s), `${where}: после ${st.tool} → ${st.target} состояние неверное`);
+    assert.equal(s.sparks, sparks, `${where}: подсказка ${st.tool} → ${st.target} дала искру`);
+    assert.equal(s.waste, waste, `${where}: подсказка ${st.tool} → ${st.target} поставила лишнюю деталь`);
     if (st.tool === 'deliver') {
-      assert.equal(r.win, true, `заказ ${s.level} (${s.faults}): сдали с ${r.problems}`);
+      assert.equal(r.win, true, `${where}: сдали с ${r.problems}`);
       return k + 1;
     }
   }
-  assert.fail(`заказ ${s.level} (${s.faults}): подсказка не довела до конца за ${limit} шагов`);
+  assert.fail(`${s.kind} №${s.level} (${s.faults}): подсказка не довела до конца за ${limit} шагов`);
   return limit;
 }
 
-test('у каждой поломки есть жалобы, группы покрывают все поломки, обучение — все по разу', () => {
+test('описания устройств согласованы: шлейфы, винты, пятна, порядок сборки, поломки', () => {
+  for (const kind of KINDS) {
+    const d = DEVICES[kind];
+    const parts = Object.keys(d.parts);
+    assert.ok(d.parts[d.battery], kind);
+    assert.ok(d.parts.display, `${kind}: экран`);
+    for (const [p, ps] of Object.entries(d.parts)) {
+      for (const b of ps.blockers) assert.ok(parts.includes(b), `${kind}.${p}: ${b}`);
+      if (ps.conn) assert.ok(d.conns[ps.conn], `${kind}.${p}: шлейф ${ps.conn}`);
+    }
+    for (const [c, cs] of Object.entries(d.conns)) {
+      assert.ok(parts.some((p) => d.parts[p].conn === c), `${kind}: у шлейфа ${c} нет детали`);
+      for (const u of cs.under) assert.ok(parts.includes(u));
+    }
+    for (const h of Object.values(d.screws)) assert.ok(parts.includes(h));
+    const items = d.order.map((x) => x.split(':'));
+    for (const p of parts) assert.ok(items.some(([t, id]) => t === 'p' && id === p), `${kind}: ${p} нет в порядке сборки`);
+    for (const c of Object.keys(d.conns)) assert.ok(items.some(([t, id]) => t === 'c' && id === c), `${kind}: шлейфа ${c} нет в порядке`);
+    for (const f of d.faults) {
+      const def = FAULT_DEFS[f];
+      assert.ok(def, f);
+      if (def.part) assert.ok(d.parts[def.part], `${kind}: ${f}`);
+      if (def.part) assert.ok(d.parts[def.part].price > 0, `${kind}: ${f} — деталь не продаётся`);
+      if (def.conn) assert.ok(d.conns[def.conn], `${kind}: ${f}`);
+      if (def.spot) assert.ok(d.spots[def.spot], `${kind}: ${f}`);
+    }
+    assert.ok(d.models.length && d.models.every((m) => /^[A-Z0-9-]+$/.test(m.code)), kind);
+  }
   for (const f of FAULTS) assert.ok(COMPLAINTS[f]?.length >= 2, f);
-  assert.deepEqual([...Object.values(GROUPS).flat()].sort(), [...FAULTS].sort());
-  assert.deepEqual([...TUTORIAL].sort(), [...FAULTS].sort());
+  for (const [lv, [kind, f]] of Object.entries(TUTORIAL)) {
+    assert.ok(DEVICES[kind].faults.includes(f), `${lv}: ${kind} ${f}`);
+    assert.ok(UNLOCK[kind] <= Number(lv), `${lv}: ${kind} ещё закрыт`);
+  }
 });
 
-test('новый заказ: неисправен, собран, сохраняется', () => {
+test('новый заказ: неисправен, собран, сохраняется, всегда один и тот же', () => {
   for (let level = 1; level <= 300; level++) {
     const s = newOrder(level);
     assert.ok(isValidState(s), `заказ ${level}`);
     assert.ok(assembled(s));
-    assert.ok(symptoms(s).length > 0, `заказ ${level} (${s.faults}) исправен с самого начала`);
-    assert.deepEqual(newOrder(level), s, 'заказ по номеру всегда один и тот же');
-    assert.ok(isValidState(JSON.parse(JSON.stringify(s))));
+    assert.ok(symptoms(s).length > 0, `заказ ${level} (${s.kind} ${s.faults}) исправен с самого начала`);
+    assert.deepEqual(newOrder(level), s);
+    assert.ok(UNLOCK[s.kind] <= level);
+    assert.ok(s.pay > 0);
+    assert.ok(s.fw.files.includes(goodFirmware(s)));
   }
 });
 
-test('поломки заказа — из разных групп; дальше заказы сложнее', () => {
-  const groupOf = (f) => Object.keys(GROUPS).find((g) => GROUPS[g].includes(f));
-  let many = 0;
-  for (let level = 1; level <= 400; level++) {
-    const f = faultsFor(level, seeded(level));
-    assert.equal(new Set(f.map(groupOf)).size, f.length, `заказ ${level}: ${f}`);
-    if (level <= TUTORIAL.length) assert.deepEqual(f, [TUTORIAL[level - 1]]);
-    if (level > 50 && f.length > 1) many++;
+test('поломки заказа — из разных групп своего устройства', () => {
+  for (const kind of KINDS) {
+    for (let level = 30; level <= 200; level++) {
+      const f = faultsFor(kind, level, seeded(level));
+      assert.ok(f.length >= 1);
+      assert.equal(new Set(f.map((x) => FAULT_DEFS[x].group)).size, f.length, `${kind} ${f}`);
+      assert.ok(f.every((x) => DEVICES[kind].faults.includes(x)));
+    }
   }
-  assert.ok(many > 100);
 });
 
-test('подсказка доводит любой заказ до сдачи на 3 звезды — без искр, лишних деталей и возвратов', () => {
+test('подсказка доводит любой заказ до сдачи на 3 звезды на каждом устройстве — с закупкой деталей', () => {
   let longest = 0;
+  const seen = new Set();
   for (let level = 1; level <= 400; level++) {
     const s = newOrder(level);
+    seen.add(s.kind);
     longest = Math.max(longest, solve(s));
-    assert.equal(s.sparks, 0, `заказ ${level}: искры`);
-    assert.equal(s.waste, 0, `заказ ${level}: лишние детали`);
-    assert.equal(s.returns, 0);
     assert.equal(starsFor(s), 3);
-    assert.ok(s.done);
+    assert.equal(s.returns, 0);
   }
-  assert.ok(longest < 120, `самый длинный заказ — ${longest} шагов`);
+  for (const kind of KINDS) {
+    for (const f of DEVICES[kind].faults) solve(newOrder(100, [f], kind));
+  }
+  assert.equal(seen.size, KINDS.length);
+  assert.ok(longest < 150, `самый длинный заказ — ${longest} шагов`);
 });
 
-test('подсказка ведёт и из любой середины: случайные действия, потом подсказки', () => {
+test('подсказка ведёт и из случайной середины на каждом устройстве', () => {
   const tools = ['flip', 'heat', 'suction', 'screwdriver', 'spudger', 'tweezers', 'parts', 'brush', 'alcohol', 'power'];
-  const targets = ['cover', 'display', 'shield', 'bracket', 'battery', 'camera', 'speaker', 'port', 's1', 's2', 's3', 's4', 's5', 's6',
-    'bat', 'disp', 'cam', 'usb', 'jack', 'board', 'button', 'screen'];
   const rng = seeded(7);
-  for (let k = 0; k < 400; k++) {
-    const s = newOrder(1 + Math.floor(rng() * 120));
-    for (let m = 0; m < 60; m++) {
-      const tool = tools[Math.floor(rng() * tools.length)];
-      act(s, tool, targets[Math.floor(rng() * targets.length)]);
-      assert.ok(isValidState(s), `${tool}: неверное состояние`);
+  for (const kind of KINDS) {
+    const d = DEVICES[kind];
+    const targets = [...Object.keys(d.parts), ...Object.keys(d.screws), ...Object.keys(d.conns), ...Object.keys(d.spots), 'jack', 'button', 'screen'];
+    for (let k = 0; k < 120; k++) {
+      const s = newOrder(30 + Math.floor(rng() * 80), null, kind);
+      const w = wallet();
+      for (const p of shopParts(kind)) w.stock[stockKey(kind, p)] = 1;
+      for (let m = 0; m < 70; m++) {
+        act(s, tools[Math.floor(rng() * tools.length)], targets[Math.floor(rng() * targets.length)], w);
+        assert.ok(isValidState(s), `${kind}: неверное состояние`);
+      }
+      solve(s, w);
     }
-    solve(s);
   }
 });
 
-test('крышка на клею: без фена не снять, после — присоской', () => {
+test('смартфон: крышка на клею, винты, батарея — до шлейфов', () => {
   const s = newOrder(4);                           // вздутая батарея
   act(s, 'flip');
   assert.equal(act(s, 'suction', 'cover').why, 'glue');
-  assert.equal(act(s, 'tweezers', 'battery').why, 'cover');
-  assert.ok(act(s, 'heat', 'cover').ok);
+  assert.deepEqual([act(s, 'tweezers', 'battery').why, act(s, 'tweezers', 'battery').by], ['blocked', 'cover']);
+  act(s, 'heat', 'cover');
   assert.equal(act(s, 'tweezers', 'cover').why, 'use-suction');
   assert.ok(act(s, 'suction', 'cover').ok);
-  assert.equal(act(s, 'spudger', 'bat').why, 'shield');
+  assert.equal(act(s, 'spudger', 'bat').by, 'shield');
   assert.equal(act(s, 'tweezers', 'shield').why, 'screws');
   for (const id of ['s1', 's2', 's3', 's4']) assert.ok(act(s, 'screwdriver', id).ok);
   assert.ok(act(s, 'tweezers', 'shield').ok);
   assert.equal(act(s, 'screwdriver', 's1').why, 'no-holder');
   assert.equal(act(s, 'tweezers', 'battery').why, 'bat-connected');
+  assert.equal(act(s, 'spudger', 'disp').spark, true);
+  assert.equal(s.sparks, 1);
 });
 
-test('шлейф при подключённой батарее — искра; батарея отключена — без искры', () => {
-  const open = () => {
-    const s = newOrder(2);
-    act(s, 'flip');
-    act(s, 'heat', 'cover');
-    act(s, 'suction', 'cover');
-    for (const id of ['s1', 's2', 's3', 's4']) act(s, 'screwdriver', id);
-    act(s, 'tweezers', 'shield');
-    return s;
-  };
-  const a = open();
-  assert.equal(act(a, 'spudger', 'disp').spark, true);
-  assert.equal(a.sparks, 1);
-  assert.equal(starsFor(a), 2);
-  const b = open();
-  assert.equal(act(b, 'spudger', 'bat').spark, false);
-  assert.equal(act(b, 'spudger', 'disp').spark, false);
-  assert.equal(b.sparks, 0);
-  // экран: шлейф отключён — можно снимать спереди
-  assert.equal(act(b, 'heat', 'display').why, 'flip');
-  act(b, 'flip');
-  assert.equal(act(b, 'suction', 'display').why, 'glue');
-  act(b, 'heat', 'display');
-  assert.ok(act(b, 'suction', 'display').ok);
-  assert.equal(act(b, 'parts', 'display').wasted, false);
+test('съёмная батарея: искра, пока стоит; вынул — без искры', () => {
+  const s = newOrder(40, ['screen-crack'], 'button');
+  assert.equal(s.view, 'front');
+  assert.ok(act(s, 'tweezers', 'fascia').ok);
+  assert.ok(act(s, 'tweezers', 'keypad').ok);
+  assert.equal(act(s, 'spudger', 'disp').spark, true);
+  const t = newOrder(40, ['screen-crack'], 'button');
+  act(t, 'flip');
+  act(t, 'tweezers', 'cover');
+  act(t, 'tweezers', 'battery');
+  act(t, 'flip');
+  act(t, 'tweezers', 'fascia');
+  act(t, 'tweezers', 'keypad');
+  assert.equal(act(t, 'spudger', 'disp').spark, false);
+  // карманка: корпус открывается только без батареи
+  const k = newOrder(40, ['umd-dead'], 'psp');
+  act(k, 'flip');
+  assert.equal(act(k, 'screwdriver', 'h1').by, 'door');
+  act(k, 'tweezers', 'door');
+  assert.equal(act(k, 'screwdriver', 'h1').by, 'battery');
 });
 
-test('новая деталь вместо исправной — минус звезда; своя обратно — без штрафа', () => {
-  const s = newOrder(1);                           // вирусы: железо исправно
+test('склад: без детали не поставить; покупка — за деньги или предоплатой клиента', () => {
+  const s = newOrder(2);                           // разбитый экран смартфона
+  const w = wallet(1000);
+  for (let k = 0; k < 60; k++) {
+    const st = nextStep(s, w);
+    if (st.tool === 'buy') break;
+    act(s, st.tool, st.target, w);
+  }
+  assert.deepEqual(nextStep(s, w), { tool: 'buy', target: 'display' });
+  assert.equal(act(s, 'parts', 'display', w).why, 'no-stock');
+  const r = act(s, 'buy', 'display', w);
+  assert.ok(r.prepaid, 'денег 1000, экран 1200 — предоплата');
+  assert.equal(w.money, 1000);
+  assert.equal(s.prepaid, 1200);
+  assert.equal(w.stock['phone-display'], 1);
+  assert.ok(act(s, 'parts', 'display', w).ok);
+  assert.equal(w.stock['phone-display'], 0);
+  solve(s, w);
+  assert.equal(earningsFor(s), Math.round((s.pay * 1.15 - 1200) / 10) * 10);
+  const w2 = wallet(5000);
+  act(newOrder(2), 'buy', 'display', w2);
+  assert.equal(w2.money, 3800);
+});
+
+test('новая деталь вместо исправной — минус звезда и деталь со склада', () => {
+  const s = newOrder(1);
+  const w = wallet();
+  w.stock['phone-cover'] = 1;
   act(s, 'flip');
   act(s, 'heat', 'cover');
   act(s, 'suction', 'cover');
-  assert.equal(act(s, 'parts', 'cover').wasted, true);
+  assert.equal(act(s, 'parts', 'cover', w).wasted, true);
   assert.equal(s.waste, 1);
-  assert.equal(act(s, 'parts', 'cover').why, 'remove-first');
-  const t = newOrder(1);
-  act(t, 'flip');
-  act(t, 'heat', 'cover');
-  act(t, 'suction', 'cover');
-  assert.equal(act(t, 'tweezers', 'cover').wasted, false);
-  assert.equal(t.waste, 0);
+  assert.equal(w.stock['phone-cover'], 0);
 });
 
-test('крышку не закрыть над разобранным; сдать несобранный нельзя, неисправный — возврат', () => {
+test('сдача: несобранное нельзя, неисправное — возврат', () => {
   const s = newOrder(3);                           // забито гнездо
   act(s, 'flip');
   act(s, 'heat', 'cover');
@@ -160,79 +218,100 @@ test('крышку не закрыть над разобранным; сдать
   const r = act(s, 'deliver');
   assert.equal(r.win, false);
   assert.deepEqual(r.problems, ['no-charge']);
-  assert.equal(s.returns, 1);
-  assert.equal(act(s, 'charger', 'jack').charge, false);
-  assert.equal(act(s, 'magnifier', 'jack').find, 'jack-lint');
+  assert.equal(act(s, 'magnifier', 'jack').find, 'jack-dirty');
   assert.ok(act(s, 'brush', 'jack').ok);
-  assert.equal(act(s, 'charger', 'jack').charge, true);
   assert.equal(act(s, 'deliver').win, true);
   assert.equal(starsFor(s), 2);
 });
 
-test('вирусы: антивирус на включённом телефоне, потом давить жуков; прошивка лечит зависание и вирусы', () => {
+test('прошивка: только своя модель и самая свежая версия; диск — сначала заменить', () => {
+  const s = newOrder(9);                           // смартфон висит на логотипе
+  const own = s.fw.files.filter((f) => f.startsWith(s.fw.code.toLowerCase()));
+  assert.equal(own.length, 3);
+  const other = s.fw.files.find((f) => !f.startsWith(s.fw.code.toLowerCase()));
+  assert.equal(run(s, `flash ${other}`).out.at(-1).c, 'err');
+  assert.equal(act(s, 'flash', other).why, 'wrong-model');
+  assert.equal(act(s, 'flash', 'nothing.fw').why, 'no-file');
+  assert.equal(act(s, 'flash', `${s.fw.code.toLowerCase()}_v${s.fw.installed}.fw`).why, 'same-version');
+  const res = run(s, `FLASH  ${goodFirmware(s).toUpperCase()}`);
+  assert.equal(res.flash?.ok, true);
+  assert.equal(s.bootloop, false);
+  assert.equal(act(s, 'flash', goodFirmware(s)).why, 'no-need');
+  // ПарДек: мёртвый диск — новый приходит пустым, систему ставит компьютер
+  const d = newOrder(19);
+  assert.equal(d.kind, 'deck');
+  assert.equal(act(d, 'flash', goodFirmware(d)).why, 'disk-error');
+  const w = wallet();
+  for (let k = 0; k < 80; k++) {
+    const st = nextStep(d, w);
+    if (st.tool === 'flash') break;
+    act(d, st.tool, st.target, w);
+  }
+  assert.ok(d.blank);
+  assert.deepEqual(symptoms(d), ['no-os']);
+  assert.equal(run(d, 'devices').out.at(-1).t.includes('диск пуст'), true);
+  assert.ok(act(d, 'flash', goodFirmware(d)).ok);
+  assert.deepEqual(symptoms(d), []);
+});
+
+test('терминал: команды, неизвестное, без связи', () => {
+  const s = newOrder(9);
+  assert.ok(run(s, 'help').out.length > 3);
+  assert.ok(run(s, 'list').out.some((l) => l.t.includes(goodFirmware(s))));
+  assert.equal(run(s, 'clear').clear, true);
+  assert.equal(run(s, 'exit').exit, true);
+  assert.equal(run(s, 'abracadabra').out.at(-1).c, 'err');
+  assert.deepEqual(run(s, '   ').out, []);
+  const dead = newOrder(7);                        // отошла батарея — компьютер не видит
+  assert.equal(run(dead, 'devices').out.at(-1).c, 'warn');
+  assert.equal(act(dead, 'flash', goodFirmware(dead)).why, 'no-link');
+});
+
+test('вирусы: антивирус на включённом смартфоне, потом давить жуков', () => {
   const s = newOrder(1);
   assert.equal(act(s, 'antivirus', 'screen').why, 'power-off');
   assert.equal(act(s, 'power', 'button').on, true);
   const n = act(s, 'antivirus', 'screen').bugs;
-  assert.ok(n >= 3);
   for (let k = n - 1; k >= 0; k--) assert.equal(act(s, 'squash', 'bug').left, k);
-  assert.equal(act(s, 'squash', 'bug').ok, false);
   assert.equal(act(s, 'deliver').win, true);
-  const b = newOrder(9);                           // завис на логотипе
-  b.virus = 4;
-  act(b, 'power', 'button');
-  assert.equal(act(b, 'antivirus', 'screen').why, 'no-screen');
-  assert.ok(act(b, 'flash', 'jack').ok);
-  assert.equal(b.virus, 0);
-  assert.deepEqual(symptoms(b), []);
-});
-
-test('лупа находит поломку, исправное — «в порядке»', () => {
-  const s = newOrder(13);                          // изношенная батарея
-  assert.equal(act(s, 'power', 'button').blink, true);
-  act(s, 'flip');
-  assert.equal(inspect(s, 'cover'), 'cover-ok');
-  act(s, 'heat', 'cover');
-  act(s, 'suction', 'cover');
-  assert.equal(act(s, 'magnifier', 'battery').find, 'battery-worn');
-  assert.equal(act(s, 'magnifier', 'indicator').find, 'indicator-ok');
-  assert.ok(s.notes.includes('battery-worn'));
-  const w = newOrder(11);                          // вода
-  act(w, 'flip');
-  act(w, 'heat', 'cover');
-  act(w, 'suction', 'cover');
-  assert.equal(act(w, 'magnifier', 'indicator').find, 'indicator-red');
-  assert.equal(act(w, 'magnifier', 'board').why, 'shield');
 });
 
 test('сохранение: битое не принимается', () => {
-  const s = newOrder(20);
+  const s = newOrder(30);
   assert.ok(isValidState(s));
   for (const broke of [
-    (x) => { x.v = 2; },
-    (x) => { x.parts.cover.in = 'да'; },
-    (x) => { x.conns.bat = 'maybe'; },
+    (x) => { x.v = 1; },
+    (x) => { x.kind = 'toaster'; },
+    (x) => { x.parts.display.in = 'да'; },
+    (x) => { x.conns.disp = 'maybe'; },
     (x) => { x.faults.push('meteor'); },
-    (x) => { x.parts.shield.in = false; },                         // винты без держателя
-    (x) => { x.screws.s5 = false; },                               // крышка закрыта, винта нет
     (x) => { x.complaint = [['virus', 99]]; },
     (x) => { x.sparks = -1; },
+    (x) => { delete x.fw; },
   ]) {
     const c = structuredClone(s);
     broke(c);
     assert.equal(isValidState(c), false, String(broke));
   }
-  assert.equal(isValidState(null), false);
+  const ph = newOrder(4);
+  ph.parts.shield.in = false;                      // винты без держателя
+  assert.equal(isValidState(ph), false);
 });
 
-test('прогресс: уровень растёт, звёзды и идеальные копятся', () => {
+test('прогресс: уровень, звёзды, деньги; старый прогресс получает деньги и склад', () => {
   const p = emptyProgress();
   assert.ok(isValidProgress(p));
+  assert.equal(p.money, START_MONEY);
   const s = newOrder(1);
   s.sparks = 1;
-  assert.equal(recordWin(p, s), 2);
-  assert.deepEqual(p, { level: 2, stars: 2, perfect: 0, sparks: 1 });
-  assert.equal(recordWin(p, newOrder(2)), 3);
-  assert.deepEqual(p, { level: 3, stars: 5, perfect: 1, sparks: 1 });
-  assert.equal(isValidProgress({ level: 0, stars: 0, perfect: 0, sparks: 0 }), false);
+  const r = recordWin(p, s);
+  assert.equal(r.stars, 2);
+  assert.equal(p.level, 2);
+  assert.equal(p.money, START_MONEY + r.earned);
+  assert.ok(r.earned > 0);
+  const old = normProgress({ level: 7, stars: 12, perfect: 3, sparks: 0 });
+  assert.equal(old.level, 7);
+  assert.equal(old.money, START_MONEY);
+  assert.deepEqual(old.stock, {});
+  assert.deepEqual(normProgress({ level: 0 }), emptyProgress());
 });

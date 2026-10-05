@@ -358,7 +358,7 @@ async function cases() {
     ['game:fifteen:stats', g.fifteen.emptyStats(), g.fifteen.isValidStats],
     ['game:rubik:stats', g.rubik.emptyStats(), g.rubik.isValidStats],
     ['game:hanoi:stats', g.hanoi.emptyStats(), g.hanoi.isValidStats],
-    ['game:repair:progress', { level: 5, stars: 11, perfect: 2, sparks: 1 }, g.repair.isValidProgress],
+    ['game:repair:progress', { level: 5, stars: 11, perfect: 2, sparks: 1, money: 2300, earned: 4100, stock: { 'phone-display': 1, 'deck-fan': 2 } }, g.repair.isValidProgress],
     ['game:match3:progress', { v: 2, done: Array(100).fill(0), boosters: { hammer: 3, row: 2, shuffle: 2, moves: 1 } },
       (v) => v.v === 2 && v.done.length === 100 && v.done.every((x) => x === 0 || x === 1)
         && ['hammer', 'row', 'shuffle', 'moves'].every((k) => Number.isInteger(v.boosters[k]) && v.boosters[k] >= 0)],

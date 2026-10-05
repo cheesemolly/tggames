@@ -150,10 +150,10 @@ export const games = [
   },
   {
     id: 'repair',
-    title: 'Ремонт телефона',
+    title: 'Ремонт гаджетов',
     load: () => import('../games/repair/index.js'),
     css: new URL('../games/repair/game.css', import.meta.url),
-    menu: { progress: 'replace' },                       // «Починено: 6 · ★ 15»
+    menu: { progress: 'replace' },                       // «Починено: 6 · 2 340 ₽»
   },
   {
     id: 'wordle',
