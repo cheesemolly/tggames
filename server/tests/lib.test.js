@@ -216,7 +216,7 @@ test('рейтинг Филворда — все найденные слова: 
 
 test('рейтинг: у каждой игры своя мера, мусор и нули не попадают', async () => {
   const { BOARDS, boardScores, boardName, plural, levelOf } = await import('../lib.js');
-  // игры «для души» (rating: false) — без рейтинга, остальные — у каждой своя мера
+  // игры «Песочницы» (rating: false) — без рейтинга, остальные — у каждой своя мера
   assert.deepEqual(Object.keys(BOARDS).sort(), GAMES.filter((g) => g.rating !== false).map((g) => g.id).sort(), 'у каждой игры с рейтингом есть мера');
   for (const [id, b] of Object.entries(BOARDS)) assert.ok(b.by && typeof b.text(5) === 'string', id);
   assert.deepEqual(boardScores({

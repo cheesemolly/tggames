@@ -115,8 +115,8 @@ export const CATEGORY_ICONS = {
     + '<circle cx="16.2" cy="12.2" r="1.3" fill="currentColor" stroke="none"/>'
     + '<circle cx="18.6" cy="14.6" r="1.3" fill="currentColor" stroke="none"/>'),
   music: svg('<path d="M9 18V5.5l11-2V16"/><circle cx="6.5" cy="18" r="2.6"/><circle cx="17.5" cy="16" r="2.6"/>'),
-  // для души: чашка с паром
-  chill: svg('<path d="M4.5 9.5h12v4.5a5 5 0 0 1-5 5h-2a5 5 0 0 1-5-5Z"/><path d="M16.5 11h1.6a2.4 2.4 0 0 1 0 4.8h-1.8"/>'
-    + '<path d="M8 3.5c-1 1.2 1 2 0 3.3M12 3.5c-1 1.2 1 2 0 3.3"/>'),
+  // песочница: ведёрко и совок
+  chill: svg('<path d="M4.5 10h11l-1.5 9.6a1.6 1.6 0 0 1-1.6 1.4H7.6A1.6 1.6 0 0 1 6 19.6Z"/><path d="M6 10a4 4 0 0 1 8 0"/>'
+    + '<path d="M19 3v9"/><path d="M17 12h4l-.5 3.2a1.5 1.5 0 0 1-3 0Z" fill="currentColor" fill-opacity="0.18"/>'),
   quiz: svg('<circle cx="12" cy="12" r="9"/><path d="M3.2 12h17.6"/><path d="M12 3c2.8 3 2.8 15 0 18M12 3c-2.8 3-2.8 15 0 18"/>'),
 };
