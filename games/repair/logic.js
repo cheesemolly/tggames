@@ -74,7 +74,7 @@ function firmware(kind, model, rng) {
   for (const k of KINDS) {
     const dk = DEVICES[k];
     for (const m of dk.models) {
-      if (m.code === model.code) continue;
+      if (m.code === model.code || dk.noFlash) continue;
       const v = dk.version[0] + Math.floor(rng() * (dk.version[1] - dk.version[0]));
       others.push(`${m.code.toLowerCase()}_v${v}.${Math.floor(rng() * 6)}.${dk.ext}`);
     }
@@ -522,7 +522,7 @@ const ACTIONS = {
 
   /** Прошивка файлом с компьютера: t — имя файла. */
   flash(s, t) {
-    if (spec(s).noJack || !linked(s)) return no('no-link');
+    if (spec(s).noJack || spec(s).noFlash || !linked(s)) return no('no-link');
     const file = String(t ?? '').trim().toLowerCase();
     if (!s.fw.files.includes(file)) return no('no-file');
     const m = /^(.+)_v(\d+)\.(\d+)\.(\w+)$/.exec(file);

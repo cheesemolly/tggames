@@ -392,3 +392,15 @@ test('ноутбук приносят закрытым: экран и клави
   assert.ok(DEVICES.hdd.parts.lid);
   for (const k of KINDS) if (DEVICES[k].lid) assert.equal(DEVICES[k].parts.lid, undefined, `${k}: деталь lid и крышка на петле`);
 });
+
+test('видеокарту не прошивают: нет поломки «прошивка», кабель не подключить, её файлов нет в компьютере', () => {
+  assert.ok(DEVICES.gpu.noFlash);
+  assert.ok(!DEVICES.gpu.faults.includes('bootloop'));
+  for (let level = 1; level <= 300; level++) {
+    const s = newOrder(level, null, 'gpu');
+    assert.ok(!s.bootloop);
+    assert.equal(act(s, 'flash', goodFirmware(s)).why, 'no-link');
+    const o = newOrder(level, null, 'phone');
+    for (const m of DEVICES.gpu.models) assert.ok(!o.fw.files.some((f) => f.startsWith(m.code.toLowerCase())), `заказ ${level}: файл видеокарты`);
+  }
+});

@@ -131,6 +131,7 @@ const T = {
     'alcohol-dust': 'Это пыль — тут нужна кисточка',
     'alcohol-where': 'Спиртом отмывают липкое и окисление',
     'charger-where': 'Зарядку — в гнездо',
+    'no-flash': 'Это не прошивают с компьютера — кабель некуда подключить',
     'antivirus-where': 'Антивирус — на экране смартфона',
     'power-off': 'Сначала включи — кнопка питания',
     'no-screen': 'Экран не работает — антивирус не запустить',
@@ -741,31 +742,31 @@ function targets() {
 function hitTest(pt) {
   if (!pt) return null;
   const [x, y] = pt;
-  let best = null;
-  let bestArea = Infinity;
+  const inside = [];
   let near = null;
   let nearD = 22;
   for (const t of targets()) {
-    let inside;
-    let area;
     if (t.kind === 'rect') {
-      inside = x >= t.x - 3 && x <= t.x + t.w + 3 && y >= t.y - 3 && y <= t.y + t.h + 3;
-      area = t.w * t.h;
+      if (x >= t.x - 3 && x <= t.x + t.w + 3 && y >= t.y - 3 && y <= t.y + t.h + 3) inside.push({ t, area: t.w * t.h });
     } else {
       const dd = Math.hypot(x - t.cx, y - t.cy);
-      inside = dd <= t.r;
-      area = Math.PI * t.r * t.r;
-      if (!inside && dd - t.r < nearD) {
+      if (dd <= t.r) inside.push({ t, area: Math.PI * t.r * t.r });
+      else if (dd - t.r < nearD) {
         nearD = dd - t.r;
         near = t;
       }
     }
-    if (inside && (!best || t.prio > best.prio || (t.prio === best.prio && area < bestArea))) {
-      best = t;
-      bestArea = area;
-    }
   }
-  return best?.target ?? near?.target ?? null;
+  inside.sort((a, b) => b.t.prio - a.t.prio || a.area - b.area);
+  // из наложенных — первая, с которой взятый инструмент что-то сделает (датчик часов поверх батареи, новая батарея
+  // мыши поверх корпуса); не подошло ничего — главная, чтобы сказать почему
+  const top = inside[0]?.t.target;
+  const own = top === 'button' || /^(bug|ad):/.test(top ?? '') || (top === 'lid' && D().lid);
+  if (tool && tool !== 'flash' && inside.length > 1 && !own) {
+    const fit = inside.find(({ t }) => act(structuredClone(game), tool, mapTarget(tool, t.target), structuredClone(progress)).ok);
+    if (fit) return fit.t.target;
+  }
+  return top ?? near?.target ?? null;
 }
 
 /**
@@ -834,13 +835,15 @@ function applicable(t, target) {
     case 'suction': return Boolean(d.parts[target]?.glue) && P[target].in;
     case 'screwdriver': return Boolean(d.screws[target]);
     case 'spudger': return Boolean(d.conns[target]);
-    case 'tweezers': return (Boolean(d.parts[target]) && !d.parts[target].glue && !d.parts[target].wipe) || d.spots[target]?.tool === 'tweezers';
+    // пинцет: снять (кроме клея и пасты) или поставить обратно любую, в том числе на клей
+    case 'tweezers': return (Boolean(d.parts[target]) && !d.parts[target].wipe && (!d.parts[target].glue || !P[target].in))
+      || d.spots[target]?.tool === 'tweezers';
     case 'parts': return Boolean(d.parts[target]) && !P[target].in && d.parts[target].price > 0;
     case 'brush':
     case 'alcohol': return Object.entries(d.spots).some(([k, sp]) => sp.tool === t && (k === target || sp.part === target))
       || (t === 'alcohol' && Boolean(d.parts[target]?.wipe) && P[target].in);
-    case 'charger':
-    case 'flash': return target === 'jack' && !d.noJack;
+    case 'charger': return target === 'jack' && !d.noJack;
+    case 'flash': return target === 'jack' && !d.noJack && !d.noFlash;
     case 'antivirus': return Boolean(d.virus) && target === 'display' && P.display?.in && game.power;
     default: return false;
   }
@@ -1028,6 +1031,10 @@ async function doTool(target) {
     return;
   }
   if (tool === 'flash') {
+    if (D().noFlash) {
+      refuse({ why: 'no-flash' }, target);
+      return;
+    }
     if (target !== 'jack') {
       refuse({ why: 'charger-where' }, target);
       return;
@@ -2288,6 +2295,12 @@ export default {
           after();
         },
         skin: (id) => { settings.skin = id; applyOptions(); },
+        hit: (x, y) => hitTest(toScene(x, y)),
+        /** куда нажать пальцем, чтобы попасть в цель (для проверки настоящими нажатиями) */
+        where: (target, empty = true) => {
+          const p = new DOMPoint(...centerOf(target, empty)).matrixTransform(ui.svg.getScreenCTM());
+          return [p.x, p.y];
+        },
       };
     }
   },

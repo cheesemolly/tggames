@@ -9,7 +9,8 @@
 // Пятна (spots): tool — чем исправлять (кисточка, спирт, пинцет — выпрямить ножки), part — на какой детали, under — что закрывает,
 // side — откуда видно (any — снаружи), power — трогать только без питания (иначе искра), sym — что не работает.
 // order — порядок сборки для подсказки (p: деталь, c: шлейф, s: винты детали). battery: '' — без батареи (комплектующие
-// ПК: питание даёт стенд, искр нет); noJack — нет гнезда (не заряжается и не прошивается).
+// ПК: питание даёт стенд, искр нет); noJack — нет гнезда (не заряжается и не прошивается);
+// noFlash — к компьютеру не подключить (видеокарта: «гнездо» — контакты PCIe, их только чистят).
 
 const P = (o = {}) => ({ side: 'back', glue: false, blockers: [], conn: '', miss: '', bad: '', price: 0, blank: false, ...o });
 
@@ -381,7 +382,8 @@ export const DEVICES = {
       heatsink: { tool: 'brush', part: 'heatsink', under: ['shroud', 'fan'], side: 'front', sym: 'overheat' },
     },
     order: ['p:vram', 'p:paste', 'p:heatsink', 's:heatsink', 'p:fan', 'c:fan', 'p:shroud', 's:shroud'],
-    faults: ['fan-broken', 'fan-dust', 'paste-dry', 'heatsink-dust', 'vram-dead', 'pcie-dirty', 'bootloop'],
+    faults: ['fan-broken', 'fan-dust', 'paste-dry', 'heatsink-dust', 'vram-dead', 'pcie-dirty'],
+    noFlash: true,
     models: [{ name: 'Жар-Птица 4070', code: 'ZHP-4070', logo: 'star' }, { name: 'Радуга 7800', code: 'RDG-7800', logo: 'drop' }],
     ext: 'rom',
     version: [86, 95],
@@ -894,7 +896,6 @@ export const KIND_COMPLAINTS = {
     bootloop: ['После обновления BIOS не стартует.', 'Чёрный экран после прошивки BIOS.'],
     'port-dirty': ['Не видит флешку с прошивкой.', 'Порты на задней панели не работают.'],
   },
-  gpu: { bootloop: ['После прошивки BIOS — чёрный экран.', 'Компьютер не стартует с этой картой после разгона.'] },
   tablet: { water: ['Ребёнок уронил в ванну.', 'Пролил сок прямо на экран.'] },
   laptop: {
     'keys-sticky': ['Пролил кофе на клавиатуру.', 'Клавиши липкие после чая.'],

@@ -6,7 +6,8 @@ import { frame, plugBody, socket, corrosion, screenStates, cell, PORTRAIT, trayL
 const F = frame(120, 110);
 const { box, pt, wrap } = F;
 
-const CONNS = { disp: [34, 150], bat: [86, 150] };
+// экран — шлейф сверху, с края корпуса (отдельно от батареи), батарея — свой разъём снизу
+const CONNS = { disp: [60, 70], bat: [60, 142] };
 const SCREEN = { x: 20, y: 62, w: 80, h: 96, rx: 16 };
 
 function face() {
@@ -28,13 +29,13 @@ export default {
   SCREEN: box(SCREEN.x, SCREEN.y, SCREEN.w, SCREEN.h),
   CONN_AT: Object.fromEntries(Object.entries(CONNS).map(([k, v]) => [k, pt(...v)])),
   SCREW_AT: {},
-  SPOT_AT: { jack: pt(60, 160), board: pt(60, 110) },
-  JACK: { front: null, back: box(44, 150, 32, 20) },
+  SPOT_AT: { jack: pt(60, 162), board: pt(60, 110) },
+  JACK: { front: null, back: box(44, 154, 32, 16) },
   BUTTON: { front: box(104, 80, 22, 30), back: box(-6, 80, 22, 30) },
   ORDER: { front: ['strap', 'display'], back: ['battery', 'plugs', 'sensor'] },
   backBody: () => wrap(`<rect class="pr-body" x="10" y="50" width="100" height="120" rx="26"/><rect class="pr-cavity" x="16" y="56" width="88" height="108" rx="22"/>
-${socket(...CONNS.disp)}${socket(...CONNS.bat)}${corrosion(60, 110, 0.6)}<circle class="pr-gold" cx="54" cy="160" r="3"/><circle class="pr-gold" cx="66" cy="160" r="3"/>
-<g class="pr-lint"><path d="M50 162c4-2 8 1 12-1s6 1 8 0"/></g><rect class="pr-side-btn" x="7" y="86" width="4" height="18" rx="2"/>`),
+${socket(...CONNS.disp)}${socket(...CONNS.bat)}${corrosion(60, 110, 0.6)}<circle class="pr-gold" cx="54" cy="161" r="2.6"/><circle class="pr-gold" cx="66" cy="161" r="2.6"/>
+<g class="pr-lint"><path d="M50 163c4-2 8 1 12-1s6 1 8 0"/></g><rect class="pr-side-btn" x="7" y="86" width="4" height="18" rx="2"/>`),
   frontBody: () => wrap(`<rect class="pr-body" x="10" y="50" width="100" height="120" rx="26"/><rect class="pr-midframe" x="16" y="56" width="88" height="108" rx="22"/>
 <rect class="pr-side-btn" x="109" y="86" width="5" height="18" rx="2"/>`),
   part: (id, s) => wrap({

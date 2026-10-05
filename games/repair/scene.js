@@ -73,6 +73,18 @@ export function defs() {
   <linearGradient id="pr-g-plastic" x1="0" y1="0" x2="0" y2="1">
     <stop offset="0" style="stop-color: var(--ph-cover-1)"/><stop offset="1" style="stop-color: var(--ph-cover-2)"/>
   </linearGradient>
+  <linearGradient id="pr-g-shade" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#fff" stop-opacity="0.16"/><stop offset="0.45" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="0.22"/>
+  </linearGradient>
+  <linearGradient id="pr-g-deck" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#000" stop-opacity="0.28"/><stop offset="0.3" stop-color="#000" stop-opacity="0.04"/><stop offset="1" stop-color="#fff" stop-opacity="0.1"/>
+  </linearGradient>
+  <linearGradient id="pr-g-cyl" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#3a3e47"/><stop offset="0.4" stop-color="#8e96a3"/><stop offset="1" stop-color="#1d2026"/>
+  </linearGradient>
+  <radialGradient id="pr-g-drop" cx="0.5" cy="0.5" r="0.5">
+    <stop offset="0" stop-color="#000" stop-opacity="0.45"/><stop offset="1" stop-color="#000" stop-opacity="0"/>
+  </radialGradient>
   <linearGradient id="pr-g-lcd" x1="0" y1="0" x2="0" y2="1">
     <stop offset="0" stop-color="#b9d98a"/><stop offset="1" stop-color="#8fbf62"/>
   </linearGradient>

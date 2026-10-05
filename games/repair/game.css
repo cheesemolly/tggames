@@ -1129,3 +1129,16 @@
 /* компьютер: Tab и стрелки под полем */
 [data-game="repair"] .pr-field-keys { margin-bottom: 8px; }
 [data-game="repair"] .pr-key-tab { font-size: 13px; }
+
+/* ноутбук: объём (тени, торец, выпуклые клавиши) */
+[data-game="repair"] .pr-lid-rim { fill: none; stroke: rgb(0 0 0 / 0.28); stroke-width: 1; }
+[data-game="repair"] .pr-lid-brand { fill: rgb(255 255 255 / 0.45); font-size: 4.6px; font-weight: 800; letter-spacing: 0.25em; }
+[data-game="repair"] .pr-deck-front { fill: rgb(0 0 0 / 0.32); }
+[data-game="repair"] .pr-deck-lip { stroke: rgb(255 255 255 / 0.35); stroke-width: 1; }
+[data-game="repair"] .pr-kbd-well-shadow { stroke: rgb(0 0 0 / 0.55); stroke-width: 1.4; }
+[data-game="repair"] .pr-keycap-side { fill: #121318; }
+[data-game="repair"] .pr-touchpad-hi { stroke: rgb(255 255 255 / 0.3); stroke-width: 0.8; }
+[data-game="repair"] .pr-notch { fill: rgb(0 0 0 / 0.35); }
+[data-game="repair"] .pr-body-side { fill: #121318; }
+[data-game="repair"] .pr-panel-seam { fill: none; stroke: rgb(0 0 0 / 0.18); stroke-width: 0.8; }
+[data-game="repair"] .pr-foot-top { fill: #2b2e36; }
