@@ -629,7 +629,9 @@ function targets() {
   for (const [p, ps] of Object.entries(d.parts)) {
     if (!onView(ps.side) || !exposed(p)) continue;
     const layer = order.indexOf(p) * 0.01;
-    add(p, rect(boxOf(p)), (s.parts[p].in ? 2 : 0) + (isEdge(p) ? 1 : 0) + layer);
+    // стоящая деталь — чем выше слой, тем главнее; пустые места — все равны, выигрывает меньшее (иначе место снятой
+    // крышки во весь корпус перехватывало нажатие по месту камеры)
+    add(p, rect(boxOf(p)), s.parts[p].in ? 2 + (isEdge(p) ? 1 : 0) + layer : 0);
   }
   for (const [id, holder] of Object.entries(d.screws)) {
     if (s.parts[holder].in && onView(d.parts[holder].side) && exposed(holder)) add(id, circ(l.SCREW_AT[id], 14), 9);
