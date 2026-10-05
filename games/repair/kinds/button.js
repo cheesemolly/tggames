@@ -2,7 +2,7 @@
 // Спереди — панель на защёлках, под ней резиновая клавиатура, под ней пластина на двух винтах и модуль экрана,
 // шлейф экрана — на плате под клавиатурой. Экран — зелёный ЖК.
 
-import { frame, screwHead, hole, plugBody, socket, jackMark, corrosion, screenStates, logo, esc } from '../scene.js';
+import { frame, pcb, screwHead, hole, plugBody, socket, jackMark, corrosion, screenStates, logo, esc } from '../scene.js';
 
 const F = frame(115, 70);
 const { box, pt, wrap } = F;
@@ -18,8 +18,7 @@ const topButton = '<rect class="pr-side-btn" x="52" y="-3" width="26" height="4"
 function frontBody() {
   return wrap(`<rect class="pr-body" x="0" y="0" width="130" height="300" rx="22"/>
 <rect class="pr-cavity" x="6" y="6" width="118" height="288" rx="18"/>
-<rect class="pr-pcb" x="10" y="112" width="110" height="178" rx="10"/>
-<path class="pr-trace" d="M20 170h30v20M80 260h30M25 280h40M100 170v40M60 230h20"/>
+${pcb(10, 112, 110, 178, 4, 10)}
 <rect class="pr-chip" x="40" y="236" width="22" height="16" rx="2"/><rect class="pr-chip" x="76" y="210" width="16" height="16" rx="2"/>
 ${KEYS.map(([x, y]) => `<circle class="pr-dome" cx="${x}" cy="${y}" r="6"/>`).join('')}
 ${socket(...CONNS.disp)}${corrosion(65, 215, 0.9)}

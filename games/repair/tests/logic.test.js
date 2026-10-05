@@ -8,7 +8,7 @@ import {
   isValidState, starsFor, emptyProgress, isValidProgress, normProgress, recordWin, faultsFor, seeded, goodFirmware,
   stockKey, shopParts, earningsFor, START_MONEY, SYMPTOMS, complaintsFor,
 } from '../logic.js';
-import { run } from '../terminal.js';
+import { run, tabComplete } from '../terminal.js';
 
 const wallet = (money = 1e6) => ({ money, stock: {} });
 
@@ -330,4 +330,65 @@ test('прогресс: уровень, звёзды, деньги; старый
   assert.equal(rub.earned, 1250);
   assert.equal(rub.usd, true);
   assert.equal(normProgress(rub).money, 1070, 'второй раз не делится');
+});
+
+test('терминал: Tab дописывает команды и файлы, повторный Tab перебирает варианты', () => {
+  const s = newOrder(9);
+  assert.equal(tabComplete(s, 'dev').line, 'devices');
+  assert.equal(tabComplete(s, 'fl').line, 'flash ');
+  assert.equal(tabComplete(s, 'zzz').none, true);
+  const code = s.fw.code.toLowerCase();
+  const own = s.fw.files.filter((f) => f.startsWith(code)).sort();
+  let r = tabComplete(s, `flash ${code.slice(0, 2)}`);
+  assert.ok(r.line.startsWith(`flash ${code}`), 'общее начало своей модели');
+  assert.ok(r.list.length >= 3);
+  const seen = new Set();
+  for (let k = 0; k < own.length + 1; k++) {
+    r = tabComplete(s, r.line, r.tab);
+    seen.add(r.line);
+  }
+  for (const f of own) assert.ok(seen.has(`flash ${f}`), `Tab добирается до ${f}`);
+  assert.equal(tabComplete(s, 'flash nothing').none, true);
+  assert.equal(tabComplete(s, 'list x').none, true);
+});
+
+test('термопаста — расходник: стереть спиртом, новую со склада, без неё кулер не закрыть', () => {
+  const s = newOrder(60, ['paste-dry'], 'cpu');
+  const w = wallet();
+  for (const id of ['c1', 'c2', 'c3', 'c4']) assert.ok(act(s, 'screwdriver', id).ok);
+  assert.ok(act(s, 'tweezers', 'cooler').ok);
+  assert.equal(act(s, 'tweezers', 'paste').why, 'use-alcohol');
+  assert.ok(act(s, 'alcohol', 'paste').wiped);
+  assert.equal(act(s, 'tweezers', 'cooler').why, 'inside-missing', 'без пасты кулер не ставится');
+  assert.equal(act(s, 'tweezers', 'paste').why, 'consumable');
+  assert.equal(act(s, 'parts', 'paste', w).why, 'no-stock');
+  act(s, 'buy', 'paste', w);
+  assert.equal(act(s, 'parts', 'paste', w).wasted, false);
+  // исправную стёр по ошибке — новая без штрафа, но за деньги
+  const t = newOrder(60, ['cooler-dust'], 'cpu');
+  for (const id of ['c1', 'c2', 'c3', 'c4']) act(t, 'screwdriver', id);
+  act(t, 'tweezers', 'cooler');
+  act(t, 'alcohol', 'paste');
+  act(t, 'buy', 'paste', w);
+  assert.equal(act(t, 'parts', 'paste', w).wasted, false);
+});
+
+test('ноутбук приносят закрытым: экран и клавиатура — только с открытой крышкой', () => {
+  const s = newOrder(60, ['screen-crack'], 'laptop');
+  assert.equal(s.lid, 'closed');
+  assert.equal(act(s, 'heat', 'display').why, 'lid-closed');
+  assert.equal(act(s, 'power', 'button').why, 'lid-closed');
+  assert.ok(act(s, 'lid').ok);
+  assert.equal(s.lid, 'open');
+  assert.ok(act(s, 'heat', 'display').ok);
+  const c = structuredClone(s);
+  c.lid = 'ajar';
+  assert.equal(isValidState(c), false);
+  solve(newOrder(61, ['virus'], 'laptop'));
+  // у диска «lid» — обычная деталь: крышки-петли нет, снимается как всё
+  const h = newOrder(62, ['platter-scratched'], 'hdd');
+  assert.equal(h.lid, undefined);
+  assert.equal(act(h, 'lid').ok, false);
+  assert.ok(DEVICES.hdd.parts.lid);
+  for (const k of KINDS) if (DEVICES[k].lid) assert.equal(DEVICES[k].parts.lid, undefined, `${k}: деталь lid и крышка на петле`);
 });

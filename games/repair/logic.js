@@ -42,6 +42,7 @@ export function seeded(seed) {
 const pick = (rng, list) => list[Math.floor(rng() * list.length)];
 const spec = (s) => DEVICES[s.kind];
 const P = (s, p) => DEVICES[s.kind].parts[p];
+const lidClosed = (s) => Boolean(DEVICES[s.kind].lid) && s.lid === 'closed';
 
 // ---------- заказ ----------
 
@@ -136,6 +137,7 @@ export function newOrder(level, only = null, forceKind = null) {
     notes: [],
     done: false,
   };
+  if (d.lid) s.lid = 'closed';                   // ноутбук приносят закрытым
   for (const f of faults) applyFault(s, f);
   s.pay = payFor(kind, faults);
   return s;
@@ -295,6 +297,7 @@ export function reach(s, target) {
   const d = spec(s);
   const side = sideOf(s, target);
   if (side !== 'any' && side !== s.view) return { why: 'flip' };
+  if (side === 'front' && lidClosed(s)) return { why: 'lid-closed' };
   if (d.parts[target]) {
     const by = firstIn(s, d.parts[target].blockers);
     return by ? { why: 'blocked', by } : null;
@@ -327,6 +330,7 @@ const refuseReach = (r) => no(r.why, r.by ? { by: r.by } : {});
 function install(s, p, fresh, wallet) {
   const r = reach(s, p);
   if (r) return refuseReach(r);
+  if (!fresh && P(s, p).consumable) return no('consumable');
   for (const q of coveredBy(s.kind, p)) {
     if (!s.parts[q].in || screwsOf(s.kind, q).some((id) => !s.screws[id])) return no('inside-missing', { by: q });
   }
@@ -431,6 +435,7 @@ const ACTIONS = {
     const r = reach(s, t);
     if (r) return refuseReach(r);
     if (t in s.hot) return no('use-suction');
+    if (d.parts[t].wipe) return no('use-alcohol');
     if (screwsOf(s.kind, t).some((id) => s.screws[id])) return no('screws');
     const c = P(s, t).conn;
     if (c && s.conns[c] !== 'off') return no(t === d.battery ? 'bat-connected' : 'flex', { conn: c });
@@ -461,7 +466,25 @@ const ACTIONS = {
   },
 
   brush: (s, t) => clean(s, 'brush', t),
-  alcohol: (s, t) => clean(s, 'alcohol', t),
+  /** Спирт: отмыть пятно или стереть деталь-расходник (старую термопасту). */
+  alcohol(s, t) {
+    const ps = spec(s).parts[t];
+    if (!ps?.wipe) return clean(s, 'alcohol', t);
+    const r = reach(s, t);
+    if (r) return refuseReach(r);
+    if (!s.parts[t].in) return no('no-part');
+    s.parts[t].in = false;
+    if (!s.parts[t].broken) s.parts[t].broken = 'gone';     // стёрта — ставить только новую, без штрафа
+    return yes({ wiped: t });
+  },
+
+  /** Крышка ноутбука: открыть и закрыть. */
+  lid(s) {
+    if (!spec(s).lid) return no('nothing');
+    if (s.view !== 'front') return no('flip');
+    s.lid = s.lid === 'closed' ? 'open' : 'closed';
+    return yes({ lid: s.lid });
+  },
 
   magnifier(s, t) {
     const out = sideOf(s, t) === 'any' && !spec(s).parts[t];
@@ -518,6 +541,7 @@ const ACTIONS = {
   },
 
   power(s) {
+    if (lidClosed(s)) return no('lid-closed');
     if (s.power) {
       s.power = false;
       return yes({ on: false });
@@ -582,6 +606,7 @@ export function inspect(s, t) {
 function step(s, tool, target) {
   const side = sideOf(s, target);
   if (side !== 'any' && side !== s.view) return { tool: 'flip' };
+  if (side === 'front' && lidClosed(s)) return { tool: 'lid', target: 'lid' };
   return { tool, target };
 }
 
@@ -598,6 +623,7 @@ function takeOut(s, p) {
     if (r) return r;
   }
   if (ps.glue) return s.hot[p] ? step(s, 'suction', p) : step(s, 'heat', p);
+  if (ps.wipe) return step(s, 'alcohol', p);
   const screw = screwsOf(s.kind, p).find((id) => s.screws[id]);
   if (screw) return step(s, 'screwdriver', screw);
   return step(s, 'tweezers', p);
@@ -646,7 +672,7 @@ function putIn(s, p, wallet) {
   }
   const r = clear(s, P(s, p).blockers);
   if (r) return r;
-  if (!s.parts[p].broken) return step(s, 'tweezers', p);
+  if (!s.parts[p].broken && !P(s, p).consumable) return step(s, 'tweezers', p);
   if (!(wallet?.stock?.[stockKey(s.kind, p)] > 0)) return { tool: 'buy', target: p };
   return step(s, 'parts', p);
 }
@@ -674,6 +700,7 @@ export function nextStep(s, wallet = null) {
   // 4. программы
   if (s.bootloop || s.blank) return { tool: 'flash', target: goodFirmware(s) };
   if (s.virus > 0) {
+    if (lidClosed(s)) return s.view === 'front' ? { tool: 'lid', target: 'lid' } : { tool: 'flip' };
     if (!s.power) return { tool: 'power', target: 'button' };
     if (!s.scanned) return step(s, 'antivirus', 'screen');
     return step(s, 'squash', 'bug');
@@ -699,6 +726,7 @@ export function isValidState(s) {
     if (!Array.isArray(s.complaint) || !s.complaint.every(([f, k]) => complaintsFor(s.kind, f)?.[k])) return false;
     if (!s.fw || typeof s.fw.code !== 'string' || !Array.isArray(s.fw.files) || typeof s.fw.newest !== 'string') return false;
     if (s.view !== 'back' && s.view !== 'front') return false;
+    if (d.lid ? !['open', 'closed'].includes(s.lid) : s.lid !== undefined) return false;
     const parts = Object.keys(d.parts);
     if (!sameKeys(s.parts, parts) || !parts.every((p) => isBool(s.parts[p].in) && typeof s.parts[p].broken === 'string' && isBool(s.parts[p].fresh))) return false;
     if (!sameKeys(s.screws, Object.keys(d.screws)) || !Object.values(s.screws).every(isBool)) return false;

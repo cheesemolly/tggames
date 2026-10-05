@@ -3,7 +3,8 @@
 //
 // Деталь: side — сторона (back, front; edge — видна с обеих, как отстёгиваемые джойстики); glue — на клею (фен и
 // присоска); blockers — что надо снять раньше неё; conn — её шлейф; miss/bad — что не работает без неё / со сломанной;
-// price — цена новой в магазине в долларах (0 — не продаётся, не ломается); blank — новая приходит без системы (диск).
+// price — цена новой в магазине в долларах (0 — не продаётся, не ломается); blank — новая приходит без системы (диск);
+// wipe — снимается спиртом (стереть), consumable — расходник: старую обратно не поставить, только новую (термопаста).
 // Винты: винт → деталь, которую держит. Шлейфы: шлейф → { side, under — что его закрывает }.
 // Пятна (spots): tool — чем исправлять (кисточка, спирт, пинцет — выпрямить ножки), part — на какой детали, under — что закрывает,
 // side — откуда видно (any — снаружи), power — трогать только без питания (иначе искра), sym — что не работает.
@@ -368,6 +369,7 @@ export const DEVICES = {
       fan: P({ side: 'front', blockers: ['shroud'], conn: 'fan', miss: 'overheat', bad: 'noisy', price: 20 }),
       heatsink: P({ side: 'front', blockers: ['shroud', 'fan'] }),
       vram: P({ side: 'front', blockers: ['heatsink'], miss: 'artifacts', bad: 'artifacts', price: 35 }),
+      paste: P({ side: 'front', blockers: ['heatsink'], wipe: true, consumable: true, miss: 'overheat', bad: 'overheat', price: 3 }),
     },
     screws: { g1: 'shroud', g2: 'shroud', g3: 'shroud', g4: 'shroud', k1: 'heatsink', k2: 'heatsink' },
     conns: { fan: { side: 'front', under: ['shroud'] } },
@@ -377,9 +379,8 @@ export const DEVICES = {
       jack: { tool: 'alcohol', part: '', under: [], side: 'any', sym: 'not-detected' },
       fan: { tool: 'brush', part: 'fan', under: ['shroud'], side: 'front', sym: 'overheat' },
       heatsink: { tool: 'brush', part: 'heatsink', under: ['shroud', 'fan'], side: 'front', sym: 'overheat' },
-      paste: { tool: 'alcohol', part: '', under: ['shroud', 'fan', 'heatsink'], side: 'front', sym: 'overheat' },
     },
-    order: ['p:vram', 'p:heatsink', 's:heatsink', 'p:fan', 'c:fan', 'p:shroud', 's:shroud'],
+    order: ['p:vram', 'p:paste', 'p:heatsink', 's:heatsink', 'p:fan', 'c:fan', 'p:shroud', 's:shroud'],
     faults: ['fan-broken', 'fan-dust', 'paste-dry', 'heatsink-dust', 'vram-dead', 'pcie-dirty', 'bootloop'],
     models: [{ name: 'Жар-Птица 4070', code: 'ZHP-4070', logo: 'star' }, { name: 'Радуга 7800', code: 'RDG-7800', logo: 'drop' }],
     ext: 'rom',
@@ -392,6 +393,7 @@ export const DEVICES = {
     portrait: true,
     parts: {
       cooler: P({ side: 'front', miss: 'overheat', bad: 'noisy', price: 15 }),
+      paste: P({ side: 'front', blockers: ['cooler'], wipe: true, consumable: true, miss: 'overheat', bad: 'overheat', price: 3 }),
     },
     screws: { c1: 'cooler', c2: 'cooler', c3: 'cooler', c4: 'cooler' },
     conns: {},
@@ -400,10 +402,9 @@ export const DEVICES = {
     noJack: true,
     spots: {
       cooler: { tool: 'brush', part: 'cooler', under: [], side: 'front', sym: 'overheat' },
-      paste: { tool: 'alcohol', part: '', under: ['cooler'], side: 'front', sym: 'overheat' },
       pins: { tool: 'tweezers', part: '', under: [], side: 'back', sym: 'no-boot' },
     },
-    order: ['p:cooler', 's:cooler'],
+    order: ['p:paste', 'p:cooler', 's:cooler'],
     faults: ['cooler-broken', 'cooler-dust', 'paste-dry', 'pins-bent'],
     models: [{ name: 'Камень 9', code: 'KMN-9', logo: 'ring' }, { name: 'Ядро 7', code: 'YDR-7', logo: 'star' }],
     ext: 'bin',
@@ -448,6 +449,7 @@ export const DEVICES = {
   laptop: {
     name: 'Ноутбук',
     portrait: false,
+    lid: true,
     parts: {
       display: P({ side: 'front', glue: true, conn: 'disp', miss: 'no-screen', bad: 'cracked', price: 80 }),
       keypad: P({ side: 'front', conn: 'kbd', miss: 'no-keys', bad: 'no-keys', price: 35 }),
@@ -762,7 +764,7 @@ export const FAULT_DEFS = {
   'ram-dead': { group: 'ram', part: 'ram', value: 'dead', labor: 15 },
   'cap-swollen': { group: 'cap', part: 'cap', value: 'swollen', labor: 25 },
   'heatsink-dust': { group: 'cooling', spot: 'heatsink', labor: 15 },
-  'paste-dry': { group: 'paste', spot: 'paste', labor: 20 },
+  'paste-dry': { group: 'paste', part: 'paste', value: 'dry', labor: 20 },
   'vram-dead': { group: 'vram', part: 'vram', value: 'dead', labor: 45 },
   'cooler-broken': { group: 'cooler', part: 'cooler', value: 'grind', labor: 10 },
   'cooler-dust': { group: 'cooler', spot: 'cooler', labor: 10 },

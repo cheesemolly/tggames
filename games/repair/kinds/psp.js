@@ -2,7 +2,7 @@
 // шлейфом), крестовина, аналоговая «шишечка», кнопки. Сзади — дверца батареи и съёмная батарея, корпус на 4 винтах
 // (открывается только без батареи — так и правильно), внутри привод дисков, модуль шишечки и плата.
 
-import { frame, screwHead, hole, plugBody, socket, jackMark, corrosion, screenStates, logo } from '../scene.js';
+import { frame, pcb, screwHead, hole, plugBody, socket, jackMark, corrosion, screenStates, logo } from '../scene.js';
 
 const F = frame(30, 46);
 const { box, pt, wrap } = F;
@@ -26,12 +26,9 @@ ${edge(true)}`);
 }
 
 function backBody() {
-  const chips = [[170, 50, 18, 14], [200, 70, 22, 16], [240, 26, 14, 12], [176, 82, 14, 12]]
-    .map(([x, y, w, h]) => `<rect class="pr-chip" x="${x}" y="${y}" width="${w}" height="${h}" rx="2"/>`).join('');
   return wrap(`<path class="pr-plastic" d="${BODY}" fill="url(#pr-g-plastic)"/>
 <path class="pr-cavity" d="M62 8H238A52 52 0 0 1 238 112H62A52 52 0 0 1 62 8Z"/>
-<rect class="pr-pcb" x="140" y="10" width="140" height="100" rx="10"/>
-<path class="pr-trace" d="M150 50h20M240 100h20M166 100h30M268 40v20"/>${chips}
+${pcb(140, 10, 140, 100, 5, 10)}
 ${Object.values(CONNS).map(([x, y]) => socket(x, y)).join('')}${corrosion(206, 62, 0.8)}${edge(false)}`);
 }
 

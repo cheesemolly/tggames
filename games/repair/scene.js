@@ -289,17 +289,128 @@ export function trayLayout(T, tray, screws) {
   };
 }
 
-/** Плата с дорожками и чипами. */
-export function pcb(x, y, w, h, n = 4, rx = 6) {
-  let chips = '';
-  for (let k = 0; k < n; k++) {
-    const cw = 10 + ((k * 7) % 12);
-    const cx = x + 6 + ((k * 37) % Math.max(10, w - cw - 12));
-    const cy = y + 6 + ((k * 23) % Math.max(10, h - 22));
-    chips += `<rect class="pr-chip" x="${cx}" y="${cy}" width="${cw}" height="${8 + (k % 3) * 4}" rx="1.5"/>`;
+/** Простой генератор случайных чисел по зерну — у каждой платы свой, но всегда одинаковый рисунок. */
+function rnd(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const f1 = (v) => +v.toFixed(1);
+
+/** Микросхема: корпус, ножки (пунктир по краю), ключ-точка и маркировка; big — BGA с шариками под углом. */
+export function chip(x, y, w, h, label = '', kind = 'qfp') {
+  let out = '';
+  if (kind === 'qfp') out += `<rect class="pr-chip-pins" x="${f1(x - 1.6)}" y="${f1(y - 1.6)}" width="${f1(w + 3.2)}" height="${f1(h + 3.2)}" rx="1"/>`;
+  if (kind === 'soic') {
+    out += `<path class="pr-chip-pins-h" d="M${f1(x + 1)} ${f1(y - 1.2)}h${f1(w - 2)}M${f1(x + 1)} ${f1(y + h + 1.2)}h${f1(w - 2)}"/>`;
   }
-  return `<rect class="pr-pcb" x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}"/>`
-    + `<path class="pr-trace" d="M${x + 4} ${y + h * 0.5}h${w * 0.3}v${-h * 0.2}M${x + w * 0.5} ${y + h - 4}v${-h * 0.25}h${w * 0.3}"/>${chips}`;
+  out += `<rect class="pr-chip" x="${f1(x)}" y="${f1(y)}" width="${f1(w)}" height="${f1(h)}" rx="${kind === 'bga' ? 1.5 : 0.8}"/>`;
+  if (kind === 'bga') out += `<rect class="pr-chip-die" x="${f1(x + w * 0.22)}" y="${f1(y + h * 0.22)}" width="${f1(w * 0.56)}" height="${f1(h * 0.56)}" rx="1"/>`;
+  out += `<circle class="pr-chip-dot" cx="${f1(x + 2.2)}" cy="${f1(y + 2.2)}" r="0.9"/>`;
+  if (label && w >= 12 && h >= 7) out += `<text class="pr-chip-text" x="${f1(x + w / 2)}" y="${f1(y + h / 2 + 1.4)}" text-anchor="middle">${label}</text>`;
+  return out;
+}
+
+/** Ряд мелких деталей (конденсаторы и резисторы) по оси. */
+function passives(r, x, y, n, vertical) {
+  let out = '';
+  for (let k = 0; k < n; k++) {
+    const cap = r() < 0.6;
+    const px = vertical ? x : x + k * 4.6;
+    const py = vertical ? y + k * 4.6 : y;
+    const w = vertical ? 2 : 3.4;
+    const h = vertical ? 3.4 : 2;
+    out += `<rect class="${cap ? 'pr-smd-cap' : 'pr-smd-res'}" x="${f1(px)}" y="${f1(py)}" width="${w}" height="${h}" rx="0.3"/>`;
+  }
+  return out;
+}
+
+const CHIP_LABELS = ['U1', 'U2', 'PMIC', 'U7', 'SoC', 'EMMC', 'U12', 'CODEC', 'WIFI', 'U3'];
+
+/**
+ * Плата: маска, шины дорожек с изломами 45°, переходные отверстия, микросхемы (QFP с ножками, SOIC, BGA), ряды
+ * мелких деталей вдоль микросхем, контактные площадки, крепёжные отверстия, белая маркировка. n — сколько микросхем;
+ * рисунок зависит от места и размера (зерно), поэтому у каждой платы свой.
+ */
+export function pcb(x, y, w, h, n = 4, rx = 6, seed = 0) {
+  const r = rnd(seed || Math.round(x * 7 + y * 13 + w * 31 + h * 17));
+  let out = `<rect class="pr-pcb" x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}"/>`;
+  if (w > 40 && h > 30) out += `<rect class="pr-silk-line" x="${x + 3}" y="${y + 3}" width="${w - 6}" height="${h - 6}" rx="${Math.max(1, rx - 2)}"/>`;
+  // шины дорожек
+  const buses = Math.max(1, Math.min(6, Math.round((w * h) / 1800)));
+  let tr = '';
+  let vias = '';
+  for (let b = 0; b < buses; b++) {
+    const horiz = r() < 0.55;
+    const lines = 2 + Math.floor(r() * 4);
+    const sx = x + 6 + r() * (w * 0.5);
+    const sy = y + 6 + r() * (h * 0.6);
+    let l1 = 8 + r() * (horiz ? w * 0.35 : h * 0.3);
+    let l2 = 6 + r() * (horiz ? w * 0.3 : h * 0.3);
+    let dd = (r() < 0.5 ? 1 : -1) * (4 + r() * 8);
+    // всё в пределах платы: изгиб внутрь, длина — до края
+    const lo = (horiz ? y : x) + 4;
+    const hi = (horiz ? y + h : x + w) - 4;
+    const from = horiz ? sy : sx;
+    const span = (lines - 1) * 2.4;
+    dd = Math.max(lo - from, Math.min(hi - from - span, dd));
+    const room = (horiz ? x + w - sx : y + h - sy) - 6 - Math.abs(dd);
+    if (l1 + l2 > room) {
+      const q = Math.max(0, room) / (l1 + l2);
+      l1 *= q;
+      l2 *= q;
+    }
+    for (let k = 0; k < lines; k++) {
+      const o = k * 2.4;
+      if (horiz) {
+        const yy = Math.min(y + h - 4, sy + o);
+        tr += `M${f1(sx)} ${f1(yy)}h${f1(l1)}l${f1(Math.abs(dd))} ${f1(dd)}h${f1(l2)}`;
+        vias += `<circle class="pr-via" cx="${f1(sx + l1 + Math.abs(dd) + l2)}" cy="${f1(yy + dd)}" r="1.1"/>`;
+      } else {
+        const xx = Math.min(x + w - 4, sx + o);
+        tr += `M${f1(xx)} ${f1(sy)}v${f1(l1)}l${f1(dd)} ${f1(Math.abs(dd))}v${f1(l2)}`;
+        vias += `<circle class="pr-via" cx="${f1(xx + dd)}" cy="${f1(sy + l1 + Math.abs(dd) + l2)}" r="1.1"/>`;
+      }
+    }
+  }
+  out += `<g class="pr-traces"><path class="pr-trace" d="${tr}"/></g>${vias}`;
+  // микросхемы — по клеткам сетки, чтобы не наползали друг на друга
+  const cols = Math.max(1, Math.round(Math.sqrt((n * w) / Math.max(h, 1))));
+  const rows = Math.max(1, Math.ceil(n / cols));
+  const cw = (w - 8) / cols;
+  const ch = (h - 8) / rows;
+  for (let k = 0; k < n; k++) {
+    const c = k % cols;
+    const rr = Math.floor(k / cols);
+    const kind = r() < 0.2 && cw > 26 && ch > 26 ? 'bga' : r() < 0.6 ? 'qfp' : 'soic';
+    const size = Math.min(cw, ch) * (kind === 'bga' ? 0.62 : 0.45 + r() * 0.15);
+    const bw = Math.max(5, kind === 'soic' ? size * 1.3 : size);
+    const bh = Math.max(4, kind === 'soic' ? size * 0.6 : size);
+    const bx = x + 4 + c * cw + (cw - bw) * (0.25 + r() * 0.5);
+    const by = y + 4 + rr * ch + (ch - bh) * (0.2 + r() * 0.4);
+    out += chip(bx, by, bw, bh, CHIP_LABELS[(k + Math.floor(r() * 9)) % CHIP_LABELS.length], kind);
+    // мелочь вдоль нижнего края микросхемы и маркировка
+    const pn = Math.max(0, Math.min(6, Math.floor(bw / 4.6)));
+    if (by + bh + 7 < y + h - 2) out += passives(r, bx, by + bh + 3.4, pn, false);
+    if (bx + bw + 6 < x + w - 2 && bh > 12) out += passives(r, bx + bw + 3, by, Math.min(4, Math.floor(bh / 4.6)), true);
+  }
+  // контактные площадки
+  for (let k = 0; k < Math.min(5, 1 + Math.floor((w * h) / 2500)); k++) {
+    out += `<circle class="pr-testpad" cx="${f1(x + 6 + r() * (w - 12))}" cy="${f1(y + 6 + r() * (h - 12))}" r="1.5"/>`;
+  }
+  // крепёжные отверстия по углам больших плат
+  if (w > 80 && h > 60) {
+    for (const [hx, hy] of [[x + 6, y + 6], [x + w - 6, y + 6], [x + 6, y + h - 6], [x + w - 6, y + h - 6]]) {
+      out += `<circle class="pr-mount-ring" cx="${hx}" cy="${hy}" r="3.2"/><circle class="pr-mount-hole" cx="${hx}" cy="${hy}" r="1.6"/>`;
+    }
+  }
+  return out;
 }
 
 /** Аккумулятор с наклейкой: вздутый — выпуклый, изношенный — с надписью износа. */
@@ -358,4 +469,16 @@ export function homeTiles(x, y, w, h, n = 6, dark = false) {
   }
   return `<rect x="${x}" y="${y}" width="${w}" height="${h}" ${dark ? 'class="pr-ui-dark"' : 'fill="url(#pr-g-wall)"'}/>${tiles}`
     + `<rect class="pr-cursor" x="${(x + gw - sz / 2 - 2).toFixed(1)}" y="${(y + gh * 1.2 - sz / 2 - 2).toFixed(1)}" width="${(sz + 4).toFixed(1)}" height="${(sz + 4).toFixed(1)}" rx="${(sz * 0.3).toFixed(1)}"/>`;
+}
+
+/** Термопаста на чипе: свежая — серая «звезда» с бликом, высохшая — бледная, в трещинах. */
+export function paste(d, dry) {
+  const { x, y, w, h } = d;
+  const k = w / 80;
+  // слой пасты по кристаллу: края чуть неровные (её выдавило радиатором)
+  const edge = `M${x + 6 * k} ${y + 2 * k}Q${x + w / 2} ${y - 2 * k} ${x + w - 6 * k} ${y + 2 * k}Q${x + w + 2 * k} ${y + h / 2} ${x + w - 4 * k} ${y + h - 3 * k}`
+    + `Q${x + w / 2} ${y + h + 2 * k} ${x + 5 * k} ${y + h - 2 * k}Q${x - 2 * k} ${y + h / 2} ${x + 6 * k} ${y + 2 * k}Z`;
+  return `<path class="pr-paste${dry ? ' pr-paste-dry' : ''}" d="${edge}"/>`
+    + (dry ? `<path class="pr-paste-crack" d="M${x + 10 * k} ${y + 30 * k}l${14 * k} ${6 * k} ${10 * k}-${10 * k} ${16 * k} ${8 * k} ${18 * k}-${6 * k}M${x + 40 * k} ${y + 8 * k}l-${4 * k} ${18 * k} ${6 * k} ${14 * k}-${3 * k} ${30 * k}M${x + 16 * k} ${y + 62 * k}l${16 * k}-${8 * k} ${14 * k} ${6 * k}M${x + 56 * k} ${y + 46 * k}l${12 * k} ${16 * k}"/>`
+      : `<path class="pr-paste-hi" d="M${x + 12 * k} ${y + 14 * k}q${18 * k}-${6 * k} ${34 * k}-${2 * k}l-${2 * k} ${5 * k}q-${16 * k}-${4 * k}-${30 * k} ${2 * k}Z"/>`);
 }

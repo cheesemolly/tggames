@@ -22,7 +22,7 @@ import {
   DEVICES, KINDS, TOOLS, TUTORIAL, UNLOCK, SYMPTOMS, complaintsFor, newOrder, act, nextStep, reach, screenOf, starsFor, isValidState,
   normProgress, recordWin, earningsFor, shopParts, stockKey, screwsOf,
 } from './logic.js';
-import { run as runTerminal, greet, PROMPT } from './terminal.js';
+import { run as runTerminal, greet, tabComplete, PROMPT } from './terminal.js';
 import { W, H, defs, avatar, TOOL_ICONS } from './scene.js';
 import phone from './kinds/phone.js';
 import button from './kinds/button.js';
@@ -121,6 +121,9 @@ const T = {
     'inside-missing': (by) => `Под ней не всё собрано: ${T.names[by] ?? by}`,
     'no-stock': 'На складе нет — купи в магазине',
     clean: 'Тут и так чисто',
+    consumable: 'Старую обратно не нанести — нужна новая («Запчасти»)',
+    'use-alcohol': 'Старую пасту стирают спиртом',
+    'lid-closed': 'Сначала открой крышку — коснись её',
     'wrong-tool': (need) => `Тут нужен другой инструмент: ${T.tools[need]?.toLowerCase() ?? need}`,
     'no-battery': 'Тут нечего заряжать',
     'brush-weak': 'Кисточкой не взять — нужен спирт',
@@ -179,7 +182,7 @@ const T = {
     'cable-frayed': 'Шлейф перетёрт', 'pcb-dead': 'Плата сгорела', 'crumbs-dirty': 'Под колпачками крошки',
     'heads-stuck': 'Головки прилипли к пластине — щелчки', 'platter-scratched': 'Пластина в царапинах — битые сектора',
     'cmos-dead': 'Батарейка BIOS села: 1,9 В', 'ram-dead': 'Чип памяти сгорел', 'cap-swollen': 'Конденсатор вздулся!',
-    'heatsink-dirty': 'Радиатор забит пылью', 'paste-dirty': 'Термопаста высохла в камень', 'vram-dead': 'Чип видеопамяти сгорел',
+    'heatsink-dirty': 'Радиатор забит пылью', 'paste-dry': 'Термопаста высохла в камень — сотри спиртом и нанеси новую', 'vram-dead': 'Чип видеопамяти сгорел',
     'cooler-grind': 'Подшипник кулера разбит', 'cooler-dirty': 'Кулер забит пылью', 'pins-dirty': 'Ножки погнуты — выпрями пинцетом',
     'pins-ok': 'Ножки ровные', 'strap-torn': 'Ремешок порван', 'sensor-dirty': 'Датчик пульса в грязи', 'sensor-ok': 'Датчик чистый',
     'rumble-dead': 'Вибромотор сгорел', 'mic-dead': 'Микрофоны не отвечают', 'grille-dirty': 'Сетка забита пылью',
@@ -430,7 +433,7 @@ function buildScene() {
 ${cells ? `<rect class="pr-mat" x="${l.MAT.x}" y="${l.MAT.y}" width="${l.MAT.w}" height="${l.MAT.h}" rx="10"/>${cells}` : ''}</g>
 <g class="pr-flipper">
   <g class="pr-side pr-back">${l.backBody(game)}${slots('back')}</g>
-  <g class="pr-side pr-front">${l.frontBody(game)}${slots('front')}<g class="pr-bugs"></g></g>
+  <g class="pr-side pr-front">${l.frontBody(game)}${slots('front')}<g class="pr-bugs"></g>${l.frontTop ? l.frontTop(game) : ''}</g>
   <g class="pr-edge">${slots('edge')}</g>
 </g>
 <g class="pr-traylayer"></g>
@@ -533,9 +536,11 @@ function setPlace(node, p) {
 
 function putNode(p) {
   const node = S.parts[p];
-  const into = game.parts[p].in ? S.slots[p] : S.tray;
+  const gone = !game.parts[p].in && D().parts[p].consumable;
+  const into = game.parts[p].in || gone ? S.slots[p] : S.tray;
   if (node.parentNode !== into) into.append(node);
-  setPlace(node, game.parts[p].in ? homePlace(p) : trayPlace(p));
+  node.classList.toggle('pr-wiped', gone);
+  setPlace(node, game.parts[p].in || gone ? homePlace(p) : trayPlace(p));
 }
 
 function putScrew(id) {
@@ -588,6 +593,7 @@ function paint() {
   const svg = ui.svg;
   const d = D();
   svg.dataset.view = game.view;
+  svg.dataset.lid = game.lid ?? '';
   const P = game.parts;
   for (const k of Object.keys(d.spots)) svg.classList.toggle(`pr-d-${k}`, game.dirt[k]);
   for (const k of ['jack', 'speaker', 'board', 'keys', 'fan', 'slot']) if (!(k in d.spots)) svg.classList.remove(`pr-d-${k}`);
@@ -691,7 +697,7 @@ function targets() {
   const l = L();
   const list = [];
   const add = (target, shape, prio) => shape && list.push({ target, prio, ...shape });
-  for (const p of Object.keys(d.parts)) if (!s.parts[p].in) add(p, trayRect(p), 6);
+  for (const p of Object.keys(d.parts)) if (!s.parts[p].in && !d.parts[p].consumable) add(p, trayRect(p), 6);
   for (const id of Object.keys(d.screws)) if (!s.screws[id]) add(id, circ(l.MAT_CELL[id], 13), 7);
   const btn = viewOf(l.BUTTON);
   if (btn) add('button', rect(btn), 8);
@@ -703,8 +709,11 @@ function targets() {
     if (sb && (!sp || sp.under.every((u) => !s.parts[u].in))) add(k, rect(sb), 5);
   }
   const order = [...(l.ORDER.back ?? []), ...(l.ORDER.front ?? [])];
+  const lidShut = d.lid && s.lid === 'closed';
+  if (d.lid && s.view === 'front') add('lid', rect(lidShut ? l.LID.closed : l.LID.open), 8);
   for (const [p, ps] of Object.entries(d.parts)) {
     if (!onView(ps.side) || !exposed(p)) continue;
+    if (lidShut && ps.side === 'front') continue;
     const layer = order.indexOf(p) * 0.01;
     // стоящая деталь — чем выше слой, тем главнее; пустые места — все равны, выигрывает меньшее (иначе место снятой
     // крышки во весь корпус перехватывало нажатие по месту камеры)
@@ -799,6 +808,7 @@ function centerOf(target, slot = false) {
   if (d.conns[target]) return l.CONN_AT[target];
   if (target === 'jack') return center(viewOf(l.JACK) ?? l.JACK?.back ?? l.JACK?.front ?? boxOf(Object.keys(d.parts)[0]));
   if (target === 'button') return center(viewOf(l.BUTTON) ?? l.BUTTON?.front ?? l.BUTTON?.back ?? boxOf(Object.keys(d.parts)[0]));
+  if (target === 'lid' && d.lid) return center(game.lid === 'closed' ? l.LID.closed : l.LID.open);
   if (target === 'screen') return center(l.SCREEN ?? boxOf(Object.keys(d.parts)[0]));
   if (target === 'bug') {
     const b = bugs.find((x) => !x.dead);
@@ -824,10 +834,11 @@ function applicable(t, target) {
     case 'suction': return Boolean(d.parts[target]?.glue) && P[target].in;
     case 'screwdriver': return Boolean(d.screws[target]);
     case 'spudger': return Boolean(d.conns[target]);
-    case 'tweezers': return (Boolean(d.parts[target]) && !d.parts[target].glue) || d.spots[target]?.tool === 'tweezers';
+    case 'tweezers': return (Boolean(d.parts[target]) && !d.parts[target].glue && !d.parts[target].wipe) || d.spots[target]?.tool === 'tweezers';
     case 'parts': return Boolean(d.parts[target]) && !P[target].in && d.parts[target].price > 0;
     case 'brush':
-    case 'alcohol': return Object.entries(d.spots).some(([k, sp]) => sp.tool === t && (k === target || sp.part === target));
+    case 'alcohol': return Object.entries(d.spots).some(([k, sp]) => sp.tool === t && (k === target || sp.part === target))
+      || (t === 'alcohol' && Boolean(d.parts[target]?.wipe) && P[target].in);
     case 'charger':
     case 'flash': return target === 'jack' && !d.noJack;
     case 'antivirus': return Boolean(d.virus) && target === 'display' && P.display?.in && game.power;
@@ -996,6 +1007,11 @@ async function doTool(target) {
     await doPower();
     return;
   }
+  // крышка ноутбука (у диска «lid» — обычная деталь)
+  if (target === 'lid' && DEVICES[game.kind].lid) {
+    await doLid();
+    return;
+  }
   if (target.startsWith('bug:')) {
     squash(Number(target.slice(4)));
     return;
@@ -1095,6 +1111,12 @@ async function perform(t, target, r) {
       break;
     }
     case 'tweezers': {
+      if (r.cleaned) {
+        paint();
+        sfx('clean', {}, 0);
+        sparkle(centerOf(target), '#ffe08a', 12);
+        break;
+      }
       const node = S.parts[target];
       sfx('lift', {}, 0);
       if (r.removed) await flyNode(node, trayPlace(target), S.tray, { dur: 440, arc: 34 });
@@ -1111,6 +1133,7 @@ async function perform(t, target, r) {
       // старая — в мусор, новая — из коробки сверху
       if (!reducedMotion()) await animate(node, [{ opacity: 1 }, { opacity: 0 }], { duration: 200, easing: 'ease-in' });
       node.firstChild.innerHTML = L().part(target, game);
+      node.classList.remove('pr-wiped');
       setPlace(node, boxPlace(target));
       S.fly.append(node);
       sfx('newpart', {}, 0);
@@ -1132,6 +1155,15 @@ async function perform(t, target, r) {
     }
     case 'brush':
     case 'alcohol': {
+      if (r.wiped) {
+        // старую термопасту — стереть: тает на месте
+        const node = S.parts[target];
+        if (!reducedMotion()) await animate(node.firstChild, [{ opacity: 1 }, { opacity: 0 }], { duration: 360, easing: 'ease-in' });
+        putNode(target);
+        sfx('fizz', {}, 0);
+        sparkle(centerOf(target), '#bfe6ff', 12);
+        break;
+      }
       paint();
       sfx('clean', {}, 0);
       sparkle(centerOf(target), t === 'alcohol' ? '#bfe6ff' : '#f4efe6', 14);
@@ -1278,6 +1310,27 @@ async function doPower() {
   }
   if (!ui) return;
   after();
+}
+
+/** Крышка ноутбука: открыть или закрыть (экран откидывается на петле — переход в CSS). */
+async function doLid() {
+  audio.get();
+  const r = act(game, 'lid');
+  if (!r.ok) {
+    refuse(r, 'lid');
+    return;
+  }
+  clearHint();
+  sfx(r.lid === 'open' ? 'lift' : 'place', {}, 0);
+  api.platform.haptic.impact('light');
+  busy++;
+  try {
+    paint();
+    await wait(380);
+  } finally {
+    busy--;
+  }
+  if (ui) after();
 }
 
 /** Переворот: устройство сжимается по ширине до нуля, сторона меняется, разжимается. */
@@ -1541,7 +1594,7 @@ async function openPc() {
   }
   if (!ui) return;
   sfx('plug', {}, 0);
-  pc = { lines: [...greet(game)], input: '', history: [], at: -1, busy: false };
+  pc = { lines: [...greet(game)], input: '', history: [], at: -1, busy: false, tab: null };
   const screen = el('div', { class: 'pr-term', role: 'log', 'aria-live': 'polite' });
   const line = el('div', { class: 'pr-term-input' });
   const keys = KEYBOARD.map((row) => el('div', { class: 'pr-kbd-row' },
@@ -1552,7 +1605,9 @@ async function openPc() {
     return b;
   };
   const bottom = el('div', { class: 'pr-kbd-row' },
+    kb('Tab', 'pr-key-fn pr-key-tab', () => typeKey('Tab')),
     kb('↑', 'pr-key-fn', () => typeKey('ArrowUp')),
+    kb('↓', 'pr-key-fn', () => typeKey('ArrowDown')),
     kb('пробел', 'pr-key-space', () => typeKey(' ')),
     kb('Стереть', 'pr-key-fn', () => typeKey('Backspace'), ICONS.back),
     kb('Ввод', 'pr-key-enter', () => typeKey('Enter'), ICONS.enter));
@@ -1569,16 +1624,32 @@ async function openPc() {
       if (!pc || pc.busy) return;
       pc.input = field.value.toLowerCase();
       field.value = '';
+      pc.tab = null;
       submitPc();
     },
   }, field, el('button', { class: 'btn pr-cmd-send', type: 'submit', onmousedown: (e) => e.preventDefault() }, T.send));
   field?.addEventListener('input', () => {
     if (!pc) return;
     pc.input = field.value.toLowerCase();
+    pc.tab = null;
     paintTerm();
   });
+  field?.addEventListener('keydown', (e) => {
+    if (e.key === 'Tab' || e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      pc.input = field.value.toLowerCase();
+      typeKey(e.key);
+    }
+  });
+  pc.box.field = field;
+  // на телефоне нет Tab и стрелок — свои кнопки под полем
+  const fieldKeys = field && el('div', { class: 'pr-kbd-row pr-field-keys' },
+    kb('Tab', 'pr-key-fn pr-key-tab', () => typeKey('Tab')),
+    kb('↑', 'pr-key-fn', () => typeKey('ArrowUp')),
+    kb('↓', 'pr-key-fn', () => typeKey('ArrowDown')));
   const box = card(T.pc,
     form,
+    fieldKeys,
     el('div', { class: 'pr-monitor' }, screen, line),
     field ? null : el('div', { class: 'pr-kbd' }, keys, bottom),
     el('div', { class: 'pr-pc-actions' },
@@ -1601,21 +1672,58 @@ function paintTerm() {
   line.replaceChildren(el('span', { class: 'pr-term-prompt' }, `${PROMPT} `), el('span', {}, pc.input), el('span', { class: 'pr-term-caret' }));
 }
 
+/**
+ * Клавиша терминала: символ, Backspace, Enter, Tab (дописать; повторно — перебрать варианты), ↑ ↓ — прошлые команды
+ * назад и вперёд (за последней — пустая строка).
+ */
 function typeKey(k) {
   if (!pc || pc.busy) return;
   if (k === 'Enter') {
+    pc.tab = null;
     submitPc();
     return;
   }
+  if (k === 'Tab') {
+    const r = tabComplete(game, pc.input, pc.tab);
+    pc.tab = r.tab;
+    if (r.none) sfx('error', {}, 60);
+    else {
+      pc.input = r.line;
+      if (r.list) pc.lines.push(...r.list.map((t) => ({ t: `  ${t}`, c: 'dim' })));
+      sfx('click', {}, 25);
+    }
+    paintTerm();
+    syncField();
+    return;
+  }
+  pc.tab = null;
   if (k === 'Backspace') pc.input = pc.input.slice(0, -1);
   else if (k === 'ArrowUp') {
     if (pc.history.length) {
       pc.at = pc.at < 0 ? pc.history.length - 1 : Math.max(0, pc.at - 1);
       pc.input = pc.history[pc.at];
     }
+  } else if (k === 'ArrowDown') {
+    if (pc.at >= 0) {
+      pc.at++;
+      if (pc.at >= pc.history.length) {
+        pc.at = -1;
+        pc.input = '';
+      } else pc.input = pc.history[pc.at];
+    }
   } else if (pc.input.length < 48) pc.input += k;
   sfx('tool', {}, 25);
   paintTerm();
+  syncField();
+}
+
+/** Поле клавиатуры телефона — то же, что строка терминала (после Tab и истории). */
+function syncField() {
+  const field = pc?.box?.field;
+  if (field && field.value !== pc.input) {
+    field.value = pc.input;
+    field.setSelectionRange?.(field.value.length, field.value.length);
+  }
 }
 
 async function submitPc() {
@@ -2003,6 +2111,7 @@ function onKeydown(e) {
       return;
     }
     if (e.key === 'Escape') closePc();
+    else if (e.key === 'Tab' || e.key === 'ArrowDown') typeKey(e.key);
     else if (e.key === 'Enter' || e.key === 'Backspace' || e.key === 'ArrowUp') typeKey(e.key);
     else if (/^[a-z0-9._\- ]$/i.test(e.key)) typeKey(e.key.toLowerCase());
     else return;

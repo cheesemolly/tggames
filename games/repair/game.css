@@ -977,3 +977,155 @@
 }
 [data-game="repair"] .pr-cmd-form .pr-cmd-send { flex: none; width: auto; padding: 0 16px; }
 [data-game="repair"] .pr-toggle-note { margin-top: 2px; padding-left: 30px; }
+
+/* ---------- подробные платы (генератор pcb, 2026-10-05) ---------- */
+[data-game="repair"] .pr-pcb { fill: var(--pcb); stroke: color-mix(in srgb, var(--pcb) 70%, #000); stroke-width: 0.8; }
+[data-game="repair"] .pr-pcb-dark { fill: #1c2426; stroke: #0e1314; }
+[data-game="repair"] .pr-silk-line { fill: none; stroke: rgb(255 255 255 / 0.18); stroke-width: 0.6; stroke-dasharray: 3 2; }
+[data-game="repair"] .pr-trace { stroke: color-mix(in srgb, var(--pcb-line) 85%, #fff); stroke-width: 0.9; stroke-linecap: round; stroke-linejoin: round; fill: none; opacity: 0.85; }
+[data-game="repair"] .pr-trace-dark { stroke: #3a4a4c; stroke-width: 1.2; }
+[data-game="repair"] .pr-via { fill: #d4a64a; stroke: color-mix(in srgb, var(--pcb) 60%, #000); stroke-width: 0.5; }
+[data-game="repair"] .pr-chip { fill: #1d1f24; stroke: #0b0c0f; stroke-width: 0.5; }
+[data-game="repair"] .pr-chip-pins { fill: none; stroke: #c3cad3; stroke-width: 2; stroke-dasharray: 0.9 1.1; }
+[data-game="repair"] .pr-chip-pins-h { fill: none; stroke: #c3cad3; stroke-width: 2.2; stroke-dasharray: 1 1.4; }
+[data-game="repair"] .pr-chip-die { fill: #3a3f47; stroke: rgb(255 255 255 / 0.12); stroke-width: 0.5; }
+[data-game="repair"] .pr-chip-dot { fill: rgb(255 255 255 / 0.35); }
+[data-game="repair"] .pr-chip-text { fill: rgb(255 255 255 / 0.55); font-size: 3.6px; font-weight: 700; letter-spacing: 0.02em; }
+[data-game="repair"] .pr-smd-cap { fill: #c9a874; stroke: #8e98a5; stroke-width: 0.5; }
+[data-game="repair"] .pr-smd-res { fill: #1d1f24; stroke: #c3cad3; stroke-width: 0.5; }
+[data-game="repair"] .pr-testpad { fill: #d4a64a; }
+[data-game="repair"] .pr-mount-ring { fill: #c3cad3; }
+[data-game="repair"] .pr-mount-hole { fill: #0b0c0f; }
+[data-game="repair"] .pr-silk { fill: rgb(255 255 255 / 0.6); font-size: 4.2px; font-weight: 700; letter-spacing: 0.03em; }
+[data-game="repair"] .pr-silk-dark { fill: #2b2e36; }
+
+/* материнская плата */
+[data-game="repair"] .pr-io-cover { fill: #2b2e36; stroke: #4a4f58; stroke-width: 1; }
+[data-game="repair"] .pr-io-stripe { stroke: #ff5a5a; stroke-width: 1.4; opacity: 0.8; }
+[data-game="repair"] .pr-io-text { fill: rgb(255 255 255 / 0.5); font-size: 6px; font-weight: 800; letter-spacing: 0.12em; }
+[data-game="repair"] .pr-choke { fill: #5b6170; stroke: #2b2e36; stroke-width: 0.6; }
+[data-game="repair"] .pr-choke-text { fill: rgb(255 255 255 / 0.6); font-size: 3.4px; font-weight: 700; }
+[data-game="repair"] .pr-eps, [data-game="repair"] .pr-atx { fill: #e9ecf0; stroke: #8e98a5; stroke-width: 0.6; }
+[data-game="repair"] .pr-pinfield { stroke: #d4a64a; stroke-width: 1.6; stroke-linecap: round; }
+[data-game="repair"] .pr-pinfield-light { stroke: #6b7280; stroke-width: 2.4; stroke-linecap: round; }
+[data-game="repair"] .pr-solder-field { stroke: #c3cad3; stroke-width: 1.8; stroke-linecap: round; }
+[data-game="repair"] .pr-socket-frame { fill: #c3cad3; stroke: #8e98a5; stroke-width: 1; }
+[data-game="repair"] .pr-socket-bed { fill: #2b2e36; }
+[data-game="repair"] .pr-socket-lever { fill: none; stroke: #e9ecf0; stroke-width: 2; stroke-linecap: round; }
+[data-game="repair"] .pr-fan-header { fill: #e9ecf0; }
+[data-game="repair"] .pr-elcap { fill: #2b2e36; stroke: #6b7280; stroke-width: 0.8; }
+[data-game="repair"] .pr-elcap-big { fill: #3b4f8c; stroke: #c3cad3; }
+[data-game="repair"] .pr-elcap-cross { stroke: #c3cad3; stroke-width: 0.9; }
+[data-game="repair"] .pr-cap-leak { fill: none; stroke: #c9a24a; stroke-width: 1.6; stroke-linecap: round; }
+[data-game="repair"] .pr-ram-latch { fill: #8e98a5; }
+[data-game="repair"] .pr-ram-sink { fill: rgb(40 44 52 / 0.65); stroke: #c3cad3; stroke-width: 0.6; }
+[data-game="repair"] .pr-ram-text { fill: #ff5a5a; font-size: 6px; font-weight: 900; letter-spacing: 0.1em; }
+[data-game="repair"] .pr-pcie { fill: #0b0c0f; stroke: #3b3f47; stroke-width: 0.6; }
+[data-game="repair"] .pr-pcie-latch { fill: #8e98a5; }
+[data-game="repair"] .pr-m2 { fill: #0b0c0f; }
+[data-game="repair"] .pr-m2-key { fill: #3b3f47; }
+[data-game="repair"] .pr-standoff { fill: #c3cad3; stroke: #6b7280; }
+[data-game="repair"] .pr-chipset-hs { fill: #3b3f47; stroke: #8e98a5; stroke-width: 1; }
+[data-game="repair"] .pr-chipset-line { stroke: #5b6170; stroke-width: 2; }
+[data-game="repair"] .pr-logo-small { fill: #ff5a5a; }
+[data-game="repair"] .pr-sata-port { fill: #1d1f24; stroke: #6b7280; stroke-width: 0.6; }
+[data-game="repair"] .pr-audio-line { fill: none; stroke: #d4a64a; stroke-width: 0.8; stroke-dasharray: 3 2; opacity: 0.7; }
+[data-game="repair"] .pr-gold-cap { fill: #d4a64a; stroke: #8a6a2a; stroke-width: 0.6; }
+[data-game="repair"] .pr-gold-cap-top { fill: #f3d58a; }
+[data-game="repair"] .pr-header { fill: #1d1f24; }
+[data-game="repair"] .pr-vrm-hs { stroke: #6b7280; }
+[data-game="repair"] .pr-backplate-sock { fill: #8e98a5; stroke: #5b6170; stroke-width: 1.2; }
+[data-game="repair"] .pr-sticker-white { fill: #f4f4f2; }
+[data-game="repair"] .pr-barcode { fill: #1d1f24; }
+
+/* видеокарта */
+[data-game="repair"] .pr-io-bracket { fill: #c3cad3; stroke: #8e98a5; stroke-width: 0.8; }
+[data-game="repair"] .pr-port-hole { fill: #1d1f24; }
+[data-game="repair"] .pr-bracket-vent { stroke: #6b7280; stroke-width: 2; stroke-linecap: round; }
+[data-game="repair"] .pr-finger-gaps { stroke: #8a6a2a; stroke-width: 1; }
+[data-game="repair"] .pr-die-sub { fill: #1f5641; stroke: #123828; }
+[data-game="repair"] .pr-die { fill: #3b3f47; stroke: #c3cad3; stroke-width: 1; }
+[data-game="repair"] .pr-die-text { fill: rgb(255 255 255 / 0.55); font-size: 6px; font-weight: 800; }
+[data-game="repair"] .pr-vram-pad { fill: #d4a64a; opacity: 0.45; }
+[data-game="repair"] .pr-polycap { fill: #6b7280; stroke: #2b2e36; stroke-width: 0.5; }
+[data-game="repair"] .pr-pcie-power { fill: #1d1f24; stroke: #4a4f58; }
+[data-game="repair"] .pr-pin-sq { fill: #3b3f47; }
+[data-game="repair"] .pr-shroud { fill: #23262d; stroke: #0b0c0f; stroke-width: 1; }
+[data-game="repair"] .pr-shroud-accent { fill: none; stroke: #ff5a5a; stroke-width: 3; stroke-linecap: round; }
+[data-game="repair"] .pr-shroud-plate { fill: #2f333c; }
+[data-game="repair"] .pr-rgb { fill: #4dc3ff; }
+[data-game="repair"] .pr-on .pr-rgb { fill: #ff5af0; }
+[data-game="repair"] .pr-fan-sticker { fill: #ff5a5a; stroke: #0b0c0f; stroke-width: 1; }
+[data-game="repair"] .pr-heatpipe-path { fill: none; stroke: #c98f58; stroke-width: 4; stroke-linecap: round; }
+[data-game="repair"] .pr-coldplate { fill: #c98f58; stroke: #8a5a2a; stroke-width: 1; }
+[data-game="repair"] .pr-backplate { fill: #3b3f47; stroke: #1d1f24; stroke-width: 1; }
+[data-game="repair"] .pr-backplate-edge { fill: none; stroke: rgb(255 255 255 / 0.1); stroke-width: 1.4; }
+[data-game="repair"] .pr-plate-vent { fill: #1d1f24; }
+[data-game="repair"] .pr-plate-ridge { fill: none; stroke: rgb(255 255 255 / 0.14); stroke-width: 2; stroke-linejoin: round; }
+[data-game="repair"] .pr-xbracket { fill: #8e98a5; stroke: #5b6170; }
+[data-game="repair"] .pr-xbracket-arms { fill: none; stroke: #8e98a5; stroke-width: 5; stroke-linecap: round; }
+[data-game="repair"] .pr-plate-logo { fill: rgb(255 255 255 / 0.4); }
+[data-game="repair"] .pr-plate-name { fill: rgb(255 255 255 / 0.45); font-size: 8px; font-weight: 800; letter-spacing: 0.1em; }
+
+/* термопаста */
+[data-game="repair"] .pr-paste { fill: #b5bcc6; stroke: #8e98a5; stroke-width: 0.8; }
+[data-game="repair"] .pr-paste-dry { fill: #dad6cc; stroke: #b0a99b; }
+[data-game="repair"] .pr-paste-hi { fill: #fff; opacity: 0.45; }
+[data-game="repair"] .pr-paste-crack { fill: none; stroke: #8f887a; stroke-width: 1; stroke-linecap: round; }
+[data-game="repair"] .pr-wiped { display: none; }
+
+/* ноутбук: крышка на петле */
+[data-game="repair"] .pr-hinge { fill: #1d1f24; }
+[data-game="repair"] .pr-deck-edge { stroke: rgb(0 0 0 / 0.25); stroke-width: 2; }
+[data-game="repair"] .pr-power-key { fill: #2b2e36; }
+[data-game="repair"] .pr-led-dot { fill: #3ddc84; }
+[data-game="repair"] .pr-side-port { fill: #1d1f24; }
+[data-game="repair"] .pr-lid-lip { stroke: rgb(0 0 0 / 0.25); stroke-width: 2; stroke-linecap: round; }
+[data-game="repair"] .pr-svg[data-kind="laptop"] .pr-lid-swing,
+[data-game="repair"] .pr-svg[data-kind="laptop"] .pr-front > [data-slot="display"] {
+  transform-box: view-box; transform-origin: 180px 139px; transition: scale 0.38s cubic-bezier(0.4, 0, 0.2, 1);
+}
+[data-game="repair"] .pr-svg[data-lid="closed"] .pr-lid-swing,
+[data-game="repair"] .pr-svg[data-lid="closed"] .pr-front > [data-slot="display"] { scale: 1 0; }
+[data-game="repair"] .pr-lid-top {
+  transform-box: view-box; transform-origin: 180px 139px; transition: scale 0.38s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease;
+}
+[data-game="repair"] .pr-svg[data-lid="open"] .pr-lid-top { scale: 1 0; opacity: 0; }
+
+/* накладные наушники */
+[data-game="repair"] .pr-band { fill: none; stroke: #2b2e36; stroke-width: 11; stroke-linecap: round; }
+[data-game="repair"] .pr-band-cushion { fill: none; stroke: #4a4f58; stroke-width: 9; stroke-linecap: round; }
+[data-game="repair"] .pr-band-out { stroke: #3b3f47; }
+[data-game="repair"] .pr-band-stitch { fill: none; stroke: rgb(255 255 255 / 0.22); stroke-width: 0.8; stroke-dasharray: 2 2; }
+[data-game="repair"] .pr-band-cap { fill: #3b3f47; }
+[data-game="repair"] .pr-band-text { fill: rgb(255 255 255 / 0.4); font-size: 5px; font-weight: 800; letter-spacing: 0.15em; }
+[data-game="repair"] .pr-crack-light { stroke: #e9ecf0; }
+[data-game="repair"] .pr-slider { fill: #c3cad3; stroke: #8e98a5; stroke-width: 0.6; }
+[data-game="repair"] .pr-slider-ticks { stroke: #6b7280; stroke-width: 0.8; }
+[data-game="repair"] .pr-yoke { fill: none; stroke: #4a4f58; stroke-width: 4; stroke-linecap: round; }
+[data-game="repair"] .pr-pivot { fill: #c3cad3; stroke: #4a4f58; stroke-width: 1; }
+[data-game="repair"] .pr-cup { fill: #2b2e36; }
+[data-game="repair"] .pr-cup-rim { fill: none; stroke: rgb(255 255 255 / 0.12); stroke-width: 1; }
+[data-game="repair"] .pr-cup-trim { fill: none; stroke: #c3cad3; stroke-width: 1.4; opacity: 0.7; }
+[data-game="repair"] .pr-earpad { fill: #34373f; stroke: #1b1d22; stroke-width: 1.4; }
+[data-game="repair"] .pr-earpad-sheen { fill: #fff; opacity: 0.08; }
+[data-game="repair"] .pr-earpad-stitch { fill: none; stroke: rgb(255 255 255 / 0.22); stroke-width: 0.8; stroke-dasharray: 2 2; }
+[data-game="repair"] .pr-earpad-fabric { fill: #1b1d22; }
+[data-game="repair"] .pr-earpad-letter { fill: rgb(255 255 255 / 0.35); font-size: 12px; font-weight: 800; }
+[data-game="repair"] .pr-earpad-worn { fill: none; stroke: #c7a26b; stroke-width: 2.2; stroke-linecap: round; }
+
+/* геймпад */
+[data-game="repair"] .pr-bumper { fill: #3b3f47; }
+[data-game="repair"] .pr-grip-tex { fill: none; stroke: rgb(255 255 255 / 0.08); stroke-width: 6; stroke-linecap: round; }
+[data-game="repair"] .pr-stick-grip { fill: none; stroke: #4a4f58; stroke-width: 1.4; stroke-dasharray: 1.6 1.6; }
+[data-game="repair"] .pr-face-btn { stroke: rgb(0 0 0 / 0.4); stroke-width: 1; }
+[data-game="repair"] .pr-btn-a { fill: #3ddc84; }
+[data-game="repair"] .pr-btn-b { fill: #ff5a5a; }
+[data-game="repair"] .pr-btn-x { fill: #3d8bfd; }
+[data-game="repair"] .pr-btn-y { fill: #ffd23d; }
+[data-game="repair"] .pr-light-bar { stroke: #4dc3ff; stroke-width: 3; stroke-linecap: round; opacity: 0.7; }
+[data-game="repair"] .pr-shell-seam { fill: none; stroke: rgb(255 255 255 / 0.06); stroke-width: 1; }
+
+/* компьютер: Tab и стрелки под полем */
+[data-game="repair"] .pr-field-keys { margin-bottom: 8px; }
+[data-game="repair"] .pr-key-tab { font-size: 13px; }

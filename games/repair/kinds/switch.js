@@ -3,7 +3,7 @@
 // детали прячутся (.pr-face-front). Сзади — крышка на 4 винтах (снимается только без контроллеров), внутри
 // вентилятор, считыватель картриджей, батарея; щель картриджа — на верхнем торце, её чистят кисточкой снаружи.
 
-import { frame, screwHead, hole, plugBody, socket, jackMark, screenStates } from '../scene.js';
+import { frame, pcb, screwHead, hole, plugBody, socket, jackMark, screenStates } from '../scene.js';
 
 const F = frame(30, 40);
 const { box, pt, wrap } = F;
@@ -25,12 +25,9 @@ function frontBody() {
 }
 
 function backBody() {
-  const chips = [[70, 18, 18, 14], [140, 18, 16, 16], [168, 40, 14, 12], [90, 40, 20, 12]]
-    .map(([x, y, w, h]) => `<rect class="pr-chip" x="${x}" y="${y}" width="${w}" height="${h}" rx="2"/>`).join('');
   return wrap(`<rect class="pr-dark-plastic" x="40" y="0" width="220" height="130" rx="10"/>
 <rect class="pr-cavity" x="46" y="6" width="208" height="118" rx="7"/>
-<rect class="pr-pcb" x="52" y="8" width="196" height="56" rx="6"/>
-<path class="pr-trace" d="M60 30h20M130 14v10M170 60h20M236 20v20M100 58h30"/>${chips}
+${pcb(52, 8, 196, 56, 6, 6)}
 ${Object.values(CONNS).map(([x, y]) => socket(x, y)).join('')}
 <rect class="pr-rail" x="38" y="10" width="4" height="110" rx="2"/><rect class="pr-rail" x="258" y="10" width="4" height="110" rx="2"/>${edge(false)}`);
 }

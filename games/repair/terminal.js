@@ -8,6 +8,44 @@ import { act, linked, symptoms, DEVICES, SYMPTOMS } from './logic.js';
 
 export const PROMPT = 'C:\\МАСТЕРСКАЯ>';
 
+export const COMMANDS = ['help', 'devices', 'test', 'list', 'flash', 'clear', 'exit'];
+
+const commonPrefix = (list) => list.reduce((a, b) => {
+  let k = 0;
+  while (k < a.length && a[k] === b[k]) k++;
+  return a.slice(0, k);
+});
+
+/**
+ * Tab: дописать команду или имя файла после flash. Один вариант — подставить целиком; несколько — сначала общее
+ * начало (и список вариантов), следующие нажатия перебирают варианты по кругу. tab — состояние перебора с прошлого
+ * нажатия (сбрасывается любой другой клавишей). → { line, tab, list?, none? }.
+ */
+export function tabComplete(s, line, tab = null) {
+  if (tab && tab.options.length > 1 && line === tab.shown) {
+    const i = (tab.i + 1) % tab.options.length;
+    const next = tab.prefix + tab.options[i];
+    return { line: next, tab: { ...tab, i, shown: next } };
+  }
+  const lower = String(line).toLowerCase().replace(/^\s+/, '');
+  const sp = lower.indexOf(' ');
+  let prefix = '';
+  let token = lower;
+  let options;
+  if (sp < 0) options = COMMANDS.filter((c) => c.startsWith(token));
+  else {
+    const cmd = lower.slice(0, sp);
+    token = lower.slice(sp).trim();
+    prefix = `${cmd} `;
+    options = cmd === 'flash' ? s.fw.files.filter((f) => f.startsWith(token)) : [];
+  }
+  if (!options.length) return { line, tab: null, none: true };
+  if (options.length === 1) return { line: prefix + options[0] + (!prefix && options[0] === 'flash' ? ' ' : ''), tab: null };
+  const common = commonPrefix(options);
+  const next = prefix + (common.length > token.length ? common : options[0]);
+  return { line: next, tab: { prefix, options, i: common.length > token.length ? -1 : 0, shown: next }, list: options };
+}
+
 const HELP = [
   'Команды:',
   '  devices        — что подключено',
@@ -16,6 +54,7 @@ const HELP = [
   '  flash <файл>   — прошить устройство',
   '  clear          — очистить экран',
   '  exit           — отключить кабель',
+  'Tab — дописать команду или имя файла, ↑ ↓ — прошлые команды.',
 ];
 
 /** Приветствие при подключении. */

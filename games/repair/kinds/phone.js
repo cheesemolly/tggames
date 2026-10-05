@@ -2,7 +2,7 @@
 // Сзади — стеклянная крышка на клею с блоком камер, под ней плата под металлическим экраном (4 винта), батарея,
 // внизу планка (2 винта) над динамиком и платой зарядки. Спереди — дисплей на клею.
 
-import { frame, screwHead, hole, plugBody, socket, jackMark, corrosion, screenStates, crackPath, logo, esc } from '../scene.js';
+import { frame, pcb, screwHead, hole, plugBody, socket, jackMark, corrosion, screenStates, crackPath, logo, esc } from '../scene.js';
 
 const F = frame(90, 30);
 const { box, pt, wrap } = F;
@@ -21,13 +21,10 @@ const sideButtons = (left) => (left
 const grille = `<g class="pr-grille">${[0, 1, 2, 3, 4].map((k) => `<circle cx="${120 + k * 7}" cy="376" r="1.6"/><circle cx="${60 - k * 7}" cy="376" r="1.6"/>`).join('')}</g>`;
 
 function backBody() {
-  const chips = [[86, 74, 26, 22], [118, 92, 30, 18], [90, 104, 20, 14], [150, 104, 12, 26], [122, 72, 14, 12], [100, 26, 40, 12]]
-    .map(([x, y, w, h]) => `<rect class="pr-chip" x="${x}" y="${y}" width="${w}" height="${h}" rx="2"/>`).join('');
   return wrap(`<rect class="pr-body" x="0" y="0" width="180" height="380" rx="26"/>
 <rect class="pr-cavity" x="7" y="7" width="166" height="366" rx="20"/>
 <path class="pr-flexline" d="M66 342h-46v-196h22"/>
-<rect class="pr-pcb" x="12" y="12" width="156" height="142" rx="12"/>
-<path class="pr-trace" d="M78 40h20v14M150 40h14M78 120h26l8 -8M140 130h24M160 80v20M110 150v-10"/>${chips}
+${pcb(12, 12, 156, 142, 6, 12)}
 ${Object.values(CONNS).map(([x, y]) => socket(x, y)).join('')}${corrosion(122, 98)}
 <rect class="pr-indicator" x="20" y="334" width="16" height="14" rx="2"/><path class="pr-indicator-x" d="M23 337l10 8M33 337l-10 8"/>
 <rect class="pr-cavity-line" x="16" y="156" width="148" height="166" rx="10"/>

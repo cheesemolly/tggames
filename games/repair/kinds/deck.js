@@ -2,7 +2,7 @@
 // кнопки и тачпады; сзади — крышка на 4 винтах, под ней плата, вентилятор, батарея, диск на винте и модули стиков
 // (каждый на своём винте). Сзади всё зеркально: левый стик — справа.
 
-import { frame, screwHead, hole, plugBody, socket, jackMark, screenStates } from '../scene.js';
+import { frame, pcb, screwHead, hole, plugBody, socket, jackMark, screenStates } from '../scene.js';
 
 const F = frame(15, 36);
 const { box, pt, wrap } = F;
@@ -27,12 +27,9 @@ ${[[285, 64], [297, 76], [285, 88], [273, 76]].map(([x, y]) => `<circle class="p
 }
 
 function backBody() {
-  const chips = [[128, 20, 18, 14], [150, 44, 14, 12], [182, 42, 14, 14], [96, 46, 20, 12]]
-    .map(([x, y, w, h]) => `<rect class="pr-chip" x="${x}" y="${y}" width="${w}" height="${h}" rx="2"/>`).join('');
   return wrap(`<path class="pr-dark-plastic" d="${BODY}"/>
 <path class="pr-cavity" d="M34 8H296A24 24 0 0 1 320 32V94Q320 132 286 132H44Q10 132 10 94V32A24 24 0 0 1 34 8Z"/>
-<rect class="pr-pcb" x="86" y="10" width="160" height="56" rx="8"/>
-<path class="pr-trace" d="M90 30h20M130 14v10M160 60h30M236 20v20M100 58h40"/>${chips}
+${pcb(86, 10, 160, 56, 5, 8)}
 ${Object.values(CONNS).map(([x, y]) => socket(x, y)).join('')}
 <rect class="pr-bay" x="20" y="8" width="54" height="52" rx="6"/><rect class="pr-bay" x="256" y="8" width="54" height="52" rx="6"/>
 ${topEdge(false)}`);
