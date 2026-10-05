@@ -19,7 +19,7 @@ import { createFx } from '../../shared/fx.js';
 import { createAudio } from '../../shared/sfx.js';
 import { createSounds } from './sounds.js';
 import {
-  DEVICES, KINDS, TOOLS, TUTORIAL, UNLOCK, COMPLAINTS, newOrder, act, nextStep, reach, screenOf, starsFor, isValidState,
+  DEVICES, KINDS, TOOLS, TUTORIAL, UNLOCK, SYMPTOMS, complaintsFor, newOrder, act, nextStep, reach, screenOf, starsFor, isValidState,
   normProgress, recordWin, earningsFor, shopParts, stockKey, screwsOf,
 } from './logic.js';
 import { run as runTerminal, greet, PROMPT } from './terminal.js';
@@ -29,8 +29,29 @@ import button from './kinds/button.js';
 import deck from './kinds/deck.js';
 import nswitch from './kinds/switch.js';
 import psp from './kinds/psp.js';
+import earbuds from './kinds/earbuds.js';
+import headphones from './kinds/headphones.js';
+import mouse from './kinds/mouse.js';
+import keyboard from './kinds/keyboard.js';
+import hdd from './kinds/hdd.js';
+import motherboard from './kinds/motherboard.js';
+import gpu from './kinds/gpu.js';
+import cpu from './kinds/cpu.js';
+import tablet from './kinds/tablet.js';
+import laptop from './kinds/laptop.js';
+import watch from './kinds/watch.js';
+import gamepad from './kinds/gamepad.js';
+import powerbank from './kinds/powerbank.js';
+import speaker from './kinds/speaker.js';
+import drone from './kinds/drone.js';
+import vr from './kinds/vr.js';
+import camera from './kinds/camera.js';
+import ereader from './kinds/ereader.js';
 
-const LAYOUTS = { phone, button, deck, switch: nswitch, psp };
+const LAYOUTS = {
+  phone, button, deck, switch: nswitch, psp, earbuds, headphones, mouse, keyboard, hdd, motherboard, gpu, cpu, tablet, laptop,
+  watch, gamepad, powerbank, speaker, drone, vr, camera, ereader,
+};
 const SKINS = ['telegram', 'green', 'blue', 'wood', 'night'];
 const AUTO_HINT = 2;                     // первые заказы — подсказка показывается сама и бесплатно
 const HEAT_MS = 1100;
@@ -40,10 +61,10 @@ const KEYBOARD = ['1234567890', 'qwertyuiop', 'asdfghjkl', 'zxcvbnm._-'];
 
 const T = {
   title: 'Ремонт гаджетов',
-  sub: (level, money) => `Заказ №${level} · ${rub(money)}`,
+  sub: (level, money) => `Заказ №${level} · ${usd(money)}`,
   tools: {
     heat: 'Фен', suction: 'Присоска', screwdriver: 'Отвёртка', spudger: 'Лопатка', tweezers: 'Пинцет', parts: 'Запчасти',
-    brush: 'Кисточка', alcohol: 'Спирт', magnifier: 'Лупа', charger: 'Зарядка', antivirus: 'Антивирус', flash: 'Ноутбук',
+    brush: 'Кисточка', alcohol: 'Спирт', magnifier: 'Лупа', charger: 'Зарядка', antivirus: 'Антивирус', flash: 'ПК',
   },
   toolHints: {
     heat: 'Держи на детали на клею, пока клей не размягчится',
@@ -64,7 +85,15 @@ const T = {
     speaker: 'динамик', port: 'плата зарядки', display: 'экран', fascia: 'передняя панель', keypad: 'клавиатура',
     plate: 'пластина', shell: 'корпус', fan: 'вентилятор', ssd: 'диск', stickL: 'левый стик', stickR: 'правый стик',
     joyL: 'левый контроллер', joyR: 'правый контроллер', cart: 'считыватель картриджей', door: 'дверца батареи',
-    umd: 'привод дисков', nub: 'шишечка',
+    umd: 'привод дисков', nub: 'шишечка', budL: 'левый наушник', budR: 'правый наушник', padL: 'левая амбушюра',
+    padR: 'правая амбушюра', driverL: 'левый динамик', driverR: 'правый динамик', band: 'оголовье', feet: 'ножки',
+    switchL: 'левый микрик', switchR: 'правый микрик', wheel: 'колёсико', keycaps: 'колпачки', switch: 'свитч', case: 'дно корпуса',
+    cable: 'шлейф USB', pcb: 'плата', lid: 'крышка', heads: 'блок головок', platter: 'пластина', cmos: 'батарейка BIOS',
+    ram: 'память', heatsink: 'радиатор', cap: 'конденсатор', shroud: 'кожух', vram: 'видеопамять', cooler: 'кулер',
+    bottom: 'дно', sensor: 'крышка с датчиком', strap: 'ремешок', rumble: 'вибромотор', grille: 'сетка', mic: 'микрофоны',
+    props: 'пропеллеры', motor: 'мотор', gimbal: 'камера с подвесом', cushion: 'накладка', lens: 'объектив', shutter: 'затвор',
+    paste: 'термопаста', pins: 'ножки процессора', crumbs: 'крошки', keys: 'кнопки', slot: 'слот', waxL: 'сетка левого',
+    waxR: 'сетка правого',
   },
   flip: 'Перевернуть',
   hint: 'Подсказка',
@@ -92,6 +121,8 @@ const T = {
     'inside-missing': (by) => `Под ней не всё собрано: ${T.names[by] ?? by}`,
     'no-stock': 'На складе нет — купи в магазине',
     clean: 'Тут и так чисто',
+    'wrong-tool': (need) => `Тут нужен другой инструмент: ${T.tools[need]?.toLowerCase() ?? need}`,
+    'no-battery': 'Тут нечего заряжать',
     'brush-weak': 'Кисточкой не взять — нужен спирт',
     'brush-where': 'Кисточкой чистят пыль',
     'alcohol-dust': 'Это пыль — тут нужна кисточка',
@@ -133,25 +164,34 @@ const T = {
     'joyL-drift': 'Стик левого контроллера стёрт — дрейф',
     'joyR-drift': 'Стик правого контроллера стёрт — дрейф',
     'cart-dead': 'Считыватель картриджей сгорел',
-    'slot-dirty': 'В щели картриджа пыль на контактах',
-    'slot-ok': 'Щель картриджа чистая',
+    'slot-dirty': 'В слоте пыль на контактах',
+    'slot-ok': 'Слот чистый',
     'umd-dead': 'Лазер привода не светит — нужен новый привод',
     'nub-drift': 'Шишечка стёрта — дрейф',
+    'budL-dead': 'Левый наушник не отвечает — плата сгорела',
+    'budR-dead': 'Правый наушник не отвечает — плата сгорела',
+    'waxL-dirty': 'Сеточка левого забита серой', 'waxR-dirty': 'Сеточка правого забита серой',
+    'driverL-torn': 'Мембрана левого динамика порвана', 'driverR-torn': 'Мембрана правого динамика порвана',
+    'padL-worn': 'Амбушюра облезла', 'padR-worn': 'Амбушюра облезла', 'band-cracked': 'Оголовье треснуло пополам',
+    'switchL-double': 'Микрик изношен — двойной клик', 'switchR-double': 'Микрик изношен — двойной клик',
+    'wheel-broken': 'Энкодер колёсика сломан', 'wheel-dirty': 'Энкодер в пыли и волосах', 'lens-dirty': 'Линза в пыли',
+    'feet-worn': 'Ножки стёрлись до пластика', 'keycaps-worn': 'Колпачки стёрлись', 'switch-chatter': 'Контакты свитча дребезжат',
+    'cable-frayed': 'Шлейф перетёрт', 'pcb-dead': 'Плата сгорела', 'crumbs-dirty': 'Под колпачками крошки',
+    'heads-stuck': 'Головки прилипли к пластине — щелчки', 'platter-scratched': 'Пластина в царапинах — битые сектора',
+    'cmos-dead': 'Батарейка BIOS села: 1,9 В', 'ram-dead': 'Чип памяти сгорел', 'cap-swollen': 'Конденсатор вздулся!',
+    'heatsink-dirty': 'Радиатор забит пылью', 'paste-dirty': 'Термопаста высохла в камень', 'vram-dead': 'Чип видеопамяти сгорел',
+    'cooler-grind': 'Подшипник кулера разбит', 'cooler-dirty': 'Кулер забит пылью', 'pins-dirty': 'Ножки погнуты — выпрями пинцетом',
+    'pins-ok': 'Ножки ровные', 'strap-torn': 'Ремешок порван', 'sensor-dirty': 'Датчик пульса в грязи', 'sensor-ok': 'Датчик чистый',
+    'rumble-dead': 'Вибромотор сгорел', 'mic-dead': 'Микрофоны не отвечают', 'grille-dirty': 'Сетка забита пылью',
+    'props-broken': 'Лопасти сломаны', 'motor-burnt': 'Обмотка мотора сгорела', 'gimbal-dead': 'Камера подвеса не отвечает',
+    'cushion-worn': 'Поролон накладки развалился', 'lens-stuck': 'Мотор фокусировки заклинило', 'glass-dirty': 'Стекло объектива мутное',
+    'shutter-stuck': 'Шторки затвора заклинило',
     'bat-loose': 'Разъём батареи отошёл',
     'disp-loose': 'Шлейф экрана отошёл',
     'conn-off': 'Шлейф отключён',
     'conn-ok': 'Шлейф подключён плотно',
   },
   okPart: (p) => `${cap(T.names[p] ?? p)} в порядке`,
-  problems: {
-    swollen: 'батарея вздута', 'no-power': 'не включается', drains: 'сразу гаснет', bootloop: 'висит на логотипе',
-    'no-screen': 'экран не показывает', cracked: 'экран разбит', 'no-charge': 'не заряжается', 'no-sound': 'нет звука',
-    quiet: 'звук глухой', 'no-camera': 'камера не работает', blurry: 'фото мутные', virus: 'вирусы на месте',
-    'no-os': 'система не загружается', 'stick-l': 'левый стик дрейфует', 'stick-r': 'правый стик дрейфует',
-    'joy-l': 'левый контроллер дрейфует', 'joy-r': 'правый контроллер дрейфует', overheat: 'перегревается',
-    noisy: 'вентилятор скрежещет', 'no-cart': 'не читает картриджи', 'no-disc': 'не читает диски', nub: 'шишечка дрейфует',
-    'no-keys': 'кнопки не нажимаются', sticky: 'кнопки залипают',
-  },
   returned: (list) => `Клиент вернулся: ${list}`,
   assemble: (m) => (m.parts.length ? 'Сначала собери: не хватает деталей' : `Сначала собери: ${m.screws} ${plural(m.screws, 'винт', 'винта', 'винтов')} не на месте`),
   heated: 'Клей размягчился',
@@ -161,6 +201,7 @@ const T = {
   dead: 'Не включается',
   blink: 'Включился и сразу погас',
   bootOn: 'Включился — смотри экран',
+  poweredOn: 'Включено',
   scanFound: (n) => `Найдено ${n} ${plural(n, 'вирус', 'вируса', 'вирусов')} — дави жуков!`,
   scanClean: 'Вирусов нет',
   cured: 'Вирусы удалены',
@@ -174,15 +215,15 @@ const T = {
   gotIt: 'Понятно',
   notes: 'Что нашёл',
   noNotes: 'Пока ничего — посмотри лупой, включи, проверь зарядку',
-  pay: (n) => `Оплата ${rub(n)}`,
-  prepaid: (n) => `предоплата ${rub(n)}`,
+  pay: (n) => `Оплата ${usd(n)}`,
+  prepaid: (n) => `предоплата ${usd(n)}`,
   win: (n) => `Заказ №${n} готов!`,
-  earned: (n) => `+${rub(n)}`,
+  earned: (n) => `+${usd(n)}`,
   quotes: ['Как новый! Спасибо!', 'Вы волшебник!', 'Ура, работает!', 'Огонь, спасибо огромное!', 'Буду всем вас советовать!'],
   mistakes: { sparks: 'искры', waste: 'лишние детали', returns: 'возвраты', hints: 'подсказка' },
   clean: 'Без единой ошибки',
   next: 'Следующий клиент',
-  menu: (n, money) => `Починено: ${n} · ${rub(money)}`,
+  menu: (n, money) => `Починено: ${n} · ${usd(money)}`,
   stats: 'Мастерская',
   statRows: ['Починено', 'Заработано всего', 'Звёзд', 'На три звезды', 'Искр за всё время'],
   rank: 'Звание',
@@ -198,9 +239,13 @@ const T = {
   skins: { telegram: 'По умолчанию', green: 'Зелёный', blue: 'Силикон', wood: 'Верстак', night: 'Ночь' },
   options: 'Игра',
   marks: 'Показывать, где работает инструмент',
+  nativeKbd: 'Использовать клавиатуру телефона',
+  nativeKbdNote: 'В компьютере мастера — обычная клавиатура телефона вместо своей',
+  cmdPlaceholder: 'команда, например devices',
+  send: 'Ввод',
   howTo: 'Как играть',
   close: 'Закрыть',
-  pc: 'Ноутбук мастера',
+  pc: 'Компьютер мастера',
   unplug: 'Отключить',
   pcHint: 'Подсказка',
   pcHintLine: (cmd) => `подсказка: ${cmd}`,
@@ -211,7 +256,7 @@ const T = {
     'Выбери инструмент внизу и коснись детали. Фен и присоска снимают детали на клею, отвёртка — винты, лопатка — шлейфы, пинцет — детали.',
     'Прежде чем трогать шлейфы — обесточь: отключи батарею или вынь её. Иначе искра.',
     'Новые детали покупай в магазине 🛒 на деньги за заказы. Ставь только вместо сломанных.',
-    'Прошивка — «Ноутбук» в гнездо: в терминале devices, list и flash <файл>.',
+    'Прошивка — «ПК» в гнездо: в терминале devices, list и flash <файл>.',
     'Собери и нажми «Сдать». Без ошибок — три звезды и чаевые.',
   ],
   play: 'В мастерскую',
@@ -226,7 +271,7 @@ const T = {
     'speaker-dust': ['Глухой звук', 'Включи телефон и послушай мелодию. Глухо — пыль в динамике, он под нижней планкой.'],
     'loose-battery': ['Не включается', 'После падения мог отойти разъём батареи. Вставить его на место — дело секунды.'],
     'camera-glass': ['Мутные фото', 'Посмотри лупой на стёклышко камеры сзади: если треснуло — менять нужно крышку, а не камеру.'],
-    bootloop: ['Висит на логотипе', 'Это программа. Вставь «Ноутбук» в гнездо: в терминале набери devices — узнаешь код модели, list — список прошивок, потом flash и имя самой свежей прошивки этой модели.'],
+    bootloop: ['Висит на логотипе', 'Это программа. Вставь «ПК» в гнездо: в терминале набери devices — узнаешь код модели, list — список прошивок, потом flash и имя самой свежей прошивки этой модели.'],
     'port-broken': ['Сгоревшая зарядка', 'Копоть в гнезде — плата зарядки сгорела. Она под нижней планкой, её шлейф отключай без батареи.'],
     water: ['Утопленник', 'Внутри покраснел индикатор влаги. Обесточь и отмой окисление на плате спиртом.'],
     'speaker-broken': ['Нет звука', 'Мелодии при включении нет совсем — динамик порван. Кисточка тут не поможет.'],
@@ -243,6 +288,24 @@ const T = {
     deck: ['ПарДек', 'Портативный компьютер: крышка на четырёх винтах, внутри батарея со шлейфом, вентилятор, диск и модули стиков.'],
     switch: ['Свичер', 'Приставка с контроллерами по бокам: их снимают пинцетом, крышка — только без них.'],
     psp: ['Карманка', 'Карманная приставка с дисками: батарея за дверцей, корпус — на винтах.'],
+    earbuds: ['Наушники-вкладыши', 'Кейс склеен — фен и присоска. Тихий наушник — сера на сеточке, почисти кисточкой. Молчит совсем — нужен новый.'],
+    mouse: ['Мышь', 'Снизу: дверца с батарейкой и ножки, под ножками — винты. Корпус открывается только без батарейки. Двойной клик — изношенный микрик.'],
+    keyboard: ['Клавиатура', 'Батареи нет — искр не будет. Колпачки снимаются пинцетом, под ними крошки (кисточка) и липкое (спирт). Прошивка — через ПК.'],
+    headphones: ['Накладные наушники', 'Амбушюры снимаются руками. Батарея — в левой чашке: отключи её, прежде чем трогать шлейфы динамиков.'],
+    tablet: ['Планшет', 'Как большой смартфон: крышка на клею, экран платы на винтах, батарея со шлейфом.'],
+    gamepad: ['Геймпад', 'Корпус на четырёх винтах. Сзади всё зеркально: левый стик — справа. Липкие кнопки отмывают изнутри — без батареи.'],
+    powerbank: ['Пауэрбанк', 'Внутри — банки аккумулятора со шлейфом и плата. Вздутые банки — сразу под замену.'],
+    hdd: ['Жёсткий диск', 'Крышка и плата — на винтах. Щелчки — головки, битые сектора — пластина. Команда test на ПК подскажет, что не так.'],
+    watch: ['Умные часы', 'Крышка с датчиком — на клею. Не меряет пульс — почисти датчик кисточкой.'],
+    laptop: ['Ноутбук', 'Дно на винтах, под ним батарея, вентилятор, память и диск. Липкая клавиатура — спирт, спереди.'],
+    speaker: ['Умная колонка', 'Тканевая сетка снимается руками, под ней динамик. Не слышит команды — микрофоны под дном.'],
+    gpu: ['Видеокарта', 'Кожух на винтах → вентиляторы → радиатор → чип. Перегрев: пыль, высохшая термопаста или вентилятор. ПК проверит командой test.'],
+    motherboard: ['Материнская плата', 'Батарейка BIOS, память и радиатор питания с конденсатором под ним. Вздутый конденсатор — под замену.'],
+    cpu: ['Процессор', 'Кулер на винтах, под ним термопаста. Погнутые ножки сзади выпрямляют пинцетом.'],
+    drone: ['Квадрокоптер', 'Сначала пропеллеры, потом крышка на винтах. Батарея снизу съёмная — вынул и можно трогать шлейфы.'],
+    vr: ['VR-шлем', 'Со стороны лица — накладка с линзами, под ней экран. Снаружи панель на винтах: батарея и вентилятор.'],
+    camera: ['Фотоаппарат', 'Объектив снимается, под ним затвор. Экран — сзади. Карта памяти и шлейф экрана — под дверцей батареи.'],
+    ereader: ['Электронная книга', 'Крышка на защёлках, под ней батарея и шлейфы. Экран на клею — спереди.'],
   },
 };
 
@@ -255,7 +318,7 @@ function plural(n, one, few, many) {
   return many;
 }
 
-const rub = (n) => `${String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ')} ₽`;
+const usd = (n) => `$${String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '\u00a0')}`;
 const cap = (t) => t.charAt(0).toUpperCase() + t.slice(1);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const svgIcon = (body) => `<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
@@ -272,7 +335,7 @@ const ICONS = {
   enter: svgIcon('<path d="M20 5v7a3 3 0 0 1-3 3H6"/><path d="m10 11-4 4 4 4"/>'),
 };
 
-const defaultSettings = () => ({ skin: 'telegram', marks: true });
+const defaultSettings = () => ({ skin: 'telegram', marks: true, nativeKbd: false });
 
 let api = null;
 let host = null;
@@ -364,7 +427,7 @@ function buildScene() {
   const dish = (x, y, w, h) => `<rect class="pr-dish" x="${x}" y="${y}" width="${w}" height="${h}" rx="14"/>`;
   const cells = Object.values(l.MAT_CELL).map(([x, y]) => `<circle class="pr-mat-cell" cx="${x}" cy="${y}" r="11"/>`).join('');
   svg.innerHTML = `${defs()}<g class="pr-traybg">${l.DISHES.map((b) => dish(...b)).join('')}
-<rect class="pr-mat" x="${l.MAT.x}" y="${l.MAT.y}" width="${l.MAT.w}" height="${l.MAT.h}" rx="10"/>${cells}</g>
+${cells ? `<rect class="pr-mat" x="${l.MAT.x}" y="${l.MAT.y}" width="${l.MAT.w}" height="${l.MAT.h}" rx="10"/>${cells}` : ''}</g>
 <g class="pr-flipper">
   <g class="pr-side pr-back">${l.backBody(game)}${slots('back')}</g>
   <g class="pr-side pr-front">${l.frontBody(game)}${slots('front')}<g class="pr-bugs"></g></g>
@@ -422,11 +485,14 @@ const HOME = { x: 0, y: 0, s: 1 };
 const placeAt = (cx, cy, tx, ty, s) => ({ x: tx - cx * s, y: ty - cy * s, s });
 const isEdge = (p) => D().parts[p]?.side === 'edge';
 
-/** Место детали на устройстве: у «края» сзади — зеркально. */
+/**
+ * Место детали на устройстве. «Край» сзади — зеркальное отражение относительно центра переворота (scale −1 по X):
+ * левый контроллер встаёт справа и скруглением наружу, а не просто переезжает (владелец, 2026-10-05: «неправильно
+ * выворачиваются контроллеры»).
+ */
 function homePlace(p) {
   if (!isEdge(p) || game.view === 'front') return HOME;
-  const b = L().BOX[p];
-  return { x: 2 * L().origin[0] - 2 * (b.x + b.w / 2), y: 0, s: 1 };
+  return { x: 2 * L().origin[0], y: 0, s: 1, sx: -1 };
 }
 
 /** Рамка детали на сцене сейчас (с учётом стороны у «края»). */
@@ -434,7 +500,7 @@ function boxOf(p) {
   const b = L().BOX[p];
   if (!b) return null;
   const h = homePlace(p);
-  return { x: b.x + h.x, y: b.y, w: b.w, h: b.h };
+  return h.sx === -1 ? { x: h.x - b.x - b.w, y: b.y, w: b.w, h: b.h } : { x: b.x + h.x, y: b.y, w: b.w, h: b.h };
 }
 
 function trayPlace(p) {
@@ -457,9 +523,11 @@ function screwPlace(id) {
   return placeAt(hx, hy, mx, my, 1.3);
 }
 
+const scaleOf = (p) => (p.sx === -1 ? `${-p.s} ${p.s}` : String(+p.s.toFixed(4)));
+
 function setPlace(node, p) {
   node.style.translate = `${p.x.toFixed(2)}px ${p.y.toFixed(2)}px`;
-  node.style.scale = String(+p.s.toFixed(4));
+  node.style.scale = scaleOf(p);
   node._place = p;
 }
 
@@ -486,8 +554,8 @@ async function flyNode(node, to, into, { dur = 420, arc = 26, grow = 1.08 } = {}
     return;
   }
   S.fly.append(node);
-  const mid = { x: (from.x + to.x) / 2, y: Math.min(from.y, to.y) - arc, s: Math.max(from.s, to.s) * grow };
-  const frame = (p) => ({ translate: `${p.x}px ${p.y}px`, scale: String(p.s) });
+  const mid = { x: (from.x + to.x) / 2, y: Math.min(from.y, to.y) - arc, s: Math.max(from.s, to.s) * grow, sx: to.sx ?? from.sx };
+  const frame = (p) => ({ translate: `${p.x}px ${p.y}px`, scale: scaleOf(p) });
   busy++;
   try {
     await animate(node, [frame(from), { ...frame(mid), offset: 0.45 }, frame(to)], { duration: dur, easing: 'cubic-bezier(0.4, 0, 0.3, 1)' });
@@ -500,7 +568,7 @@ async function flyNode(node, to, into, { dur = 420, arc = 26, grow = 1.08 } = {}
 // ---------- сцена: перерисовка по состоянию ----------
 
 function screenMode() {
-  if (!game.parts.display.in) return 'off';
+  if (!game.parts.display?.in) return 'off';
   if (overlay) return overlay;
   const s = screenOf(game);
   return s === 'none' ? 'off' : s;
@@ -523,9 +591,10 @@ function paint() {
   const P = game.parts;
   for (const k of Object.keys(d.spots)) svg.classList.toggle(`pr-d-${k}`, game.dirt[k]);
   for (const k of ['jack', 'speaker', 'board', 'keys', 'fan', 'slot']) if (!(k in d.spots)) svg.classList.remove(`pr-d-${k}`);
+  svg.querySelectorAll('.pr-spot').forEach((n) => n.classList.toggle('pr-spot-on', Boolean(game.dirt[n.dataset.spot])));
   svg.classList.toggle('pr-wet', game.wet);
   svg.classList.toggle('pr-on', game.power);
-  svg.classList.toggle('pr-swollen', P[d.battery].in && P[d.battery].broken === 'swollen');
+  svg.classList.toggle('pr-swollen', Boolean(d.battery) && P[d.battery].in && P[d.battery].broken === 'swollen');
   svg.classList.toggle('pr-burnt', Boolean(d.port) && P[d.port].in && Boolean(P[d.port].broken));
   svg.classList.toggle('pr-no-port', Boolean(d.port) && !P[d.port].in);
   for (const c of Object.keys(d.conns)) {
@@ -536,14 +605,17 @@ function paint() {
   }
   for (const p of Object.keys(game.hot)) S.parts[p].style.setProperty('--heat', String(game.hot[p] ? 1 : heatLevel[p] ?? 0));
   const disp = S.parts.display;
-  disp.dataset.screen = screenMode();
-  disp.dataset.drift = disp.dataset.screen === 'home' ? driftOf() : '';
-  const showAds = d.virus && game.virus > 0 && disp.dataset.screen === 'home';
-  disp.dataset.virus = showAds ? '1' : '0';
-  const now = performance.now();
-  disp.querySelectorAll('.pr-ad').forEach((ad) => ad.classList.toggle('pr-ad-gone', (adsGone.get(ad.dataset.ad) ?? 0) > now));
+  let showAds = false;
+  if (disp) {
+    disp.dataset.screen = screenMode();
+    disp.dataset.drift = disp.dataset.screen === 'home' ? driftOf() : '';
+    showAds = Boolean(d.virus) && game.virus > 0 && disp.dataset.screen === 'home';
+    disp.dataset.virus = showAds ? '1' : '0';
+    const now = performance.now();
+    disp.querySelectorAll('.pr-ad').forEach((ad) => ad.classList.toggle('pr-ad-gone', (adsGone.get(ad.dataset.ad) ?? 0) > now));
+  }
   // жуки видны только на рабочем экране; после перезапуска игры найденные антивирусом — снова на месте
-  S.bugs.style.display = showAds ? '' : 'none';
+  if (S.bugs) S.bugs.style.display = showAds ? '' : 'none';
   if (showAds && game.scanned && !bugs.some((b) => !b.dead)) spawnBugs(game.virus);
   paintTicket();
   paintTools();
@@ -565,7 +637,7 @@ function paintTools() {
 // ---------- клиент ----------
 
 function complaintText() {
-  return game.complaint.map(([f, k]) => COMPLAINTS[f][k]).join(' ');
+  return game.complaint.map(([f, k]) => complaintsFor(game.kind, f)[k]).join(' ');
 }
 
 function setMood(m, ms = 0) {
@@ -623,8 +695,13 @@ function targets() {
   for (const id of Object.keys(d.screws)) if (!s.screws[id]) add(id, circ(l.MAT_CELL[id], 13), 7);
   const btn = viewOf(l.BUTTON);
   if (btn) add('button', rect(btn), 8);
-  add('jack', rect(viewOf(l.JACK)), 5);
-  for (const [k, b] of Object.entries(l.SPOT_BOX ?? {})) add(k, rect(viewOf(b)), 5);
+  const jack = l.JACK && viewOf(l.JACK);
+  if (jack && !d.noJack) add('jack', rect(jack), 5);
+  for (const [k, b] of Object.entries(l.SPOT_BOX ?? {})) {
+    const sb = viewOf(b);
+    const sp = d.spots[k];
+    if (sb && (!sp || sp.under.every((u) => !s.parts[u].in))) add(k, rect(sb), 5);
+  }
   const order = [...(l.ORDER.back ?? []), ...(l.ORDER.front ?? [])];
   for (const [p, ps] of Object.entries(d.parts)) {
     if (!onView(ps.side) || !exposed(p)) continue;
@@ -644,7 +721,7 @@ function targets() {
   if (d.indicator && s.view === 'back' && !s.parts.cover.in) add('indicator', rect(l.BOX.indicator), 5);
   if (s.view === 'front') {
     bugs.forEach((b, k) => { if (!b.dead) add(`bug:${k}`, circ([b.x, b.y], 18), 11); });
-    if (l.ADS && S.parts.display.dataset.virus === '1') {
+    if (l.ADS && S.parts.display?.dataset.virus === '1') {
       const now = performance.now();
       l.ADS.forEach((pt, k) => { if ((adsGone.get(String(k)) ?? 0) <= now) add(`ad:${k}`, circ(pt, 13), 10); });
     }
@@ -720,20 +797,21 @@ function centerOf(target, slot = false) {
   const l = L();
   if (d.screws[target]) return game.screws[target] ? l.SCREW_AT[target] : l.MAT_CELL[target];
   if (d.conns[target]) return l.CONN_AT[target];
-  if (target === 'jack') return center(viewOf(l.JACK));
-  if (target === 'button') return center(viewOf(l.BUTTON) ?? l.BUTTON.front ?? l.BUTTON.back);
-  if (target === 'screen') return center(l.SCREEN);
+  if (target === 'jack') return center(viewOf(l.JACK) ?? l.JACK?.back ?? l.JACK?.front ?? boxOf(Object.keys(d.parts)[0]));
+  if (target === 'button') return center(viewOf(l.BUTTON) ?? l.BUTTON?.front ?? l.BUTTON?.back ?? boxOf(Object.keys(d.parts)[0]));
+  if (target === 'screen') return center(l.SCREEN ?? boxOf(Object.keys(d.parts)[0]));
   if (target === 'bug') {
     const b = bugs.find((x) => !x.dead);
-    return b ? [b.x, b.y] : center(l.SCREEN);
+    return b ? [b.x, b.y] : centerOf('screen');
   }
   if (d.parts[target]) {
     if (!game.parts[target].in && !slot) return [l.TRAY[target].cx, l.TRAY[target].cy];
     return center(boxOf(target));
   }
-  if (l.SPOT_AT?.[target]) return viewOf(l.SPOT_AT[target]);
+  if (l.SPOT_AT?.[target]) return viewOf(l.SPOT_AT[target]) ?? l.SPOT_AT[target].front ?? l.SPOT_AT[target].back;
+  if (l.SPOT_BOX?.[target]) return center(viewOf(l.SPOT_BOX[target]) ?? l.SPOT_BOX[target].front ?? l.SPOT_BOX[target].back);
   if (l.BOX[target]) return center(l.BOX[target]);
-  return center(l.SCREEN);
+  return centerOf('screen');
 }
 
 // ---------- подсветки: куда подходит инструмент, подсказка ----------
@@ -746,13 +824,13 @@ function applicable(t, target) {
     case 'suction': return Boolean(d.parts[target]?.glue) && P[target].in;
     case 'screwdriver': return Boolean(d.screws[target]);
     case 'spudger': return Boolean(d.conns[target]);
-    case 'tweezers': return Boolean(d.parts[target]) && !d.parts[target].glue;
+    case 'tweezers': return (Boolean(d.parts[target]) && !d.parts[target].glue) || d.spots[target]?.tool === 'tweezers';
     case 'parts': return Boolean(d.parts[target]) && !P[target].in && d.parts[target].price > 0;
     case 'brush':
     case 'alcohol': return Object.entries(d.spots).some(([k, sp]) => sp.tool === t && (k === target || sp.part === target));
     case 'charger':
-    case 'flash': return target === 'jack';
-    case 'antivirus': return Boolean(d.virus) && target === 'display' && P.display.in && game.power;
+    case 'flash': return target === 'jack' && !d.noJack;
+    case 'antivirus': return Boolean(d.virus) && target === 'display' && P.display?.in && game.power;
     default: return false;
   }
 }
@@ -874,7 +952,7 @@ function innerOf(target) {
 /** Нельзя: мягкий «бум», покачивание и объяснение. */
 function refuse(r, target) {
   const w = T.why[r.why];
-  const text = typeof w === 'function' ? w(r.by) : w ?? '';
+  const text = typeof w === 'function' ? w(r.by ?? r.need) : w ?? '';
   if (r.why === 'flip') {
     ui.flipBtn.classList.add('pr-hinted');
     later(() => ui?.flipBtn.classList.remove('pr-hinted'), 1600);
@@ -1150,6 +1228,9 @@ async function cable(kind, out = false) {
   }
 }
 
+/** Нужно ли перевернуть к экрану (у фотоаппарата экран сзади; без экрана — не нужно). */
+const needFlipToScreen = () => Boolean(D().parts.display) && game.view !== D().parts.display.side;
+
 /** Включение: логотип, потом экран; мелодия — по состоянию динамика. */
 async function bootSequence() {
   const P = game.parts;
@@ -1173,14 +1254,15 @@ async function doPower() {
   busy++;
   try {
     if (r.on) {
-      if (game.view !== 'front') await flip();
+      if (needFlipToScreen()) await flip();
       await bootSequence();
-      if (screenOf(game) !== 'home') bubble(T.bootOn, centerOf('screen'), 1400);
+      if (D().parts.display && screenOf(game) !== 'home') bubble(T.bootOn, centerOf('screen'), 1400);
+      else if (!D().parts.display) bubble(T.poweredOn, centerOf('button'), 1400, 'good');
     } else if (r.dead) {
       sfx('click', {}, 0);
       bubble(T.dead, at, 1600, 'bad');
     } else if (r.blink) {
-      if (game.view !== 'front') await flip();
+      if (needFlipToScreen()) await flip();
       overlay = 'empty';
       paint();
       sfx('blink', {}, 0);
@@ -1475,9 +1557,30 @@ async function openPc() {
     kb('Стереть', 'pr-key-fn', () => typeKey('Backspace'), ICONS.back),
     kb('Ввод', 'pr-key-enter', () => typeKey('Enter'), ICONS.enter));
   pc.box = { screen, line };
+  // клавиатура телефона (настройка): поле вверху окна, своя кнопка «Ввод» и Enter
+  const field = settings.nativeKbd ? el('input', {
+    class: 'pr-cmd-input', type: 'text', autocomplete: 'off', autocapitalize: 'off', spellcheck: false, enterKeyHint: 'send',
+    placeholder: T.cmdPlaceholder, maxLength: 48,
+  }) : null;
+  const form = field && el('form', {
+    class: 'pr-cmd-form', novalidate: true,
+    onsubmit: (e) => {
+      e.preventDefault();
+      if (!pc || pc.busy) return;
+      pc.input = field.value.toLowerCase();
+      field.value = '';
+      submitPc();
+    },
+  }, field, el('button', { class: 'btn pr-cmd-send', type: 'submit', onmousedown: (e) => e.preventDefault() }, T.send));
+  field?.addEventListener('input', () => {
+    if (!pc) return;
+    pc.input = field.value.toLowerCase();
+    paintTerm();
+  });
   const box = card(T.pc,
+    form,
     el('div', { class: 'pr-monitor' }, screen, line),
-    el('div', { class: 'pr-kbd' }, keys, bottom),
+    field ? null : el('div', { class: 'pr-kbd' }, keys, bottom),
     el('div', { class: 'pr-pc-actions' },
       el('button', { class: 'btn btn-secondary pr-pc-btn', onclick: () => pcHint() }, T.pcHint),
       el('button', { class: 'btn pr-pc-btn', onclick: () => closePc() }, T.unplug)),
@@ -1486,6 +1589,7 @@ async function openPc() {
   box.querySelector('.pr-card-head .pr-icon-btn').addEventListener('click', () => closePc(true));
   openModal(box);
   paintTerm();
+  if (field) later(() => field.focus(), 60);
   if (tutorialAuto() || (TUTORIAL[game.level] && TUTORIAL[game.level][1] === 'bootloop')) pcHint(true);
 }
 
@@ -1617,7 +1721,7 @@ function showShop(want = '') {
     },
   }, DEVICES[k].name));
   function render() {
-    money.textContent = rub(progress.money);
+    money.textContent = usd(progress.money);
     const rows = shopParts(kind).map((p) => {
       const price = DEVICES[kind].parts[p].price;
       const n = progress.stock[stockKey(kind, p)] ?? 0;
@@ -1629,7 +1733,7 @@ function showShop(want = '') {
           buyPart(kind, p, row);
           render();
         },
-      }, rub(price));
+      }, usd(price));
       row.append(btn);
       return row;
     });
@@ -1664,13 +1768,13 @@ async function onDeliver() {
     api.platform.haptic.notification('error');
     setMood('sad', 2400);
     starShake();
-    toast.show(T.returned(r.problems.map((k) => T.problems[k] ?? k).join(', ')), 2600);
+    toast.show(T.returned(r.problems.map((k) => SYMPTOMS[k] ?? k).join(', ')), 2600);
     after();
     return;
   }
   busy++;
   try {
-    if (game.view !== 'front') await flip();
+    if (needFlipToScreen()) await flip();
     overlay = '';
     await bootSequence();
   } finally {
@@ -1834,7 +1938,7 @@ function rankOf(stars) {
 }
 
 function showStats() {
-  const vals = [progress.level - 1, rub(progress.earned), progress.stars, progress.perfect, progress.sparks];
+  const vals = [progress.level - 1, usd(progress.earned), progress.stars, progress.perfect, progress.sparks];
   openModal(card(T.stats,
     el('div', { class: 'pr-rank' }, el('span', {}, T.rank), el('b', {}, rankOf(progress.stars))),
     el('div', { class: 'pr-table' }, T.statRows.map((label, k) => el('div', { class: 'pr-row' }, el('span', {}, label), el('b', {}, String(vals[k]))))),
@@ -1854,17 +1958,22 @@ function showSettings() {
       sfx('click');
     },
   }, el('span', { class: 'pr-swatch' }, el('span', { class: 'pr-swatch-phone' })), el('span', { class: 'pr-skin-name' }, T.skins[id])));
-  const input = el('input', { type: 'checkbox', checked: settings.marks });
-  input.addEventListener('change', () => {
-    settings.marks = input.checked;
-    saveSettings();
-    paintMarks();
-  });
+  const toggle = (key, label, after = () => {}) => {
+    const input = el('input', { type: 'checkbox', checked: settings[key] });
+    input.addEventListener('change', () => {
+      settings[key] = input.checked;
+      saveSettings();
+      after();
+    });
+    return el('label', { class: 'pr-toggle' }, input, el('span', {}, label));
+  };
   openModal(card(T.settings,
     el('h3', { class: 'pr-section' }, T.skin),
     el('div', { class: 'pr-skins', role: 'radiogroup' }, skins),
     el('h3', { class: 'pr-section' }, T.options),
-    el('label', { class: 'pr-toggle' }, input, el('span', {}, T.marks)),
+    toggle('marks', T.marks, paintMarks),
+    toggle('nativeKbd', T.nativeKbd),
+    el('p', { class: 'pr-note pr-toggle-note' }, T.nativeKbdNote),
     el('button', { class: 'btn btn-secondary pr-play', onclick: showRules }, T.howTo),
   ));
 }
@@ -1889,6 +1998,10 @@ function actionButton(icon, label, onclick, cls = '') {
 function onKeydown(e) {
   if (pc) {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.target?.tagName === 'INPUT') {
+      if (e.key === 'Escape') closePc();
+      return;
+    }
     if (e.key === 'Escape') closePc();
     else if (e.key === 'Enter' || e.key === 'Backspace' || e.key === 'ArrowUp') typeKey(e.key);
     else if (/^[a-z0-9._\- ]$/i.test(e.key)) typeKey(e.key.toLowerCase());
@@ -1936,6 +2049,7 @@ export default {
       settings = {
         skin: SKINS.includes(savedSettings.skin) ? savedSettings.skin : 'telegram',
         marks: savedSettings.marks !== false,
+        nativeKbd: savedSettings.nativeKbd === true,
       };
     }
 

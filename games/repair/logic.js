@@ -9,19 +9,23 @@
 // Прошивка: кабель от компьютера в гнездо, в терминале — нужный файл для этой модели (terminal.js).
 
 import {
-  DEVICES, KINDS, FAULT_DEFS, FAULTS, COMPLAINTS, TUTORIAL, UNLOCK, pickKind, connOwner, coveredBy, screwsOf, shopParts,
-  stockKey,
+  DEVICES, KINDS, FAULT_DEFS, FAULTS, COMPLAINTS, TUTORIAL, UNLOCK, SYMPTOMS, pickKind, connOwner, coveredBy, screwsOf,
+  shopParts, stockKey, complaintsFor, faultParts,
 } from './devices.js';
 
-export { DEVICES, KINDS, FAULTS, FAULT_DEFS, COMPLAINTS, TUTORIAL, UNLOCK, shopParts, stockKey, screwsOf };
+export { DEVICES, KINDS, FAULTS, FAULT_DEFS, COMPLAINTS, TUTORIAL, UNLOCK, SYMPTOMS, shopParts, stockKey, screwsOf, complaintsFor };
 
 export const TOOLS = ['heat', 'suction', 'screwdriver', 'spudger', 'tweezers', 'parts', 'brush', 'alcohol', 'magnifier', 'charger', 'antivirus', 'flash'];
 export const COLORS = ['graphite', 'white', 'mint', 'lavender', 'coral', 'blue', 'yellow', 'red'];
+/** Клиенты: имя и пол — по нему причёска (у женщин — длинные волосы или пучок, у мужчин — коротко, кепка, лысина). */
 export const NAMES = [
-  'Аня', 'Борис', 'Вика', 'Гоша', 'Даша', 'Егор', 'Женя', 'Зоя', 'Илья', 'Катя', 'Лёша', 'Маша', 'Никита', 'Оля',
-  'Петя', 'Рита', 'Саша', 'Тимур', 'Уля', 'Фёдор', 'Баба Валя', 'Дед Миша',
+  ['Аня', 'f'], ['Вика', 'f'], ['Даша', 'f'], ['Зоя', 'f'], ['Катя', 'f'], ['Маша', 'f'], ['Оля', 'f'], ['Рита', 'f'],
+  ['Уля', 'f'], ['Женя', 'f'], ['Баба Валя', 'f', 'old'], ['Борис', 'm'], ['Гоша', 'm'], ['Егор', 'm'], ['Илья', 'm'],
+  ['Лёша', 'm'], ['Никита', 'm'], ['Петя', 'm'], ['Тимур', 'm'], ['Фёдор', 'm'], ['Саша', 'm'], ['Дед Миша', 'm', 'old'],
 ];
-export const START_MONEY = 1500;
+export const HAIR_F = [1, 2];                     // длинные, пучок
+export const HAIR_M = [0, 3, 4];                  // коротко, кепка, почти лысый
+export const START_MONEY = 100;
 
 /** Генератор случайных чисел по зерну (mulberry32): один заказ — одно зерно. */
 export function seeded(seed) {
@@ -105,15 +109,8 @@ export function newOrder(level, only = null, forceKind = null) {
     level,
     kind,
     model: { name: model.name, code: model.code, logo: model.logo, color: pick(rng, COLORS), cams: rng() < 0.5 ? 2 : 3 },
-    customer: {
-      name: pick(rng, NAMES),
-      skin: Math.floor(rng() * 4),
-      hair: Math.floor(rng() * 5),
-      hairColor: Math.floor(rng() * 5),
-      bg: Math.floor(rng() * 6),
-      glasses: rng() < 0.3,
-    },
-    complaint: faults.map((f) => [f, Math.floor(rng() * COMPLAINTS[f].length)]),
+    customer: customerFor(rng),
+    complaint: faults.map((f) => [f, Math.floor(rng() * complaintsFor(kind, f).length)]),
     crack: { x: 0.25 + rng() * 0.5, y: 0.2 + rng() * 0.5, seed: Math.floor(rng() * 1e9) },
     fw: firmware(kind, model, rng),
     faults,
@@ -146,39 +143,65 @@ export function newOrder(level, only = null, forceKind = null) {
 
 export const bugsFor = (level) => Math.min(8, 3 + Math.floor(level / 8));
 
+/** Клиент: внешность по полу и возрасту имени (у стариков — седина, у деда — борода). */
+function customerFor(rng) {
+  const [name, gender, age] = pick(rng, NAMES);
+  const old = age === 'old';
+  return {
+    name,
+    gender,
+    old,
+    skin: Math.floor(rng() * 4),
+    hair: pick(rng, gender === 'f' ? HAIR_F : HAIR_M),
+    hairColor: old ? 4 : Math.floor(rng() * 4),
+    bg: Math.floor(rng() * 6),
+    glasses: old || rng() < 0.25,
+    beard: gender === 'm' && (old || rng() < 0.2),
+  };
+}
+
 function applyFault(s, f) {
   const def = FAULT_DEFS[f];
   if (def.soft === 'virus') s.virus = bugsFor(s.level);
   if (def.soft === 'bootloop') s.bootloop = true;
-  if (def.part) s.parts[def.part].broken = def.value;
+  for (const p of faultParts(f)) s.parts[p].broken = def.value;
   if (def.conn) s.conns[def.conn] = 'loose';
   if (def.spot) s.dirt[def.spot] = true;
   if (def.wet) s.wet = true;
 }
 
-/** Оплата заказа: работа плюс детали с наценкой, кругло до 50. */
+/** Оплата заказа в долларах: работа плюс детали с наценкой, кругло до 5. */
 export function payFor(kind, faults) {
   let sum = 0;
   for (const f of faults) {
-    const def = FAULT_DEFS[f];
-    sum += def.labor;
-    if (def.part) sum += DEVICES[kind].parts[def.part].price * 1.3;
+    sum += FAULT_DEFS[f].labor;
+    for (const p of faultParts(f)) sum += DEVICES[kind].parts[p].price * 1.3;
   }
-  return Math.round(sum / 50) * 50;
+  return Math.max(5, Math.round(sum / 5) * 5);
 }
 
 // ---------- состояние устройства ----------
 
-/** Есть питание от батареи (для искр): батарея стоит и её шлейф подключён (у съёмной — просто стоит). */
+/**
+ * Есть питание от батареи (для искр): батарея стоит и её шлейф подключён (у съёмной — просто стоит). У устройств без
+ * батареи (комплектующие ПК, клавиатура, колонка) питание даёт стенд при проверке — на столе они обесточены.
+ */
 export function powered(s) {
   const d = spec(s);
+  if (!d.battery) return false;
   if (!s.parts[d.battery].in) return false;
-  const c = P(s, d.battery).conn;
+  const c = batConnOf(s);
   return c ? s.conns[c] === 'on' : true;
 }
 
 /** Включится ли: питание есть и плата не залита. Изношенная батарея гаснет сразу. */
-export const canPower = (s) => powered(s) && !s.dirt.board;
+export const canPower = (s) => (spec(s).battery ? powered(s) : true) && !s.dirt.board;
+
+/** Шлейф батареи ('' — батарея съёмная или её нет). */
+const batConnOf = (s) => (spec(s).battery ? P(s, spec(s).battery).conn : '');
+
+/** Батарея устройства (или null — без батареи). */
+const batteryOf = (s) => (spec(s).battery ? s.parts[spec(s).battery] : null);
 
 export function chargeOk(s) {
   const d = spec(s);
@@ -193,7 +216,7 @@ const osOk = (s) => !s.parts.ssd || (s.parts.ssd.in && !s.parts.ssd.broken && !s
 
 /** Что на экране включённого устройства: none, dark, flicker, logo, noos, home. */
 export function screenOf(s) {
-  if (!s.power || !s.parts.display.in) return 'none';
+  if (!s.power || !s.parts.display?.in) return 'none';
   if (s.conns.disp === 'loose') return 'flicker';
   if (s.conns.disp !== 'on') return 'dark';
   if (s.bootloop) return 'logo';
@@ -215,13 +238,13 @@ export function missing(s) {
 export function symptoms(s) {
   const d = spec(s);
   const out = new Set();
-  const bat = s.parts[d.battery];
-  if (bat.in && bat.broken === 'swollen') out.add('swollen');
+  const bat = batteryOf(s);
+  if (bat?.in && bat.broken === 'swollen') out.add('swollen');
   if (!canPower(s)) {
     out.add('no-power');
     return [...out];
   }
-  if (bat.broken === 'worn') out.add('drains');
+  if (bat?.broken === 'worn') out.add('drains');
   if (s.bootloop) out.add('bootloop');
   for (const [p, ps] of Object.entries(d.parts)) {
     if (!ps.miss && !ps.bad) continue;
@@ -232,7 +255,7 @@ export function symptoms(s) {
   }
   if (s.blank) out.add('no-os');
   for (const [k, sp] of Object.entries(d.spots)) if (s.dirt[k] && sp.sym) out.add(sp.sym);
-  if (!chargeOk(s)) out.add('no-charge');
+  if (d.battery && !d.noJack && !chargeOk(s)) out.add('no-charge');
   if (s.virus > 0 && !s.bootloop) out.add('virus');
   return [...out];
 }
@@ -244,7 +267,7 @@ export const starsFor = (s) => Math.max(1, (s.hints ? 2 : 3) - s.sparks - s.wast
 export function earningsFor(s) {
   const st = starsFor(s);
   const tip = st === 3 ? 0.15 : st === 2 ? 0.05 : 0;
-  return Math.max(0, Math.round((s.pay * (1 + tip) - s.prepaid) / 10) * 10);
+  return Math.max(0, Math.round(s.pay * (1 + tip) - s.prepaid));
 }
 
 // ---------- доступ ----------
@@ -259,7 +282,7 @@ export function sideOf(s, target) {
   if (d.screws[target]) return d.parts[d.screws[target]].side;
   if (d.conns[target]) return d.conns[target].side;
   if (d.spots[target]) return d.spots[target].side;
-  if (target === 'screen' || target === 'bug') return 'front';
+  if (target === 'screen' || target === 'bug') return d.parts.display?.side ?? 'front';
   if (target === 'indicator') return 'back';
   return 'any';
 }
@@ -290,7 +313,7 @@ export function reach(s, target) {
     const by = firstIn(s, d.spots[target].under);
     return by ? { why: 'blocked', by } : null;
   }
-  if (target === 'screen') return s.parts.display.in ? null : { why: 'no-part' };
+  if (target === 'screen') return s.parts.display?.in ? null : { why: 'no-part' };
   if (target === 'indicator') {
     const by = firstIn(s, d.spots.board?.under.slice(0, 1) ?? []);
     return by ? { why: 'blocked', by } : null;
@@ -336,8 +359,8 @@ function clean(s, tool, t) {
   const r = reach(s, t);
   if (r) return refuseReach(r);
   if (sp.part && !s.parts[sp.part].in) return no('no-part');
-  if (sp.tool !== tool) return no(s.dirt[t] ? (tool === 'brush' ? 'brush-weak' : 'alcohol-dust') : 'clean');
   if (!s.dirt[t]) return no('clean');
+  if (sp.tool !== tool) return no('wrong-tool', { need: sp.tool });
   const spark = Boolean(sp.power) && powered(s);
   if (spark) s.sparks++;
   s.dirt[t] = false;
@@ -389,7 +412,7 @@ const ACTIONS = {
     const r = reach(s, t);
     if (r) return refuseReach(r);
     if (!s.parts[connOwner(s.kind, t)].in) return no('no-part');
-    const batConn = P(s, d.battery).conn;
+    const batConn = batConnOf(s);
     const spark = t !== batConn && powered(s);
     if (spark) s.sparks++;
     const st = s.conns[t] === 'on' ? 'off' : 'on';
@@ -401,6 +424,7 @@ const ACTIONS = {
   tweezers(s, t) {
     const d = spec(s);
     if (d.screws[t]) return no('use-screwdriver');
+    if (d.spots[t]?.tool === 'tweezers') return clean(s, 'tweezers', t);
     if (!d.parts[t]) return no('tweezers-where');
     const part = s.parts[t];
     if (!part.in) return install(s, t, false, null);
@@ -449,7 +473,8 @@ const ACTIONS = {
   },
 
   charger(s, t) {
-    if (t !== 'jack') return no('charger-where');
+    if (t !== 'jack' || spec(s).noJack) return no('charger-where');
+    if (!spec(s).battery) return no('no-battery');
     return yes({ charge: chargeOk(s) && powered(s) });
   },
 
@@ -474,7 +499,7 @@ const ACTIONS = {
 
   /** Прошивка файлом с компьютера: t — имя файла. */
   flash(s, t) {
-    if (!linked(s)) return no('no-link');
+    if (spec(s).noJack || !linked(s)) return no('no-link');
     const file = String(t ?? '').trim().toLowerCase();
     if (!s.fw.files.includes(file)) return no('no-file');
     const m = /^(.+)_v(\d+)\.(\d+)\.(\w+)$/.exec(file);
@@ -498,7 +523,7 @@ const ACTIONS = {
       return yes({ on: false });
     }
     if (!canPower(s)) return yes({ on: false, dead: true });
-    if (s.parts[spec(s).battery].broken === 'worn') return yes({ on: false, blink: true });
+    if (batteryOf(s)?.broken === 'worn') return yes({ on: false, blink: true });
     s.power = true;
     return yes({ on: true, screen: screenOf(s) });
   },
@@ -536,7 +561,7 @@ export function inspect(s, t) {
     const st = s.parts[t];
     if (!st.in) return 'ok';
     if (st.broken) return `${t}-${st.broken}`;
-    if (s.parts[d.battery].broken === 'swollen' && d.parts[d.battery].blockers.includes(t)) return 'cover-bulge';
+    if (d.battery && s.parts[d.battery].broken === 'swollen' && d.parts[d.battery].blockers.includes(t)) return 'cover-bulge';
     const spot = Object.keys(d.spots).find((k) => (k === t || d.spots[k].part === t) && s.dirt[k] && d.spots[k].side !== 'any');
     if (spot) return `${spot}-dirty`;
     return `ok:${t}`;
@@ -590,19 +615,19 @@ function clear(s, list) {
 /** Обесточить: отключить шлейф батареи или вынуть съёмную. */
 function cutPower(s) {
   const d = spec(s);
-  const c = P(s, d.battery).conn;
+  const c = batConnOf(s);
   return c ? connOff(s, c) : takeOut(s, d.battery);
 }
 
 function connOff(s, c) {
   if (s.conns[c] === 'off') return null;
-  const batConn = P(s, spec(s).battery).conn;
+  const batConn = batConnOf(s);
   return clear(s, spec(s).conns[c].under) ?? (c !== batConn && powered(s) ? cutPower(s) : null) ?? step(s, 'spudger', c);
 }
 
 function connOn(s, c) {
   if (s.conns[c] === 'on' || !s.parts[connOwner(s.kind, c)].in) return null;
-  const batConn = P(s, spec(s).battery).conn;
+  const batConn = batConnOf(s);
   return clear(s, spec(s).conns[c].under) ?? (c !== batConn && powered(s) ? cutPower(s) : null) ?? step(s, 'spudger', c);
 }
 
@@ -671,7 +696,7 @@ export function isValidState(s) {
     if (!Array.isArray(s.faults) || !s.faults.every((f) => d.faults.includes(f))) return false;
     if (!s.model || typeof s.model.name !== 'string' || !COLORS.includes(s.model.color)) return false;
     if (!s.customer || typeof s.customer.name !== 'string') return false;
-    if (!Array.isArray(s.complaint) || !s.complaint.every(([f, k]) => COMPLAINTS[f]?.[k])) return false;
+    if (!Array.isArray(s.complaint) || !s.complaint.every(([f, k]) => complaintsFor(s.kind, f)?.[k])) return false;
     if (!s.fw || typeof s.fw.code !== 'string' || !Array.isArray(s.fw.files) || typeof s.fw.newest !== 'string') return false;
     if (s.view !== 'back' && s.view !== 'front') return false;
     const parts = Object.keys(d.parts);
@@ -697,7 +722,7 @@ export function isValidState(s) {
 }
 
 /** Прогресс: следующий заказ, звёзды, на три звезды, искры, деньги, склад запчастей, заработано за всё время. */
-export const emptyProgress = () => ({ level: 1, stars: 0, perfect: 0, sparks: 0, money: START_MONEY, earned: 0, stock: {} });
+export const emptyProgress = () => ({ level: 1, stars: 0, perfect: 0, sparks: 0, money: START_MONEY, earned: 0, stock: {}, usd: true });
 
 export function isValidProgress(p) {
   return Boolean(p) && typeof p === 'object' && Number.isInteger(p.level) && p.level >= 1
@@ -706,10 +731,19 @@ export function isValidProgress(p) {
     && (p.stock === undefined || (p.stock && typeof p.stock === 'object' && Object.values(p.stock).every(isCount)));
 }
 
-/** Прогресс из сохранения: старый (до денег) дополняется стартовыми деньгами и пустым складом. */
+/**
+ * Прогресс из сохранения: старый (до денег) дополняется стартовыми деньгами и пустым складом; рубли (до 2026-10-05,
+ * без отметки usd) переводятся в доллары — 20 к 1, не меньше стартовых.
+ */
 export function normProgress(p) {
   if (!isValidProgress(p)) return emptyProgress();
-  return { ...emptyProgress(), ...p, stock: { ...(p.stock ?? {}) } };
+  const out = { ...emptyProgress(), ...p, stock: { ...(p.stock ?? {}) } };
+  if (p.usd !== true) {
+    out.money = p.money === undefined ? START_MONEY : Math.max(START_MONEY, Math.round(p.money / 20));
+    out.earned = Math.round((p.earned ?? 0) / 20);
+    out.usd = true;
+  }
+  return out;
 }
 
 /** Записать сданный заказ. → { stars, earned }. */

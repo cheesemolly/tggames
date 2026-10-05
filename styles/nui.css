@@ -74,6 +74,7 @@
 .nui [data-cat="board"] { --c: #2f7ff0; --cl: #7fb6ff; }
 .nui [data-cat="quiz"] { --c: #10a38e; --cl: #4be0c6; }
 .nui [data-cat="music"] { --c: #e0368c; --cl: #ff86c3; }
+.nui [data-cat="chill"] { --c: #4d9a1f; --cl: #a3e635; }
 .nui [data-cat="fav"] { --c: #ff4f7b; --cl: #ff8fab; }
 
 /* «Меньше анимаций» из шторки настроек — как системная настройка (styles/app.css) */

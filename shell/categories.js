@@ -17,7 +17,7 @@ export const categories = [
     title: 'Головоломки',
     hint: 'Подумать не спеша',
     color: '--cat-puzzles',
-    games: ['match3', 'sudoku', 'killer-sudoku', 'nonogram', 'minesweeper', 'fifteen', 'rubik', 'hanoi', 'repair', 'loop', 'connect-dots', 'mahjong', 'klondike', 'spider', '2048', 'memory'],
+    games: ['match3', 'sudoku', 'killer-sudoku', 'nonogram', 'minesweeper', 'fifteen', 'rubik', 'hanoi', 'loop', 'connect-dots', 'mahjong', 'klondike', 'spider', '2048', 'memory'],
   },
   {
     id: 'arcade',
@@ -39,6 +39,14 @@ export const categories = [
     hint: 'Проверить, что знаешь',
     color: '--cat-quiz',
     games: ['flags'],
+  },
+  {
+    // игры без рейтинга — просто поиграть в своё удовольствие (решение владельца, 2026-10-05)
+    id: 'chill',
+    title: 'Для души',
+    hint: 'Без спешки и соревнований',
+    color: '--cat-chill',
+    games: ['repair'],
   },
   {
     id: 'music',

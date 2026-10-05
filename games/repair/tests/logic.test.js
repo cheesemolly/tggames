@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import {
   DEVICES, KINDS, FAULTS, FAULT_DEFS, COMPLAINTS, TUTORIAL, UNLOCK, newOrder, act, nextStep, symptoms, assembled,
   isValidState, starsFor, emptyProgress, isValidProgress, normProgress, recordWin, faultsFor, seeded, goodFirmware,
-  stockKey, shopParts, earningsFor, START_MONEY,
+  stockKey, shopParts, earningsFor, START_MONEY, SYMPTOMS, complaintsFor,
 } from '../logic.js';
 import { run } from '../terminal.js';
 
@@ -38,8 +38,10 @@ test('описания устройств согласованы: шлейфы, 
   for (const kind of KINDS) {
     const d = DEVICES[kind];
     const parts = Object.keys(d.parts);
-    assert.ok(d.parts[d.battery], kind);
-    assert.ok(d.parts.display, `${kind}: экран`);
+    assert.ok(!d.battery || d.parts[d.battery], kind);
+    if (d.virus) assert.ok(d.parts.display, `${kind}: антивирусу нужен экран`);
+    assert.ok(Boolean(d.noJack) !== Boolean(d.spots.jack), `${kind}: гнездо`);
+    if (d.faults.includes('bootloop')) assert.ok(!d.noJack, `${kind}: прошивка без гнезда`);
     for (const [p, ps] of Object.entries(d.parts)) {
       for (const b of ps.blockers) assert.ok(parts.includes(b), `${kind}.${p}: ${b}`);
       if (ps.conn) assert.ok(d.conns[ps.conn], `${kind}.${p}: шлейф ${ps.conn}`);
@@ -63,6 +65,14 @@ test('описания устройств согласованы: шлейфы, 
     assert.ok(d.models.length && d.models.every((m) => /^[A-Z0-9-]+$/.test(m.code)), kind);
   }
   for (const f of FAULTS) assert.ok(COMPLAINTS[f]?.length >= 2, f);
+  for (const kind of KINDS) for (const f of DEVICES[kind].faults) assert.ok(complaintsFor(kind, f)?.length >= 2, `${kind} ${f}`);
+  for (const kind of KINDS) {
+    const d = DEVICES[kind];
+    const syms = [...Object.values(d.parts).flatMap((p) => [p.miss, p.bad]), ...Object.values(d.spots).map((x) => x.sym)].filter(Boolean);
+    for (const k of syms) assert.ok(SYMPTOMS[k], `${kind}: нет текста «${k}»`);
+  }
+  for (const k of ['swollen', 'no-power', 'drains', 'bootloop', 'no-os', 'no-charge', 'virus']) assert.ok(SYMPTOMS[k], k);
+  assert.ok(KINDS.every((k) => UNLOCK[k] >= 1 && UNLOCK[k] < 60), 'каждое устройство когда-нибудь приходит');
   for (const [lv, [kind, f]] of Object.entries(TUTORIAL)) {
     assert.ok(DEVICES[kind].faults.includes(f), `${lv}: ${kind} ${f}`);
     assert.ok(UNLOCK[kind] <= Number(lv), `${lv}: ${kind} ещё закрыт`);
@@ -171,7 +181,7 @@ test('съёмная батарея: искра, пока стоит; вынул
 
 test('склад: без детали не поставить; покупка — за деньги или предоплатой клиента', () => {
   const s = newOrder(2);                           // разбитый экран смартфона
-  const w = wallet(1000);
+  const w = wallet(30);
   for (let k = 0; k < 60; k++) {
     const st = nextStep(s, w);
     if (st.tool === 'buy') break;
@@ -180,17 +190,17 @@ test('склад: без детали не поставить; покупка �
   assert.deepEqual(nextStep(s, w), { tool: 'buy', target: 'display' });
   assert.equal(act(s, 'parts', 'display', w).why, 'no-stock');
   const r = act(s, 'buy', 'display', w);
-  assert.ok(r.prepaid, 'денег 1000, экран 1200 — предоплата');
-  assert.equal(w.money, 1000);
-  assert.equal(s.prepaid, 1200);
+  assert.ok(r.prepaid, 'денег $30, экран $60 — предоплата');
+  assert.equal(w.money, 30);
+  assert.equal(s.prepaid, 60);
   assert.equal(w.stock['phone-display'], 1);
   assert.ok(act(s, 'parts', 'display', w).ok);
   assert.equal(w.stock['phone-display'], 0);
   solve(s, w);
-  assert.equal(earningsFor(s), Math.round((s.pay * 1.15 - 1200) / 10) * 10);
-  const w2 = wallet(5000);
+  assert.equal(earningsFor(s), Math.round(s.pay * 1.15 - 60));
+  const w2 = wallet(500);
   act(newOrder(2), 'buy', 'display', w2);
-  assert.equal(w2.money, 3800);
+  assert.equal(w2.money, 440);
 });
 
 test('новая деталь вместо исправной — минус звезда и деталь со склада', () => {
@@ -277,7 +287,7 @@ test('вирусы: антивирус на включённом смартфо�
 });
 
 test('сохранение: битое не принимается', () => {
-  const s = newOrder(30);
+  const s = newOrder(30, ['screen-crack'], 'phone');
   assert.ok(isValidState(s));
   for (const broke of [
     (x) => { x.v = 1; },
@@ -314,4 +324,10 @@ test('прогресс: уровень, звёзды, деньги; старый
   assert.equal(old.money, START_MONEY);
   assert.deepEqual(old.stock, {});
   assert.deepEqual(normProgress({ level: 0 }), emptyProgress());
+  // рубли из прошлой версии — в доллары, 20 к 1
+  const rub = normProgress({ level: 30, stars: 80, perfect: 20, sparks: 1, money: 21390, earned: 25000, stock: { 'phone-display': 1 } });
+  assert.equal(rub.money, 1070);
+  assert.equal(rub.earned, 1250);
+  assert.equal(rub.usd, true);
+  assert.equal(normProgress(rub).money, 1070, 'второй раз не делится');
 });

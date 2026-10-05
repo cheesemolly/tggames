@@ -802,3 +802,178 @@
   [data-game="repair"] .pr-kbd, [data-game="repair"] .pr-kbd-row { gap: 3px; }
   [data-game="repair"] .pr-term { height: 120px; }
 }
+
+/* ---------- новые устройства (2026-10-05) ---------- */
+
+/* пятна: пыль, сера, крошки, липкое — видны, когда пятно грязное (.pr-spot-on ставит код по data-spot) */
+[data-game="repair"] .pr-spot { fill: var(--dust); stroke: var(--dust); stroke-width: 1.4; stroke-linecap: round; opacity: 0; transition: opacity 0.5s ease; pointer-events: none; }
+[data-game="repair"] .pr-spot.pr-spot-on { opacity: 0.95; }
+[data-game="repair"] .pr-spot-sticky { fill: #a8742c; stroke: none; }
+[data-game="repair"] .pr-spot-sticky.pr-spot-on { opacity: 0.6; }
+[data-game="repair"] .pr-spot[data-spot="waxL"], [data-game="repair"] .pr-spot[data-spot="waxR"] { fill: #c9a24a; stroke: #c9a24a; }
+[data-game="repair"] .pr-spot[data-spot="paste"] { fill: #9aa3ae; }
+[data-game="repair"] .pr-spot[data-spot="jack"] .pr-oxide, [data-game="repair"] .pr-oxide { fill: #6b8f55; }
+[data-game="repair"] .pr-crack-dark { fill: none; stroke: rgb(0 0 0 / 0.6); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+[data-game="repair"] .pr-dark-text { fill: rgb(0 0 0 / 0.45); }
+[data-game="repair"] .pr-worn { opacity: 0.55; }
+
+/* наушники */
+[data-game="repair"] .pr-case-tray { fill: #f1f2f4; }
+[data-game="repair"] .pr-case-led { fill: #3ddc84; }
+[data-game="repair"] .pr-bud-stem, [data-game="repair"] .pr-bud-head { fill: #fbfbfc; stroke: rgb(0 0 0 / 0.18); stroke-width: 1; }
+[data-game="repair"] .pr-bud-mesh { fill: #3b3f47; }
+[data-game="repair"] .pr-bud-led { fill: #3ddc84; }
+[data-game="repair"] .pr-band { stroke: #2b2e36; stroke-width: 12; stroke-linecap: round; }
+[data-game="repair"] .pr-band-pad { stroke: #555b66; stroke-width: 8; stroke-linecap: round; }
+[data-game="repair"] .pr-band-in { fill: #555b66; }
+[data-game="repair"] .pr-cup { fill: #2b2e36; }
+[data-game="repair"] .pr-cup-out { stroke: rgb(0 0 0 / 0.25); stroke-width: 1; }
+[data-game="repair"] .pr-earpad { fill: #3b3f47; stroke: #1b1d22; stroke-width: 2; }
+[data-game="repair"] .pr-earpad-hole { fill: #1b1d22; }
+[data-game="repair"] .pr-earpad-worn { fill: none; stroke: #c7a26b; stroke-width: 2.4; stroke-linecap: round; }
+[data-game="repair"] .pr-driver { fill: #1b1d22; stroke: #4a4f58; stroke-width: 2; }
+[data-game="repair"] .pr-cone { fill: #2b2e36; stroke: #4a4f58; stroke-width: 1; }
+[data-game="repair"] .pr-cone-cap { fill: #4a4f58; }
+
+/* мышь, клавиатура */
+[data-game="repair"] .pr-mouse-body { fill: var(--dark-plastic); stroke: rgb(0 0 0 / 0.3); stroke-width: 1; }
+[data-game="repair"] .pr-mouse-split { fill: none; stroke: rgb(0 0 0 / 0.3); stroke-width: 1.4; }
+[data-game="repair"] .pr-wheel-cap, [data-game="repair"] .pr-wheel { fill: #3b3f47; stroke: #1b1d22; stroke-width: 1; }
+[data-game="repair"] .pr-wheel-grip { stroke: #6b7280; stroke-width: 1.2; }
+[data-game="repair"] .pr-sensor { fill: #ff4d6d; opacity: 0.85; }
+[data-game="repair"] .pr-sensor-hole { fill: #1b1d22; }
+[data-game="repair"] .pr-feet { fill: #e9ecf0; stroke: rgb(0 0 0 / 0.2); stroke-width: 0.8; }
+[data-game="repair"] .pr-aa { fill: #2b2e36; }
+[data-game="repair"] .pr-aa-band { fill: #e5484d; }
+[data-game="repair"] .pr-micro { fill: #1b1d22; }
+[data-game="repair"] .pr-micro-btn { fill: #e5484d; }
+[data-game="repair"] .pr-plate { fill: #6b7280; }
+[data-game="repair"] .pr-switch-stem { fill: #e5484d; }
+[data-game="repair"] .pr-keycap { fill: #eef0f3; stroke: rgb(0 0 0 / 0.25); stroke-width: 0.8; }
+[data-game="repair"] .pr-keycap-acc { fill: #ffb627; }
+[data-game="repair"] .pr-keycap-flat { fill: #2b2e36; stroke: #1b1d22; }
+[data-game="repair"] .pr-switch-body { fill: #1b1d22; }
+[data-game="repair"] .pr-switch-top { fill: #3b3f47; }
+[data-game="repair"] .pr-switch-cross { stroke: #e5484d; stroke-width: 2.4; }
+[data-game="repair"] .pr-foot { fill: #1b1d22; }
+
+/* жёсткий диск, материнка, видеокарта, процессор */
+[data-game="repair"] .pr-metal-casting { fill: #9aa3ae; stroke: #6b7480; stroke-width: 1; }
+[data-game="repair"] .pr-hdd-well { fill: #6b7480; }
+[data-game="repair"] .pr-spindle { fill: #c3cad3; }
+[data-game="repair"] .pr-lid { stroke: #6b7480; stroke-width: 1; }
+[data-game="repair"] .pr-hdd-label { fill: #fbfbfa; stroke: rgb(0 0 0 / 0.1); }
+[data-game="repair"] .pr-hdd-text { fill: #2b2e36; font-size: 11px; font-weight: 800; }
+[data-game="repair"] .pr-hdd-small { font-size: 8px; font-weight: 600; }
+[data-game="repair"] .pr-platter { fill: #dfe4ea; stroke: #9aa3ae; stroke-width: 1; }
+[data-game="repair"] .pr-scratch { fill: none; stroke: #6b7480; stroke-width: 1.4; }
+[data-game="repair"] .pr-actuator { fill: #3b3f47; }
+[data-game="repair"] .pr-arm { fill: #8e98a5; stroke: #4a4f58; stroke-width: 0.8; }
+[data-game="repair"] .pr-head { fill: #2b2e36; }
+[data-game="repair"] .pr-sata { fill: #1b1d22; }
+[data-game="repair"] .pr-solder { fill: #c9ced6; }
+[data-game="repair"] .pr-socket-cpu { fill: #d9dde3; stroke: #8e98a5; }
+[data-game="repair"] .pr-slot-ram, [data-game="repair"] .pr-pcie { fill: #1b1d22; }
+[data-game="repair"] .pr-cmos-holder { fill: #6b7480; }
+[data-game="repair"] .pr-coin { fill: #dfe4ea; stroke: #8e98a5; stroke-width: 1.4; }
+[data-game="repair"] .pr-coin-text { fill: #4a4f58; font-size: 5px; font-weight: 800; }
+[data-game="repair"] .pr-ram { fill: #1f5641; stroke: #123828; }
+[data-game="repair"] .pr-fin { fill: rgb(0 0 0 / 0.22); }
+[data-game="repair"] .pr-cap { fill: #3b6fd6; stroke: #1d3f86; stroke-width: 1; }
+[data-game="repair"] .pr-cap-cross { stroke: #c9ced6; stroke-width: 1.4; }
+[data-game="repair"] .pr-cap-bulge { fill: #8fb3ff; stroke: #c74a3a; stroke-width: 1.4; }
+[data-game="repair"] .pr-vram-pad { fill: #d4a64a; opacity: 0.5; }
+[data-game="repair"] .pr-die { fill: #3b3f47; stroke: #8e98a5; }
+[data-game="repair"] .pr-shroud-hole { fill: #0b0c0f; }
+[data-game="repair"] .pr-shroud-line { stroke: #ffb627; stroke-width: 3; stroke-linecap: round; }
+[data-game="repair"] .pr-heatsink { fill: #c3cad3; stroke: #8e98a5; }
+[data-game="repair"] .pr-heatpipe { fill: #c98f58; }
+[data-game="repair"] .pr-cpu-sub { fill: #1f5641; stroke: #123828; }
+[data-game="repair"] .pr-pin { fill: #d4a64a; }
+[data-game="repair"] .pr-bent { fill: none; stroke: #d4a64a; stroke-width: 2.4; stroke-linecap: round; }
+[data-game="repair"] .pr-spot[data-spot="pins"] { fill: none; stroke: none; }
+[data-game="repair"] .pr-cpu-mark { fill: #d4a64a; }
+[data-game="repair"] .pr-ihs { fill: #d9dde3; stroke: #8e98a5; stroke-width: 1.4; }
+[data-game="repair"] .pr-ihs-text { fill: #2b2e36; font-size: 10px; font-weight: 800; }
+[data-game="repair"] .pr-ihs-small { font-size: 7px; font-weight: 600; }
+
+/* ноутбук, планшет, часы, геймпад, пауэрбанк, колонка */
+[data-game="repair"] .pr-taskbar { fill: rgb(0 0 0 / 0.4); }
+[data-game="repair"] .pr-kbd-well { fill: #1b1d22; }
+[data-game="repair"] .pr-touchpad { fill: rgb(0 0 0 / 0.12); stroke: rgb(0 0 0 / 0.2); }
+[data-game="repair"] .pr-ring-a { fill: none; stroke: #ff5a7a; stroke-width: 5; stroke-dasharray: 130 70; }
+[data-game="repair"] .pr-ring-b { fill: none; stroke: #3ddc84; stroke-width: 5; stroke-dasharray: 90 70; }
+[data-game="repair"] .pr-watch-time { fill: #fff; font-size: 13px; font-weight: 800; }
+[data-game="repair"] .pr-watch-sub { fill: #ff5a7a; font-size: 8px; font-weight: 700; }
+[data-game="repair"] .pr-strap { fill: #3b3f47; stroke: #1b1d22; }
+[data-game="repair"] .pr-strap-hole { fill: #1b1d22; }
+[data-game="repair"] .pr-sensor-glass { fill: #1b1d22; stroke: #4a4f58; stroke-width: 2; }
+[data-game="repair"] .pr-sensor-led { fill: #3ddc84; }
+[data-game="repair"] .pr-sensor-pd { fill: #6b7280; }
+[data-game="repair"] .pr-home-btn { fill: #3b3f47; stroke: #ffb627; stroke-width: 1.4; }
+[data-game="repair"] .pr-motor { fill: #8e98a5; }
+[data-game="repair"] .pr-weight { fill: #6b7480; }
+[data-game="repair"] .pr-cell18650 { fill: #3d8bfd; stroke: #1d4f9c; }
+[data-game="repair"] .pr-cell-top { fill: #c3cad3; }
+[data-game="repair"] .pr-cell-wrap { fill: #f3c64c; }
+[data-game="repair"] .pr-pb-led { fill: rgb(0 0 0 / 0.3); }
+[data-game="repair"] .pr-pb-led.on { fill: #3ddc84; }
+[data-game="repair"] .pr-fabric { fill: #5b6170; }
+[data-game="repair"] .pr-fabric-dots { fill: rgb(0 0 0 / 0.35); }
+[data-game="repair"] .pr-light-ring { fill: none; stroke: #4dc3ff; stroke-width: 3; opacity: 0.7; }
+[data-game="repair"] .pr-rubber-foot { fill: rgb(0 0 0 / 0.12); }
+[data-game="repair"] .pr-mic-hole { fill: #1b1d22; }
+
+/* квадрокоптер, шлем, фотоаппарат, книга */
+[data-game="repair"] .pr-arm-frame { fill: none; stroke: var(--dark-plastic); stroke-width: 12; stroke-linecap: round; }
+[data-game="repair"] .pr-motor-mount, [data-game="repair"] .pr-motor-can { fill: #3b3f47; stroke: #1b1d22; }
+[data-game="repair"] .pr-motor-top { fill: #8e98a5; }
+[data-game="repair"] .pr-leg { fill: #1b1d22; }
+[data-game="repair"] .pr-prop { fill: rgb(220 228 238 / 0.8); stroke: #6b7280; stroke-width: 1; }
+[data-game="repair"] .pr-prop-hub { fill: #2b2e36; }
+[data-game="repair"] .pr-gimbal { fill: #2b2e36; }
+[data-game="repair"] .pr-led-strip { fill: #3ddc84; }
+[data-game="repair"] .pr-vr-eye { fill: #12243f; }
+[data-game="repair"] .pr-foam { fill: #3b3f47; }
+[data-game="repair"] .pr-sd-slot { fill: #1b1d22; }
+[data-game="repair"] .pr-spot[data-spot="slot"] { fill: none; stroke: var(--lint); stroke-width: 3; }
+[data-game="repair"] .pr-grip { fill: rgb(0 0 0 / 0.25); }
+[data-game="repair"] .pr-mount { fill: #3b3f47; stroke: #c3cad3; stroke-width: 2; }
+[data-game="repair"] .pr-sensor-plate { fill: #3d5a8c; }
+[data-game="repair"] .pr-lens-barrel { fill: #1b1d22; stroke: #3b3f47; stroke-width: 2; }
+[data-game="repair"] .pr-lens-ring2 { fill: #2b2e36; stroke: #6b7280; stroke-width: 1.4; stroke-dasharray: 3 2; }
+[data-game="repair"] .pr-shutter { fill: #1b1d22; }
+[data-game="repair"] .pr-shutter-blade { fill: #3b3f47; }
+[data-game="repair"] .pr-photo-hill { fill: #2fae66; opacity: 0.85; }
+[data-game="repair"] .pr-eink { fill: #e9e7df; }
+[data-game="repair"] .pr-eink-line { fill: #8e8c85; }
+[data-game="repair"] .pr-eink-page { fill: #6b6a64; font-size: 8px; font-weight: 700; }
+[data-game="repair"] .pr-eink-glass { fill: #2b2e36; }
+
+/* клиент: пол */
+[data-game="repair"] .pr-av-hair-back { fill: var(--hair); }
+[data-game="repair"] .pr-av-beard { fill: var(--hair); opacity: 0.9; }
+[data-game="repair"] .pr-av-lash { fill: none; stroke: #1f1a17; stroke-width: 0.9; stroke-linecap: round; }
+[data-game="repair"] .pr-av-f .pr-av-mouth { stroke: #d23c5a; }
+[data-game="repair"] .pr-av-f .pr-av-mouth-open { fill: #d23c5a; }
+[data-game="repair"] .pr-av-f .pr-av-shirt { fill: #e65a9a; }
+[data-game="repair"] .pr-av-neckline { fill: var(--skin); }
+[data-game="repair"] .pr-av-collar { fill: #fff; opacity: 0.8; }
+
+/* компьютер: клавиатура телефона */
+[data-game="repair"] .pr-cmd-form { display: flex; gap: 6px; margin-bottom: 8px; }
+[data-game="repair"] .pr-cmd-input {
+  flex: 1;
+  width: 0;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 16px;
+}
+[data-game="repair"] .pr-cmd-form .pr-cmd-send { flex: none; width: auto; padding: 0 16px; }
+[data-game="repair"] .pr-toggle-note { margin-top: 2px; padding-left: 30px; }

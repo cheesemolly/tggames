@@ -96,7 +96,7 @@ export const RULES = [
   ['game:repair:current', { type: 'level', at: 'level' }],
   // деньги и склад запчастей — расходуемое: заработал/купил на одном устройстве, потратил на другом — сходится
   ['game:repair:progress', { type: 'fields', fields: {
-    level: 'max', stars: 'count', perfect: 'count', sparks: 'count', earned: 'count', money: { spend: 1500 }, 'stock.*': { spend: 0 },
+    level: 'max', stars: 'count', perfect: 'count', sparks: 'count', earned: 'count', money: { spend: 100 }, 'stock.*': { spend: 0 },
   } }],
   ['game:repair:seen', { type: 'fields', fields: { '': 'union' } }],
   ['game:hanoi:stats', { type: 'fields', fields: { '*.played': 'count', '*.wins': 'count', '*.perfect': 'count', '*.bestMoves': 'min', '*.bestTime': 'min' } }],

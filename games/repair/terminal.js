@@ -1,15 +1,17 @@
 // Терминал компьютера мастерской: устройство подключено кабелем, команды набираются на своей клавиатуре.
-//   help — команды; devices — что подключено (модель, версия, состояние); list — файлы прошивок в папке;
+//   help — команды; devices — что подключено (модель, версия, состояние); test — что не работает (диагностика,
+//   без названия поломки); list — файлы прошивок в папке;
 //   flash <файл> — прошить; clear — очистить; exit — отключить кабель.
 // Прошивка подходит только своей модели и только самая свежая версия (сломанная уже стоит). Без DOM — для тестов.
 
-import { act, linked, DEVICES } from './logic.js';
+import { act, linked, symptoms, DEVICES, SYMPTOMS } from './logic.js';
 
 export const PROMPT = 'C:\\МАСТЕРСКАЯ>';
 
 const HELP = [
   'Команды:',
   '  devices        — что подключено',
+  '  test           — проверить, что не работает',
   '  list           — файлы прошивок',
   '  flash <файл>   — прошить устройство',
   '  clear          — очистить экран',
@@ -70,6 +72,13 @@ export function run(s, line) {
           { t: `[USB] ${s.fw.code}   ${DEVICES[s.kind].name}`, c: 'ok' },
           { t: `      прошивка ${s.blank || s.parts.ssd?.broken ? '—' : s.fw.installed}   ${status(s)}`, c: 'ok' }],
       };
+    case 'test':
+    case 'check': {
+      if (!linked(s)) return { out: [...out, ...MESSAGES['no-link'].map((t) => ({ t, c: 'warn' }))] };
+      const bad = symptoms(s);
+      if (!bad.length) return { out: [...out, { t: 'Проверка: всё работает.', c: 'ok' }] };
+      return { out: [...out, { t: 'Проверка нашла:', c: 'dim' }, ...bad.map((k) => ({ t: `  ✗ ${SYMPTOMS[k] ?? k}`, c: 'err' }))] };
+    }
     case 'list':
     case 'ls':
     case 'dir':

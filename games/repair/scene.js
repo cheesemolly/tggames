@@ -199,13 +199,20 @@ const MOUTH = {
 export function avatar(c, mood = 'calm') {
   const glasses = c.glasses ? '<g class="pr-av-glasses"><circle cx="19.5" cy="21" r="3.6"/><circle cx="28.5" cy="21" r="3.6"/><path d="M23 21h2"/></g>' : '';
   const brows = mood === 'sad' || mood === 'shock' ? '<path class="pr-av-brow" d="M17 16.5l4-1M31 16.5l-4-1"/>' : '<path class="pr-av-brow" d="M17 16l4-0.6M31 16l-4-0.6"/>';
-  return `<svg viewBox="0 0 48 48" aria-hidden="true" class="pr-av pr-av-skin-${c.skin} pr-av-hair-${c.hairColor}">
-<circle class="pr-av-bg pr-av-bg-${c.bg}" cx="24" cy="24" r="24"/>
-<path class="pr-av-shirt" d="M8 48c1-9 7-13 16-13s15 4 16 13Z"/>
+  // пол клиента (с 2026-10-05): у женщин — волосы и за спиной, ресницы, помада, блузка с вырезом; у мужчин — борода
+  const f = c.gender === 'f';
+  const back = f && c.hair === 1 ? '<path class="pr-av-hair-back" d="M12.5 21c0 10 2 17 4.5 20h14c2.5-3 4.5-10 4.5-20Z"/>' : '';
+  const lashes = f ? '<path class="pr-av-lash" d="M17.6 19.4l-1.4-1.1M18.6 19l-0.6-1.4M30.4 19.4l1.4-1.1M29.4 19l0.6-1.4"/>' : '';
+  const beard = c.beard ? '<path class="pr-av-beard" d="M13.6 22c0.6 9 5 14 10.4 14s9.8-5 10.4-14c-1.6 3-4.4 4.6-10.4 4.6S15.2 25 13.6 22Z"/>' : '';
+  const shirt = f ? '<path class="pr-av-shirt" d="M8 48c1-9 7-13 16-13s15 4 16 13Z"/><path class="pr-av-neckline" d="M19 35l5 6 5-6"/>'
+    : '<path class="pr-av-shirt" d="M8 48c1-9 7-13 16-13s15 4 16 13Z"/><path class="pr-av-collar" d="M19 35l5 4 5-4"/>';
+  return `<svg viewBox="0 0 48 48" aria-hidden="true" class="pr-av pr-av-${f ? 'f' : 'm'} pr-av-skin-${c.skin} pr-av-hair-${c.hairColor}">
+<circle class="pr-av-bg pr-av-bg-${c.bg}" cx="24" cy="24" r="24"/>${back}
+${shirt}
 <rect class="pr-av-skin" x="20.5" y="29" width="7" height="8" rx="3"/>
-<circle class="pr-av-skin" cx="24" cy="21" r="11"/>
+<circle class="pr-av-skin" cx="24" cy="21" r="11"/>${beard}
 <g class="pr-av-hair">${HAIR[c.hair % HAIR.length]}</g>
-<circle class="pr-av-eye" cx="19.5" cy="21" r="1.4"/><circle class="pr-av-eye" cx="28.5" cy="21" r="1.4"/>
+<circle class="pr-av-eye" cx="19.5" cy="21" r="1.4"/><circle class="pr-av-eye" cx="28.5" cy="21" r="1.4"/>${lashes}
 ${brows}<g class="pr-av-mouth">${MOUTH[mood] ?? MOUTH.calm}</g>${glasses}
 <circle class="pr-av-cheek" cx="16.5" cy="25" r="2"/><circle class="pr-av-cheek" cx="31.5" cy="25" r="2"/>
 </svg>`;
@@ -247,3 +254,108 @@ export const TOOL_ICONS = {
 };
 
 export const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+
+// ---------- набор для устройств: шаблоны лотков и частые детали ----------
+
+/** Лотки «вертикального» устройства (слева большой, справа коврик и мелочь) и «горизонтального» (снизу). */
+export const PORTRAIT = {
+  DISHES: [[4, 6, 82, 428], [276, 112, 80, 322]],
+  MAT: { x: 278, y: 8, w: 74, h: 96 },
+  CELLS: [[296, 26], [334, 26], [296, 56], [334, 56], [296, 86], [334, 86]],
+  SLOT: {
+    L1: { cx: 45, cy: 74, w: 72, h: 128 }, L2: { cx: 45, cy: 214, w: 72, h: 128 }, L3: { cx: 45, cy: 352, w: 74, h: 140 },
+    R1: { cx: 315, cy: 156, w: 70, h: 80 }, R2: { cx: 315, cy: 236, w: 60, h: 60 }, R3: { cx: 315, cy: 296, w: 72, h: 44 },
+    R4: { cx: 315, cy: 352, w: 66, h: 52 }, R5: { cx: 315, cy: 408, w: 66, h: 44 },
+  },
+};
+export const LANDSCAPE = {
+  DISHES: [[6, 206, 226, 228], [238, 206, 116, 228]],
+  MAT: { x: 242, y: 210, w: 108, h: 90 },
+  CELLS: [[262, 230], [296, 230], [330, 230], [262, 256], [296, 256], [330, 256], [262, 282], [296, 282], [330, 282]],
+  SLOT: {
+    A1: { cx: 119, cy: 246, w: 210, h: 70 }, A2: { cx: 119, cy: 320, w: 200, h: 62 },
+    B1: { cx: 52, cy: 398, w: 84, h: 52 }, B2: { cx: 128, cy: 398, w: 58, h: 52 }, B3: { cx: 194, cy: 398, w: 62, h: 52 },
+    C1: { cx: 270, cy: 340, w: 44, h: 56 }, C2: { cx: 322, cy: 340, w: 44, h: 56 }, C3: { cx: 296, cy: 404, w: 100, h: 40 },
+  },
+};
+
+/** Раскладка лотков: tray — { деталь: имя места шаблона }, винты — по порядку в ячейки коврика. */
+export function trayLayout(T, tray, screws) {
+  return {
+    DISHES: T.DISHES,
+    MAT: T.MAT,
+    MAT_CELL: Object.fromEntries(screws.map((id, k) => [id, T.CELLS[k]])),
+    TRAY: Object.fromEntries(Object.entries(tray).map(([p, slot]) => [p, T.SLOT[slot]])),
+  };
+}
+
+/** Плата с дорожками и чипами. */
+export function pcb(x, y, w, h, n = 4, rx = 6) {
+  let chips = '';
+  for (let k = 0; k < n; k++) {
+    const cw = 10 + ((k * 7) % 12);
+    const cx = x + 6 + ((k * 37) % Math.max(10, w - cw - 12));
+    const cy = y + 6 + ((k * 23) % Math.max(10, h - 22));
+    chips += `<rect class="pr-chip" x="${cx}" y="${cy}" width="${cw}" height="${8 + (k % 3) * 4}" rx="1.5"/>`;
+  }
+  return `<rect class="pr-pcb" x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}"/>`
+    + `<path class="pr-trace" d="M${x + 4} ${y + h * 0.5}h${w * 0.3}v${-h * 0.2}M${x + w * 0.5} ${y + h - 4}v${-h * 0.25}h${w * 0.3}"/>${chips}`;
+}
+
+/** Аккумулятор с наклейкой: вздутый — выпуклый, изношенный — с надписью износа. */
+export function cell(x, y, w, h, s, part = 'battery', label = 'Li-ion') {
+  const b = s.parts[part]?.broken;
+  const body = b === 'swollen'
+    ? `<rect class="pr-battery" x="${x - 2}" y="${y - 2}" width="${w + 4}" height="${h + 4}" rx="${Math.min(w, h) * 0.3}"/><ellipse class="pr-battery-hi" cx="${x + w * 0.4}" cy="${y + h * 0.4}" rx="${w * 0.3}" ry="${h * 0.22}"/>`
+    : `<rect class="pr-battery" x="${x}" y="${y}" width="${w}" height="${h}" rx="${Math.min(6, w * 0.1)}"/>`;
+  const lw = w * 0.76;
+  const lh = Math.min(h * 0.6, 40);
+  const fs = Math.max(5, Math.min(9, lw / 10));
+  return `${body}<rect class="pr-battery-label" x="${x + (w - lw) / 2}" y="${y + (h - lh) / 2}" width="${lw}" height="${lh}" rx="3"/>`
+    + `<text class="pr-battery-text" style="font-size:${fs}px" x="${x + w / 2}" y="${y + h / 2 - fs * 0.2}" text-anchor="middle">${label}</text>`
+    + `<text class="pr-battery-text" style="font-size:${fs}px" x="${x + w / 2}" y="${y + h / 2 + fs * 1.1}" text-anchor="middle">${b === 'worn' ? 'ИЗНОС 60%' : '3.7 V'}</text>`;
+}
+
+/** Вентилятор: рамка, кольцо, лопасти (крутятся, когда включено), пыль; сломанный — с трещиной. */
+export function fanAt(cx, cy, r, broken = false, spot = 'fan') {
+  const blades = [0, 1, 2, 3, 4, 5, 6].map((k) => `<path class="pr-blade" transform="rotate(${k * 51.4} ${cx} ${cy})" d="M${cx} ${cy}c${r * 0.2}-${r * 0.48} ${r * 0.57}-${r * 0.76} ${r * 0.86}-${r * 0.67}-${r * 0.1} ${r * 0.33}-${r * 0.43} ${r * 0.57}-${r * 0.86} ${r * 0.67}Z"/>`).join('');
+  return `<rect class="pr-fan-box" x="${cx - r - 4}" y="${cy - r - 4}" width="${2 * r + 8}" height="${2 * r + 8}" rx="${r * 0.3}"/><circle class="pr-fan-ring" cx="${cx}" cy="${cy}" r="${r}"/>
+<g class="pr-fan-blades">${blades}</g><circle class="pr-fan-hub" cx="${cx}" cy="${cy}" r="${r * 0.28}"/>
+${broken ? `<path class="pr-tear" d="M${cx - r * 0.6} ${cy - r * 0.5}l${r * 0.4} ${r * 0.3}-${r * 0.15} ${r * 0.2} ${r * 0.4} ${r * 0.3}"/>` : ''}
+<g class="pr-spot" data-spot="${spot}"><circle cx="${cx - r * 0.5}" cy="${cy - r * 0.4}" r="${r * 0.18}"/><circle cx="${cx + r * 0.5}" cy="${cy + r * 0.4}" r="${r * 0.22}"/><circle cx="${cx - r * 0.2}" cy="${cy + r * 0.6}" r="${r * 0.14}"/><circle cx="${cx + r * 0.55}" cy="${cy - r * 0.5}" r="${r * 0.13}"/></g>`;
+}
+
+/** Динамик: диффузор с центром; порванный — с разрывом. */
+export function driverAt(cx, cy, r, torn = false) {
+  return `<circle class="pr-driver" cx="${cx}" cy="${cy}" r="${r}"/><circle class="pr-cone" cx="${cx}" cy="${cy}" r="${r * 0.72}"/><circle class="pr-cone-cap" cx="${cx}" cy="${cy}" r="${r * 0.28}"/>`
+    + (torn ? `<path class="pr-tear" d="M${cx - r * 0.5} ${cy - r * 0.2}l${r * 0.3} ${r * 0.2}-${r * 0.1} ${r * 0.2} ${r * 0.4} ${r * 0.2}"/>` : '');
+}
+
+/** Объектив: кольцо и стекло с бликом. */
+export const lensAt = (cx, cy, r) => `<circle class="pr-lens-ring" cx="${cx}" cy="${cy}" r="${r + 2}"/><circle cx="${cx}" cy="${cy}" r="${r}" fill="url(#pr-g-lens)"/><circle class="pr-lens-hi" cx="${cx - r * 0.3}" cy="${cy - r * 0.35}" r="${r * 0.22}"/>`;
+
+/** Подгорелое пятно на сломанной детали. */
+export const scorch = (cx, cy, k = 1) => `<path class="pr-scorch" transform="translate(${cx} ${cy}) scale(${k})" d="M-8 -2c4-5 14-5 17 0s-3 10-9 10-11-5-8-10Z"/>`;
+
+/** Пыль (видна, когда пятно грязное: .pr-d-<пятно>). */
+export const dustAt = (spot, cx, cy, k = 1) => `<g class="pr-spot" data-spot="${spot}" transform="translate(${cx} ${cy}) scale(${k})"><circle cx="-6" cy="-4" r="3.4"/><circle cx="5" cy="3" r="4"/><circle cx="-2" cy="7" r="2.6"/><circle cx="8" cy="-6" r="2.2"/><path d="M-10 2c4-3 8 1 12-2"/></g>`;
+
+/** Липкое пятно (сладкий чай, кофе). */
+export const stickyAt = (spot, cx, cy, k = 1) => `<g class="pr-spot pr-spot-sticky" data-spot="${spot}" transform="translate(${cx} ${cy}) scale(${k})"><ellipse cx="0" cy="0" rx="20" ry="12"/><ellipse cx="22" cy="10" rx="9" ry="6"/><circle cx="-18" cy="10" r="4"/></g>`;
+
+/** Домашний экран: обои и плитки (для планшета, ноутбука, часов, шлема…). */
+export function homeTiles(x, y, w, h, n = 6, dark = false) {
+  const cols = Math.max(2, Math.round(Math.sqrt((n * w) / h)));
+  const rows = Math.ceil(n / cols);
+  const gw = w / (cols + 1);
+  const gh = h / (rows + 1.5);
+  const sz = Math.min(gw, gh) * 0.7;
+  let tiles = '';
+  for (let k = 0; k < n; k++) {
+    const c = k % cols;
+    const r = Math.floor(k / cols);
+    tiles += `<rect class="pr-app pr-app-${(k * 3) % 8}" x="${(x + gw * (c + 1) - sz / 2).toFixed(1)}" y="${(y + gh * (r + 1.2) - sz / 2).toFixed(1)}" width="${sz.toFixed(1)}" height="${sz.toFixed(1)}" rx="${(sz * 0.25).toFixed(1)}"/>`;
+  }
+  return `<rect x="${x}" y="${y}" width="${w}" height="${h}" ${dark ? 'class="pr-ui-dark"' : 'fill="url(#pr-g-wall)"'}/>${tiles}`
+    + `<rect class="pr-cursor" x="${(x + gw - sz / 2 - 2).toFixed(1)}" y="${(y + gh * 1.2 - sz / 2 - 2).toFixed(1)}" width="${(sz + 4).toFixed(1)}" height="${(sz + 4).toFixed(1)}" rx="${(sz * 0.3).toFixed(1)}"/>`;
+}
