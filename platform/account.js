@@ -10,7 +10,7 @@ export { ERRORS, message } from './errors.js';
 
 let topCache = null;        // { at, promise } — последняя сводка рейтинга
 const TOP_CACHE_MS = 30 * 1000;
-let me = null;              // { id, tgId, name, username, isAdmin, beta, banned, perks } или null
+let me = null;              // { id, tgId, name, username, isAdmin, beta, banned, perks, cosmetics? } или null
 
 export const account = {
   /** Аккаунты работают, только если выложен сервер и игра открыта внутри Telegram. */
@@ -39,6 +39,11 @@ export const account = {
   /** Особые скины этого игрока (shell/perks.js); владельцу сервер отдаёт все. */
   get perks() {
     return Array.isArray(me?.perks) ? me.perks : [];
+  },
+
+  /** Рамки и значки (в бете 'badges'): { frames, badges, frame, badge } — что есть и что надето; null — сервер не отдал. */
+  get cosmetics() {
+    return me?.cosmetics ?? null;
   },
 
   /** Нет связи с сервером после попытки входа (shell/login.js) — меню пишет об этом и даёт «Повторить». */
@@ -129,6 +134,16 @@ export const account = {
     return this.request('/state', { method: 'PUT', payload, keepalive, bounded: true });
   },
 
+  /** Надеть рамку / значок из своих или снять (null): { frame?, badge? }. Таблицы рейтинга перечитаются. */
+  async setWear(change) {
+    const res = await this.request('/me/wear', { method: 'POST', payload: change });
+    if (res.ok && me) {
+      me = { ...me, cosmetics: res.data.cosmetics };
+      topCache = null;
+    }
+    return res;
+  },
+
   /** Обратная связь (как /report в боте): отзыв сразу приходит владельцу. */
   report(text) {
     return this.request('/report', { method: 'POST', payload: { text } });
@@ -187,6 +202,11 @@ export const account = {
 
   setPerk(id, perk, on) {
     return this.request(`/admin/player/${id}/perk`, { method: 'POST', payload: { perk, on } });
+  },
+
+  /** Выдать игроку значок (shell/badges.js) или забрать. */
+  setBadge(id, badge, on) {
+    return this.request(`/admin/player/${id}/badge`, { method: 'POST', payload: { badge, on } });
   },
 
   /** Сделать игрока бета-тестером (видит бету, панели не получает) или снять. */

@@ -114,7 +114,7 @@ export function renderAdmin(container, { onBack, toast, api = account, onOwnSave
     showCard(res.data);
   }
 
-  function showCard({ player, data, updatedAt, perks = [], allPerks = null, boardHidden = false, tester = null }) {
+  function showCard({ player, data, updatedAt, perks = [], allPerks = null, boardHidden = false, tester = null, badges = [], allBadges = null }) {
     const parts = splitState(data);
     const jsonBox = el('textarea', { class: 'adm-json', spellcheck: 'false', value: pretty(data) });
 
@@ -172,6 +172,10 @@ export function renderAdmin(container, { onBack, toast, api = account, onOwnSave
       // бета-тестер: видит всё из беты, но не панель; старый воркер поля tester не отдаёт — блока нет
       tester !== null && el('h3', { class: 'adm-h3' }, 'Бета-тестер'),
       tester !== null && testerRow(),
+
+      // значки (в бете 'badges') — выдать / забрать; что надеть, игрок выбирает сам. Старый воркер списка не отдаёт
+      allBadges && feature('badges') && el('h3', { class: 'adm-h3' }, 'Значки'),
+      ...(allBadges && feature('badges') ? Object.entries(allBadges).map(([id, title]) => badgeRow(id, title)) : []),
 
       // особые скины (в бете: perks) — выдать / забрать; список приходит с сервера (старый воркер его не отдаёт)
       allPerks && feature('perks') && el('h3', { class: 'adm-h3' }, 'Особые скины'),
@@ -268,6 +272,27 @@ export function renderAdmin(container, { onBack, toast, api = account, onOwnSave
       }
       paint();
       return el('div', { class: 'adm-perk' }, note, button);
+    }
+
+    function badgeRow(id, title) {
+      let on = badges.includes(id);
+      const button = el('button', { class: 'account-btn', onclick: toggle });
+      const paint = () => {
+        button.textContent = on ? 'Забрать' : 'Выдать';
+        button.classList.toggle('adm-perk-on', on);
+      };
+      async function toggle() {
+        const res = await api.setBadge(player.id, id, !on);
+        if (!res.ok) {
+          toast.show(message(res.error));
+          return;
+        }
+        on = res.data.badges.includes(id);
+        paint();
+        toast.show(on ? 'Значок выдан — у игрока он сразу надет' : 'Значок забран');
+      }
+      paint();
+      return el('div', { class: 'adm-perk' }, el('span', {}, `Значок «${title}»`), button);
     }
 
     function perkRow(perk, title) {

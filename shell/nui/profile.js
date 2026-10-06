@@ -8,12 +8,17 @@ import { icon } from './icons.js';
 import { avatar, gameArt, openSheet, switchButton, skeleton } from './ui.js';
 import { getVisits } from './store.js';
 import { getPrefs, setPref } from './prefs.js';
-import { testerFrame } from '../tester-frame.js';
+import { FRAMES, BADGES, badge, hasBadgeArt, framed } from '../badges.js';
+import { pop, shake } from '../../shared/motion.js';
+import { message } from '../../platform/errors.js';
 import { firstName } from './content.js';
 import { bestPlaces, streakOf, dayKey, monthCells, MONTHS, WEEKDAYS, digits, plural } from './logic.js';
 
 // tester — аватар в рамке тестера (в бете 'tester-frame'): у бета-тестеров и разработчика.
-export function renderProfile(container, { games, account, platform, summary, betaCount = null, admin = false, tester = false, feedback, onPrefs, dockable = false }) {
+// looks — рамки и значки (в бете 'badges'): что надето, называет сервер (account.cosmetics); здесь же их выбирают.
+export function renderProfile(container, {
+  games, account, platform, summary, betaCount = null, admin = false, tester = false, looks = false, feedback, onPrefs, dockable = false,
+}) {
   const name = account.current ? account.name : platform.user?.first_name ?? null;
   const shown = firstName(name) ?? 'Гость';
   const rank = el('div', { class: 'nrank-box' }, skeleton('card'));
@@ -30,19 +35,68 @@ export function renderProfile(container, { games, account, platform, summary, be
   );
 
   const nameNode = el('span', { class: 'nprof-name npx' }, shown);
+  // что надето: с рамками и значками — как решил сервер, без них — рамка тестера у тех, у кого она есть
+  const cosmetics = () => (looks ? account.cosmetics : null);
+  const wornFrame = () => (cosmetics() ? cosmetics().frame : tester ? 'tester' : null);
+  let face = framed(avatar(shown, 'nava-lg'), wornFrame());
+  const wear = el('div', { class: 'nlooks' });
   const screen = el('div', { class: 'scroll nscroll nprofile' },
     el('div', { class: 'nprof-head' },
-      tester ? testerFrame(avatar(shown, 'nava-lg')) : avatar(shown, 'nava-lg'),
+      face,
       nameNode,
       el('button', { class: 'niconbtn', 'aria-label': 'Настройки', onclick: () => settingsSheet({ account, onPrefs, dockable }) }, icon('gear')),
     ),
     rank,
+    wear,
     el('h2', { class: 'npx nsec-title' }, 'Лучшие места'),
     best,
     menu,
   );
   container.replaceChildren(screen);
-  if (tester) fitName(nameNode);
+  const refit = fitName(nameNode, () => Boolean(wornFrame()));
+
+  // ---------- значки и рамки: что есть и что надето ----------
+  function drawWear(note = null) {
+    const cos = cosmetics();
+    const badges = (cos?.badges ?? []).filter(hasBadgeArt);
+    const frames = (cos?.frames ?? []).filter((id) => Object.hasOwn(FRAMES, id));
+    if (!badges.length && !frames.length) return wear.replaceChildren();
+    const tile = (kind, id, picture, title) => {
+      const on = cos[kind] === id;
+      const button = el('button', {
+        class: `nwear-tile${on ? ' on' : ''}`,
+        'aria-pressed': String(on),
+        onclick: async () => {
+          button.disabled = true;
+          const res = await account.setWear({ [kind]: on ? null : id });
+          if (!screen.isConnected) return;
+          if (!res.ok) {
+            button.disabled = false;
+            shake(button);
+            drawWear(message(res.error));
+            return;
+          }
+          drawWear();
+          if (kind === 'frame') {
+            const next = framed(avatar(shown, 'nava-lg'), wornFrame());
+            face.replaceWith(next);
+            face = next;
+            pop(face, { from: 0.9 });
+            refit();
+          }
+        },
+      }, picture, el('span', {}, title, el('small', {}, on ? (kind === 'frame' ? 'надета' : 'надет') : 'надеть')));
+      return button;
+    };
+    wear.replaceChildren(
+      ...(badges.length ? [el('h2', { class: 'npx nsec-title' }, 'Значки'),
+        el('div', { class: 'nwear' }, badges.map((id) => tile('badge', id, badge(id, 32), BADGES[id])))] : []),
+      ...(frames.length ? [el('h2', { class: 'npx nsec-title' }, 'Рамки'),
+        el('div', { class: 'nwear' }, frames.map((id) => tile('frame', id, framed(avatar(shown), id, 'sm'), FRAMES[id])))] : []),
+      el('p', { class: 'nhint' }, note ?? 'Носить можно один значок и одну рамку — их видно в рейтинге. Нажми ещё раз, чтобы снять.'),
+    );
+  }
+  drawWear();
 
   // ---------- место в рейтинге ----------
   if (!account.enabled) {
@@ -112,11 +166,17 @@ export function renderNoRating(container, { platform }) {
 /**
  * Имя рядом с рамкой тестера: рамка шире аватара, и имя рвалось посреди слова («cheese_mol / ly»). Шрифт
  * уменьшается, пока имя не встанет в одну строку; не встало и самым мелким — перенос, как без рамки.
- * Пересчёт — когда догрузился шрифт и когда меняется ширина.
+ * Пересчёт — когда догрузился шрифт и когда меняется ширина. active() — надета ли рамка сейчас (её можно снять
+ * и надеть прямо на экране); возвращает функцию пересчёта.
  */
-function fitName(node, sizes = [16, 14, 12, 10]) {
+function fitName(node, active = () => true, sizes = [16, 14, 12, 10]) {
   const fit = () => {
     if (!node.isConnected) return;
+    if (!active()) {                               // рамку сняли — имя как без неё
+      node.style.whiteSpace = '';
+      node.style.fontSize = '';
+      return;
+    }
     node.style.whiteSpace = 'nowrap';
     for (const size of sizes) {
       node.style.fontSize = `${size}px`;
@@ -137,6 +197,7 @@ function fitName(node, sizes = [16, 14, 12, 10]) {
     });
     watch.observe(node);
   }
+  return fit;
 }
 
 function menuItem(iconName, text, onclick, external = false) {

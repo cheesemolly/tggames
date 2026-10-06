@@ -839,6 +839,87 @@ h1, h2 { margin: 0 0 8px; line-height: 1.2; }
 @media (prefers-reduced-motion: reduce) {
   .tframe-rv, .tframe-shine { animation: none; }
 }
+/* маленькая рамка — в строке таблицы (sm: аватар 34, рамка 42) и на пьедестале (md: аватар 44, рамка 52):
+   кайма 3px с бликом и заклёпками-точками по углам; пиксель блика 2px — числа сверяет тест */
+.tframe-mini { width: var(--tf-box); height: var(--tf-box); margin: 2px; }
+.tframe-sm { --tf-box: 42px; }
+.tframe-md { --tf-box: 52px; }
+.tframe-mini .tframe-body {
+  box-shadow: 0 0 0 2px #000;
+  background:
+    linear-gradient(var(--tf-hi), var(--tf-hi)) top / 100% 1px no-repeat,
+    linear-gradient(var(--tf-hi), var(--tf-hi)) left / 1px 100% no-repeat,
+    linear-gradient(var(--tf-lo), var(--tf-lo)) bottom / 100% 1px no-repeat,
+    linear-gradient(var(--tf-lo), var(--tf-lo)) right / 1px 100% no-repeat,
+    var(--tf);
+}
+.tframe-mini .tframe-ava {
+  left: 4px;
+  top: 4px;
+  width: calc(var(--tf-box) - 8px);
+  height: calc(var(--tf-box) - 8px);
+  box-shadow: 0 0 0 1px #000;
+  font-size: 15px;
+}
+.tframe-md .tframe-ava { font-size: 18px; }
+.tframe-mini .tframe-rv { width: 1px; height: 1px; animation: none; }
+.tframe-sm .tframe-shine { translate: -56px 0; animation-name: tframe-sweep-sm; }
+.tframe-md .tframe-shine { translate: -66px 0; animation-name: tframe-sweep-md; }
+@keyframes tframe-sweep-sm {
+  0% { translate: -56px 0; animation-timing-function: steps(49); }
+  40%, 100% { translate: 42px 0; }
+}
+@keyframes tframe-sweep-md {
+  0% { translate: -66px 0; animation-timing-function: steps(59); }
+  40%, 100% { translate: 52px 0; }
+}
+
+/* ---------- значок (shell/badges.js): картинка 16×16, --s — сторона в px ---------- */
+.cbadge {
+  position: relative;
+  display: inline-block;
+  flex: none;
+  width: var(--s, 16px);
+  height: var(--s, 16px);
+  vertical-align: middle;
+  isolation: isolate;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.cbadge-l { position: absolute; inset: 0; display: block; overflow: hidden; }
+.cbadge-out { background: #000; }
+.cbadge-spin {
+  position: absolute;
+  left: -50%;
+  top: -50%;
+  display: block;
+  width: 200%;
+  height: 200%;
+  animation: cbadge-spin 4.5s linear infinite;
+}
+@keyframes cbadge-spin { to { rotate: 360deg; } }
+@media (prefers-reduced-motion: reduce) {
+  .cbadge-spin { animation: none; }
+}
+/* имя со значком: длинное имя обрезается, значок остаётся */
+.top-named { display: flex; align-items: center; gap: 6px; }
+.top-step-name.top-named { justify-content: center; gap: 5px; }
+.top-name-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* раздел «Значки» в профиле игрока */
+.top-badges { margin: 0 0 16px; }
+.top-sec { margin: 0 0 8px; font-size: 15px; font-weight: 800; }
+.top-badge-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.top-badge-tile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px 10px 12px;
+  border-radius: 14px;
+  background: var(--tg-theme-secondary-bg-color);
+  font-size: 14px;
+  font-weight: 700;
+  animation: card-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
 .top-profile-sum { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; width: 100%; }
 .top-stat {
   display: grid;

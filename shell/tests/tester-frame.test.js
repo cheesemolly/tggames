@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-import { FRAME, shine, shineSteps } from '../tester-frame.js';
+import { FRAME, SIZES, shine, shineSteps } from '../tester-frame.js';
 import { BETA } from '../beta.js';
 import { SERVER_BETA } from '../../server/lib.js';
 
@@ -24,6 +24,18 @@ test('рамка тестера: блик — ступеньки во всю в�
   assert.ok(block.includes(`0% { translate: -${width}px 0; animation-timing-function: steps(${shineSteps()}); }`));
   assert.ok(block.includes(`40%, 100% { translate: ${FRAME.w}px 0; }`), 'и уходит целиком вправо');
   assert.ok(block.includes('prefers-reduced-motion') || css.includes('.tframe-rv, .tframe-shine { animation: none; }'));
+});
+
+test('маленькая рамка (строка таблицы и пьедестал): блик целым числом шагов, числа в стилях те же', () => {
+  const css = readFileSync(new URL('../../styles/app.css', import.meta.url), 'utf8');
+  for (const size of ['sm', 'md']) {
+    const box = SIZES[size];
+    const { width } = shine(box);
+    assert.ok(Number.isInteger(box.h / box.step) && Number.isInteger(shineSteps(box)), size);
+    assert.ok(css.includes(`.tframe-${size} { --tf-box: ${box.w}px; }`), `размер ${size}`);
+    assert.ok(css.includes(`.tframe-${size} .tframe-shine { translate: -${width}px 0; animation-name: tframe-sweep-${size}; }`));
+    assert.match(css, new RegExp(`@keyframes tframe-sweep-${size} \\{\\s+0% \\{ translate: -${width}px 0; animation-timing-function: steps\\(${shineSteps(box)}\\); \\}\\s+40%, 100% \\{ translate: ${box.w}px 0; \\}`));
+  }
 });
 
 test('рамка тестера: пока в бете — и на сервере, и в оболочке', () => {

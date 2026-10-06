@@ -5,8 +5,17 @@
 
 import { el } from '../shared/dom.js';
 
-/** Размеры в px: рамка W×H, шаг пикселя блика STEP; из них считаются и стили (тест сверяет). */
-export const FRAME = { w: 96, h: 117, step: 3 };
+/**
+ * Размеры в px: рамка W×H, шаг пикселя блика STEP; из них считаются и стили (тест сверяет).
+ * lg — в профиле (с планкой TESTER и плашкой); md и sm — на пьедестале и в строке таблицы (аватар 44 и 34):
+ * только кайма с бликом и заклёпками по углам — на планку и значок там нет места.
+ */
+export const SIZES = {
+  lg: { w: 96, h: 117, step: 3 },
+  md: { w: 52, h: 52, step: 2 },
+  sm: { w: 42, h: 42, step: 2 },
+};
+export const FRAME = SIZES.lg;
 
 /**
  * Блик — две ступенчатые диагонали (широкая и узкая следом) во всю высоту рамки: пути SVG и его ширина.
@@ -40,23 +49,29 @@ const RIVETS = [[3, 3], [46, 3], [90, 3], [90, 46], [3, 111], [3, 46]];
 
 /**
  * Аватар в рамке тестера. avatarNode — обычный аватар (вкладки «Профиль» или рейтинга): из него берутся буква и
- * цвет, сам он в рамку не вставляется (у каждого экрана свои размеры и тени аватара).
+ * цвет, сам он в рамку не вставляется (у каждого экрана свои размеры и тени аватара). size — ключ SIZES.
  */
-export function testerFrame(avatarNode) {
+export function testerFrame(avatarNode, size = 'lg') {
+  const box = SIZES[size] ?? SIZES.lg;
+  const mini = box !== SIZES.lg;
   const ava = el('span', { class: 'tframe-ava' }, avatarNode.textContent);
   if (avatarNode.dataset.cat) ava.dataset.cat = avatarNode.dataset.cat;      // новый интерфейс: цвет папки (--c)
   const cat = avatarNode.style.getPropertyValue('--cat');                    // рейтинг: --cat
   if (cat) ava.style.setProperty('--cat', cat);
 
-  const { main, tail, width } = shine();
+  const { main, tail, width } = shine(box);
+  // маленькая рамка: заклёпки-точки по четырём углам
+  const rivets = mini ? [[1, 1], [box.w - 2, 1], [box.w - 2, box.h - 2], [1, box.h - 2]] : RIVETS;
   const body = el('span', { class: 'tframe-body' },
-    RIVETS.map(([x, y], i) => el('span', { class: 'tframe-rv', style: `left: ${x}px; top: ${y}px; --i: ${i}` })),
-    el('span', { class: 'tframe-word' }, 'TESTER'),
+    rivets.map(([x, y], i) => el('span', { class: 'tframe-rv', style: `left: ${x}px; top: ${y}px; --i: ${i}` })),
+    !mini && el('span', { class: 'tframe-word' }, 'TESTER'),
   );
   body.insertAdjacentHTML('beforeend',
-    `<svg class="tframe-shine" width="${width}" height="${FRAME.h}" shape-rendering="crispEdges" aria-hidden="true">`
+    `<svg class="tframe-shine" width="${width}" height="${box.h}" shape-rendering="crispEdges" aria-hidden="true">`
     + `<path fill="#fff" d="${main}"/><path fill="#fff" opacity=".55" d="${tail}"/></svg>`);
+  const label = { role: 'img', 'aria-label': 'Аватар в рамке бета-тестера' };
+  if (mini) return el('span', { class: `tframe tframe-mini tframe-${size}`, ...label }, body, ava);
   const badge = el('span', { class: 'tframe-badge' });
   badge.innerHTML = TOOLS;
-  return el('span', { class: 'tframe', role: 'img', 'aria-label': 'Аватар в рамке бета-тестера' }, body, ava, badge);
+  return el('span', { class: 'tframe', ...label }, body, ava, badge);
 }

@@ -264,6 +264,7 @@ export const SERVER_BETA = [
   // >>> серверная бета
   'rating-points',
   'tester-frame',
+  'badges',
   // <<< конец серверной беты
 ];
 
@@ -322,6 +323,29 @@ export const PERKS = {
 };
 
 export const isPerk = (id) => Object.prototype.hasOwnProperty.call(PERKS, id);
+
+// ---------- рамки и значки ----------
+
+/**
+ * Украшения профиля (в бете 'badges'): рамка на аватаре и значок у имени — их видно в таблицах рейтинга и в профиле.
+ * Носить можно одну рамку и один значок; какие — игрок выбирает в профиле (таблица user_wear). Рамка тестера есть у
+ * бета-тестеров и разработчика; значки выдаёт владелец в панели (таблица user_badges — кому, хранится в базе, не в
+ * коде). Списки сверяются тестом с shell/badges.js.
+ */
+export const FRAMES = { tester: 'Рамка тестера' };
+export const BADGES = { contributor: 'Contributor' };
+
+export const isBadge = (id) => Object.prototype.hasOwnProperty.call(BADGES, id);
+
+/**
+ * Что надето. owned — что у игрока есть ({ frames, badges }), chosen — его выбор (строка user_wear) или null.
+ * В выборе null — «не выбирал»: надето первое, что есть (выданный значок виден сразу); '' — снял сам.
+ * Выбранное, чего у игрока уже нет (сняли отметку тестера, забрали значок), считается невыбранным.
+ */
+export function wearOf(owned, chosen) {
+  const pick = (list, value) => (value === '' ? null : list.includes(value) ? value : list[0] ?? null);
+  return { frame: pick(owned.frames, chosen?.frame ?? null), badge: pick(owned.badges, chosen?.badge ?? null) };
+}
 
 // ---------- рейтинг (лидерборды) ----------
 

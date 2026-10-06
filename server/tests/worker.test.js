@@ -1044,6 +1044,122 @@ test('рамка тестера: в профиле рейтинга tester — �
   }
 });
 
+// ---------- значки и рамки ----------
+
+test('значки и рамки: выдаёт владелец, надетое видно в таблицах и профиле; носить — одну рамку и один значок из своих', async () => {
+  const lib = await import('../lib.js');
+  const wasBeta = [...lib.SERVER_BETA];
+  lib.SERVER_BETA.splice(0, lib.SERVER_BETA.length);          // как после релиза: видно всем
+  try {
+    const env = createEnv();
+    const owner = await asUser(ADMIN);
+    const masha = await asUser(USER);
+    const petya = await asUser({ id: 43, first_name: 'Петя' });
+    for (const [who, best] of [[owner, 99], [masha, 30], [petya, 20]]) {
+      await save(env, who, { 'shell:stats:flappy-burger': { played: 1, wins: 0, best } });
+    }
+    const cosmetics = async (who) => (await call(env, '/me', { initData: who })).data.cosmetics;
+    const mashaId = (await call(env, '/me', { initData: masha })).data.id;
+    const grant = (action, payload, by = owner) => call(env, `/admin/player/${mashaId}/${action}`, { method: 'POST', initData: by, payload });
+    const wear = (who, payload) => call(env, '/me/wear', { method: 'POST', initData: who, payload });
+    // строка Маши в таблице игры и в общем рейтинге — глазами Пети
+    const rowOf = async (name = 'Маша') => (await call(env, '/top/flappy-burger', { initData: petya })).data.rows.find((r) => r.name === name);
+    const overallOf = async (name = 'Маша') => (await call(env, '/top', { initData: petya })).data.overall.rows.find((r) => r.name === name);
+    const looks = (r) => ({ frame: r.frame ?? null, badge: r.badge ?? null });
+
+    assert.deepEqual(await cosmetics(masha), { frames: [], badges: [], frame: null, badge: null }, 'сначала ничего');
+    assert.equal('frame' in await rowOf() || 'badge' in await rowOf(), false, 'нечего надеть — в строке нет лишних полей');
+
+    // значок выдаёт только владелец; несуществующего не выдать
+    assert.equal((await grant('badge', { badge: 'contributor', on: true }, masha)).status, 403);
+    assert.equal((await grant('badge', { badge: 'nope', on: true })).status, 400);
+    assert.deepEqual((await grant('badge', { badge: 'contributor', on: true })).data.badges, ['contributor']);
+    const card = (await call(env, `/admin/player/${mashaId}`, { initData: owner })).data;
+    assert.deepEqual([card.badges, Object.keys(card.allBadges)], [['contributor'], ['contributor']], 'в карточке панели');
+    await grant('tester', { on: true });
+
+    // выданное надето сразу: в строке таблицы игры, в общем рейтинге, в профиле
+    assert.deepEqual(await cosmetics(masha), { frames: ['tester'], badges: ['contributor'], frame: 'tester', badge: 'contributor' });
+    assert.deepEqual(looks(await rowOf()), { frame: 'tester', badge: 'contributor' });
+    assert.deepEqual(looks(await overallOf()), { frame: 'tester', badge: 'contributor' });
+    assert.deepEqual(looks(await rowOf('Петя')), { frame: null, badge: null }, 'у соседа ничего');
+    const mashaPid = (await rowOf()).pid;
+    const profile = async (pid = mashaPid) => (await call(env, `/top/player/${pid}`, { initData: petya })).data;
+    assert.deepEqual([(await profile()).frame, (await profile()).badge, (await profile()).badges], ['tester', 'contributor', ['contributor']]);
+    const petyaProfile = await profile((await rowOf('Петя')).pid);
+    assert.deepEqual([petyaProfile.frame, petyaProfile.badge, petyaProfile.badges], [null, null, []]);
+    // своя строка «ты» в таблице игры — тоже с надетым
+    assert.deepEqual(looks((await call(env, '/top/flappy-burger', { initData: masha })).data.me), { frame: 'tester', badge: 'contributor' });
+
+    // снять значок — рамка остаётся; значок по-прежнему в профиле среди значков
+    assert.deepEqual((await wear(masha, { badge: null })).data.cosmetics, { frames: ['tester'], badges: ['contributor'], frame: 'tester', badge: null });
+    assert.deepEqual(looks(await rowOf()), { frame: 'tester', badge: null });
+    assert.deepEqual([(await profile()).badge, (await profile()).badges], [null, ['contributor']]);
+    // надеть значок, снять рамку
+    await wear(masha, { badge: 'contributor', frame: null });
+    assert.deepEqual(looks(await rowOf()), { frame: null, badge: 'contributor' });
+    assert.equal((await profile()).frame, null, 'рамку снял — её нет и в профиле');
+
+    // чужое и несуществующее надеть нельзя
+    for (const payload of [{ badge: 'contributor' }, { frame: 'tester' }, { badge: 'nope' }, { frame: 5 }]) {
+      assert.equal((await wear(petya, payload)).status, 400, JSON.stringify(payload));
+    }
+    assert.deepEqual(await cosmetics(petya), { frames: [], badges: [], frame: null, badge: null });
+
+    // забрали значок — его нет нигде, хотя он был выбран
+    await grant('badge', { badge: 'contributor', on: false });
+    assert.deepEqual(looks(await rowOf()), { frame: null, badge: null });
+    assert.deepEqual((await profile()).badges, []);
+    // рамку надел обратно; сняли отметку тестера — рамки нет
+    await wear(masha, { frame: 'tester' });
+    assert.equal((await rowOf()).frame, 'tester');
+    await grant('tester', { on: false });
+    assert.equal('frame' in await rowOf(), false);
+
+    // разработчик: рамка тестера есть и без отметки
+    assert.deepEqual((await cosmetics(owner)).frames, ['tester']);
+
+    // удаление игрока чистит и значки, и выбор
+    await grant('badge', { badge: 'contributor', on: true });
+    await call(env, `/admin/player/${mashaId}`, { method: 'DELETE', initData: owner });
+    assert.deepEqual(await cosmetics(masha), { frames: [], badges: [], frame: null, badge: null });
+  } finally {
+    lib.SERVER_BETA.splice(0, lib.SERVER_BETA.length, ...wasBeta);
+  }
+});
+
+test('значки и рамки в бете: поля в таблицах и выбор — только тем, кто видит бету', async () => {
+  const lib = await import('../lib.js');
+  const wasBeta = [...lib.SERVER_BETA];
+  lib.SERVER_BETA.splice(0, lib.SERVER_BETA.length, 'badges');
+  try {
+    const env = createEnv();
+    const owner = await asUser(ADMIN);
+    const masha = await asUser(USER);
+    const petya = await asUser({ id: 43, first_name: 'Петя' });
+    for (const who of [masha, petya]) await save(env, who, { 'shell:stats:flappy-burger': { played: 1, wins: 0, best: 14 } });
+    const idOf = async (who) => (await call(env, '/me', { initData: who })).data.id;
+    const [mashaId, petyaId] = [await idOf(masha), await idOf(petya)];
+    await call(env, `/admin/player/${mashaId}/tester`, { method: 'POST', initData: owner, payload: { on: true } });
+    await call(env, `/admin/player/${petyaId}/badge`, { method: 'POST', initData: owner, payload: { badge: 'contributor', on: true } });
+    const rows = async (who) => (await call(env, '/top/flappy-burger', { initData: who })).data.rows;
+
+    // Петя (не тестер): значок ему выдан, но пока бета — он его не видит и выбрать не может
+    assert.equal('cosmetics' in (await call(env, '/me', { initData: petya })).data, false);
+    assert.equal((await call(env, '/me/wear', { method: 'POST', initData: petya, payload: { badge: null } })).status, 404);
+    assert.ok((await rows(petya)).every((r) => !('frame' in r) && !('badge' in r)));
+    const mashaPid = (await rows(petya)).find((r) => r.name === 'Маша').pid;
+    assert.equal('badges' in (await call(env, `/top/player/${mashaPid}`, { initData: petya })).data, false);
+
+    // Маша (тестер) видит: свою рамку и значок Пети
+    assert.equal((await rows(masha)).find((r) => r.name === 'Маша').frame, 'tester');
+    assert.equal((await rows(masha)).find((r) => r.name === 'Петя').badge, 'contributor');
+    assert.deepEqual((await call(env, '/me', { initData: masha })).data.cosmetics, { frames: ['tester'], badges: [], frame: 'tester', badge: null });
+  } finally {
+    lib.SERVER_BETA.splice(0, lib.SERVER_BETA.length, ...wasBeta);
+  }
+});
+
 // ---------- бета sync-refresh: сохранения — только от нового клиента ----------
 
 test('старый клиент: у владельца и тестера (бета sync-merge) — только слияние, у игрока — любой; после релиза — у всех', async () => {

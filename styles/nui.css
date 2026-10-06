@@ -561,6 +561,32 @@
 /* ---------- профиль ---------- */
 .nui .nprof-head { display: flex; align-items: center; gap: 14px; }
 .nui .nprof-name { flex: 1; min-width: 0; font-size: 16px; overflow-wrap: anywhere; }
+/* значки и рамки во вкладке «Профиль»: что есть, что надето (нажатие — надеть / снять) */
+.nui .nlooks { display: flex; flex-direction: column; gap: 12px; }
+.nui .nlooks:empty { display: none; }
+.nui .nlooks .nsec-title { margin: 0; }
+.nui .nwear { display: flex; flex-wrap: wrap; gap: 12px; }
+.nui .nwear-tile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 60px;
+  padding: 8px 16px 8px 12px;
+  border: 2px solid #000;
+  border-radius: 6px;
+  box-shadow: var(--n-sh);
+  background: var(--n-s1);
+  color: var(--n-text);
+  font: 700 14px var(--n-font);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+.nui .nwear-tile small { display: block; margin-top: 2px; font-size: 12px; font-weight: 400; color: var(--n-hint); }
+.nui .nwear-tile.on { background: color-mix(in srgb, var(--n-acc) 20%, var(--n-s1)); }
+.nui .nwear-tile.on small { color: var(--n-acc); }
+.nui .nwear-tile:active { background: var(--n-s2); }
+.nui .nwear-tile:disabled { opacity: 0.6; }
 .nui .niconbtn {
   display: grid;
   place-items: center;
@@ -801,7 +827,9 @@
   box-shadow: var(--n-sh);
   background: var(--n-s1);
 }
-.nui .nscreen .top-profile .tframe-ava { color: var(--n-on); }
+.nui .nscreen .top-screen .tframe-ava { color: var(--n-on); }
+.nui .nscreen .top-sec { font-family: var(--n-px); font-size: 12px; font-weight: 400; line-height: 1.4; }
+.nui .nscreen .top-badge-tile { border: 2px solid #000; border-radius: 6px; box-shadow: var(--n-sh); background: var(--n-s1); }
 .nui .nscreen .top-profile-name { font-family: var(--n-px); font-size: 16px; font-weight: 400; line-height: 1.4; }
 .nui .nscreen .nskel-row { margin-top: 12px; }
 

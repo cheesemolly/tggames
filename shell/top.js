@@ -19,7 +19,7 @@ import { GAME_ICONS } from './icons.js';
 import { categoryOfGame, byFolderAndPlace } from './categories.js';
 import { feature } from './beta.js';
 import { filterGames } from './nui/logic.js';
-import { testerFrame } from './tester-frame.js';
+import { BADGES, badge, hasBadgeArt, framed } from './badges.js';
 import { message } from '../platform/errors.js';
 import { showLayer, hideLayer, pop, shake, reducedMotion } from '../shared/motion.js';
 
@@ -83,6 +83,19 @@ export async function renderTop(container, {
   route, games, source, onBack, overall = false, search = false, tabbed = false, skeleton = null, play = false,
 }) {
   const titleOf = (id) => games.find((g) => g.id === id)?.title ?? id;
+  // рамка на аватаре и значок справа от имени (в бете 'badges'): что надето, сервер кладёт в строку — frame, badge
+  const looks = feature('badges');
+  const face = (r, size) => {
+    const node = avatar(r.name, size === 'md' ? 'top-avatar-md' : '');
+    return looks && r.frame ? framed(node, r.frame, size) : node;
+  };
+  // длинное имя обрезается многоточием, значок и «ты» остаются на месте
+  const named = (cls, r, ...rest) => {
+    const mark = looks && r.badge ? badge(r.badge, 16) : null;
+    return mark
+      ? el('span', { class: `${cls} top-named` }, el('span', { class: 'top-name-text' }, r.name), mark, ...rest)
+      : el('span', { class: cls }, r.name, ...rest);
+  };
   const screen = el('div', { class: 'scroll top-screen' });
   container.replaceChildren(screen);
   // replaceChildren, в отличие от el(), не пропускает false/null — отсеиваем сами
@@ -109,13 +122,15 @@ export async function renderTop(container, {
       // с общим рейтингом сервер отдаёт очки за каждую игру — сверху те, что дали больше (видно, где подняться)
       const withPoints = overall && 'overall' in p && !p.outside;
       const list = withPoints ? [...p.games].sort((a, b) => b.points - a.points || a.place - b.place) : p.games;
+      // надетая рамка: с рамками и значками её называет сервер (frame), до них — отметка тестера ('tester-frame')
+      const frameId = looks && 'frame' in p ? p.frame : (p.tester && feature('tester-frame') ? 'tester' : null);
+      const badges = looks ? (p.badges ?? []).filter(hasBadgeArt) : [];
       show(
         el('div', { class: 'folder-head' },
           el('button', { class: 'back-chip', onclick: onBack, 'aria-label': 'Назад' }, '‹ Назад'),
         ),
         el('div', { class: 'top-profile' },
-          // рамка тестера (в бете 'tester-frame'): сервер помечает бета-тестеров и разработчика
-          p.tester && feature('tester-frame') ? testerFrame(avatar(p.name, 'top-avatar-lg')) : avatar(p.name, 'top-avatar-lg'),
+          framed(avatar(p.name, 'top-avatar-lg'), frameId),
           el('div', { class: 'top-profile-name' }, p.name,
             p.admin && el('span', { class: 'top-admin' }, 'admin'),
             p.me && el('span', { class: 'top-you' }, 'это ты')),
@@ -133,6 +148,12 @@ export async function renderTop(container, {
             stat(p.games.filter((g) => g.place === 1).length, 'первых мест'),
             stat(medals, 'в тройке'),
           ),
+        ),
+        // все значки игрока — под местами, над списком игр
+        badges.length > 0 && el('div', { class: 'top-badges' },
+          el('h2', { class: 'top-sec' }, 'Значки'),
+          el('div', { class: 'top-badge-list' }, badges.map((id) => el('div', { class: 'top-badge-tile' },
+            badge(id, 48), el('span', {}, BADGES[id])))),
         ),
         list.length
           ? el('div', { class: 'top-list' }, list.map((g, i) => el('a', {
@@ -172,9 +193,9 @@ export async function renderTop(container, {
         class: `top-row${r.me ? ' top-row-me' : ''}`, href: `#/top/player/${encodeURIComponent(r.pid)}`, style: `--i: ${i}`,
       },
         el('span', { class: 'top-num' }, r.place),
-        avatar(r.name),
+        face(r, 'sm'),
         el('span', { class: 'top-row-main' },
-          el('span', { class: 'top-row-name' }, r.name, r.me && el('span', { class: 'top-you' }, 'ты')),
+          named('top-row-name', r, r.me && el('span', { class: 'top-you' }, 'ты')),
         ),
         el('span', { class: 'top-row-value' }, r.text),
       );
@@ -190,8 +211,8 @@ export async function renderTop(container, {
             [podium[1], podium[0], podium[2]].map((r) => (r
               ? el('a', { class: `top-step top-step-${r.place}${r.me ? ' top-row-me' : ''}`, href: `#/top/player/${encodeURIComponent(r.pid)}` },
                 el('span', { class: 'top-medal' }, MEDALS[r.place - 1]),
-                avatar(r.name, 'top-avatar-md'),
-                el('span', { class: 'top-step-name' }, r.name),
+                face(r, 'md'),
+                named('top-step-name', r),
                 el('span', { class: 'top-step-value' }, r.text),
                 el('span', { class: 'top-step-block' }, r.place),
               )
@@ -245,9 +266,9 @@ export async function renderTop(container, {
         class: `top-row${r.me ? ' top-row-me' : ''}`, href: `#/top/player/${encodeURIComponent(r.pid)}`, style: `--i: ${i}`,
       },
         el('span', { class: 'top-num' }, r.place),
-        avatar(r.name),
+        face(r, 'sm'),
         el('span', { class: 'top-row-main' },
-          el('span', { class: 'top-row-name' }, r.name, r.me && el('span', { class: 'top-you' }, 'ты')),
+          named('top-row-name', r, r.me && el('span', { class: 'top-you' }, 'ты')),
           el('span', { class: 'top-row-sub' }, overallSub(r)),
         ),
         el('span', { class: 'top-row-value' }, pointsText(r.points)),
@@ -280,8 +301,8 @@ export async function renderTop(container, {
             [podium[1], podium[0], podium[2]].map((r) => (r
               ? el('a', { class: `top-step top-step-${r.place}${r.me ? ' top-row-me' : ''}`, href: `#/top/player/${encodeURIComponent(r.pid)}` },
                 el('span', { class: 'top-medal' }, MEDALS[r.place - 1]),
-                avatar(r.name, 'top-avatar-md'),
-                el('span', { class: 'top-step-name' }, r.name),
+                face(r, 'md'),
+                named('top-step-name', r),
                 el('span', { class: 'top-step-value' }, pointsText(r.points)),
                 el('span', { class: 'top-step-block' }, r.place),
               )

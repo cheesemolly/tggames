@@ -268,6 +268,7 @@ const SERVER_BETA = [
   // >>> серверная бета
   'rating-points',
   'tester-frame',
+  'badges',
   // <<< конец серверной беты
 ];
 
@@ -326,6 +327,29 @@ const PERKS = {
 };
 
 const isPerk = (id) => Object.prototype.hasOwnProperty.call(PERKS, id);
+
+// ---------- рамки и значки ----------
+
+/**
+ * Украшения профиля (в бете 'badges'): рамка на аватаре и значок у имени — их видно в таблицах рейтинга и в профиле.
+ * Носить можно одну рамку и один значок; какие — игрок выбирает в профиле (таблица user_wear). Рамка тестера есть у
+ * бета-тестеров и разработчика; значки выдаёт владелец в панели (таблица user_badges — кому, хранится в базе, не в
+ * коде). Списки сверяются тестом с shell/badges.js.
+ */
+const FRAMES = { tester: 'Рамка тестера' };
+const BADGES = { contributor: 'Contributor' };
+
+const isBadge = (id) => Object.prototype.hasOwnProperty.call(BADGES, id);
+
+/**
+ * Что надето. owned — что у игрока есть ({ frames, badges }), chosen — его выбор (строка user_wear) или null.
+ * В выборе null — «не выбирал»: надето первое, что есть (выданный значок виден сразу); '' — снял сам.
+ * Выбранное, чего у игрока уже нет (сняли отметку тестера, забрали значок), считается невыбранным.
+ */
+function wearOf(owned, chosen) {
+  const pick = (list, value) => (value === '' ? null : list.includes(value) ? value : list[0] ?? null);
+  return { frame: pick(owned.frames, chosen?.frame ?? null), badge: pick(owned.badges, chosen?.badge ?? null) };
+}
 
 // ---------- рейтинг (лидерборды) ----------
 
@@ -1670,7 +1694,9 @@ function applyAdmin(doc, data, stamp, rules = RULES) {
 //   APP_URL         — адрес мини-приложения (по умолчанию наш GitHub Pages).
 //
 // Запросы игры (везде заголовок `Authorization: tma <initData>`):
-//   GET  /me                      -> { id, tgId, name, username, isAdmin, beta, banned, perks }
+//   GET  /me                      -> { id, tgId, name, username, isAdmin, beta, banned, perks, cosmetics? }
+//   POST /me/wear                 { frame?, badge? } — надеть рамку / значок из своих (null — снять); в бете 'badges'
+//                                    -> { ok, cosmetics: { frames, badges, frame, badge } }
 //   GET  /state                   -> { data, updatedAt }
 //   PUT  /state  { data, base }   -> { updatedAt }  |  409 с чужим свежим прогрессом
 // Рейтинг (в ответах только имя игрока и случайный pid — ни id, ни ника, ни tg_id):
@@ -1691,6 +1717,7 @@ function applyAdmin(doc, data, stamp, rules = RULES) {
 //   POST   /admin/player/<id>/ban    { banned }
 //   POST   /admin/player/<id>/perk   { perk, on } — выдать / забрать особый скин (PERKS в lib.js)
 //   POST   /admin/player/<id>/tester { on } — бета-тестер: видит бету, но не панель (таблица beta_testers)
+//   POST   /admin/player/<id>/badge  { badge, on } — выдать / забрать значок (BADGES в lib.js, таблица user_badges)
 // Обратная связь: POST /report { text } (из приложения) и /report текст в боте — отзыв приходит владельцам.
 //   DELETE /admin/player/<id>
 //   POST   /admin/broadcast          { text }
@@ -1757,13 +1784,30 @@ export default {
       const { player, admin, user } = auth;
 
       if (path === '/me' && request.method === 'GET') {
+        const beta = admin || await isTester(env, player.id);
         return json({
           id: player.id, tgId: player.tg_id, name: player.name, username: player.username,
           // beta — видит бету (владелец или бета-тестер из панели); панель — только isAdmin
-          isAdmin: admin, beta: admin || await isTester(env, player.id), banned: Boolean(player.banned),
+          isAdmin: admin, beta, banned: Boolean(player.banned),
           // владелец видит все особые скины и так; остальным — выданные в панели
           perks: admin ? Object.keys(PERKS) : await perksOf(env, player.id),
+          // рамки и значки: что есть и что надето (в бете 'badges')
+          ...(betaOpen('badges', beta) && { cosmetics: await cosmeticsOf(env, player.id, admin) }),
         }, 200, origin);
+      }
+      if (path === '/me/wear' && request.method === 'POST') {
+        if (!betaOpen('badges', admin || await isTester(env, player.id))) return fail('not_found', 404, origin);
+        const { frame, badge } = await body(request);
+        const mine = await cosmeticsOf(env, player.id, admin);
+        // null — снять; надеть можно только своё
+        const allowed = (list, v) => v === undefined || v === null || (typeof v === 'string' && list.includes(v));
+        if (!allowed(mine.frames, frame) || !allowed(mine.badges, badge)) return fail('bad_wear', 400, origin);
+        // чего в запросе нет — остаётся как было (в том числе «не выбирал»)
+        const was = await env.DB.prepare('SELECT frame, badge FROM user_wear WHERE user_id = ?').bind(player.id).first();
+        const next = (v, old) => (v === undefined ? old ?? null : v ?? '');
+        await env.DB.prepare('INSERT OR REPLACE INTO user_wear (user_id, frame, badge) VALUES (?, ?, ?)')
+          .bind(player.id, next(frame, was?.frame), next(badge, was?.badge)).run();
+        return json({ ok: true, cosmetics: await cosmeticsOf(env, player.id, admin) }, 200, origin);
       }
       if (path === '/state' && request.method === 'GET') {
         if (url.searchParams.get('sync') === String(MERGE_PROTOCOL)) return await getMerged(env, player, url, origin);
@@ -2208,7 +2252,20 @@ async function topRoutes(request, env, path, player, admin, origin) {
   // общий рейтинг — сумма очков за места по играм (overallRanking в lib.js); пока в бете — только владельцу
   const withOverall = betaOpen('leaderboard-overall', beta);
   const overall = () => overallRanking(all, games);
-  const overallRow = (p) => ({ place: p.place, name: p.name, pid: p.pid, points: p.points, firsts: p.firsts, games: p.games, me: p.user_id === player.id });
+  // рамка на аватаре и значок у имени в строках таблиц (в бете 'badges'): что надето у игроков
+  const cosmeticsOn = betaOpen('badges', beta);
+  let worn = null;
+  const loadWorn = async () => {
+    if (cosmeticsOn && !worn) worn = await wornByAll(env);
+  };
+  const deco = (userId) => {
+    const w = worn?.(userId);
+    return { ...(w?.frame && { frame: w.frame }), ...(w?.badge && { badge: w.badge }) };
+  };
+  const overallRow = (p) => ({
+    place: p.place, name: p.name, pid: p.pid, points: p.points, firsts: p.firsts, games: p.games, me: p.user_id === player.id,
+    ...deco(p.user_id),
+  });
 
   if (path === '/top') {
     const byGame = {};
@@ -2223,6 +2280,7 @@ async function topRoutes(request, env, path, player, admin, origin) {
     const mine = await env.DB.prepare('SELECT pid FROM board_players WHERE user_id = ?').bind(player.id).first();
     const out = { games: list, mePid: mine?.pid ?? null, ...(outside && { outside: true }) };
     if (withOverall) {
+      await loadWorn();
       const ranking = overall();
       const me = ranking.find((p) => p.user_id === player.id);
       out.overall = { total: ranking.length, rows: ranking.slice(0, TOP_LIMIT).map(overallRow), me: me ? overallRow(me) : null };
@@ -2275,6 +2333,9 @@ async function topRoutes(request, env, path, player, admin, origin) {
     // рамка тестера на аватаре (в бете 'tester-frame'): у бета-тестеров и разработчика
     const tester = betaOpen('tester-frame', beta)
       && (adminIds.includes(Number(banned.tg_id)) || await isTester(env, who.user_id));
+    // что надето и какие значки есть — для профиля (в бете 'badges')
+    const cos = cosmeticsOn ? await cosmeticsOf(env, who.user_id, adminIds.includes(Number(banned.tg_id))) : null;
+    const looks = cos && { frame: cos.frame, badge: cos.badge, badges: cos.badges };
     if (ownerProfile) {
       // разработчик вне мест: результаты видны, мест и очков нет
       const own = Object.fromEntries(ranked.filter((r) => r.user_id === who.user_id).map((r) => [r.game_id, r]));
@@ -2283,6 +2344,7 @@ async function topRoutes(request, env, path, player, admin, origin) {
         games: GAMES.filter((g) => games.has(g.id) && own[g.id]).map((g) => ({ game: g.id, text: text(g.id, own[g.id].value), place: null, total: null })),
         ...(withOverall && { overall: null }),
         ...(tester && { tester: true }),
+        ...looks,
       }, 200, origin);
     }
     const found = Object.fromEntries(all.filter((r) => r.user_id === who.user_id).map((r) => [r.game_id, r]));
@@ -2294,6 +2356,7 @@ async function topRoutes(request, env, path, player, admin, origin) {
         ...(withOverall && { points: overallPoints(found[g.id].place) }),
       })),
       ...(tester && { tester: true }),
+      ...looks,
     };
     if (withOverall) {
       const ranking = overall();
@@ -2306,6 +2369,7 @@ async function topRoutes(request, env, path, player, admin, origin) {
   const one = path.match(/^\/top\/([a-z0-9-]{1,40})$/);
   if (!one || !games.has(one[1])) return fail('not_found', 404, origin);
   const game = one[1];
+  await loadWorn();
   const list = all.filter((r) => r.game_id === game && (r.place <= TOP_LIMIT || r.user_id === player.id))
     .sort((a, b) => a.place - b.place);
   const mine = list.find((r) => r.user_id === player.id);
@@ -2314,9 +2378,9 @@ async function topRoutes(request, env, path, player, admin, origin) {
     by: board(game).by,
     total: list[0]?.total ?? 0,
     rows: list.filter((r) => r.place <= TOP_LIMIT).map((r) => ({
-      place: r.place, name: r.name, text: text(game, r.value), pid: r.pid, me: r.user_id === player.id,
+      place: r.place, name: r.name, text: text(game, r.value), pid: r.pid, me: r.user_id === player.id, ...deco(r.user_id),
     })),
-    me: mine ? { place: mine.place, name: mine.name, text: text(game, mine.value), pid: mine.pid } : null,
+    me: mine ? { place: mine.place, name: mine.name, text: text(game, mine.value), pid: mine.pid, ...deco(mine.user_id) } : null,
     ...(outside && { outside: true }),
   }, 200, origin);
 }
@@ -2421,6 +2485,56 @@ async function perksOf(env, userId) {
   return (rows.results ?? []).map((r) => r.perk).filter(isPerk);
 }
 
+// ---------- рамки и значки ----------
+// Что выдано (user_badges) и что игрок надел (user_wear: NULL — не выбирал, '' — снял). Рамка тестера не выдаётся:
+// она есть у бета-тестеров и разработчика. Правила «что надето» — wearOf в lib.js.
+
+const cosmeticsReady = new WeakSet();
+
+async function ensureCosmetics(env) {
+  if (cosmeticsReady.has(env.DB)) return;
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS user_badges (
+    user_id INTEGER NOT NULL, badge TEXT NOT NULL, PRIMARY KEY (user_id, badge))`).run();
+  await env.DB.prepare('CREATE TABLE IF NOT EXISTS user_wear (user_id INTEGER PRIMARY KEY, frame TEXT, badge TEXT)').run();
+  cosmeticsReady.add(env.DB);
+}
+
+// в порядке списка BADGES — он же порядок в профиле
+const sortBadges = (list) => Object.keys(BADGES).filter((b) => list.includes(b));
+
+async function badgesOf(env, userId) {
+  await ensureCosmetics(env);
+  const rows = await env.DB.prepare('SELECT badge FROM user_badges WHERE user_id = ?').bind(userId).all();
+  return sortBadges((rows.results ?? []).map((r) => r.badge));
+}
+
+/** Рамки и значки одного игрока: что есть и что надето — { frames, badges, frame, badge }. */
+async function cosmeticsOf(env, userId, admin) {
+  const owned = {
+    frames: admin || await isTester(env, userId) ? Object.keys(FRAMES) : [],
+    badges: await badgesOf(env, userId),
+  };
+  const chosen = await env.DB.prepare('SELECT frame, badge FROM user_wear WHERE user_id = ?').bind(userId).first();
+  return { ...owned, ...wearOf(owned, chosen) };
+}
+
+/** Что надето у всех сразу — для строк таблицы: функция userId → { frame, badge }. Три небольших запроса. */
+async function wornByAll(env) {
+  await ensureCosmetics(env);
+  await ensureTesters(env);
+  const testers = new Set(((await env.DB.prepare('SELECT user_id FROM beta_testers').all()).results ?? []).map((r) => r.user_id));
+  const badges = new Map();
+  for (const r of (await env.DB.prepare('SELECT user_id, badge FROM user_badges').all()).results ?? []) {
+    badges.set(r.user_id, [...(badges.get(r.user_id) ?? []), r.badge]);
+  }
+  const chosen = new Map(((await env.DB.prepare('SELECT user_id, frame, badge FROM user_wear').all()).results ?? []).map((r) => [r.user_id, r]));
+  // разработчика в строках нет (он вне мест), поэтому рамка тестера здесь — только по отметке тестера
+  return (userId) => wearOf(
+    { frames: testers.has(userId) ? Object.keys(FRAMES) : [], badges: sortBadges(badges.get(userId) ?? []) },
+    chosen.get(userId),
+  );
+}
+
 // ---------- бета-тестеры ----------
 // Кого владелец позвал проверять бету: видят новые игры и функции, как он, но панели у них нет (её закрывает
 // isAdmin). Список — в базе, не в коде: репозиторий публичный. Отмечает владелец в панели.
@@ -2466,7 +2580,7 @@ async function adminRoutes(request, env, path, url, origin) {
     return json(await broadcast(env, text.trim()), 200, origin);
   }
 
-  const match = path.match(/^\/admin\/player\/(\d+)(\/state|\/ban|\/perk|\/board|\/tester)?$/);
+  const match = path.match(/^\/admin\/player\/(\d+)(\/state|\/ban|\/perk|\/board|\/tester|\/badge)?$/);
   if (!match) return fail('not_found', 404, origin);
   const id = Number(match[1]);
   const action = match[2] ?? '';
@@ -2482,7 +2596,18 @@ async function adminRoutes(request, env, path, url, origin) {
       player: playerRow(player), data: row?.data ?? '{}', updatedAt: row?.updated_at ?? 0,
       perks: await perksOf(env, id), allPerks: PERKS, boardHidden: Boolean(board?.hidden),
       tester: await isTester(env, id),
+      badges: await badgesOf(env, id), allBadges: BADGES,
     }, 200, origin);
+  }
+
+  // значок: выдать или забрать (что надеть, игрок выбирает сам)
+  if (action === '/badge' && request.method === 'POST') {
+    const { badge, on } = await body(request);
+    if (!isBadge(badge)) return fail('bad_badge', 400, origin);
+    await ensureCosmetics(env);
+    if (on) await env.DB.prepare('INSERT OR IGNORE INTO user_badges (user_id, badge) VALUES (?, ?)').bind(id, badge).run();
+    else await env.DB.prepare('DELETE FROM user_badges WHERE user_id = ? AND badge = ?').bind(id, badge).run();
+    return json({ ok: true, badges: await badgesOf(env, id) }, 200, origin);
   }
 
   // бета-тестер: видит бету, панели не получает
@@ -2550,6 +2675,9 @@ async function adminRoutes(request, env, path, url, origin) {
     await env.DB.prepare('DELETE FROM user_perks WHERE user_id = ?').bind(id).run();
     await ensureTesters(env);
     await env.DB.prepare('DELETE FROM beta_testers WHERE user_id = ?').bind(id).run();
+    await ensureCosmetics(env);
+    await env.DB.prepare('DELETE FROM user_badges WHERE user_id = ?').bind(id).run();
+    await env.DB.prepare('DELETE FROM user_wear WHERE user_id = ?').bind(id).run();
     await ensureBoardTables(env);
     await env.DB.prepare('DELETE FROM board_scores WHERE user_id = ?').bind(id).run();
     await env.DB.prepare('DELETE FROM board_players WHERE user_id = ?').bind(id).run();

@@ -354,6 +354,7 @@ function renderNui(screen, route) {
       betaCount: isTester() ? BETA.length : null,
       admin: account.isAdmin,
       tester: isTester() && feature('tester-frame'),
+      looks: feature('badges'),
       feedback: () => openFeedback({ account, toast }),
       dockable: feature('tabbar-dock'),
       onPrefs: (prefs) => applyPrefs(platform, prefs, feature('tabbar-dock')),
