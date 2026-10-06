@@ -19,7 +19,7 @@ import { GAME_ICONS } from './icons.js';
 import { categoryOfGame, byFolderAndPlace } from './categories.js';
 import { feature } from './beta.js';
 import { filterGames } from './nui/logic.js';
-import { BADGES, badge, hasBadgeArt, framed } from './badges.js';
+import { BADGES, BADGE_NOTES, badge, hasBadgeArt, framed } from './badges.js';
 import { message } from '../platform/errors.js';
 import { showLayer, hideLayer, pop, shake, reducedMotion } from '../shared/motion.js';
 
@@ -98,6 +98,47 @@ export async function renderTop(container, {
   };
   const screen = el('div', { class: 'scroll top-screen' });
   container.replaceChildren(screen);
+
+  /**
+   * Значки в профиле игрока: одна строка — заголовок и маленькие картинки без подписей (плитки с названиями занимали
+   * много места). Название значка и за что он — по нажатию, под строкой; ещё раз или мимо — убрать.
+   */
+  const badgeShelf = (ids) => {
+    const name = el('b', {});
+    const note = el('span', {});
+    const info = el('div', { class: 'top-badge-info', role: 'status', hidden: true }, el('div', { class: 'top-badge-card' }, name, note));
+    let open = null;
+    const buttons = ids.map((id) => el('button', {
+      class: 'top-badge-btn', 'aria-label': `Значок ${BADGES[id]}`, 'aria-expanded': 'false', onclick: () => toggle(id),
+    }, badge(id, 32)));
+    const paint = () => buttons.forEach((button, i) => {
+      button.classList.toggle('on', ids[i] === open);
+      button.setAttribute('aria-expanded', String(ids[i] === open));
+    });
+    const close = () => {
+      open = null;
+      paint();
+      hideLayer(info, () => open === null);
+    };
+    function toggle(id) {
+      if (open === id) return close();
+      const shown = open !== null;
+      open = id;
+      name.textContent = BADGES[id];
+      note.textContent = BADGE_NOTES[id] ?? '';
+      paint();
+      if (shown) pop(info.firstElementChild, { from: 0.94 });
+      else showLayer(info);
+    }
+    const shelf = el('div', { class: 'top-badges' },
+      el('div', { class: 'top-badge-row' }, el('h2', { class: 'top-sec' }, 'Значки'), el('div', { class: 'top-badge-list' }, buttons)),
+      info,
+    );
+    screen.addEventListener('pointerdown', (e) => {
+      if (open !== null && shelf.isConnected && !shelf.contains(e.target)) close();
+    });
+    return shelf;
+  };
   // replaceChildren, в отличие от el(), не пропускает false/null — отсеиваем сами
   const show = (...nodes) => screen.replaceChildren(...nodes.flat().filter((n) => n != null && n !== false));
 
@@ -150,11 +191,7 @@ export async function renderTop(container, {
           ),
         ),
         // все значки игрока — под местами, над списком игр
-        badges.length > 0 && el('div', { class: 'top-badges' },
-          el('h2', { class: 'top-sec' }, 'Значки'),
-          el('div', { class: 'top-badge-list' }, badges.map((id) => el('div', { class: 'top-badge-tile' },
-            badge(id, 48), el('span', {}, BADGES[id])))),
-        ),
+        badges.length > 0 && badgeShelf(badges),
         list.length
           ? el('div', { class: 'top-list' }, list.map((g, i) => el('a', {
             class: `top-row${g.place && g.place <= 3 ? ' top-row-medal' : ''}`,

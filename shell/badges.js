@@ -11,6 +11,8 @@ import { testerFrame } from './tester-frame.js';
 
 export const FRAMES = { tester: 'Рамка тестера' };
 export const BADGES = { contributor: 'Contributor' };
+// за что значок — показывается по нажатию на него в профиле (на сервере не нужно)
+export const BADGE_NOTES = { contributor: 'За помощь проекту' };
 
 const N = 16;
 const F = '#'.repeat(N);

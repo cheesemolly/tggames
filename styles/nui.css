@@ -830,7 +830,10 @@
 }
 .nui .nscreen .top-screen .tframe-ava { color: var(--n-on); }
 .nui .nscreen .top-sec { font-family: var(--n-px); font-size: 12px; font-weight: 400; line-height: 1.4; }
-.nui .nscreen .top-badge-tile { border: 2px solid #000; border-radius: 6px; box-shadow: var(--n-sh); background: var(--n-s1); }
+.nui .nscreen .top-badge-btn { border-radius: 6px; }
+.nui .nscreen .top-badge-btn.on { background: var(--n-s2); }
+.nui .nscreen .top-badge-card { border: 2px solid #000; border-radius: 6px; box-shadow: var(--n-sh); background: var(--n-s1); }
+.nui .nscreen .top-badge-card span { color: var(--n-hint); }
 .nui .nscreen .top-profile-name { font-family: var(--n-px); font-size: 16px; font-weight: 400; line-height: 1.4; }
 .nui .nscreen .nskel-row { margin-top: 12px; }
 

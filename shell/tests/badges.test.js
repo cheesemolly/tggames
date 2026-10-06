@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { FRAMES, BADGES, grid, erode, edge, place, path, polygon, hasBadgeArt } from '../badges.js';
+import { FRAMES, BADGES, BADGE_NOTES, grid, erode, edge, place, path, polygon, hasBadgeArt } from '../badges.js';
 import { FRAMES as SERVER_FRAMES, BADGES as SERVER_BADGES, SERVER_BETA, wearOf } from '../../server/lib.js';
 import { BETA } from '../beta.js';
 
@@ -9,6 +9,9 @@ test('значки и рамки: список в оболочке тот же, 
   assert.deepEqual(FRAMES, SERVER_FRAMES);
   assert.deepEqual(BADGES, SERVER_BADGES);
   for (const id of Object.keys(BADGES)) assert.ok(hasBadgeArt(id), `картинка значка ${id}`);
+  // в профиле у значка нет подписи — название и за что он показываются по нажатию
+  assert.deepEqual(Object.keys(BADGE_NOTES), Object.keys(BADGES), 'у каждого значка написано, за что он');
+  assert.equal(BADGE_NOTES.contributor, 'За помощь проекту');
   assert.equal(hasBadgeArt('__proto__'), false);
   assert.equal(SERVER_BETA.includes('badges'), BETA.some((b) => b.id === 'badges'), 'в бете — и там, и там');
 });

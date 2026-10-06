@@ -881,21 +881,37 @@ h1, h2 { margin: 0 0 8px; line-height: 1.2; }
 .top-named { display: flex; align-items: center; gap: 6px; }
 .top-step-name.top-named { justify-content: center; gap: 5px; }
 .top-name-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* раздел «Значки» в профиле игрока */
-.top-badges { margin: 0 0 16px; }
-.top-sec { margin: 0 0 8px; font-size: 15px; font-weight: 800; }
-.top-badge-list { display: flex; flex-wrap: wrap; gap: 8px; }
-.top-badge-tile {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 16px 10px 12px;
-  border-radius: 14px;
-  background: var(--tg-theme-secondary-bg-color);
-  font-size: 14px;
-  font-weight: 700;
-  animation: card-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+/* раздел «Значки» в профиле игрока: строка — заголовок и маленькие значки; название и за что — по нажатию */
+.top-badges { margin: 0 0 12px; }
+.top-badge-row { display: flex; align-items: center; gap: 6px; }
+.top-sec { margin: 0; font-size: 15px; font-weight: 800; }
+.top-badge-list { display: flex; flex-wrap: wrap; gap: 2px; min-width: 0; }
+.top-badge-btn {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 0.15s ease;
 }
+.top-badge-btn.on { background: var(--tg-theme-secondary-bg-color); }
+.top-badge-info { margin-top: 4px; }
+.top-badge-card {
+  display: inline-grid;
+  gap: 2px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: var(--tg-theme-secondary-bg-color);
+  font-size: 13px;
+  text-align: left;
+}
+.top-badge-card b { font-size: 14px; }
+.top-badge-card span { color: var(--tg-theme-hint-color); }
 .top-profile-sum { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; width: 100%; }
 .top-stat {
   display: grid;
