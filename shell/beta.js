@@ -112,6 +112,14 @@ export const BETA = [
     since: '2026-10-06',
     open: '#/game/flappy-burger',
   },
+  {
+    id: 'flappy-no-toast',
+    kind: 'feature',
+    title: 'Flappy Burger: без надписей о переходе',
+    note: 'При пролёте через стену больше не всплывают надписи «На улицу!» и «Обратно на кухню!» — они закрывали экран. Звук перехода остался.',
+    since: '2026-10-06',
+    open: '#/game/flappy-burger',
+  },
   // <<< конец списка беты
 ];
 

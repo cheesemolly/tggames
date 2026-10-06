@@ -1216,7 +1216,8 @@ function onEvent(e) {
   } else if (e === 'gate') {
     const toStreet = sceneAt(game, game.dist + BURGER_X) === 'street';
     sfx(toStreet ? 'street' : 'kitchen');
-    toast.show(toStreet ? T.street : T.kitchen, 1400);
+    // надписи «На улицу!» / «Обратно на кухню!» убраны (в бете: api.feature('flappy-no-toast')) — закрывали экран
+    if (!api.feature?.('flappy-no-toast')) toast.show(toStreet ? T.street : T.kitchen, 1400);
   } else if (e === 'hit') {
     sfx('hit');
     flashT = game.t;
