@@ -242,4 +242,11 @@ export const games = [
     // «Сыграно · Побед · Рекорд» — рекорд — счёт лучшей выигранной партии; у начатой — «Счёт 120 : 98»
     menu: { saveLine: (s) => (Array.isArray(s.scores) ? `Счёт ${s.scores[0]} : ${s.scores[1]}` : null) },
   },
+  {
+    id: 'billiards',
+    title: 'Бильярд',
+    load: () => import('../games/billiards/index.js'),
+    css: new URL('../games/billiards/game.css', import.meta.url),
+    menu: { best: false },                               // «Сыграно · Побед» — партии с ботом
+  },
 ];

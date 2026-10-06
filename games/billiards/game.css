@@ -1,0 +1,329 @@
+/*
+ * Бильярд. Стол рисуется на Canvas (render.js) — его цвета задают скины там же. Здесь — всё вокруг стола из цветов
+ * темы: шапка, табло игроков, шкала силы, колесо наводки, кнопка винта, окна. Игровые цвета (шкала силы от
+ * зелёного к красному, цвет битка) — переменные --bl-*, одинаковые в обеих темах.
+ */
+
+[data-game="billiards"] {
+  --bl-accent: var(--tg-theme-button-color);
+  --bl-accent-text: var(--tg-theme-button-text-color);
+  --bl-ivory: #f6f1e4;
+  --bl-dot: #c62828;
+  --bl-low: #3fbf6f;
+  --bl-mid: #f2c230;
+  --bl-high: #e5483b;
+  --toast-top: 130px;
+}
+
+.game-root[data-game="billiards"] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+[data-game="billiards"] .btn { background: var(--bl-accent); color: var(--bl-accent-text); }
+[data-game="billiards"] .btn-secondary { background: var(--tg-theme-bg-color); color: var(--tg-theme-text-color); }
+[data-game="billiards"] .bl { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 6px; }
+[data-game="billiards"] .bl-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 4px; }
+[data-game="billiards"] .bl-title { font-size: 20px; font-weight: 700; line-height: 1.2; }
+[data-game="billiards"] .bl-sub { min-height: 18px; font-size: 13px; color: var(--tg-theme-hint-color); }
+[data-game="billiards"] .bl-actions { display: flex; gap: 6px; }
+[data-game="billiards"] .bl-icon-btn {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: var(--tg-theme-secondary-bg-color);
+  color: var(--tg-theme-text-color);
+  font: inherit;
+  cursor: pointer;
+  transition: transform 0.1s ease, opacity 0.2s ease;
+}
+[data-game="billiards"] .bl-icon-btn:active { transform: scale(0.92); }
+[data-game="billiards"] .bl-icon-btn svg { width: 20px; height: 20px; }
+[data-game="billiards"] .bl-muted { opacity: 0.55; }
+
+/* табло: два игрока, у каждого — его шары */
+[data-game="billiards"] .bl-players { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+[data-game="billiards"] .bl-player {
+  display: grid;
+  gap: 3px;
+  min-height: 46px;
+  padding: 5px 9px;
+  border-radius: 10px;
+  background: var(--tg-theme-secondary-bg-color);
+  box-shadow: inset 0 -2px 0 transparent;
+  transition: box-shadow 0.25s ease, opacity 0.25s ease;
+  opacity: 0.7;
+}
+[data-game="billiards"] .bl-player.bl-active { box-shadow: inset 0 -2px 0 var(--bl-accent); opacity: 1; }
+[data-game="billiards"] .bl-who { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; min-width: 0; }
+[data-game="billiards"] .bl-name { font-size: 14px; white-space: nowrap; }
+[data-game="billiards"] .bl-group { font-size: 11px; color: var(--tg-theme-hint-color); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+[data-game="billiards"] .bl-balls { display: flex; gap: 3px; min-height: 13px; }
+[data-game="billiards"] .bl-mini {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--c);
+  box-shadow: inset -1.5px -2px 2px rgb(0 0 0 / 0.35), inset 1px 1px 1px rgb(255 255 255 / 0.4);
+  transition: opacity 0.3s ease, scale 0.3s ease;
+}
+[data-game="billiards"] .bl-stripe { background: linear-gradient(var(--bl-ivory) 24%, var(--c) 24% 76%, var(--bl-ivory) 76%); }
+[data-game="billiards"] .bl-eight { box-shadow: inset 0 0 0 2px var(--c), inset 0 0 0 4.5px var(--bl-ivory); }
+[data-game="billiards"] .bl-gone { opacity: 0.18; scale: 0.8; }
+
+/* стол и управление по бокам */
+[data-game="billiards"] .bl-play { flex: 1; min-height: 0; display: grid; grid-template-columns: 34px minmax(0, 1fr) 40px; gap: 6px; }
+[data-game="billiards"] .bl-wrap { position: relative; min-width: 0; min-height: 0; }
+[data-game="billiards"] .bl-canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
+[data-game="billiards"] .bl-left { display: flex; flex-direction: column; gap: 6px; min-height: 0; }
+
+/* кнопка винта: биток с красной точкой — куда придётся удар */
+[data-game="billiards"] .bl-spin {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: var(--tg-theme-secondary-bg-color);
+  cursor: pointer;
+  transition: transform 0.1s ease, opacity 0.2s ease, box-shadow 0.2s ease;
+}
+[data-game="billiards"] .bl-spin:active { transform: scale(0.92); }
+[data-game="billiards"] .bl-spin:disabled { opacity: 0.4; cursor: default; }
+[data-game="billiards"] .bl-spin-on { box-shadow: inset 0 0 0 2px var(--bl-accent); }
+[data-game="billiards"] .bl-spin-mini {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff, var(--bl-ivory) 55%, #b9b2a0);
+}
+[data-game="billiards"] .bl-spin-dot {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 26%;
+  height: 26%;
+  border-radius: 50%;
+  background: var(--bl-dot);
+  translate: -50% -50%;
+  transition: left 0.15s ease, top 0.15s ease;
+}
+
+/* колесо точной наводки: рифлёная полоса, едет под пальцем */
+[data-game="billiards"] .bl-wheel {
+  flex: 1;
+  min-height: 0;
+  border-radius: 10px;
+  background:
+    linear-gradient(90deg, rgb(0 0 0 / 0.28), transparent 30%, transparent 70%, rgb(0 0 0 / 0.28)),
+    repeating-linear-gradient(0deg, color-mix(in srgb, var(--tg-theme-hint-color) 55%, transparent) 0 2px, transparent 2px 9px),
+    var(--tg-theme-secondary-bg-color);
+  touch-action: none;
+  cursor: ns-resize;
+  transition: opacity 0.2s ease;
+}
+
+/* шкала силы: тянуть вниз — сильнее, отпустить — удар */
+[data-game="billiards"] .bl-power {
+  position: relative;
+  padding: 10px 0;
+  border-radius: 12px;
+  background: var(--tg-theme-secondary-bg-color);
+  touch-action: none;
+  cursor: ns-resize;
+  transition: opacity 0.2s ease, box-shadow 0.2s ease;
+}
+[data-game="billiards"] .bl-power-track {
+  position: relative;
+  width: 10px;
+  height: 100%;
+  margin: 0 auto;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--tg-theme-hint-color) 30%, transparent);
+}
+/* заливка — градиент во всю шкалу, открытый сверху до нужной силы: цвет показывает силу, а не «сколько залито» */
+[data-game="billiards"] .bl-power-fill {
+  position: absolute;
+  inset: 0;
+  border-radius: 5px;
+  background: linear-gradient(var(--bl-low), var(--bl-mid) 55%, var(--bl-high));
+  clip-path: inset(0 0 calc(100% - var(--p, 0%)) 0 round 5px);
+}
+[data-game="billiards"] .bl-power-knob {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 28px;
+  height: 16px;
+  border-radius: 6px;
+  background: var(--tg-theme-text-color);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.4);
+  translate: -50% -50%;
+}
+[data-game="billiards"] .bl-power-knob::after {
+  content: '';
+  position: absolute;
+  inset: 5px 6px;
+  border-top: 2px solid var(--tg-theme-bg-color);
+  border-bottom: 2px solid var(--tg-theme-bg-color);
+  opacity: 0.6;
+}
+[data-game="billiards"] .bl-charging { box-shadow: inset 0 0 0 2px var(--bl-accent); }
+[data-game="billiards"] .bl-off { opacity: 0.4; }
+
+[data-game="billiards"] .bl-status {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+[data-game="billiards"] .bl-thinking::after { content: '…'; width: 1.2em; animation: bl-dots 1s steps(4) infinite; overflow: hidden; text-align: left; }
+@keyframes bl-dots { from { width: 0; } to { width: 1.2em; } }
+
+/* ---------- окна ---------- */
+
+[data-game="billiards"] .bl-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--tg-theme-bg-color) 82%, transparent);
+}
+[data-game="billiards"] .bl-card {
+  width: 100%;
+  max-width: 380px;
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--tg-theme-secondary-bg-color);
+}
+[data-game="billiards"] .bl-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+[data-game="billiards"] .bl-card h2 { margin: 0; font-size: 18px; }
+[data-game="billiards"] .bl-card .bl-icon-btn { background: var(--tg-theme-bg-color); }
+[data-game="billiards"] .bl-result { text-align: center; }
+[data-game="billiards"] .bl-note { margin: 8px 0 0; font-size: 13px; line-height: 1.4; color: var(--tg-theme-hint-color); }
+[data-game="billiards"] .bl-rule { margin: 0 0 10px; font-size: 14px; line-height: 1.4; }
+[data-game="billiards"] .bl-line { display: flex; justify-content: space-between; gap: 12px; margin: 10px 0 0; font-size: 14px; }
+[data-game="billiards"] .bl-card-actions { display: flex; gap: 8px; margin-top: 14px; }
+[data-game="billiards"] .bl-card-actions .btn { flex: 1; }
+[data-game="billiards"] .bl-section { margin: 12px 0 8px; font-size: 14px; }
+[data-game="billiards"] .bl-section:first-of-type { margin-top: 0; }
+[data-game="billiards"] .bl-options { display: grid; gap: 6px; }
+[data-game="billiards"] .bl-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--tg-theme-bg-color);
+  color: var(--tg-theme-text-color);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+  transition: box-shadow 0.2s ease, transform 0.1s ease;
+}
+[data-game="billiards"] .bl-option span { font-size: 12px; color: var(--tg-theme-hint-color); text-align: right; }
+[data-game="billiards"] .bl-option[aria-checked="true"] { box-shadow: inset 0 0 0 2px var(--bl-accent); }
+[data-game="billiards"] .bl-option:active { transform: scale(0.98); }
+[data-game="billiards"] .bl-start { width: 100%; margin-top: 14px; }
+
+/* выбор точки удара: большой биток */
+[data-game="billiards"] .bl-spin-ball {
+  position: relative;
+  width: min(200px, 60%);
+  aspect-ratio: 1;
+  margin: 4px auto 0;
+  border-radius: 50%;
+  background: radial-gradient(circle at 36% 30%, #fff, var(--bl-ivory) 50%, #a9a290);
+  box-shadow: 0 6px 16px rgb(0 0 0 / 0.35);
+  touch-action: none;
+  cursor: crosshair;
+}
+[data-game="billiards"] .bl-spin-cross {
+  position: absolute;
+  inset: 12%;
+  border-radius: 50%;
+  border: 1px dashed rgb(0 0 0 / 0.25);
+  background:
+    linear-gradient(rgb(0 0 0 / 0.18), rgb(0 0 0 / 0.18)) center / 1px 100% no-repeat,
+    linear-gradient(rgb(0 0 0 / 0.18), rgb(0 0 0 / 0.18)) center / 100% 1px no-repeat;
+}
+[data-game="billiards"] .bl-spin-ball .bl-spin-dot { width: 13%; height: 13%; box-shadow: 0 1px 3px rgb(0 0 0 / 0.4); transition: none; }
+
+/* скины: образец — уголок стола */
+[data-game="billiards"] .bl-skins { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 8px; }
+[data-game="billiards"] .bl-skin {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--tg-theme-text-color);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+[data-game="billiards"] .bl-swatch {
+  display: grid;
+  width: 56px;
+  height: 56px;
+  padding: 7px;
+  border-radius: 10px;
+  background: var(--wood);
+  transition: transform 0.2s ease;
+}
+[data-game="billiards"] .bl-swatch i { border-radius: 3px; background: var(--cloth); box-shadow: inset 0 0 0 3px var(--cushion); }
+[data-game="billiards"] .bl-skin:active .bl-swatch { transform: scale(0.92); }
+[data-game="billiards"] .bl-skin[aria-checked="true"] .bl-swatch { outline: 3px solid var(--bl-accent); outline-offset: 3px; }
+
+[data-game="billiards"] .bl-stats { width: 100%; border-collapse: collapse; font-size: 13px; }
+[data-game="billiards"] .bl-stats th { font-size: 11px; font-weight: 600; color: var(--tg-theme-hint-color); padding: 4px 2px; }
+[data-game="billiards"] .bl-stats td { padding: 6px 2px; text-align: center; border-top: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 25%, transparent); font-variant-numeric: tabular-nums; }
+[data-game="billiards"] .bl-stats td:first-child { text-align: left; font-weight: 600; }
+
+/* низкий экран: всё вокруг стола ужимается — столу нужна высота */
+@media (max-height: 640px) {
+  [data-game="billiards"] .bl { gap: 4px; }
+  [data-game="billiards"] .bl-title { font-size: 17px; }
+  [data-game="billiards"] .bl-sub { min-height: 15px; font-size: 12px; }
+  [data-game="billiards"] .bl-icon-btn { width: 32px; height: 32px; }
+  [data-game="billiards"] .bl-player { min-height: 38px; padding: 3px 8px; gap: 2px; }
+  [data-game="billiards"] .bl-mini { width: 11px; height: 11px; }
+  [data-game="billiards"] .bl-balls { min-height: 11px; }
+  [data-game="billiards"] .bl-status { min-height: 24px; font-size: 12px; }
+  [data-game="billiards"] .bl-play { grid-template-columns: 30px minmax(0, 1fr) 36px; gap: 4px; }
+  [data-game="billiards"] .bl-spin { width: 30px; height: 30px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-game="billiards"] .bl-thinking::after { animation: none; }
+  [data-game="billiards"] * { transition-duration: 0s !important; }
+}

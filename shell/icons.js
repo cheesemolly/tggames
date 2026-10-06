@@ -80,6 +80,10 @@ export const GAME_ICONS = {
   checkers: svg('<rect x="3" y="3" width="18" height="18" rx="3"/>'
     + '<circle cx="8.6" cy="8.6" r="2.4" fill="currentColor" stroke="none"/>'
     + '<circle cx="15.4" cy="15.4" r="2.4"/><path d="M3 12h18" opacity="0.35"/>'),
+  // бильярд: шар-восьмёрка и кий
+  billiards: svg('<circle cx="10" cy="13.5" r="7"/><circle cx="10" cy="11.6" r="2.9"/>'
+    + '<path d="M10 9.7a.95.95 0 1 0 0 1.9.95.95 0 1 0 0-1.9M10 11.6a1.05 1.05 0 1 0 0 2.1 1.05 1.05 0 1 0 0-2.1" stroke-width="1"/>'
+    + '<path d="M16.2 7.6 21.4 2.4" stroke-width="2"/>'),
 
   // Аркады
   pinball: svg('<circle cx="12" cy="8" r="3.2" fill="currentColor" stroke="none"/>'

@@ -9,6 +9,15 @@ import { digits, plural, placeOn } from './logic.js';
 
 export const STORIES = [
   {
+    id: 'billiards-new',
+    label: 'Бильярд',
+    games: ['billiards'],
+    slides: [
+      { kicker: 'Новая игра', title: 'Бильярд', text: 'Пул-«восьмёрка» с настоящей физикой: против бота четырёх уровней или вдвоём на одном телефоне. Забей все свои шары, потом восьмёрку.', play: 'billiards' },
+      { kicker: 'Совет', title: 'Оттяжка и накат', text: 'Кнопка с шаром слева от стола — точка удара по битку. Ниже центра — биток после удара вернётся назад, выше — покатится за шаром. Так его ставят под следующий удар.', play: 'billiards' },
+    ],
+  },
+  {
     id: 'erudit-new',
     label: 'Эрудит',
     games: ['erudit'],
@@ -222,6 +231,7 @@ export function pickStories({ visible, rated = false, seen = [], week = null }) 
 
 /** Что показать баннером «Новая игра»: первая видимая игроку из списка (новые — выше). */
 export const NEW_GAMES = [
+  { id: 'billiards', text: 'Пул с настоящей физикой: бот или вдвоём' },
   { id: 'erudit', text: 'Скрэббл на русском против бота' },
   { id: 'arkanoid', text: '300 уровней, 10 глав, 15 бонусов' },
   { id: 'repair', text: '23 вида гаджетов, магазин, прошивка с ПК' },
