@@ -20,7 +20,7 @@ import { categoryOfGame, byFolderAndPlace } from './categories.js';
 import { feature } from './beta.js';
 import { filterGames } from './nui/logic.js';
 import { message } from '../platform/errors.js';
-import { showLayer, hideLayer, pop, shake } from '../shared/motion.js';
+import { showLayer, hideLayer, pop, shake, reducedMotion } from '../shared/motion.js';
 
 const MEDALS = ['🥇', '🥈', '🥉'];
 
@@ -295,7 +295,7 @@ export async function renderTop(container, {
     let list = res.data.games.filter((g) => games.some((x) => x.id === g.game));
     if (feature('top-sort')) list = byFolderAndPlace(list, (g) => g.game, (g) => g.me?.place ?? null);
     list = list.map((g) => ({ ...g, title: titleOf(g.game) }));
-    // в бете 'top-game-search' вверху вкладки «По играм» — поиск игры; поиск игрока остаётся во вкладке «Общий»
+    // в бете 'top-game-search' над списком — поиск игры (поиск игрока — по-прежнему вверху)
     const byGame = overall && feature('top-game-search');
     const rows = el('div', { class: 'top-list' });
     const drawRows = () => {
@@ -320,9 +320,10 @@ export async function renderTop(container, {
     show(
       header,
       tabs,
-      byGame ? gameSearch(drawRows) : searchForm,
+      searchForm,
       outsideNote,
       meLink,
+      byGame && gameSearch(drawRows, rows),
       rows,
     );
   };
@@ -339,10 +340,10 @@ export function overallLine(summary) {
 let gameQuery = '';
 
 /**
- * Поиск игры во вкладке «По играм» (в бете 'top-game-search'): поле вверху экрана, список сужается по мере набора —
- * по тем же правилам, что в «Играх» (filterGames). Enter убирает клавиатуру.
+ * Поиск игры во вкладке «По играм» (в бете 'top-game-search'): поле прямо над списком игр, список (rows) сужается по
+ * мере набора — по тем же правилам, что в «Играх» (filterGames). Enter убирает клавиатуру.
  */
-function gameSearch(onChange) {
+function gameSearch(onChange, rows) {
   const input = el('input', {
     class: 'top-search-input', type: 'search', placeholder: 'Найти игру', value: gameQuery, maxLength: 40,
     autocomplete: 'off', autocapitalize: 'off', spellcheck: false, enterkeyhint: 'search', 'aria-label': 'Найти игру',
@@ -351,13 +352,27 @@ function gameSearch(onChange) {
     gameQuery = input.value;
     onChange();
   });
-  return el('form', {
-    class: 'top-search', novalidate: true,
+  const form = el('form', {
+    class: 'top-search top-game-search', novalidate: true,
     onsubmit: (e) => {
       e.preventDefault();
       input.blur();
     },
   }, el('div', { class: 'top-search-row' }, input));
+  // Поле стоит над списком, посреди экрана. На телефоне при фокусе оно уезжает к верху — найденное видно над
+  // клавиатурой; списку на это время держится высота экрана, иначе короткий список вернул бы поле вниз.
+  let release = 0;
+  input.addEventListener('focus', () => {
+    if (!matchMedia('(pointer: coarse)').matches) return;
+    clearTimeout(release);
+    rows.style.minHeight = `${rows.closest('.scroll')?.clientHeight ?? 0}px`;
+    form.scrollIntoView({ block: 'start', behavior: reducedMotion() ? 'auto' : 'smooth' });
+  });
+  input.addEventListener('blur', () => {
+    // не сразу: нажатие на строку сначала снимает фокус — строка уехала бы из-под пальца
+    release = setTimeout(() => { rows.style.minHeight = ''; }, 300);
+  });
+  return form;
 }
 
 /**

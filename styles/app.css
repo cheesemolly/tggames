@@ -643,7 +643,7 @@ h1, h2 { margin: 0 0 8px; line-height: 1.2; }
 .top-screen { --cat: var(--cat-words); }
 .top-loading, .top-empty { text-align: center; padding: 18px 0; }
 .top-empty p { margin: 0 0 12px; }
-.top-list { display: grid; gap: 8px; }
+.top-list { display: grid; gap: 8px; align-content: start; }   /* start: при min-height (поиск игры) строки не растягиваются */
 .top-row {
   display: flex;
   align-items: center;
@@ -867,6 +867,7 @@ h1, h2 { margin: 0 0 8px; line-height: 1.2; }
 }
 .top-search-input:focus { outline: none; border-color: var(--tg-theme-button-color); }
 .top-search-input[type="search"] { appearance: none; -webkit-appearance: none; }
+.top-game-search { scroll-margin-top: 12px; }
 .top-list > .top-none { margin: 0; animation: top-sub-in 180ms ease-out; }
 .top-search .account-btn { flex: none; }
 .top-search .account-btn:disabled { opacity: 0.6; }
