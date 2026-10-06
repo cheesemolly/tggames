@@ -20,7 +20,8 @@
 //   GET  /top/<игра>              -> { game, by, total, rows: [{ place, name, text, pid, me }], me }
 //   GET  /top/player/<pid>        -> { name, me, games: [{ game, text, place, total, points? }], overall?, admin?,
 //                                    outside?, tester? } — профиль (разработчик — вне мест, но с бейджем admin:
-//                                    'leaderboard-no-admin'; tester — рамка тестера на аватаре: 'tester-frame')
+//                                    'leaderboard-no-admin'; tester — рамка тестера на аватаре: 'tester-frame';
+//                                    streak — сколько дней подряд заходит: 'profile-streak')
 //   POST /top/find  { username }  -> { pid } — поиск игрока по @нику, только точное совпадение; сам ник в ответ не попадает
 //   POST /top/suggest { q }       -> { players: [{ pid, name }] } — автодополнение: до 10 игроков, у кого имя
 //                                    начинается с q (кириллица тоже) или @ник совпал целиком; сам ник в ответ не попадает
@@ -45,7 +46,7 @@
 import {
   checkInitData, timingSafeEqual, validateState, parseAdminIds, isAdmin, displayName,
   publicGames, findGames, startAppLink, progressLines, shiftEntities, GAMES, BOARDS, boardScores, boardPoints, pointsView, boardFor, BOARD_VERSION, boardName,
-  PERKS, isPerk, FRAMES, BADGES, isBadge, wearOf, SERVER_BETA, SYNC_PROTOCOL, overallPoints, overallRanking, withoutUsers, parseUsername, matchPlayers, REPORT_MAX, REPORT_PER_HOUR, reportMessage, START_TEXT, WELCOME_TEXT, WELCOME_MEDIA,
+  PERKS, isPerk, FRAMES, BADGES, isBadge, wearOf, visitStreak, SERVER_BETA, SYNC_PROTOCOL, overallPoints, overallRanking, withoutUsers, parseUsername, matchPlayers, REPORT_MAX, REPORT_PER_HOUR, reportMessage, START_TEXT, WELCOME_TEXT, WELCOME_MEDIA,
 } from './lib.js';
 import {
   MERGE_PROTOCOL, loadDoc, saveDoc, applyPush, applyAdmin, entriesSince, isDeviceId,
@@ -658,6 +659,8 @@ async function topRoutes(request, env, path, player, admin, origin) {
     // что надето и какие значки есть — для профиля (в бете 'badges')
     const cos = cosmeticsOn ? await cosmeticsOf(env, who.user_id, adminIds.includes(Number(banned.tg_id))) : null;
     const looks = cos && { frame: cos.frame, badge: cos.badge, badges: cos.badges };
+    // серия дней — огонёк с главной, теперь и в профиле (в бете 'profile-streak'): только число, сами дни не отдаются
+    const streak = betaOpen('profile-streak', beta) ? { streak: await streakOf(env, who.user_id) } : null;
     if (ownerProfile) {
       // разработчик вне мест: результаты видны, мест и очков нет
       const own = Object.fromEntries(ranked.filter((r) => r.user_id === who.user_id).map((r) => [r.game_id, r]));
@@ -667,6 +670,7 @@ async function topRoutes(request, env, path, player, admin, origin) {
         ...(withOverall && { overall: null }),
         ...(tester && { tester: true }),
         ...looks,
+        ...streak,
       }, 200, origin);
     }
     const found = Object.fromEntries(all.filter((r) => r.user_id === who.user_id).map((r) => [r.game_id, r]));
@@ -679,6 +683,7 @@ async function topRoutes(request, env, path, player, admin, origin) {
       })),
       ...(tester && { tester: true }),
       ...looks,
+      ...streak,
     };
     if (withOverall) {
       const ranking = overall();
@@ -805,6 +810,16 @@ async function perksOf(env, userId) {
   await ensurePerks(env);
   const rows = await env.DB.prepare('SELECT perk FROM user_perks WHERE user_id = ?').bind(userId).all();
   return (rows.results ?? []).map((r) => r.perk).filter(isPerk);
+}
+
+/** Серия дней игрока — из дней захода в его прогрессе (visitStreak в lib.js). */
+async function streakOf(env, userId) {
+  const row = await env.DB.prepare('SELECT data FROM states WHERE user_id = ?').bind(userId).first();
+  try {
+    return visitStreak(JSON.parse(row?.data ?? '{}')?.['shell:player:visits']);
+  } catch {
+    return 0;       // прогресс не разобрался — серии нет
+  }
 }
 
 // ---------- рамки и значки ----------

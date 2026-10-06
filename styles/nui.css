@@ -561,6 +561,9 @@
 /* ---------- профиль ---------- */
 .nui .nprof-head { display: flex; align-items: center; gap: 14px; }
 .nui .nprof-name { flex: 1; min-width: 0; font-size: 16px; overflow-wrap: anywhere; }
+/* имя и под ним огонёк серии (в бете 'profile-streak') */
+.nui .nprof-id { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+.nui .nprof-id .nprof-name { flex: none; max-width: 100%; }
 /* значки и рамки во вкладке «Профиль»: что есть, что надето (нажатие — надеть / снять) */
 .nui .nlooks { display: flex; flex-direction: column; gap: 12px; }
 .nui .nlooks:empty { display: none; }
@@ -829,6 +832,7 @@
   background: var(--n-s1);
 }
 .nui .nscreen .top-screen .tframe-ava { color: var(--n-on); }
+.nui .nscreen .top-flame { border: 2px solid #000; border-radius: 6px; box-shadow: var(--n-sh); background: var(--n-s1); font-family: var(--n-font); }
 .nui .nscreen .top-sec { font-family: var(--n-px); font-size: 12px; font-weight: 400; line-height: 1.4; }
 .nui .nscreen .top-badge-btn { border-radius: 6px; }
 .nui .nscreen .top-badge-btn.on { background: var(--n-s2); }

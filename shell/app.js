@@ -28,6 +28,7 @@ import { renderProfile, renderNoRating, streakSheet } from './nui/profile.js';
 import { tabBar, skeleton } from './nui/ui.js';
 import { installAudioGate, applyPrefs, dockTabs, getPrefs, DEFAULT_PREFS } from './nui/prefs.js';
 import { markVisit, noteOpened } from './nui/store.js';
+import { streakOf, dayKey } from './nui/logic.js';
 import { installMouseDrag } from './nui/drag.js';
 
 const root = document.getElementById('app');
@@ -162,6 +163,7 @@ function show(route) {
         suggest: feature('player-suggest') ? (q) => account.suggestPlayers(q) : null,
       },
       search: feature('player-search'),
+      ownStreak,
       play: feature('top-play'),
       onBack: () => backFrom(route),
     }).catch((err) => console.error(err));
@@ -209,6 +211,9 @@ let lastTab = '#/top';          // вкладка рейтинга, с кото�
  * особые скины сами не выдаются: они — подарок конкретному игроку.
  */
 const hasPerk = (id) => (isOwner() && !playerView()) || account.perks.includes(id);
+
+// своя серия дней, как на главной (огонёк) — для своего профиля в рейтинге
+const ownStreak = async () => streakOf(await markVisit(), dayKey()).current;
 
 /** Куда ведёт «Назад»: из игры — в её папку, из папки — на главную, в рейтинге — на шаг вверх. */
 function backFrom(route = currentRoute()) {
@@ -355,6 +360,7 @@ function renderNui(screen, route) {
       admin: account.isAdmin,
       tester: isTester() && feature('tester-frame'),
       looks: feature('badges'),
+      streak: feature('profile-streak'),
       feedback: () => openFeedback({ account, toast }),
       dockable: feature('tabbar-dock'),
       onPrefs: (prefs) => applyPrefs(platform, prefs, feature('tabbar-dock')),
@@ -379,6 +385,7 @@ function renderNui(screen, route) {
         suggest: feature('player-suggest') ? (q) => account.suggestPlayers(q) : null,
       },
       search: feature('player-search'),
+      ownStreak,
       play: feature('top-play'),
       tabbed: true,
       skeleton: () => skeleton('row', 6),

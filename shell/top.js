@@ -19,6 +19,7 @@ import { GAME_ICONS } from './icons.js';
 import { categoryOfGame, byFolderAndPlace } from './categories.js';
 import { feature } from './beta.js';
 import { filterGames } from './nui/logic.js';
+import { icon } from './nui/icons.js';
 import { BADGES, BADGE_NOTES, badge, hasBadgeArt, framed } from './badges.js';
 import { message } from '../platform/errors.js';
 import { showLayer, hideLayer, pop, shake, reducedMotion } from '../shared/motion.js';
@@ -79,8 +80,10 @@ function head({ back, backLabel, title, hint, style = '', action = null }) {
 // skeleton — что показать, пока грузится (вместо «Загрузка…»).
 // play — в таблице игры кнопка «Играть»: сразу в игру, не выходя из рейтинга (в бете 'top-play'; просьба владельца,
 // 2026-10-02); «Назад» из игры в новом интерфейсе вернёт в эту же таблицу.
+// ownStreak — своя серия дней, как на главной (async → число): в своём профиле сегодняшний заход мог ещё не дойти
+// до сервера, и огонёк показал бы на день меньше.
 export async function renderTop(container, {
-  route, games, source, onBack, overall = false, search = false, tabbed = false, skeleton = null, play = false,
+  route, games, source, onBack, overall = false, search = false, tabbed = false, skeleton = null, play = false, ownStreak = null,
 }) {
   const titleOf = (id) => games.find((g) => g.id === id)?.title ?? id;
   // рамка на аватаре и значок справа от имени (в бете 'badges'): что надето, сервер кладёт в строку — frame, badge
@@ -166,9 +169,15 @@ export async function renderTop(container, {
       // надетая рамка: с рамками и значками её называет сервер (frame), до них — отметка тестера ('tester-frame')
       const frameId = looks && 'frame' in p ? p.frame : (p.tester && feature('tester-frame') ? 'tester' : null);
       const badges = looks ? (p.badges ?? []).filter(hasBadgeArt) : [];
+      // серия дней — тот же огонёк, что на главной, справа вверху (в бете 'profile-streak'); число отдаёт сервер
+      let streak = feature('profile-streak') && Number.isInteger(p.streak) ? p.streak : null;
+      if (streak !== null && p.me && ownStreak) streak = Math.max(streak, await ownStreak().catch(() => 0));
+      const days = `${streak} ${plural(streak ?? 0, ['день', 'дня', 'дней'])} подряд`;
       show(
-        el('div', { class: 'folder-head' },
+        el('div', { class: 'folder-head top-profile-head' },
           el('button', { class: 'back-chip', onclick: onBack, 'aria-label': 'Назад' }, '‹ Назад'),
+          streak !== null && el('span', { class: 'top-flame', role: 'img', 'aria-label': `Серия: ${days}`, title: `Серия: ${days}` },
+            icon('flame'), el('b', {}, String(streak))),
         ),
         el('div', { class: 'top-profile' },
           framed(avatar(p.name, 'top-avatar-lg'), frameId),

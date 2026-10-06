@@ -6,7 +6,7 @@ import { el } from '../../shared/dom.js';
 import { BOT_USERNAME } from '../config.js';
 import { icon } from './icons.js';
 import { avatar, gameArt, openSheet, switchButton, skeleton } from './ui.js';
-import { getVisits } from './store.js';
+import { getVisits, markVisit } from './store.js';
 import { getPrefs, setPref } from './prefs.js';
 import { FRAMES, BADGES, badge, hasBadgeArt, framed } from '../badges.js';
 import { pop, shake } from '../../shared/motion.js';
@@ -16,8 +16,10 @@ import { bestPlaces, streakOf, dayKey, monthCells, MONTHS, WEEKDAYS, digits, plu
 
 // tester — аватар в рамке тестера (в бете 'tester-frame'): у бета-тестеров и разработчика.
 // looks — рамки и значки (в бете 'badges'): что надето, называет сервер (account.cosmetics); здесь же их выбирают.
+// streak — огонёк серии под именем, как на главной (в бете 'profile-streak'); нажатие — календарь серии.
 export function renderProfile(container, {
-  games, account, platform, summary, betaCount = null, admin = false, tester = false, looks = false, feedback, onPrefs, dockable = false,
+  games, account, platform, summary, betaCount = null, admin = false, tester = false, looks = false, streak = false,
+  feedback, onPrefs, dockable = false,
 }) {
   const name = account.current ? account.name : platform.user?.first_name ?? null;
   const shown = firstName(name) ?? 'Гость';
@@ -40,10 +42,12 @@ export function renderProfile(container, {
   const wornFrame = () => (cosmetics() ? cosmetics().frame : tester ? 'tester' : null);
   let face = framed(avatar(shown, 'nava-lg'), wornFrame());
   const wear = el('div', { class: 'nlooks' });
+  const flame = streak && el('button', { class: 'nflame', hidden: true, onclick: () => streakSheet().catch(() => {}) },
+    icon('flame'), el('b', {}));
   const screen = el('div', { class: 'scroll nscroll nprofile' },
     el('div', { class: 'nprof-head' },
       face,
-      nameNode,
+      flame ? el('span', { class: 'nprof-id' }, nameNode, flame) : nameNode,
       el('button', { class: 'niconbtn', 'aria-label': 'Настройки', onclick: () => settingsSheet({ account, onPrefs, dockable }) }, icon('gear')),
     ),
     rank,
@@ -54,6 +58,16 @@ export function renderProfile(container, {
   );
   container.replaceChildren(screen);
   const refit = fitName(nameNode, () => Boolean(wornFrame()));
+  if (flame) {
+    // markVisit, а не getVisits: сегодняшний заход мог ещё не записаться — огонёк показал бы на день меньше
+    markVisit().then((visited) => {
+      const n = streakOf(visited, dayKey()).current;
+      flame.lastChild.textContent = String(n);
+      flame.setAttribute('aria-label', `Серия: ${n} ${plural(n, ['день', 'дня', 'дней'])} подряд`);
+      flame.hidden = false;
+      pop(flame, { from: 0.9 });
+    }).catch(() => {});
+  }
 
   // ---------- значки и рамки: что есть и что надето ----------
   function drawWear(note = null) {

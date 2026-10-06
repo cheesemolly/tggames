@@ -1044,6 +1044,51 @@ test('рамка тестера: в профиле рейтинга tester — �
   }
 });
 
+// ---------- серия дней в профиле ----------
+
+test('серия в профиле: число дней подряд из дней захода игрока; сами дни не отдаются; в бете — только тем, кто видит бету', async () => {
+  const lib = await import('../lib.js');
+  const DAY = 86400000;
+  const now = Date.UTC(2026, 9, 6, 12);                       // 6 октября 2026, полдень по UTC
+  const key = (back) => new Date(now - back * DAY).toISOString().slice(0, 10);
+  const streak = (backs, at = now) => lib.visitStreak(backs.map(key), at);
+  assert.equal(streak([2, 1, 0]), 3, 'сегодня, вчера, позавчера');
+  assert.equal(streak([5, 4, 2, 1, 0]), 3, 'пропуск рвёт серию');
+  assert.equal(streak([3, 2, 1]), 3, 'сегодня ещё не заходил — серия до вчера горит');
+  assert.equal(streak([4, 3, 2]), 3, 'позавчера — ещё горит: у игрока свой часовой пояс');
+  assert.equal(streak([5, 4, 3]), 0, 'три дня назад — погасла');
+  assert.equal(streak([0, 0, 1]), 2, 'повторы не считаются дважды');
+  assert.equal(lib.visitStreak(['2025-12-30', '2025-12-31', '2026-01-01'], Date.UTC(2026, 0, 1, 5)), 3, 'через границу года');
+  assert.equal(lib.visitStreak([key(0), 'мусор', 7, null]), 1, 'мусор отбрасывается');
+  for (const bad of [null, undefined, 'x', {}, []]) assert.equal(lib.visitStreak(bad), 0);
+
+  const wasBeta = [...lib.SERVER_BETA];
+  lib.SERVER_BETA.splice(0, lib.SERVER_BETA.length, 'profile-streak');
+  try {
+    const env = createEnv();
+    const owner = await asUser(ADMIN);
+    const masha = await asUser(USER);
+    const petya = await asUser({ id: 43, first_name: 'Петя' });
+    const today = (back) => new Date(Date.now() - back * DAY).toISOString().slice(0, 10);
+    await save(env, masha, { 'shell:stats:flappy-burger': { played: 1, wins: 0, best: 14 }, 'shell:player:visits': [today(3), today(1), today(0)] });
+    await save(env, petya, { 'shell:stats:flappy-burger': { played: 1, wins: 0, best: 9 } });
+    const pidOf = async (who) => (await call(env, '/top', { initData: who })).data.mePid;
+    const [mashaPid, petyaPid] = [await pidOf(masha), await pidOf(petya)];
+    const profile = async (pid, who) => (await call(env, `/top/player/${pid}`, { initData: who })).data;
+
+    assert.equal((await profile(mashaPid, owner)).streak, 2, 'сегодня и вчера');
+    assert.equal((await profile(petyaPid, owner)).streak, 0, 'дней захода нет — серия 0');
+    assert.equal(JSON.stringify(await profile(mashaPid, owner)).includes(today(0)), false, 'сами дни в ответ не попадают');
+    assert.equal('streak' in await profile(mashaPid, petya), false, 'пока в бете — игроку поле не отдаётся');
+
+    lib.SERVER_BETA.splice(0, lib.SERVER_BETA.length);
+    assert.equal((await profile(mashaPid, petya)).streak, 2, 'после релиза серию видят все');
+    assert.equal((await profile(mashaPid, masha)).streak, 2, 'и сам игрок — в своём профиле');
+  } finally {
+    lib.SERVER_BETA.splice(0, lib.SERVER_BETA.length, ...wasBeta);
+  }
+});
+
 // ---------- значки и рамки ----------
 
 test('значки и рамки: выдаёт владелец, надетое видно в таблицах и профиле; носить — одну рамку и один значок из своих', async () => {

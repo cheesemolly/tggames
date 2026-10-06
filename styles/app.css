@@ -757,6 +757,24 @@ h1, h2 { margin: 0 0 8px; line-height: 1.2; }
 .top-profile { display: grid; justify-items: center; gap: 10px; margin: 4px 0 18px; text-align: center; }
 .top-profile .top-avatar-lg { animation: top-pop 420ms cubic-bezier(0.3, 1.6, 0.5, 1) backwards; }
 .top-profile-name { font-size: 22px; font-weight: 800; overflow-wrap: anywhere; }
+/* серия дней в профиле игрока — тот же огонёк с числом, что на главной: справа вверху, напротив «Назад» */
+.top-profile-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.top-flame {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 12px;
+  background: var(--tg-theme-secondary-bg-color);
+  color: #ff8a3d;
+  font-size: 15px;
+  font-weight: 800;
+  animation: top-pop 420ms cubic-bezier(0.3, 1.6, 0.5, 1) backwards;
+}
+.top-flame .ni { display: inline-grid; place-items: center; width: 20px; height: 20px; }
+.top-flame .ni svg { width: 100%; height: 100%; }
 
 /* ---------- рамка тестера (shell/tester-frame.js) ----------
    Квадратная серебряная кайма с бликом и заклёпками, внизу по центру свисает значок — гаечный ключ и молот.

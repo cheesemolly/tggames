@@ -265,6 +265,7 @@ export const SERVER_BETA = [
   'rating-points',
   'tester-frame',
   'badges',
+  'profile-streak',
   // <<< конец серверной беты
 ];
 
@@ -323,6 +324,27 @@ export const PERKS = {
 };
 
 export const isPerk = (id) => Object.prototype.hasOwnProperty.call(PERKS, id);
+
+// ---------- серия дней ----------
+
+/**
+ * Серия игрока для его профиля (в бете 'profile-streak'): сколько дней подряд он заходил — тот же огонёк, что у
+ * него на главной. days — дни захода из его прогресса (shell:player:visits, местные даты «ГГГГ-ММ-ДД»).
+ * Считается от последнего дня захода назад. Серия жива, если последний заход — не раньше позавчера по UTC: у игрока
+ * «сегодня» и «вчера» свои, а его часовой пояс серверу неизвестен (местная дата отличается от UTC не больше чем на
+ * день), так что оборванная серия может гореть на день дольше, но живая не погаснет раньше времени.
+ */
+export function visitStreak(days, now = Date.now()) {
+  const DAY = 86400000;
+  const nums = [...new Set((Array.isArray(days) ? days : [])
+    .filter((d) => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d))
+    .map((d) => Math.round(Date.UTC(Number(d.slice(0, 4)), Number(d.slice(5, 7)) - 1, Number(d.slice(8, 10))) / DAY)))]
+    .sort((a, b) => a - b);
+  if (!nums.length || nums.at(-1) < Math.floor(now / DAY) - 2) return 0;
+  let run = 1;
+  while (run < nums.length && nums.at(-run - 1) === nums.at(-run) - 1) run += 1;
+  return run;
+}
 
 // ---------- рамки и значки ----------
 
