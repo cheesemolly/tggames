@@ -29,10 +29,11 @@ export function renderProfile(container, { games, account, platform, summary, be
     admin && menuLink('panel', 'Панель владельца', '#/admin'),
   );
 
+  const nameNode = el('span', { class: 'nprof-name npx' }, shown);
   const screen = el('div', { class: 'scroll nscroll nprofile' },
     el('div', { class: 'nprof-head' },
       tester ? testerFrame(avatar(shown, 'nava-lg')) : avatar(shown, 'nava-lg'),
-      el('span', { class: 'nprof-name npx' }, shown),
+      nameNode,
       el('button', { class: 'niconbtn', 'aria-label': 'Настройки', onclick: () => settingsSheet({ account, onPrefs, dockable }) }, icon('gear')),
     ),
     rank,
@@ -41,6 +42,7 @@ export function renderProfile(container, { games, account, platform, summary, be
     menu,
   );
   container.replaceChildren(screen);
+  if (tester) fitName(nameNode);
 
   // ---------- место в рейтинге ----------
   if (!account.enabled) {
@@ -105,6 +107,36 @@ export function renderNoRating(container, { platform }) {
       el('button', { class: 'nbtn', onclick: () => platform.openTelegramLink(`https://t.me/${BOT_USERNAME}`) }, `Открыть @${BOT_USERNAME}`),
     ),
   ));
+}
+
+/**
+ * Имя рядом с рамкой тестера: рамка шире аватара, и имя рвалось посреди слова («cheese_mol / ly»). Шрифт
+ * уменьшается, пока имя не встанет в одну строку; не встало и самым мелким — перенос, как без рамки.
+ * Пересчёт — когда догрузился шрифт и когда меняется ширина.
+ */
+function fitName(node, sizes = [16, 14, 12, 10]) {
+  const fit = () => {
+    if (!node.isConnected) return;
+    node.style.whiteSpace = 'nowrap';
+    for (const size of sizes) {
+      node.style.fontSize = `${size}px`;
+      if (node.scrollWidth <= node.clientWidth) return;
+    }
+    node.style.whiteSpace = '';
+    node.style.fontSize = '12px';
+  };
+  fit();
+  document.fonts?.ready.then(fit).catch(() => {});
+  if (typeof ResizeObserver === 'function') {
+    let width = node.clientWidth;
+    const watch = new ResizeObserver(() => {
+      if (!node.isConnected) return watch.disconnect();
+      if (node.clientWidth === width) return;      // высота меняется от самой подгонки — её не слушаем
+      width = node.clientWidth;
+      fit();
+    });
+    watch.observe(node);
+  }
 }
 
 function menuItem(iconName, text, onclick, external = false) {
