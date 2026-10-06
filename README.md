@@ -38,13 +38,43 @@
   <tr>
     <td align="center"><img src="media/readme/flags.gif" width="220" alt="флаги"><br><b>флаги</b><br><sub>угадай страну по флагу</sub></td>
     <td align="center"><img src="media/readme/bongo-cat.gif" width="220" alt="bongo cat"><br><b>bongo cat</b><br><sub>кот стучит, а ты играешь мелодии</sub></td>
+    <td align="center"><img src="media/readme/tictactoe.gif" width="220" alt="крестики-нолики"><br><b>крестики-нолики</b><br><sub>классика 3×3 и гомоку против бота</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="media/readme/match3.gif" width="220" alt="три в ряд"><br><b>три в ряд</b><br><sub>меняй фишки местами и собирай ряды</sub></td>
+    <td align="center"><img src="media/readme/chess.gif" width="220" alt="шахматы"><br><b>шахматы</b><br><sub>семь уровней бота или партия с другом по ссылке</sub></td>
+    <td align="center"><img src="media/readme/spider.gif" width="220" alt="паук"><br><b>паук</b><br><sub>пасьянс на одну, две или четыре масти</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="media/readme/klondike.gif" width="220" alt="косынка"><br><b>косынка</b><br><sub>сдача по одной или по три карты</sub></td>
+    <td align="center"><img src="media/readme/pinball.gif" width="220" alt="пинбол"><br><b>пинбол</b><br><sub>флипперы, бамперы и миссии</sub></td>
+    <td align="center"><img src="media/readme/nonogram.gif" width="220" alt="японский кроссворд"><br><b>японский кроссворд</b><br><sub>закрашивай клетки по числам и открывай картинку</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="media/readme/minesweeper.gif" width="220" alt="сапёр"><br><b>сапёр</b><br><sub>открывай клетки и не задень мину</sub></td>
+    <td align="center"><img src="media/readme/go.gif" width="220" alt="го"><br><b>го</b><br><sub>доски 9, 13 и 19 против бота</sub></td>
+    <td align="center"><img src="media/readme/killer-sudoku.gif" width="220" alt="судоку-киллер"><br><b>судоку-киллер</b><br><sub>судоку с клетками-суммами</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="media/readme/fifteen.gif" width="220" alt="пятнашки"><br><b>пятнашки</b><br><sub>собери плитки по порядку, поля от 3×3 до 8×8</sub></td>
+    <td align="center"><img src="media/readme/rubik.gif" width="220" alt="кубик рубика"><br><b>кубик рубика</b><br><sub>крути грани и собери кубик</sub></td>
+    <td align="center"><img src="media/readme/hanoi.gif" width="220" alt="ханойская башня"><br><b>ханойская башня</b><br><sub>перенеси башню, до десяти дисков</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="media/readme/billiards.gif" width="220" alt="бильярд"><br><b>бильярд</b><br><sub>пул-«восьмёрка» с настоящей физикой</sub></td>
+    <td align="center"><img src="media/readme/erudit.gif" width="220" alt="эрудит"><br><b>эрудит</b><br><sub>скрэббл на русском против бота</sub></td>
+    <td align="center"><img src="media/readme/arkanoid.gif" width="220" alt="арканоид"><br><b>арканоид</b><br><sub>300 уровней и 15 бонусов</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="media/readme/repair.gif" width="220" alt="ремонт гаджетов"><br><b>ремонт гаджетов</b><br><sub>найди поломку, разбери и почини</sub></td>
+    <td></td>
     <td></td>
   </tr>
 </table>
 
 ## что есть
 
-- 17 игр: слова, головоломки, аркады, шашки, викторина и музыка
+- 34 игры: слова, головоломки, аркады, настольные, викторина и музыка
 - рейтинг по каждой игре, видно только имя
 - прогресс сохраняется за аккаунтом telegram, можно играть с любого устройства
 - звуки, скины, светлая и тёмная тема
