@@ -22,6 +22,7 @@ import {
   emptyStats, recordGame, isValidStats, normalizeSettings, defaultSettings, SKINS, PERK_SKINS,
   AUTOFILL_MODES, autofillPlan, applyAutofill,
 } from './logic.js';
+import { pointsInfo } from '../../shared/points-info.js';
 
 const t = TEXT.ru;
 
@@ -817,6 +818,7 @@ function showSettings() {
     autofillRow || null,
     el('h3', { class: 'sd-section-title' }, t.settings.appearance),
     el('div', { class: 'sd-skins', role: 'radiogroup', 'aria-label': t.settings.appearance }, skinButtons),
+    pointsInfo(api, 'sudoku'),
   ));
   ui.modal.onEscape = close;
 }

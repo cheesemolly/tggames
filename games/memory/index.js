@@ -19,6 +19,7 @@ import { monsterSvg, patternSvg, specialSvg, speakerSvg, SPECIAL_INFO, DEFS } fr
 import { createSounds } from './sounds.js';
 import { createEffects } from './effects.js';
 import { createAudio } from '../../shared/sfx.js';
+import { pointsInfo } from '../../shared/points-info.js';
 
 const SKINS = [
   { id: 'telegram', title: 'По умолчанию' },
@@ -764,6 +765,7 @@ function openSettings() {
     el('label', { class: 'mm-toggle' },
       el('input', { type: 'checkbox', checked: settings.preview, onchange: (e) => { settings = { ...settings, preview: e.target.checked }; saveSettings(); } }),
       el('span', {}, 'Показывать карточки в начале')),
+    pointsInfo(api, 'memory'),
     el('button', { class: 'mm-btn', onclick: closeModal }, 'Готово'),
   ]);
 }

@@ -11,6 +11,7 @@ import {
   SIZES, DEFAULT_SIZE, WIN_VALUE, UNDO_PER_GAME, canMove, maxTile, newGame, play, undo, isValidState,
   emptyStats, recordGame, isValidStats,
 } from './logic.js';
+import { pointsInfo } from '../../shared/points-info.js';
 
 const SKINS = ['telegram', 'classic', 'dark', 'ocean', 'neon', 'candy'];
 const SLIDE_MS = 110;
@@ -391,6 +392,7 @@ function showSettings() {
     note,
     el('h3', { class: 'tt-section' }, T.settings.skin),
     el('div', { class: 'tt-skins', role: 'radiogroup' }, skinButtons),
+    pointsInfo(api, '2048'),
   ));
 }
 

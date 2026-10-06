@@ -14,6 +14,7 @@ import { createSounds } from './sounds.js';
 import {
   MODES, SIZES, LEVELS, newGame, play, undo, botMove, canPlay, isValidState, emptyStats, isValidStats, recordGame,
 } from './logic.js';
+import { pointsInfo } from '../../shared/points-info.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const T = {
@@ -581,6 +582,7 @@ function showSettings() {
     el('h3', { class: 'tt-section' }, T.skin),
     el('div', { class: 'tt-skins', role: 'radiogroup' }, skins),
     el('label', { class: 'tt-toggle' }, toggle, el('span', {}, T.confirmSetting)),
+    pointsInfo(api, 'tictactoe'),
   ));
 }
 

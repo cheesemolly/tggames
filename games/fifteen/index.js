@@ -23,6 +23,7 @@ import {
   recordGame, fmtTime,
 } from './logic.js';
 import { optimal } from './solver.js';
+import { pointsInfo } from '../../shared/points-info.js';
 
 const SKINS = ['telegram', 'wood', 'gradient', 'neon', 'candy', 'sunset', 'sea'];
 const PICTURE_SKINS = new Set(['sunset', 'sea']);
@@ -641,6 +642,7 @@ function showSettings() {
     toggle('numbers', T.numbers),
     toggle('moveGap', T.moveGap),
     finePointer && toggle('hover', T.hover),
+    pointsInfo(api, 'fifteen'),
   ));
 }
 

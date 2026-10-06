@@ -14,6 +14,7 @@ import {
   newGame, step, flap, launch, sceneAt, obstacleRects, emptyStats, recordGame, isValidStats,
 } from './logic.js';
 import { createLogo, LOGO_COUNT } from './logos.js';
+import { pointsInfo } from '../../shared/points-info.js';
 
 const T = {
   title: 'Flappy Burger',
@@ -1067,6 +1068,7 @@ function showStats() {
       item(stats.best, T.stats.best), item(stats.games, T.stats.games),
       item(stats.total, T.stats.total), item(stats.streets, T.stats.streets),
     ),
+    pointsInfo(api, 'flappy-burger'),
   ));
 }
 

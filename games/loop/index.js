@@ -13,6 +13,7 @@ import {
   newLevel, rotateTile, tileKind, isValidState, emptyStats, recordSolved, isValidStats, SHAPES,
   currentMasks, tileFits,
 } from './logic.js';
+import { pointsInfo } from '../../shared/points-info.js';
 
 const PALETTES = ['telegram', 'mint', 'sky', 'sand', 'lilac', 'rose', 'lemon', 'coral', 'graphite', 'night'];
 const RANDOM_POOL = PALETTES.filter((p) => p !== 'telegram');
@@ -382,6 +383,7 @@ function showSettings() {
     el('div', { class: 'lp-options', role: 'radiogroup' }, shapeButtons),
     el('h3', { class: 'lp-section' }, T.settings.palette),
     el('div', { class: 'lp-skins', role: 'radiogroup' }, paletteButtons),
+    pointsInfo(api, 'loop'),
   ));
 }
 

@@ -20,6 +20,7 @@ import {
 import { levelSpec, LEVEL_COUNT, CHAPTERS, TIPS } from './levels.js';
 import { createRenderer, makeIcon } from './render.js';
 import { createMap } from './map.js';
+import { pointsInfo } from '../../shared/points-info.js';
 
 const T = {
   title: 'Три в ряд',
@@ -42,6 +43,7 @@ const T = {
   soundOff: 'Включить звук',
   back: 'К карте',
   close: 'Закрыть',
+  pointsInfo: 'Очки в рейтинге',
   allDone: 'Все 100 уровней пройдены! Можно переигрывать на три звезды.',
 };
 
@@ -215,7 +217,7 @@ function showMap({ celebrate = 0 } = {}) {
   root.replaceChildren(
     el('div', { class: 'm3-header' },
       el('div', { class: 'm3-head-text' }, el('div', { class: 'm3-title' }, T.title), el('div', { class: 'm3-sub' }, T.level(currentLevel()))),
-      el('div', { class: 'm3-actions' }, passedBadge, soundButton()),
+      el('div', { class: 'm3-actions' }, passedBadge, api.feature('rating-points') && iconButton('🏆', T.pointsInfo, showPointsInfo), soundButton()),
     ),
     map.root,
     ui.modal,
@@ -244,6 +246,15 @@ function showMap({ celebrate = 0 } = {}) {
       }, reducedMotion() ? 0 : 450);
     }
   });
+}
+
+/** «Очки в рейтинге» (бета 'rating-points'): у игры нет окна настроек — своё окно с кнопки 🏆 на карте. */
+function showPointsInfo() {
+  sfx('click');
+  openModal(el('div', { class: 'm3-card', role: 'dialog', 'aria-label': T.pointsInfo },
+    el('button', { class: 'm3-close', 'aria-label': T.close, onclick: closeModal }, '✕'),
+    pointsInfo(api, 'match3'),
+  ), { onClose: () => {} });
 }
 
 function showLevelCard(n) {

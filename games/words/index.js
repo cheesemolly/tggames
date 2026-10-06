@@ -13,6 +13,7 @@ import {
   normalize, target, stars, passed, share, newProgress, levelState, unlockedMax, isUnlocked, submit, hint,
   isValidProgress,
 } from './logic.js';
+import { pointsInfo } from '../../shared/points-info.js';
 
 const SKINS = ['telegram', 'notebook', 'board'];
 const T = {
@@ -411,6 +412,7 @@ function showSettings() {
     ),
     el('h3', { class: 'wd-section' }, T.settings.skin),
     el('div', { class: 'wd-skins', role: 'radiogroup' }, buttons),
+    pointsInfo(api, 'words'),
   ));
 }
 

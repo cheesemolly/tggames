@@ -25,6 +25,7 @@ import {
   DNF, penaltyFor, averageOf, fmtTime, emptyStats, isValidStats, isValidHistory, recordSolve, SKINS, SPEEDS,
   defaultSettings, normalizeSettings, isValidSave, solveValue,
 } from './logic.js';
+import { pointsInfo } from '../../shared/points-info.js';
 
 const PALETTES = {
   classic: { colors: ['#ffffff', '#c41e3a', '#009e60', '#ffd500', '#ff5800', '#0051ba'], body: '#121212', size: 0.86, radius: 0.12 },
@@ -989,6 +990,7 @@ function showSettings() {
     el('div', { class: 'rb-options', role: 'radiogroup' }, speeds),
     el('label', { class: 'rb-toggle' }, insp, el('span', {}, T.inspection)),
     el('p', { class: 'rb-note' }, T.scrambleNote),
+    pointsInfo(api, 'rubik'),
   ));
 }
 

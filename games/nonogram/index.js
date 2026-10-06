@@ -20,6 +20,7 @@ import {
   isSolved, hintLine, serializeRun, deserializeRun, emptyProgress, normalizeProgress, recordSolve, solvedCount,
   isOpen, normalizeSettings, fmtTime,
 } from './logic.js';
+import { pointsInfo } from '../../shared/points-info.js';
 
 const T = {
   title: 'Японский кроссворд',
@@ -1023,6 +1024,7 @@ function showSettings() {
     }, T.checkHint),
     toggle(T.autoCross, settings.autoCross, (v) => { settings.autoCross = v; saveSettings(); }),
     toggle(T.highlight, settings.highlight, (v) => { settings.highlight = v; saveSettings(); }),
+    pointsInfo(api, 'nonogram'),
   ));
 }
 

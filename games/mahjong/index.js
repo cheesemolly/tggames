@@ -16,6 +16,7 @@ import {
   relations, isFree, freeTiles, availablePairs, removePair, undo, reshuffle, tilesLeft, isWon, isStuck,
   newGame, isValidState, emptyStats, recordGame, isValidStats,
 } from './logic.js';
+import { pointsInfo } from '../../shared/points-info.js';
 
 const SKINS = ['telegram', 'felt', 'wood', 'night', 'sakura', 'jade'];
 const TILE_RATIO = 1.3;          // высота плитки к ширине
@@ -668,6 +669,7 @@ function showSettings() {
       dim),
     el('h3', { class: 'mj-section' }, T.settings.skin),
     el('div', { class: 'mj-skins', role: 'radiogroup' }, skinButtons),
+    pointsInfo(api, 'mahjong'),
   ));
 }
 

@@ -24,6 +24,7 @@ import {
   emptyStats, recordGame, isValidStats, normalizeSettings, defaultSettings, SKINS,
   AUTOFILL_MODES, autofillPlan, applyAutofill,
 } from './logic.js';
+import { pointsInfo } from '../../shared/points-info.js';
 
 const t = TEXT.ru;
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -944,6 +945,7 @@ function showSettings() {
     ),
     el('h3', { class: 'ks-section-title' }, t.settings.appearance),
     el('div', { class: 'ks-skins', role: 'radiogroup', 'aria-label': t.settings.appearance }, skinButtons),
+    pointsInfo(api, 'killer-sudoku'),
   ));
   ui.modal.onEscape = close;
 }

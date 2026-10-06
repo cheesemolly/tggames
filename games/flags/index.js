@@ -12,6 +12,7 @@ import {
   MODES, LENGTHS, REGIONS, MARATHON_LIVES, WIN_SHARE, findCountry, suggest, newGame, answer, next, isOver, current,
   asked, isValidState, emptyStats, recordGame, isValidStats, regionPool,
 } from './logic.js';
+import { pointsInfo } from '../../shared/points-info.js';
 
 const T = {
   title: 'Флаги',
@@ -351,6 +352,7 @@ function showStats() {
       ? el('div', { class: 'fl-hard' }, hard.map(([code, n]) => el('div', { class: 'fl-hard-item' },
         el('img', { src: flagUrl(code), alt: '' }), el('span', {}, byCode.get(code).name), el('b', {}, `×${n}`))))
       : el('p', { class: 'fl-note' }, T.stats.none),
+    pointsInfo(api, 'flags'),
   ));
 }
 

@@ -21,6 +21,7 @@ import {
   COLUMNS, MODES, suitOf, rankOf, isUp, face, card, newGame, canPick, runStart, canMove, move, deal, canDeal, undo,
   isWon, hintMoves, allMoves, dealsLeft, isValidState, emptyStats, isValidStats, recordGame,
 } from './logic.js';
+import { pointsInfo } from '../../shared/points-info.js';
 
 const T = {
   title: 'Паук',
@@ -902,6 +903,7 @@ function showSettings() {
       api.storage.set('settings', settings);
     })),
     el('label', { class: 'sp-toggle' }, four, el('span', {}, el('b', {}, T.fourColor), el('small', {}, T.fourColorHint))),
+    pointsInfo(api, 'spider'),
   ));
 }
 

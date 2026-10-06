@@ -13,6 +13,7 @@ import {
   COLS, ROWS, BALL_R, POWER_R, MIN_ANGLE, newLevel, startTurn, step, recall, endTurn, danger, tracePath, aimAngle,
   polygon, progress, isValidState, normalizeState, emptyStats, isValidStats, LASER_LIFE, LASERS,
 } from './logic.js';
+import { pointsInfo } from '../../shared/points-info.js';
 
 const SKINS = ['telegram', 'classic', 'neon', 'candy', 'forest', 'graphite'];
 const FIELD_H = ROWS + 0.55;            // поле + полоска под линией запуска (шарик и «×60»)
@@ -983,6 +984,7 @@ function showSettings() {
   openModal(card(T.settings.title,
     el('h3', { class: 'bk-section' }, T.settings.skin),
     el('div', { class: 'bk-skins', role: 'radiogroup' }, buttons),
+    pointsInfo(api, 'brick-blast'),
   ));
 }
 

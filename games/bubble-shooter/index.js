@@ -19,6 +19,7 @@ import {
   newLevel, shoot, swap, arm, aimPath, angleTo, clearedShare, rewardProgress, isValidState, emptyStats, recordGame, isValidStats,
 } from './logic.js';
 import { drawSpecial, createTrail } from './specials.js';
+import { pointsInfo } from '../../shared/points-info.js';
 
 const SKINS = ['classic', 'telegram', 'night', 'candy'];
 const CANVAS_H = SHOOTER_DY + 1.35;                // поле + зона стрелка, в диаметрах шара
@@ -1180,6 +1181,7 @@ function showMenu() {
     ),
     el('p', { class: 'bs-note' }, T.menu.skin),
     el('div', { class: 'bs-skins' }, skins),
+    pointsInfo(api, 'bubble-shooter'),
     el('button', { class: 'btn btn-secondary bs-restart', onclick: () => { closeModal(); startLevel(game.level); } }, T.menu.restart),
   ));
 }

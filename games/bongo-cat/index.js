@@ -12,6 +12,7 @@ import {
   INSTRUMENTS, findInstrument, padForCode, SONGS, songKeys, songPhrases, followSong, expectedNote,
   emptyStats, isValidStats, recordHit, progressLine, octavePads, octaveKey,
 } from './logic.js';
+import { pointsInfo } from '../../shared/points-info.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const PAW_MIN_MS = 90;
@@ -515,6 +516,7 @@ function openStats() {
       el('span', { class: 'bc-stat-v' }, typeof v === 'number' ? v.toLocaleString('ru-RU') : v),
       el('span', { class: 'bc-stat-k' }, k),
     ))),
+    pointsInfo(api, 'bongo-cat'),
     el('button', { class: 'bc-btn', onclick: closeModal }, 'Закрыть'),
   ]);
 }

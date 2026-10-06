@@ -21,6 +21,7 @@ import {
   numbers, reveal, chord, toggleFlag, flagsAround, minesLeft, progressOf, bbbv, hintFor, serialize, deserialize,
   emptyStats, isValidStats, recordGame, normalizeSetup, normalizeSettings, fmtTime, neighborsOf,
 } from './logic.js';
+import { pointsInfo } from '../../shared/points-info.js';
 
 const T = {
   title: 'Сапёр',
@@ -1139,6 +1140,7 @@ function showSettings() {
     }, 'ms-option ms-option-sm'),
     toggle(T.chordSetting, settings.chord, (v) => { settings.chord = v; saveSettings(); }),
     toggle(T.marks, settings.marks, (v) => { settings.marks = v; saveSettings(); }),
+    pointsInfo(api, 'minesweeper'),
   ));
 }
 

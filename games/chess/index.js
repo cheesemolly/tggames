@@ -20,6 +20,7 @@ import {
 import { LEVELS, chooseMove, bestMove } from './engine.js';
 import { pieceSvg } from './pieces.js';
 import { HINTS_PER_GAME, emptyStats, isValidStats, isValidGame, capturedOf, ruSan, recordGame } from './logic.js';
+import { pointsInfo } from '../../shared/points-info.js';
 
 const T = {
   title: 'Шахматы',
@@ -821,6 +822,7 @@ function showSettings() {
         paintPlayers();
       })),
     el('label', { class: 'ch-toggle' }, coords, el('span', {}, T.coords)),
+    pointsInfo(api, 'chess'),
   ));
 }
 

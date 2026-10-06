@@ -13,6 +13,7 @@ import {
 import { createFx } from '../../shared/fx.js';
 import { createAudio } from '../../shared/sfx.js';
 import { createSounds } from './sounds.js';
+import { pointsInfo } from '../../shared/points-info.js';
 
 const SKINS = ['telegram', 'classic', 'sky', 'dark', 'wood', 'neon', 'candy', 'hedgehog'];
 // особые скины — только тем, кому выдал владелец (api.perk, shell/perks.js); id скина = id перка
@@ -533,7 +534,7 @@ function showSettings() {
       buttons.forEach((b, k) => b.setAttribute('aria-checked', String(skins[k] === id)));
     },
   }, el('span', { class: 'bb-swatch', 'data-skin': id }), T.skins[id]));
-  openModal(card(T.settings.title, el('div', { class: 'bb-skins', role: 'radiogroup' }, buttons)));
+  openModal(card(T.settings.title, el('div', { class: 'bb-skins', role: 'radiogroup' }, buttons), pointsInfo(api, 'block-blast')));
 }
 
 function askRestart() {

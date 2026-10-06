@@ -19,6 +19,7 @@ import {
   levelParams, checkPaths, startAt, stepTo, emptyPaths, newGame, nextRound, applyHint,
   isValidState, emptyStats, isValidStats, isAdjacent, axisOf, loadProgress, newLevelGame, passLevel, retryLevel,
 } from './logic.js';
+import { pointsInfo } from '../../shared/points-info.js';
 
 const SKINS = ['telegram', 'classic', 'neon', 'paper', 'candy', 'space'];
 const COLORS = 10;
@@ -655,6 +656,7 @@ function showSettings() {
       timerSwitch),
     el('h3', { class: 'cd-section' }, T.settings.skin),
     el('div', { class: 'cd-skins', role: 'radiogroup' }, skinButtons),
+    pointsInfo(api, 'connect-dots'),
   ));
 }
 

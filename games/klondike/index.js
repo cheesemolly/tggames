@@ -19,6 +19,7 @@ import {
   COLUMNS, MODES, suitOf, rankOf, isUp, face, newGame, canPick, firstUp, canMove, move, draw, undo, isWon,
   canAutoFinish, nextFinishMove, hintMoves, foundationFor, allMoves, isValidState, emptyStats, isValidStats, recordGame,
 } from './logic.js';
+import { pointsInfo } from '../../shared/points-info.js';
 
 const T = {
   title: 'Косынка',
@@ -994,6 +995,7 @@ function showSettings() {
       settings.winnable = on;
       api.storage.set('settings', settings);
     }),
+    pointsInfo(api, 'klondike'),
   ));
 }
 

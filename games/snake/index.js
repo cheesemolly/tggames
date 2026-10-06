@@ -19,6 +19,7 @@ import {
 } from './logic.js';
 import { levelMap, mapTitle, cycleOf, MAP_COUNT } from './levels.js';
 import { createRenderer } from './render.js';
+import { pointsInfo } from '../../shared/points-info.js';
 
 const SKINS = [
   { id: 'telegram', title: 'По умолчанию' },
@@ -668,6 +669,7 @@ function openSettings() {
         later(resize, 50);
       } }),
       el('span', {}, 'Кнопки-стрелки на экране')),
+    pointsInfo(api, 'snake'),
     el('button', { class: 'sn-btn', onclick: closeModal }, 'Готово'),
   ]);
 }

@@ -18,6 +18,7 @@ import {
   score, keyStatuses, checkGuess, getStatus, newBoard, getScore, isValidBoard,
   emptyStats, recordGame, isValidStats, shareText,
 } from './logic.js';
+import { pointsInfo } from '../../shared/points-info.js';
 
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const FLIP_MS = 450;
@@ -245,6 +246,7 @@ function openStats() {
         style: `width: ${Math.max(8, (count / maxDist) * 100)}%`,
       }, count),
     ))),
+    pointsInfo(api, 'wordle'),
   ));
   statsOpen = true;
   sfx('click');

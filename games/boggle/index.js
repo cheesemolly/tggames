@@ -16,6 +16,7 @@ import {
   checkSelection, applyWord, bonusPoints, isComplete, newGame, isValidState,
   emptyStats, recordGame, isValidStats,
 } from './logic.js';
+import { pointsInfo } from '../../shared/points-info.js';
 
 const SKINS = ['telegram', 'classic', 'night', 'paper', 'neon', 'mint'];
 const CAPSULE_COLORS = 8;
@@ -554,6 +555,7 @@ function showSettings() {
     note,
     el('h3', { class: 'bo-section' }, T.settings.skin),
     el('div', { class: 'bo-skins', role: 'radiogroup' }, skinButtons),
+    pointsInfo(api, 'boggle'),
   ));
 }
 

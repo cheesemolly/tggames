@@ -17,6 +17,7 @@ import { buildTable, W, BALL_R, PLUNGER_Y, LANE_X } from './table.js';
 import { createRenderer, SKINS } from './render.js';
 import * as R from './rules.js';
 import { missionHelp } from './help.js';
+import { pointsInfo } from '../../shared/points-info.js';
 
 const T = {
   title: 'Пинбол',
@@ -924,6 +925,7 @@ function showStats() {
       tile(String(stats.jackpots), T.statsTiles.jackpots),
       tile(String(stats.hyper), T.statsTiles.hyper),
     ),
+    pointsInfo(api, 'pinball'),
     el('button', { class: 'btn btn-secondary pb-wide-btn', onclick: showMenu }, T.pause),
   ));
 }

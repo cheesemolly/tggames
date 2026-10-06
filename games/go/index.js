@@ -25,6 +25,7 @@ import {
   LEVEL_IDS, SKINS, HANDICAPS, normalizeSetup, normalizeSettings, defaultSettings, needConfirm,
   emptyStats, isValidStats, recordGame, fmtScore, playerFor,
 } from './logic.js';
+import { pointsInfo } from '../../shared/points-info.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const T = {
@@ -1058,6 +1059,7 @@ function showSettings() {
     }, 'go-option go-option-sm'),
     el('label', { class: 'go-toggle' }, coords, el('span', {}, T.coords)),
     el('label', { class: 'go-toggle' }, atari, el('span', {}, T.atari)),
+    pointsInfo(api, 'go'),
   ));
 }
 

@@ -12,6 +12,7 @@ import {
   WHITE, BLACK, LEVEL_IDS, generateMoves, newGame, playMove, undoMove, result, bestMove, sameMove, moveTo, count,
   isValidState, emptyStats, migrateStats, MODES, rowOf, colOf, isDark,
 } from './logic.js';
+import { pointsInfo } from '../../shared/points-info.js';
 
 const SKINS = ['telegram', 'wood', 'green', 'marble', 'night', 'candy'];
 const T = {
@@ -640,6 +641,7 @@ function showSettings() {
       coordsSwitch),
     el('h3', { class: 'ck-section' }, T.settings.skin),
     el('div', { class: 'ck-skins', role: 'radiogroup' }, buttons),
+    pointsInfo(api, 'checkers'),
   ));
 }
 

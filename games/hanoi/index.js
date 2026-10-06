@@ -19,6 +19,7 @@ import {
   DISKS, PEGS, DEFAULT_DISKS, DEFAULT_PEGS, minMoves, newGame, move, undo, canMove, top, target, bestMove,
   remaining, distances, isValidGame, emptyStats, isValidStats, recordGame, statKey, biggestTower, fmtTime,
 } from './logic.js';
+import { pointsInfo } from '../../shared/points-info.js';
 
 const SKINS = ['telegram', 'wood', 'temple', 'neon', 'candy', 'ice'];
 const DRAG_MIN = 8;
@@ -930,6 +931,7 @@ function showSettings() {
     toggle('targets', T.targets),
     toggle('numbers', T.numbers),
     el('button', { class: 'btn btn-secondary th-play', onclick: showRules }, T.howTo),
+    pointsInfo(api, 'hanoi'),
   ));
 }
 
