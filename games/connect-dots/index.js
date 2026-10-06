@@ -3,6 +3,9 @@
 // Очков нет: успех измеряется тем, до какого уровня дошёл (в коде они называются round).
 // Уровни бесконечные: поле растёт до 8×8, с 6-го уровня — стены, с 10-го — тоннели.
 // Таймер на уровень (в настройках отключается); время вышло — игра окончена.
+// В бете 'connect-dots-levels' — уровни с прогрессом, как в «Шариках»: уровень не сбрасывается, время вышло — то же
+// поле заново; таймер всегда включён и идёт по часам — выход, свёрнутая вкладка и окна его не останавливают
+// (владелец: «убрать паузу, чтобы игроки не жульничали»). Прогресс — 'progress' { level, hints }.
 // Партия, статистика и настройки — в api.storage игры.
 // Звуки (sounds.js) — в бете у владельца: api.feature('connect-dots-sounds'); кнопка в шапке, 'sound' в api.storage.
 
@@ -14,7 +17,7 @@ import { createAudio } from '../../shared/sfx.js';
 import { createSounds } from './sounds.js';
 import {
   levelParams, checkPaths, startAt, stepTo, emptyPaths, newGame, nextRound, applyHint,
-  isValidState, emptyStats, isValidStats, isAdjacent, axisOf,
+  isValidState, emptyStats, isValidStats, isAdjacent, axisOf, loadProgress, newLevelGame, passLevel, retryLevel,
 } from './logic.js';
 
 const SKINS = ['telegram', 'classic', 'neon', 'paper', 'candy', 'space'];
@@ -41,6 +44,11 @@ const T = {
   soundOn: 'Выключить звук',
   soundOff: 'Включить звук',
   restartQuestion: 'Начать заново с первого уровня?',
+  passed: 'Пройдено',
+  passedValue: (n) => String(n),
+  retry: 'Ещё раз',
+  retryNote: (n) => `Уровень ${n} — то же поле, время заново.`,
+  hintBonus: '+1 подсказка',
   restart: 'Начать заново',
   cancel: 'Отмена',
   stats: { open: 'Статистика', title: 'Статистика', played: 'Игр', bestRound: 'Лучший уровень', rounds: 'Уровней пройдено', close: 'Закрыть' },
@@ -73,6 +81,7 @@ let game = null;
 let bank = null;                // банк уровней levels.json (грузится один раз)
 let stats = emptyStats();
 let settings = { timer: true, skin: 'telegram' };
+let progress = { level: 1, hints: 3 };   // уровни с прогрессом (бета 'connect-dots-levels')
 let soundOn = true;
 let lastTickSec = null;      // последние секунды таймера тикают — по разу в секунду
 // звук — один AudioContext на всю жизнь страницы, заводится при первом звуке (из касания)
@@ -100,6 +109,14 @@ const colorVar = (color) => `var(--cd-c${(color % COLORS) + 1})`;
 // ---------- звук ----------
 
 const soundFeature = () => Boolean(api?.feature?.('connect-dots-sounds'));
+const levelsMode = () => Boolean(api?.feature?.('connect-dots-levels'));
+// в режиме уровней таймер всегда включён
+const timerOn = () => levelsMode() || settings.timer;
+
+function saveProgress() {
+  api.storage.set('progress', progress);
+  api.progress(`Уровень ${progress.level}`);
+}
 
 function sfx(name, opts) {
   if (!soundFeature() || !soundOn) return;
@@ -138,24 +155,31 @@ function save() {
 // ---------- таймер ----------
 
 function timeLeft() {
+  if (levelsMode()) return game.deadline == null ? null : Math.max(0, game.deadline - Date.now());
   if (game.timeLeftMs === null) return null;
   return Math.max(0, game.timeLeftMs - (runningSince === null ? 0 : performance.now() - runningSince));
 }
 
 function startClock() {
+  if (levelsMode()) {
+    // по часам: однажды запущенный, идёт до конца уровня
+    if (!over && !busy && game.deadline == null) game.deadline = Date.now() + levelParams(game.round).timeSec * 1000;
+    return;
+  }
   if (!settings.timer || over || busy || modalActive) return;
   if (game.timeLeftMs === null) game.timeLeftMs = levelParams(game.round).timeSec * 1000;
   if (runningSince === null) runningSince = performance.now();
 }
 
 function stopClock() {
+  if (levelsMode()) return;                     // паузы нет
   if (runningSince !== null) game.timeLeftMs = timeLeft();
   runningSince = null;
 }
 
 function renderTimer() {
-  ui.timer.hidden = !settings.timer;
-  if (!settings.timer || !game) return;
+  ui.timer.hidden = !timerOn();
+  if (!timerOn() || !game) return;
   const total = levelParams(game.round).timeSec * 1000;
   const left = timeLeft() ?? total;
   const k = Math.max(0, Math.min(1, left / total));
@@ -165,7 +189,7 @@ function renderTimer() {
 }
 
 function tick() {
-  if (!game || over || runningSince === null) return;
+  if (!game || over || (levelsMode() ? busy || game.deadline == null : runningSince === null)) return;
   renderTimer();
   const sec = Math.ceil(timeLeft() / 1000);
   if (sec >= 1 && sec <= 5 && sec !== lastTickSec) {
@@ -176,6 +200,11 @@ function tick() {
 }
 
 function onVisibility() {
+  if (levelsMode()) {
+    if (document.visibilityState === 'hidden') save();
+    else tick();
+    return;
+  }
   if (document.visibilityState === 'hidden') {
     stopClock();
     save();
@@ -289,7 +318,7 @@ function renderBoard() {
 
 function renderInfo() {
   ui.sub.textContent = T.round(game.round);
-  ui.best.textContent = T.bestRound(Math.max(stats.bestRound, game.round - 1));
+  ui.best.textContent = levelsMode() ? T.passedValue(progress.level - 1) : T.bestRound(Math.max(stats.bestRound, game.round - 1));
   ui.hintBadge.textContent = game.hintsLeft;
   ui.hintButton.disabled = over || game.hintsLeft <= 0;
 }
@@ -394,6 +423,13 @@ function roundCleared() {
   stats.bestRound = Math.max(stats.bestRound, game.round);
   stats.rounds += 1;
   api.storage.set('stats', stats);
+  let bonus = 0;
+  if (levelsMode()) {
+    game.deadline = null;
+    ({ progress, bonus } = passLevel(progress, game.round));
+    game.hintsLeft = progress.hints;
+    saveProgress();
+  }
   sfx('cleared', { step: game.level.dots.length });
   api.platform.haptic.notification('success');
   renderInfo();
@@ -409,7 +445,7 @@ function roundCleared() {
       cssVar(`--cd-c${(color % COLORS) + 1}`), 8, { speed: 240, size: 6 });
   }));
   ui.board.classList.add('cd-glow');
-  floatText(T.cleared(game.round));
+  floatText(T.cleared(game.round), bonus ? T.hintBonus : undefined);
 
   later(() => {
     if (!ui) return;
@@ -418,7 +454,8 @@ function roundCleared() {
     const prev = levelParams(game.round);
     animate(ui.svg, [{ transform: 'none', opacity: 1 }, { transform: 'scale(0.85)', opacity: 0 }], { duration: 220, easing: 'ease-in', fill: 'forwards' }).then(() => {
       if (!ui) return;
-      nextRound(game, bank);
+      if (levelsMode()) game = newLevelGame(bank, progress.level, progress.hints);
+      else nextRound(game, bank);
       busy = false;
       ui.svg.getAnimations().forEach((a) => a.cancel());
       renderBoard();
@@ -452,6 +489,10 @@ function floatText(title, sub) {
 
 function timeUp() {
   if (over) return;
+  if (levelsMode()) {
+    levelTimeUp();
+    return;
+  }
   over = true;
   stopClock();
   drawing = null;
@@ -473,6 +514,43 @@ function timeUp() {
   }), reducedMotion() ? 0 : 1400);
 }
 
+/** Время вышло в режиме уровней: окно «Ещё раз» — то же поле, время заново; уровень не сбрасывается. */
+function levelTimeUp() {
+  over = true;
+  drawing = null;
+  stats.played += 1;
+  api.storage.set('stats', stats);
+  sfx('timeup');
+  api.platform.haptic.notification('error');
+  shake(ui.board, { distance: 8, duration: 450 });
+  ui.board.classList.add('cd-over');
+  renderTimer();
+  renderInfo();
+  later(() => {
+    if (!ui || !over) return;
+    openModal(el('div', { class: 'cd-card', role: 'dialog', 'aria-label': T.resultTitle },
+      el('div', { class: 'cd-card-head' }, el('h2', {}, T.resultTitle)),
+      el('p', { class: 'cd-note' }, T.retryNote(game.round)),
+      el('div', { class: 'cd-card-actions' },
+        el('button', { class: 'btn', onclick: () => { closeModal(); retry(); } }, T.retry)),
+    ));
+  }, reducedMotion() ? 0 : 900);
+}
+
+function retry() {
+  retryLevel(game);
+  over = false;
+  busy = false;
+  drawing = null;
+  ui.board.classList.remove('cd-over');
+  renderBoard();
+  renderInfo();
+  introRound();
+  startClock();
+  renderTimer();
+  save();
+}
+
 function onReset() {
   if (!game || busy || over) return;
   if (game.paths.every((p) => p.length <= 1)) return;
@@ -491,6 +569,10 @@ function onHint() {
   }
   const color = applyHint(game);
   if (color < 0) return;
+  if (levelsMode()) {
+    progress = { ...progress, hints: game.hintsLeft };
+    saveProgress();
+  }
   sfx('hint', { color });
   api.platform.haptic.impact('medium');
   renderBoard();
@@ -568,7 +650,7 @@ function showSettings() {
     },
   }, el('span', { class: 'cd-swatch', 'data-skin': id }), T.skins[id]));
   openModal(card(T.settings.title,
-    el('label', { class: 'cd-setting' },
+    !levelsMode() && el('label', { class: 'cd-setting' },
       el('div', {}, el('div', { class: 'cd-setting-title' }, T.settings.timer), el('div', { class: 'cd-note' }, T.settings.timerDesc)),
       timerSwitch),
     el('h3', { class: 'cd-section' }, T.settings.skin),
@@ -603,18 +685,25 @@ function tip(id, ms) {
 }
 
 function startGame(saved = null) {
-  // брошенная посреди игра (пройден хотя бы один уровень) засчитывается как сыгранная
-  if (!saved && game && !over && game.round > 1) {
-    stats.played += 1;
-    api.storage.set('stats', stats);
+  if (levelsMode()) {
+    // начатое поле этого уровня — продолжаем (с его временем), иначе — новое поле уровня
+    game = saved && saved.round === progress.level ? saved : newLevelGame(bank, progress.level, progress.hints);
+    game.hintsLeft = progress.hints;
+    if (progress.level === 1 && !saved) later(() => tip('rules', 2800), 350);
+  } else {
+    // брошенная посреди игра (пройден хотя бы один уровень) засчитывается как сыгранная
+    if (!saved && game && !over && game.round > 1) {
+      stats.played += 1;
+      api.storage.set('stats', stats);
+    }
+    game = saved ?? newGame(bank);
+    if (!saved) later(() => tip('rules', 2800), 350);
   }
-  game = saved ?? newGame(bank);
-  if (!saved) later(() => tip('rules', 2800), 350);
   over = false;
   busy = false;
   drawing = null;
   runningSince = null;
-  if (!settings.timer) game.timeLeftMs = null;
+  if (!timerOn()) game.timeLeftMs = null;
   ui.board.classList.remove('cd-over');
   renderBoard();
   renderInfo();
@@ -622,6 +711,7 @@ function startGame(saved = null) {
   startClock();
   renderTimer();
   save();
+  tick();                                         // вернулся после конца времени — сразу «Время вышло»
 }
 
 function toolButton(icon, label, onclick, badge = null) {
@@ -637,7 +727,7 @@ function iconButton(icon, label, onclick) {
 }
 
 function onKeydown(e) {
-  if (e.key === 'Escape' && modalActive) closeModal();
+  if (e.key === 'Escape' && modalActive && !(levelsMode() && over)) closeModal();
 }
 
 export default {
@@ -648,16 +738,19 @@ export default {
     api = gameApi;
     host = container;
     toast = createToast();
-    const [savedGame, savedStats, savedSettings, levels, savedSound, savedTips] = await Promise.all([
+    const [savedGame, savedStats, savedSettings, levels, savedSound, savedTips, savedProgress] = await Promise.all([
       api.storage.get('current'), api.storage.get('stats'), api.storage.get('settings'),
       bank ?? fetch(new URL('./levels.json', import.meta.url)).then((r) => r.json()),
-      api.storage.get('sound'), api.storage.get('tips'),
+      api.storage.get('sound'), api.storage.get('tips'), api.storage.get('progress'),
     ]);
     seenTips = Array.isArray(savedTips) ? savedTips.filter((t) => typeof t === 'string') : [];
     bank = levels;
     if (!api) return;
     soundOn = savedSound !== false;
     stats = isValidStats(savedStats) ? savedStats : emptyStats();
+    progress = loadProgress(savedProgress, stats);
+    if (levelsMode()) saveProgress();
+    else api.progress(null);
     settings = {
       timer: typeof savedSettings?.timer === 'boolean' ? savedSettings.timer : true,
       skin: SKINS.includes(savedSettings?.skin) ? savedSettings.skin : 'telegram',
@@ -688,15 +781,15 @@ export default {
     root = el('div', { class: 'cd' },
       el('div', { class: 'cd-header' },
         el('div', {}, el('div', { class: 'cd-title' }, T.title), ui.sub),
-        el('div', { class: ui.soundBtn ? 'cd-actions cd-actions-4' : 'cd-actions' },
+        el('div', { class: ui.soundBtn && !levelsMode() ? 'cd-actions cd-actions-4' : 'cd-actions' },
           ui.soundBtn,
-          iconButton(ICONS.restart, T.newGame, askRestart),
+          !levelsMode() && iconButton(ICONS.restart, T.newGame, askRestart),
           iconButton(ICONS.stats, T.stats.open, showStats),
           iconButton(ICONS.gear, T.settings.open, showSettings),
         ),
       ),
       el('div', { class: 'cd-info' },
-        el('span', {}, `${T.filled}: `, ui.fill), el('span', {}, `${T.best}: `, ui.best)),
+        el('span', {}, `${T.filled}: `, ui.fill), el('span', {}, `${levelsMode() ? T.passed : T.best}: `, ui.best)),
       ui.wrap,
       ui.timer,
       el('div', { class: 'cd-tools' }, toolButton(ICONS.reset, T.tools.reset, onReset), ui.hintButton),
@@ -716,6 +809,11 @@ export default {
   },
 
   getState() {
+    if (levelsMode()) {
+      if (!game) return null;
+      save();
+      return { round: game.round };
+    }
     if (!game || over || (game.round === 1 && game.paths.every((p) => p.length <= 1))) return null;
     save();
     return { round: game.round };

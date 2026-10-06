@@ -294,6 +294,40 @@ export function nextRound(state, bank, rng = Math.random) {
   state.level = pickLevel(bank, state.round, rng);
   state.paths = emptyPaths(state.level);
   state.timeLeftMs = null;
+  state.deadline = null;
+}
+
+// ---------- уровни с прогрессом (бета 'connect-dots-levels') ----------
+// Как в «Шариках» и Brick Blast: уровень не сбрасывается, проигрыш — то же поле заново. Таймер — по часам
+// (deadline), а не по времени на экране: выход из игры, свёрнутая вкладка и окна его не останавливают.
+
+export const HINT_EVERY = 5;           // +1 подсказка за каждый 5-й пройденный уровень
+
+/** Прогресс уровней из сохранения; старым игрокам — со следующего за рекордом забега. */
+export function loadProgress(saved, stats) {
+  const ok = saved && Number.isInteger(saved.level) && saved.level >= 1 && Number.isInteger(saved.hints) && saved.hints >= 0;
+  if (ok) return { level: saved.level, hints: saved.hints };
+  return { level: Math.max(1, (stats?.bestRound ?? 0) + 1), hints: HINTS_PER_GAME };
+}
+
+/** Партия уровня round (подсказки — общий запас прогресса). */
+export function newLevelGame(bank, round, hints, rng = Math.random) {
+  const level = pickLevel(bank, round, rng);
+  return { v: STATE_VERSION, round, hintsLeft: hints, level, paths: emptyPaths(level), timeLeftMs: null, deadline: null };
+}
+
+/** Уровень пройден: следующий, каждый HINT_EVERY-й — +1 подсказка. Возвращает новый прогресс и была ли награда. */
+export function passLevel(progress, round) {
+  const level = Math.max(progress.level, round + 1);
+  const bonus = round % HINT_EVERY === 0 && round + 1 > progress.level ? 1 : 0;
+  return { progress: { level, hints: progress.hints + bonus }, bonus };
+}
+
+/** Переиграть то же поле: линии стёрты, время — заново. */
+export function retryLevel(state) {
+  state.paths = emptyPaths(state.level);
+  state.timeLeftMs = null;
+  state.deadline = null;
 }
 
 /**
@@ -330,7 +364,8 @@ export function isValidState(s) {
     && lv.solution.every((p) => Array.isArray(p) && p.every(cellOk))
     && Array.isArray(s.paths) && s.paths.length === lv.dots.length && s.paths.every((p) => Array.isArray(p) && p.every(cellOk))
     && [s.round, s.hintsLeft].every((v) => Number.isInteger(v) && v >= 0)
-    && (s.timeLeftMs === null || (Number.isFinite(s.timeLeftMs) && s.timeLeftMs >= 0));
+    && (s.timeLeftMs === null || (Number.isFinite(s.timeLeftMs) && s.timeLeftMs >= 0))
+    && (s.deadline == null || (Number.isFinite(s.deadline) && s.deadline >= 0));
 }
 
 // ---------- статистика ----------

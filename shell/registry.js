@@ -71,8 +71,9 @@ export const games = [
     title: 'Соедини точки',
     load: () => import('../games/connect-dots/index.js'),
     css: new URL('../games/connect-dots/game.css', import.meta.url),
-    // рекорд — как далеко зашёл; без таймера забег не кончается — показываем, где он сейчас
-    menu: { wins: false, bestValue: (n) => `Уровень ${n}`, saveLine: (s) => (s.round ? `Сейчас: уровень ${s.round}` : null) },
+    // рекорд — как далеко зашёл; без таймера забег не кончается — показываем, где он сейчас;
+    // в бете 'connect-dots-levels' игра сама пишет «Уровень N» (prefer — у остальных строка прежняя)
+    menu: { wins: false, bestValue: (n) => `Уровень ${n}`, saveLine: (s) => (s.round ? `Сейчас: уровень ${s.round}` : null), progress: 'prefer' },
   },
   {
     id: 'mahjong',

@@ -699,6 +699,8 @@ const RULES = [
   ['game:wordle:boards', { type: 'map' }],
   ['game:loop:stats', { type: 'fields', fields: { solved: 'count', taps: 'count', bestLevel: 'max' } }],
   ['game:connect-dots:stats', { type: 'fields', fields: { played: 'count', bestRound: 'max', rounds: 'count' } }],
+  // уровни с прогрессом (бета 'connect-dots-levels'): уровень — максимум, подсказки — расходуемое
+  ['game:connect-dots:progress', { type: 'fields', fields: { level: 'max', hints: { spend: 3 } } }],
   ['game:mahjong:stats', { type: 'fields', fields: { '*.played': 'count', '*.wins': 'count', '*.clean': 'count' } }],
   ['game:2048:stats', { type: 'fields', fields: { '*.played': 'count', '*.wins': 'count', '*.bestTile': 'max' } }],
   ['game:rubik:stats', { type: 'fields', fields: { count: 'count', dnf: 'count', best: 'min', bestMoves: 'min', bestAo5: 'min', bestAo12: 'min' } }],

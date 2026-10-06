@@ -11,7 +11,8 @@ export const DEFAULT_MENU = {
   best: true,
   bestLabel: 'Рекорд',
   bestValue: null,         // как показать рекорд: (n) => 'Уровень 7' и т.п.
-  progress: null,          // 'replace' — вместо статистики, 'append' — в конец строки
+  progress: null,          // 'replace' — вместо статистики, 'append' — в конец строки,
+                           // 'prefer' — строка игры, если она есть, иначе статистика (игра переходит на уровни в бете)
   saveLine: null,          // (state из getState()) => 'Сейчас: уровень 8' — что сказать о начатой партии
 };
 
@@ -30,6 +31,7 @@ export function menuLine(stats, { menu = {}, progress = null, save = null } = {}
 
   // Уровневые игры (Петля, Слова из слова, Brick Blast, Филворд) сами говорят, что писать.
   if (cfg.progress === 'replace') return progress || (save ? IN_PROGRESS : NOT_PLAYED);
+  if (cfg.progress === 'prefer' && progress) return progress;
 
   const appended = cfg.progress === 'append' && progress ? progress : null;
   const now = save && cfg.saveLine ? cfg.saveLine(save.state ?? {}) : null;

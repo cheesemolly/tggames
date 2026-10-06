@@ -48,6 +48,10 @@ test('начатая партия — не «Ещё не играли»', () => 
   assert.equal(menuLine(stats(5, 1), { save }), 'Сыграно: 5 · Побед: 1');
   // Уровневая игра, ещё ничего не сообщившая, но с начатой партией.
   assert.equal(menuLine(stats(0), { menu: { progress: 'replace' }, save }), IN_PROGRESS);
+  // prefer: строка игры, если она есть, иначе обычная статистика
+  assert.equal(menuLine(stats(3), { menu: { progress: 'prefer' }, progress: 'Уровень 9' }), 'Уровень 9');
+  assert.equal(menuLine(stats(0), { menu: { progress: 'prefer' } }), NOT_PLAYED);
+  assert.match(menuLine(stats(3), { menu: { progress: 'prefer' } }), /Сыграно: 3/);
   // Wordle: партия идёт, серии ещё нет.
   assert.equal(menuLine(stats(0), { menu: { best: false, progress: 'append' }, save }), IN_PROGRESS);
 });

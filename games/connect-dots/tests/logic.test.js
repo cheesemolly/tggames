@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import {
   MAX_SIZE, ALL_TIERS, PAIRS, tierKey, levelParams, decodeLevel, encodeLevel, transformLevel, pickLevel,
   checkPaths, startAt, stepTo, emptyPaths, newGame, nextRound, applyHint, isValidState,
-  emptyStats, recordGame, isValidStats, neighbors,
+  emptyStats, recordGame, isValidStats, neighbors, loadProgress, newLevelGame, passLevel, retryLevel, HINTS_PER_GAME,
 } from '../logic.js';
 import { solve, buildGraph } from '../solver.js';
 import { generatePuzzle, randomLevel } from '../generator.js';
@@ -238,4 +238,33 @@ test('сохранение и статистика (очков в игре не�
   assert.deepEqual(st, { played: 2, bestRound: 7, rounds: 10 }, 'очков нет — считаем пройденные раунды');
   assert.ok(isValidStats(st));
   assert.equal(neighbors(0, 3).length, 2);
+});
+
+test('уровни с прогрессом: старт после рекорда, проигрыш — то же поле, подсказка за каждый 5-й уровень', () => {
+  assert.deepEqual(loadProgress(null, null), { level: 1, hints: HINTS_PER_GAME });
+  assert.deepEqual(loadProgress(null, { played: 4, bestRound: 17, rounds: 30 }), { level: 18, hints: HINTS_PER_GAME }, 'старые игроки — со следующего за рекордом');
+  assert.deepEqual(loadProgress({ level: 5, hints: 0 }, { bestRound: 17 }), { level: 5, hints: 0 });
+  assert.deepEqual(loadProgress({ level: 0, hints: 2 }, null), { level: 1, hints: HINTS_PER_GAME }, 'мусор — заново');
+
+  const g = newLevelGame(bank, 12, 2, seeded(5));
+  assert.equal(g.round, 12);
+  assert.equal(g.hintsLeft, 2);
+  assert.equal(g.level.tunnels.length, levelParams(12).tunnels);
+  assert.ok(isValidState(JSON.parse(JSON.stringify({ ...g, deadline: Date.now() + 5000 }))));
+  assert.equal(isValidState({ ...g, deadline: -1 }), false);
+
+  const field = JSON.stringify(g.level);
+  g.paths[0] = [...g.level.solution[0]];
+  g.deadline = 123;
+  retryLevel(g);
+  assert.equal(JSON.stringify(g.level), field, 'проигрыш — то же поле');
+  assert.ok(g.paths.every((p) => p.length <= 1), 'линии стёрты');
+  assert.equal(g.deadline, null, 'время заново');
+
+  let pr = { level: 4, hints: 1 };
+  ({ progress: pr } = passLevel(pr, 4));
+  assert.deepEqual(pr, { level: 5, hints: 1 });
+  const r = passLevel(pr, 5);
+  assert.deepEqual(r, { progress: { level: 6, hints: 2 }, bonus: 1 }, '5-й уровень — +1 подсказка');
+  assert.deepEqual(passLevel(r.progress, 5).progress, { level: 6, hints: 2 }, 'повтор уже пройденного награды не даёт');
 });
