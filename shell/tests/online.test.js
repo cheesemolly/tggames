@@ -94,8 +94,8 @@ function scripted(room, reply = () => same) {
   return { clock, doc, calls, events, session };
 }
 
-test('ссылка-приглашение: приложение разбирает то, что собирает сервер', () => {
-  assert.deepEqual(parseRoomParam(lib.roomParam('chess', 'k3f9x2ab1c')), { game: 'chess', code: 'k3f9x2ab1c' });
+test('ссылка-приглашение: в параметре запуска — игра и код комнаты', () => {
+  assert.deepEqual(parseRoomParam('chess_k3f9x2ab1c'), { game: 'chess', code: 'k3f9x2ab1c' });
   assert.deepEqual(parseRoomParam('killer-sudoku_0000000000'), { game: 'killer-sudoku', code: '0000000000' }, 'id игры с дефисом');
   for (const junk of [null, undefined, '', 'chess', 'sudoku', 'chess_', 'chess_short', 'chess_ABCDEFGHIJ', 'chess_abcdefghijk', '_abcdefghij', '../x_abcdefghij', 'chess_abc/efghij']) {
     assert.equal(parseRoomParam(junk), null, String(junk));
@@ -125,8 +125,6 @@ test('расписание опроса: первый раз через 10 с, �
   assert.equal(pollDelay(60000, 99, true), LOBBY_STEPS.at(-1) * 1000);
   assert.equal(pollDelay(POLL_STOP_AFTER_MS, 3, true), null);
   for (const steps of [POLL_STEPS, LOBBY_STEPS]) assert.ok(Math.min(...steps) >= 5, 'чаще раза в 5 с не спрашиваем');
-  // игрок, который ещё опрашивает партию, для сервера «в игре»: бот ему о ходе не пишет
-  assert.ok(POLL_SLOW_MS + lib.ROOM_SEEN_EVERY_MS < lib.ROOM_AWAY_MS);
 });
 
 test('кого ждём: второго игрока или хода соперника', () => {
@@ -165,7 +163,7 @@ test('соперник думает долго: опрос редеет и че�
   assert.equal(session.state, 'paused');
   assert.deepEqual(events.filter((e) => e.state).map((e) => e.state), ['paused'], 'при открытии обработчики не зовутся');
   await clock.advance(60 * 60 * 1000);
-  assert.equal(calls.length, 27, 'дальше — тишина: о ходе напишет бот');
+  assert.equal(calls.length, 27, 'дальше — тишина, пока не нажмут «проверить» или не вернутся в приложение');
   assert.equal(clock.pending, 0);
 
   session.check();
@@ -372,10 +370,11 @@ async function client(env, user, clock, counter) {
 /**
  * Партия двух приложений через настоящий сервер: каждый думает над ходом thinks[k] секунд (по кругу), всего plies
  * ходов; afterMove(игрок, сколько ходов сделано) — что игрок делает после своего хода (например, сворачивает
- * приложение). → { counter, minutes, notes, lags, lag } — запросы, длительность, сообщения бота, через сколько
- * секунд ход появился у соперника.
+ * приложение); finale({ host, guest, clock, counter }) — что происходит потом, пока партии ещё открыты.
+ * → { counter, minutes, notes, lags, lag } — запросы, длительность, исходящие запросы сервера (сообщения бота —
+ * их быть не должно), через сколько секунд ход появился у соперника.
  */
-async function playGame({ plies, thinks, afterMove = () => {}, tail = 60 }) {
+async function playGame({ plies, thinks, afterMove = () => {}, finale = async () => {}, tail = 60 }) {
   const realNow = Date.now;
   const counter = { total: 0, polls: 0, posts: 0, flying: 0 };
   // сервер проверяет подпись Telegram не мгновенно — тестовые часы ждут, пока запросы долетят
@@ -435,6 +434,7 @@ async function playGame({ plies, thinks, afterMove = () => {}, tail = 60 }) {
     attach(guest, joined.room);
     for (let minute = 0; made < plies && minute < 120; minute += 1) await clock.advance(60 * 1000);
     await clock.advance(tail * 1000);
+    await finale({ host, guest, clock, counter });
     host.session.close();
     guest.session.close();
     const mean = lags.reduce((a, b) => a + b, 0) / (lags.length || 1);
@@ -450,12 +450,12 @@ async function playGame({ plies, thinks, afterMove = () => {}, tail = 60 }) {
   }
 }
 
-test('целая партия через сервер: 110–130 запросов на 10 минут игры, ход виден сопернику за секунды, бот молчит', async () => {
+test('целая партия через сервер: 110–130 запросов на 10 минут игры, ход виден сопернику за секунды', async () => {
   const thinks = [4, 7, 12, 3, 20, 9, 6, 15, 5, 30, 8, 11];          // думают в среднем 10,8 с на ход
   const { counter, notes, lags, lag, made, minutes } = await playGame({ plies: 60, thinks });
   assert.equal(made, 60);
   assert.equal(counter.posts, 62, 'приглашение, вход и 60 ходов');
-  assert.equal(notes.length, 0, 'оба в игре — бот не пишет');
+  assert.equal(notes.length, 0, 'сервер никому не пишет');
   assert.equal(lags.length, 60);
   const perTen = (counter.total / minutes) * 10;
   console.log(`  60 ходов за ${minutes.toFixed(1)} мин: ${counter.total} запросов (${counter.posts} — ходы и вход, ${counter.polls} — опрос), `
@@ -479,20 +479,26 @@ test('быстрая и вдумчивая партии: запросов — п
   assert.ok(slow.lag.max <= 15);
 });
 
-test('соперник свернул приложение: о ходе ему пишет бот, а ждущий опрашивает всё реже и замолкает', async () => {
-  const { counter, notes, made, host, guest } = await playGame({
+test('соперник свернул приложение: ждущий опрашивает всё реже и замолкает; вернулся — сразу видит ход', async () => {
+  let seen = null;
+  const { counter, notes, made, host } = await playGame({
     plies: 6,
     thinks: [60],
     afterMove: (who, n) => {
       if (n === 4) who.doc.set('hidden');           // гость сделал 4-й ход и ушёл из приложения
     },
+    // прошло два часа: создательница давно сделала 5-й ход и ждёт; гость возвращается в приложение
+    finale: async ({ guest, clock, counter: count }) => {
+      const before = { polls: count.polls, moves: guest.session.room.moves.length };
+      guest.doc.set('visible');
+      await clock.advance(1000);
+      seen = { asked: count.polls - before.polls, was: before.moves, now: guest.session.room.moves.length };
+    },
   });
-  assert.equal(made, 5, 'шестого хода нет: гость не вернулся');
-  // 5-й ход создательница сделала через минуту — гость к тому времени партию уже не смотрел
-  assert.equal(notes.length, 1);
-  assert.equal(notes[0].payload.chat_id, guest.user.id);
-  assert.match(notes[0].payload.text, /Твоя очередь/);
+  assert.equal(made, 5, 'шестого хода нет: гость не возвращался');
+  assert.equal(notes.length, 0, 'бот о ходе не пишет — гость узнаёт о нём, когда открывает игру');
   assert.equal(host.session.state, 'paused');
-  // создательница ждёт 6-го хода: 27 опросов за 10 минут — и тишина, сколько бы ни прошло (в тесте — два часа)
-  assert.ok(counter.polls <= 27 + 5 * 8 + 6, `опросов: ${counter.polls}`);
+  // создательница ждёт 6-го хода: 27 опросов за 10 минут — и тишина, сколько бы ни прошло
+  assert.ok(counter.polls <= 27 + 5 * 8 + 6 + 1, `опросов: ${counter.polls}`);
+  assert.deepEqual(seen, { asked: 1, was: 4, now: 5 }, 'вернулся — один запрос, и ход соперника на доске');
 });

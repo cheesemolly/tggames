@@ -67,7 +67,7 @@ const T = {
   create: 'Создать партию',
   creating: 'Создаю…',
   invite: 'Позови друга',
-  inviteText: 'Отправь другу ссылку. Как только он её откроет, партия начнётся. Ждать здесь не обязательно: бот напишет.',
+  inviteText: 'Отправь другу ссылку. Как только он её откроет, партия начнётся.',
   inviteMade: 'Партия создана, ждём друга.',
   showLink: 'Показать ссылку',
   tapForLink: 'показать ссылку',
@@ -80,7 +80,7 @@ const T = {
   waitingFriend: 'Ждём друга…',
   friendWord: 'друг',
   joined: (name) => `${name} в игре — партия началась`,
-  paused: 'бот напишет о ходе',
+  paused: 'проверь ход',
   offline: 'нет связи…',
   refresh: 'Проверить, не походил ли соперник',
   busyFriend: (name) => `Идёт партия, соперник — ${name}. Доиграй её или сдайся — и можно будет создать новую.`,
@@ -421,6 +421,7 @@ function paintPlayers() {
   }
   ui.them.status.textContent = status;
   ui.them.status.classList.toggle('ch-status-still', still);
+  ui.them.root.classList.toggle('ch-player-stuck', stuck);
   ui.them.refresh.classList.toggle('ch-refresh-on', stuck);
   ui.them.refresh.tabIndex = stuck ? 0 : -1;
   ui.them.root.classList.toggle('ch-player-link', Boolean(net) && !net.done && !playing);

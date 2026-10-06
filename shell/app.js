@@ -86,7 +86,7 @@ const visibleGames = () => games.filter((g) => feature(g.id));
 
 // ---------- партии с другом по сети (shell/online.js; в бете 'chess-online') ----------
 
-// Ссылка-приглашение (t.me/<бот>?startapp=chess_<код> или кнопка бота «Открыть партию»): игра и код комнаты.
+// Ссылка-приглашение (t.me/<бот>?startapp=chess_<код>): игра и код комнаты.
 // Открывается после входа — только тогда известно, видит ли игрок бету, и есть аккаунт, от имени которого играть.
 let invite = parseRoomParam(platform.startParam);
 const onlines = new Map();

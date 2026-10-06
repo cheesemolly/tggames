@@ -1,11 +1,12 @@
 // Партии с другом по сети: настоящий worker.js поверх SQLite и подменённого Bot API. Сервер правил игры не знает —
-// здесь проверяется то, за что он отвечает: кто участник, чья очередь, номер состояния, итог, сообщения бота, бета.
+// здесь проверяется то, за что он отвечает: кто участник, чья очередь, номер состояния, итог, бета — и что сам он
+// никому ничего не шлёт.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import worker from '../worker.js';
-import { ROOM_GAMES, ROOM_CODE_RE, ROOM_AWAY_MS, ROOM_SEEN_EVERY_MS, roomParam, roomSeat, roomTurn, roomView } from '../lib.js';
+import { ROOM_GAMES, ROOM_CODE_RE, roomSeat, roomTurn, roomView } from '../lib.js';
 import { makeInitData, createEnv, captureTelegram, TOKEN, ADMIN } from './helpers.js';
 
 const ORIGIN = 'https://cheesemolly.github.io';
@@ -62,7 +63,7 @@ async function started(env, first = 'me') {
 test('правила комнаты: чья очередь, место игрока, что видит игрок', () => {
   const room = {
     code: 'abcdefghij', game: 'chess', host: 3, guest: 9, first: 1, moves: [], seq: 2, status: 'play', result: null,
-    name0: 'Маша', name1: 'Петя', updated_at: 100, seen0: 1, seen1: 2,
+    name0: 'Маша', name1: 'Петя', updated_at: 100,
   };
   assert.equal(roomSeat(room, 3), 0);
   assert.equal(roomSeat(room, 9), 1);
@@ -81,7 +82,6 @@ test('правила комнаты: чья очередь, место игро�
   const { move } = ROOM_GAMES.chess;
   for (const ok of ['e2e4', 'a7a8q', 'h2h1n', 'e1g1']) assert.ok(move.test(ok), ok);
   for (const bad of ['e2', 'e2e9', 'i2i4', 'e2-e4', 'e7e8k', 'E2E4', 'e2e4 ', 'e2e4q1']) assert.ok(!move.test(bad), bad);
-  assert.equal(roomParam('chess', 'abcdefghij'), 'chess_abcdefghij');
 });
 
 test('партия с другом: приглашение, вход по ссылке, ходы по очереди, мат', () => released(async () => {
@@ -243,73 +243,32 @@ test('сдача и отмена приглашения; новое пригла
   assert.equal((await live.host.get(`/rooms/${live.code}`)).data.room.status, 'play');
 }));
 
-test('бот пишет о ходе, только когда соперник партию не смотрит; в сообщении — кнопка в эту партию', () => released(async () => {
+test('сервер никому не пишет: за партию — ни одного исходящего запроса, опрос базу только читает', () => released(async () => {
   const env = createEnv();
   const tg = captureTelegram();
   try {
     const { host, guest, code, room } = await started(env);
-    // создатель только что создал комнату — он «в партии», о приходе гостя бот не пишет
-    assert.equal(tg.calls.length, 0);
+    // опрос ничего не записывает: сколько ни спрашивай, строка комнаты та же
+    const row = () => JSON.stringify(env.DB.prepare('SELECT * FROM rooms WHERE code = ?').bind(code).first());
+    const before = row();
+    for (let i = 0; i < 5; i += 1) await host.get(`/rooms/${code}?seq=${room.seq}`);
+    await guest.get(`/rooms/${code}?seq=0`);
+    assert.equal(row(), before);
 
-    // гость ждёт хода и опрашивает — о ходе бот не пишет
+    // ходы, конец партии, сдача, вход по ссылке — бот о них не сообщает (исходящих запросов у сервера нет вовсе)
     const first = await host.post(`/rooms/${code}/move`, { seq: room.seq, move: 'e2e4' });
-    assert.equal(tg.calls.length, 0);
-
-    // создатель ушёл из приложения (давно не спрашивал партию) — о ходе гостя бот напишет
-    const away = Date.now() - ROOM_AWAY_MS - 1000;
-    env.DB.prepare('UPDATE rooms SET seen0 = ? WHERE code = ?').bind(away, code).run();
     const reply = await guest.post(`/rooms/${code}/move`, { seq: first.data.room.seq, move: 'e7e5' });
     assert.equal(reply.status, 200);
-    assert.equal(tg.calls.length, 1);
-    const note = tg.calls[0];
-    assert.equal(note.method, 'sendMessage');
-    assert.equal(note.payload.chat_id, host.user.id);
-    assert.match(note.payload.text, /Шахматы/);
-    assert.match(note.payload.text, /Петя/);
-    assert.match(note.payload.text, /e7–e5/);
-    assert.match(note.payload.text, /Твоя очередь/);
-    assert.ok(!/Сидоров|petya_secret/.test(note.payload.text), 'ни фамилии, ни ника соперника');
-    const button = note.payload.reply_markup.inline_keyboard[0][0];
-    assert.equal(button.web_app.url, `https://example.test/tggames/?startapp=${roomParam('chess', code)}`);
-
-    // создатель вернулся и опросил партию — следующий ход гостя снова без сообщения
-    const back = await host.get(`/rooms/${code}?seq=0`);
-    const third = await host.post(`/rooms/${code}/move`, { seq: back.data.room.seq, move: 'g1f3' });
-    await guest.post(`/rooms/${code}/move`, { seq: third.data.room.seq, move: 'b8c6' });
-    assert.equal(tg.calls.length, 1);
-
-    // сдача: соперника нет — узнает от бота
-    env.DB.prepare('UPDATE rooms SET seen1 = ? WHERE code = ?').bind(away, code).run();
     await host.post(`/rooms/${code}/resign`);
-    assert.equal(tg.calls.length, 2);
-    assert.equal(tg.calls[1].payload.chat_id, guest.user.id);
-    assert.match(tg.calls[1].payload.text, /сдался/);
-
-    // друг пришёл по ссылке, когда создателя уже нет в приложении
-    const masha = await player(env, person('Маша'));
-    const kolya = await player(env, person('<b>Коля</b>'));
-    const invite = (await masha.post('/rooms', { game: 'chess', first: 'me' })).data.room.code;
-    env.DB.prepare('UPDATE rooms SET seen0 = ? WHERE code = ?').bind(away, invite).run();
-    await kolya.post(`/rooms/${invite}/join`);
-    assert.equal(tg.calls.length, 3);
-    assert.equal(tg.calls[2].payload.chat_id, masha.user.id);
-    assert.match(tg.calls[2].payload.text, /партия началась\. Твой ход/);
-    assert.ok(tg.calls[2].payload.text.includes('&lt;b&gt;Коля&lt;/b&gt;'), 'имя соперника не становится разметкой');
+    const mate = await started(env);
+    let { seq } = mate.room;
+    for (const [who, move, over] of [[mate.host, 'f2f3'], [mate.guest, 'e7e5'], [mate.host, 'g2g4'], [mate.guest, 'd8h4', 'checkmate']]) {
+      seq = (await who.post(`/rooms/${mate.code}/move`, { seq, move, over })).data.room.seq;
+    }
+    assert.equal(tg.calls.length, 0);
   } finally {
     tg.restore();
   }
-}));
-
-test('«смотрит партию» пишется в базу не на каждый опрос', () => released(async () => {
-  const env = createEnv();
-  const { host, code, room } = await started(env);
-  const seen = () => env.DB.prepare('SELECT seen0 FROM rooms WHERE code = ?').bind(code).first().seen0;
-  const before = seen();
-  for (let i = 0; i < 3; i += 1) await host.get(`/rooms/${code}?seq=${room.seq}`);
-  assert.equal(seen(), before, 'только что отмечался — запись не нужна');
-  env.DB.prepare('UPDATE rooms SET seen0 = ? WHERE code = ?').bind(before - ROOM_SEEN_EVERY_MS - 5, code).run();
-  await host.get(`/rooms/${code}?seq=${room.seq}`);
-  assert.ok(seen() >= before, 'давно не отмечался — записано');
 }));
 
 test('приглашений — не больше шести в минуту от игрока', () => released(async () => {

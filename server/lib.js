@@ -921,31 +921,21 @@ export function boardName(firstName) {
  * номером состояния (seq), а законность хода проверяют оба приложения (правила — в коде игры). В рейтинг такие
  * партии не идут. beta — id функции (shell/beta.js): пока он в SERVER_BETA, комнаты игры открыты владельцу и
  * тестерам; move — как выглядит ход; ends — чем партия кончается сама ('win' — победил сделавший ход, 'draw' —
- * ничья); say — как назвать ход в сообщении бота.
+ * ничья).
  */
 export const ROOM_GAMES = {
   chess: {
     beta: 'chess-online',
-    title: 'Шахматы',
-    emoji: '♟️',
     maxMoves: 1000,
     move: /^[a-h][1-8][a-h][1-8][qrbn]?$/,
     ends: { checkmate: 'win', stalemate: 'draw', repetition: 'draw', fifty: 'draw', material: 'draw' },
-    say: (move) => `${move.slice(0, 2)}–${move.slice(2, 4)}`,
   },
 };
 
 export const ROOM_CODE_LENGTH = 10;
 export const ROOM_CODE_RE = /^[a-z0-9]{10}$/;
-export const ROOM_SEEN_EVERY_MS = 15 * 1000;      // «смотрит партию» пишется в базу не чаще (запись в D1 ограничена)
-// Не спрашивал партию дольше — значит, не смотрит: о ходе соперника ему напишет бот. Больше самого редкого опроса
-// приложения (shell/online.js, 30 с) вместе с порогом записи выше.
-export const ROOM_AWAY_MS = 50 * 1000;
 export const ROOM_KEEP_MS = 30 * 24 * 60 * 60 * 1000;     // партия без ходов дольше — удаляется
 export const ROOM_KEEP_DONE_MS = 3 * 24 * 60 * 60 * 1000; // оконченная и приглашение без ответа — столько
-
-/** Параметр ссылки-приглашения: t.me/<бот>?startapp=chess_<код> (разбирает shell/online.js — тест сверяет). */
-export const roomParam = (game, code) => `${game}_${code}`;
 
 /** Место игрока в комнате: 0 — создатель, 1 — гость, −1 — не участник. */
 export const roomSeat = (room, userId) => (room.host === userId ? 0 : room.guest === userId ? 1 : -1);

@@ -114,8 +114,6 @@ CREATE TABLE IF NOT EXISTS rooms (
   name0      TEXT NOT NULL,               /* имя создателя, как в рейтинге (без фамилии и ника) */
   name1      TEXT,                        /* имя гостя */
   created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL,            /* последнее событие */
-  seen0      INTEGER NOT NULL DEFAULT 0,  /* когда создатель последний раз смотрел партию: не смотрит — о ходе пишет бот */
-  seen1      INTEGER NOT NULL DEFAULT 0
+  updated_at INTEGER NOT NULL             /* последнее событие */
 );
 CREATE INDEX IF NOT EXISTS rooms_host ON rooms(host, game, status);
