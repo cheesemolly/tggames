@@ -16,6 +16,9 @@ export const GAME_ICONS = {
     + '<rect x="2.5" y="14.4" width="5.6" height="5.6" rx="1.4"/>'
     + '<rect x="9.2" y="14.4" width="5.6" height="5.6" rx="1.4" fill="currentColor" stroke="none"/>'
     + '<rect x="15.9" y="14.4" width="5.6" height="5.6" rx="1.4"/>'),
+  // эрудит: фишка с буквой «Э» и точкой очков в углу
+  erudit: svg('<rect x="3" y="3" width="18" height="18" rx="3.5"/><path d="M8.6 8.2a4.6 4.6 0 1 1 0 7.6"/><path d="M10.8 12h5.6"/>'
+    + '<circle cx="17.4" cy="17.4" r="1" fill="currentColor" stroke="none"/>'),
 
   // Головоломки
   sudoku: svg('<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/>'

@@ -234,4 +234,12 @@ export const games = [
     // «Сыграно · Рекорд: 1 234 500 · Звание: Капитан» — победы в пинболе нет
     menu: { wins: false, progress: 'append', bestValue: (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') },
   },
+  {
+    id: 'erudit',
+    title: 'Эрудит',
+    load: () => import('../games/erudit/index.js'),
+    css: new URL('../games/erudit/game.css', import.meta.url),
+    // «Сыграно · Побед · Рекорд» — рекорд — счёт лучшей выигранной партии; у начатой — «Счёт 120 : 98»
+    menu: { saveLine: (s) => (Array.isArray(s.scores) ? `Счёт ${s.scores[0]} : ${s.scores[1]}` : null) },
+  },
 ];

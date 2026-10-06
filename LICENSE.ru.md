@@ -43,6 +43,9 @@ Copyright (c) 2026 cheesemolly (https://github.com/cheesemolly). Все прав
 - `games/boggle/words/ru.json` — список существительных из Harrix/Russian-Nouns
   (https://github.com/Harrix/Russian-Nouns), лицензия MIT; частоты слов — из «Нового частотного
   словаря русской лексики» О. Н. Ляшевской и С. А. Шарова (2009);
+- `games/erudit/words/ru.json` — список существительных из Harrix/Russian-Nouns
+  (https://github.com/Harrix/Russian-Nouns), лицензия MIT; список частых слов — по «Новому частотному
+  словарю русской лексики» О. Н. Ляшевской и С. А. Шарова (2009);
 - `games/wordle/words/*.json` — списки слов, собранные из общедоступных источников; принадлежат
   их владельцам;
 - `games/chess/engine.js` — значения таблиц полей взяты из «Simplified Evaluation Function»

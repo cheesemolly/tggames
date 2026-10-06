@@ -1,0 +1,377 @@
+/*
+ * Эрудит. Поле — сетка 15×15, фишки лежат прямо в клетках (без transform — их можно трясти и «впрыгивать»).
+ * Клетки поля и рамки — из цветов темы. Игровые цвета — свои, заданы для обеих тем: фишки (--er-tile…) и
+ * премии как в «Эрудите»: зелёная — буква ×2, жёлтая — буква ×3, синяя — слово ×2, красная — слово ×3.
+ * Размеры букв — в долях ширины поля и руки (cqw): поле и рука — контейнеры.
+ */
+
+[data-game="erudit"] {
+  --er-cell: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 75%, var(--tg-theme-bg-color));
+  --er-frame: color-mix(in srgb, var(--tg-theme-text-color) 16%, var(--tg-theme-bg-color));
+  --er-accent: var(--tg-theme-button-color);
+  --er-accent-text: var(--tg-theme-button-text-color);
+  --er-tile: #f7e8c4;
+  --er-tile-fresh: #fff7dc;
+  --er-tile-edge: #d2ba84;
+  --er-tile-ink: #2e2416;
+  --er-star: #b23a22;
+  --er-last: #e08a1e;
+  --er-p-d: #bfe6c6;
+  --er-p-t: #f7e28c;
+  --er-p-2: #b7d5f6;
+  --er-p-3: #f4b1a9;
+  --er-mark: rgb(0 0 0 / 0.5);
+  --er-warn: #c0392b;
+  --toast-top: 120px;
+}
+:root[data-theme="dark"] [data-game="erudit"] {
+  --er-tile: #e9d8ae;
+  --er-tile-fresh: #fff1c4;
+  --er-tile-edge: #a8905a;
+  --er-last: #ffb347;
+  --er-p-d: #2b5f3d;
+  --er-p-t: #6f5c1c;
+  --er-p-2: #2a4d7c;
+  --er-p-3: #7d342f;
+  --er-mark: rgb(255 255 255 / 0.62);
+  --er-warn: #ff8a7a;
+}
+
+/* ---------- раскладка ---------- */
+
+.game-root[data-game="erudit"] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+[data-game="erudit"] .btn { background: var(--er-accent); color: var(--er-accent-text); }
+[data-game="erudit"] .btn:disabled { opacity: 0.45; cursor: default; }
+[data-game="erudit"] .btn-secondary { background: var(--tg-theme-bg-color); color: var(--tg-theme-text-color); }
+[data-game="erudit"] .er { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 6px; }
+[data-game="erudit"] .er-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 4px; }
+[data-game="erudit"] .er-title { font-size: 20px; font-weight: 700; line-height: 1.2; }
+[data-game="erudit"] .er-sub { min-height: 18px; font-size: 13px; color: var(--tg-theme-hint-color); }
+[data-game="erudit"] .er-actions { display: flex; gap: 6px; }
+[data-game="erudit"] .er-icon-btn {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: var(--tg-theme-secondary-bg-color);
+  color: var(--tg-theme-text-color);
+  font: inherit;
+  cursor: pointer;
+  transition: transform 0.1s ease, opacity 0.2s ease;
+}
+[data-game="erudit"] .er-icon-btn:active { transform: scale(0.92); }
+[data-game="erudit"] .er-icon-btn svg { width: 20px; height: 20px; }
+[data-game="erudit"] .er-muted { opacity: 0.55; }
+
+/* счёт: вы — мешок — бот */
+[data-game="erudit"] .er-scores { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 8px; }
+[data-game="erudit"] .er-side {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 10px;
+  background: var(--tg-theme-secondary-bg-color);
+  box-shadow: inset 0 -2px 0 transparent;
+  font-size: 13px;
+  color: var(--tg-theme-hint-color);
+  transition: box-shadow 0.25s ease, color 0.25s ease;
+}
+[data-game="erudit"] .er-side b { font-size: 18px; color: var(--tg-theme-text-color); font-variant-numeric: tabular-nums; }
+[data-game="erudit"] .er-side.er-active { box-shadow: inset 0 -2px 0 var(--er-accent); color: var(--tg-theme-text-color); }
+[data-game="erudit"] .er-bag { display: grid; justify-items: center; line-height: 1.1; font-size: 11px; color: var(--tg-theme-hint-color); }
+[data-game="erudit"] .er-bag b { font-size: 15px; color: var(--tg-theme-text-color); font-variant-numeric: tabular-nums; }
+
+/* ---------- поле ---------- */
+
+[data-game="erudit"] .er-wrap { flex: 1; min-height: 0; display: grid; place-items: center; container-type: size; }
+[data-game="erudit"] .er-board {
+  position: relative;
+  width: min(100cqw, 100cqh);
+  aspect-ratio: 1;
+  display: grid;
+  grid-template-columns: repeat(15, minmax(0, 1fr));
+  grid-template-rows: repeat(15, minmax(0, 1fr));
+  gap: 1px;
+  padding: 2px;
+  border-radius: 6px;
+  background: var(--er-frame);
+  container-type: inline-size;
+  touch-action: manipulation;
+}
+[data-game="erudit"] .er-cell {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  min-height: 0;
+  border-radius: 2px;
+  background: var(--er-cell);
+  cursor: pointer;
+}
+[data-game="erudit"] .er-p-d { background: var(--er-p-d); }
+[data-game="erudit"] .er-p-t { background: var(--er-p-t); }
+[data-game="erudit"] .er-p-2 { background: var(--er-p-2); }
+[data-game="erudit"] .er-p-3 { background: var(--er-p-3); }
+[data-game="erudit"] .er-mark {
+  font-size: 2.5cqw;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--er-mark);
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+[data-game="erudit"] .er-center .er-mark { font-size: 3.4cqw; color: var(--tg-theme-hint-color); }
+[data-game="erudit"] .er-cursor { box-shadow: inset 0 0 0 2px var(--er-accent); z-index: 1; }
+[data-game="erudit"] .er-cursor .er-mark { opacity: 0; }
+[data-game="erudit"] .er-cursor::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+  border: 1.5cqw solid transparent;
+  border-left: 2.4cqw solid var(--er-accent);
+  border-right: 0;
+  translate: -50% -50%;
+  animation: er-cursor 0.9s ease-in-out infinite;
+}
+[data-game="erudit"] .er-cursor[data-dir="v"]::after { rotate: 90deg; }
+@keyframes er-cursor { 50% { opacity: 0.35; } }
+
+/* ---------- фишки ---------- */
+
+[data-game="erudit"] .er-tile {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 14%;
+  background: var(--er-tile);
+  color: var(--er-tile-ink);
+  box-shadow: inset 0 -0.45cqw 0 var(--er-tile-edge);
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+[data-game="erudit"] .er-tile b {
+  font-size: 4cqw;
+  font-weight: 800;
+  line-height: 1;
+  text-transform: uppercase;
+  translate: -10% -8%;
+}
+[data-game="erudit"] .er-tile i {
+  position: absolute;
+  right: 6%;
+  bottom: 8%;
+  font-size: 2cqw;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1;
+  opacity: 0.8;
+}
+[data-game="erudit"] .er-star b { color: var(--er-star); translate: none; }
+[data-game="erudit"] .er-fresh { background: var(--er-tile-fresh); box-shadow: inset 0 0 0 2px var(--er-accent); }
+[data-game="erudit"] .er-last { box-shadow: inset 0 0 0 2px var(--er-last); }
+[data-game="erudit"] .er-leaving { pointer-events: none; }
+
+/* очки хода всплывают над словом */
+[data-game="erudit"] .er-float {
+  position: absolute;
+  z-index: 3;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--er-accent);
+  color: var(--er-accent-text);
+  font-size: 15px;
+  font-weight: 800;
+  white-space: nowrap;
+  pointer-events: none;
+}
+[data-game="erudit"] .er-float-bot { background: var(--tg-theme-text-color); color: var(--tg-theme-bg-color); }
+
+/* ---------- строка под полем, рука, кнопки ---------- */
+
+[data-game="erudit"] .er-status {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+  text-align: center;
+  overflow-wrap: anywhere;
+  transition: color 0.2s ease;
+}
+[data-game="erudit"] .er-status.er-warn { color: var(--er-warn); }
+[data-game="erudit"] .er-thinking::after { content: '…'; width: 1.2em; animation: er-dots 1s steps(4) infinite; overflow: hidden; text-align: left; }
+@keyframes er-dots { from { width: 0; } to { width: 1.2em; } }
+
+[data-game="erudit"] .er-rack {
+  flex: none;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 5px;
+  width: 100%;
+  max-width: 420px;
+  margin: 0 auto;
+  container-type: inline-size;
+}
+[data-game="erudit"] .er-slot {
+  position: relative;
+  aspect-ratio: 1;
+  padding: 0;
+  border: 0;
+  border-radius: 14%;
+  background: color-mix(in srgb, var(--tg-theme-hint-color) 14%, transparent);
+  font: inherit;
+  cursor: pointer;
+  transition: translate 0.15s ease, box-shadow 0.15s ease;
+}
+[data-game="erudit"] .er-slot:disabled { cursor: default; }
+[data-game="erudit"] .er-slot .er-tile { box-shadow: inset 0 -0.9cqw 0 var(--er-tile-edge), 0 1px 3px rgb(0 0 0 / 0.25); }
+[data-game="erudit"] .er-slot .er-tile b { font-size: 7.2cqw; }
+[data-game="erudit"] .er-slot .er-tile i { font-size: 3.2cqw; }
+[data-game="erudit"] .er-slot:active .er-tile { scale: 0.94; }
+[data-game="erudit"] .er-picked { translate: 0 -14%; }
+[data-game="erudit"] .er-picked .er-tile,
+[data-game="erudit"] .er-slot[aria-pressed="true"] .er-tile { background: var(--er-tile-fresh); box-shadow: inset 0 0 0 0.7cqw var(--er-accent), 0 3px 8px rgb(0 0 0 / 0.3); }
+[data-game="erudit"] .er-slot[aria-pressed="true"] { translate: 0 -10%; }
+
+[data-game="erudit"] .er-tools { flex: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 1.5fr); gap: 6px; }
+[data-game="erudit"] .er-tool {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 7px 0;
+  border: 0;
+  border-radius: 12px;
+  background: var(--tg-theme-secondary-bg-color);
+  color: var(--tg-theme-text-color);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: transform 0.1s ease, opacity 0.2s ease, background-color 0.2s ease, color 0.2s ease;
+}
+[data-game="erudit"] .er-tool:active { transform: scale(0.95); }
+[data-game="erudit"] .er-tool:disabled { opacity: 0.4; cursor: default; }
+[data-game="erudit"] .er-tool-icon { display: grid; }
+[data-game="erudit"] .er-tool-icon svg { width: 20px; height: 20px; }
+[data-game="erudit"] .er-play { font-weight: 700; }
+[data-game="erudit"] .er-play.er-ready { background: var(--er-accent); color: var(--er-accent-text); }
+
+/* ---------- окна ---------- */
+
+[data-game="erudit"] .er-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--tg-theme-bg-color) 82%, transparent);
+}
+[data-game="erudit"] .er-card {
+  width: 100%;
+  max-width: 380px;
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--tg-theme-secondary-bg-color);
+}
+[data-game="erudit"] .er-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+[data-game="erudit"] .er-card h2 { margin: 0; font-size: 18px; }
+[data-game="erudit"] .er-card .er-icon-btn { background: var(--tg-theme-bg-color); }
+[data-game="erudit"] .er-note { margin: 4px 0 0; font-size: 13px; color: var(--tg-theme-hint-color); }
+[data-game="erudit"] .er-alert { color: var(--er-warn); font-weight: 600; }
+[data-game="erudit"] .er-rule { margin: 0 0 10px; font-size: 14px; line-height: 1.4; }
+[data-game="erudit"] .er-card-actions { display: flex; gap: 8px; margin-top: 14px; }
+[data-game="erudit"] .er-card-actions .btn { flex: 1; }
+[data-game="erudit"] .er-section { margin: 6px 0 8px; font-size: 14px; }
+[data-game="erudit"] .er-levels { display: grid; gap: 6px; }
+[data-game="erudit"] .er-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--tg-theme-bg-color);
+  color: var(--tg-theme-text-color);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+  transition: box-shadow 0.2s ease, transform 0.1s ease;
+}
+[data-game="erudit"] .er-option span { font-size: 12px; color: var(--tg-theme-hint-color); text-align: right; }
+[data-game="erudit"] .er-option[aria-checked="true"] { box-shadow: inset 0 0 0 2px var(--er-accent); }
+[data-game="erudit"] .er-option:active { transform: scale(0.98); }
+[data-game="erudit"] .er-start { width: 100%; margin-top: 14px; }
+
+[data-game="erudit"] .er-legend { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 10px; margin: 12px 0; font-size: 13px; }
+[data-game="erudit"] .er-legend-item { display: flex; align-items: center; gap: 6px; }
+[data-game="erudit"] .er-chip {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  color: var(--er-mark);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+[data-game="erudit"] .er-values { display: grid; gap: 4px; font-size: 14px; }
+[data-game="erudit"] .er-values div { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 8px; align-items: baseline; }
+[data-game="erudit"] .er-values b { text-align: right; font-variant-numeric: tabular-nums; }
+[data-game="erudit"] .er-values span { letter-spacing: 0.04em; }
+
+[data-game="erudit"] .er-rack-pick { margin-top: 12px; }
+[data-game="erudit"] .er-letters { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px; margin-top: 12px; }
+[data-game="erudit"] .er-letter {
+  aspect-ratio: 1;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: var(--er-tile);
+  color: var(--er-tile-ink);
+  box-shadow: inset 0 -2px 0 var(--er-tile-edge);
+  font: inherit;
+  font-size: 17px;
+  font-weight: 800;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+[data-game="erudit"] .er-letter:active { transform: scale(0.9); }
+
+[data-game="erudit"] .er-stats { width: 100%; border-collapse: collapse; font-size: 13px; }
+[data-game="erudit"] .er-stats th { font-size: 11px; font-weight: 600; color: var(--tg-theme-hint-color); padding: 4px 2px; }
+[data-game="erudit"] .er-stats td { padding: 6px 2px; text-align: center; border-top: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 25%, transparent); font-variant-numeric: tabular-nums; }
+[data-game="erudit"] .er-stats td:first-child { text-align: left; font-weight: 600; }
+
+@media (prefers-reduced-motion: reduce) {
+  [data-game="erudit"] .er-cursor::after, [data-game="erudit"] .er-thinking::after { animation: none; }
+  [data-game="erudit"] * { transition-duration: 0s !important; }
+}

@@ -9,6 +9,15 @@ import { digits, plural, placeOn } from './logic.js';
 
 export const STORIES = [
   {
+    id: 'erudit-new',
+    label: 'Эрудит',
+    games: ['erudit'],
+    slides: [
+      { kicker: 'Новая игра', title: 'Эрудит', text: 'Скрэббл на русском против бота: составляй слова из семи фишек на поле 15×15. Цветные клетки умножают очки буквы или всего слова. Четыре уровня бота.', play: 'erudit' },
+      { kicker: 'Совет', title: 'Дорогую букву — на цветную клетку', text: 'Ф, Ц, Ш, Щ, Ъ, Э и Ю стоят по 10 очков. На жёлтой клетке такая буква даёт 30, а если слово ещё и задело красную — всё умножится на три.', play: 'erudit' },
+    ],
+  },
+  {
     id: 'arkanoid-new',
     label: 'Арканоид',
     games: ['arkanoid'],
@@ -213,6 +222,7 @@ export function pickStories({ visible, rated = false, seen = [], week = null }) 
 
 /** Что показать баннером «Новая игра»: первая видимая игроку из списка (новые — выше). */
 export const NEW_GAMES = [
+  { id: 'erudit', text: 'Скрэббл на русском против бота' },
   { id: 'arkanoid', text: '300 уровней, 10 глав, 15 бонусов' },
   { id: 'repair', text: '23 вида гаджетов, магазин, прошивка с ПК' },
   { id: 'hanoi', text: 'От 3 до 10 дисков, «идеально» — за минимум' },
