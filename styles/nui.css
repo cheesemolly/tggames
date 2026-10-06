@@ -587,6 +587,7 @@
 .nui .nwear-tile.on small { color: var(--n-acc); }
 .nui .nwear-tile:active { background: var(--n-s2); }
 .nui .nwear-tile:disabled { opacity: 0.6; }
+.nui .nwear-tile .tframe { margin-bottom: 10px; }      /* значок рамки свисает — место под него в плитке */
 .nui .niconbtn {
   display: grid;
   place-items: center;

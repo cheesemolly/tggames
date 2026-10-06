@@ -1,26 +1,26 @@
-// Рамка тестера (в бете 'tester-frame'): серебряная пиксельная рамка вокруг аватара в профиле — у бета-тестеров
-// и разработчика. Цельная: заклёпки по краям, снизу планка с надписью TESTER, в правом нижнем углу — плашка с
-// гаечным ключом и молотом. Блик проходит по диагонали, потом искра обегает заклёпки. Стили — styles/app.css
-// (.tframe…): рамка одна и та же во вкладке «Профиль» и в профиле игрока в рейтинге.
+// Рамка тестера (в бете 'tester-frame'): серебряная пиксельная рамка вокруг аватара — у бета-тестеров и
+// разработчика. Квадратная толстая кайма с заклёпками, внизу по центру — гаечный ключ и молот (свисают за край).
+// Блик проходит по диагонали, в большой рамке потом искра обегает заклёпки. Вид один и тот же везде: в профиле,
+// на пьедестале и в строке таблицы — меняется только размер. Стили — styles/app.css (.tframe…).
 
 import { el } from '../shared/dom.js';
 
 /**
- * Размеры в px: рамка W×H, шаг пикселя блика STEP; из них считаются и стили (тест сверяет).
- * lg — в профиле (с планкой TESTER и плашкой); md и sm — на пьедестале и в строке таблицы (аватар 44 и 34):
- * только кайма с бликом и заклёпками по углам — на планку и значок там нет места.
+ * Размеры в px: рамка W×H, кайма PAD (вместе с чёрной линией у аватара), шаг пикселя блика STEP, пиксель значка
+ * ICON; из них считаются и стили (тест сверяет). lg — профиль (аватар 78), md — пьедестал (44), sm — строка
+ * таблицы (34).
  */
 export const SIZES = {
-  lg: { w: 96, h: 117, step: 3 },
-  md: { w: 52, h: 52, step: 2 },
-  sm: { w: 42, h: 42, step: 2 },
+  lg: { w: 102, h: 102, pad: 12, step: 3, icon: 3 },
+  md: { w: 56, h: 56, pad: 6, step: 2, icon: 2 },
+  sm: { w: 44, h: 44, pad: 5, step: 2, icon: 1 },
 };
 export const FRAME = SIZES.lg;
 
 /**
  * Блик — две ступенчатые диагонали (широкая и узкая следом) во всю высоту рамки: пути SVG и его ширина.
  * Одним SVG, а не тенями от точки: рисунок целиком в своём прямоугольнике — браузер не теряет, что перерисовать
- * (блик тенями оставлял «след» на планке).
+ * (блик тенями оставлял «след» на рамке).
  */
 export function shine({ h, step } = FRAME) {
   let main = '';
@@ -36,42 +36,86 @@ export function shine({ h, step } = FRAME) {
 /** Сколько шагов проходит блик: от «целиком слева за рамкой» до «целиком справа». */
 export const shineSteps = ({ w, h, step } = FRAME) => (shine({ h, step }).width + w) / step;
 
-// гаечный ключ и молот, 16×16 пикселей
-const TOOLS = '<svg viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">'
-  + '<path fill="#eef2f8" d="M1 14h2v1h-2zM1 13h3v1h-3zM3 12h2v1h-2zM4 11h2v1h-2zM5 10h2v1h-2zM6 9h2v1h-2zM7 8h2v1h-2zM8 7h2v1h-2zM9 6h2v1h-2zM10 5h4v1h-4zM10 4h5v1h-5zM10 3h2v1h-2zM14 3h2v1h-2zM10 2h2v1h-2zM15 2h1v1h-1zM11 1h2v1h-2z"/>'
-  + '<path fill="#9aa6bd" d="M3 13h1v1h-1zM4 12h1v1h-1zM5 11h1v1h-1zM6 10h1v1h-1zM7 9h1v1h-1zM8 8h1v1h-1zM9 7h1v1h-1zM10 6h1v1h-1zM11 5h3v1h-3z"/>'
-  + '<path fill="#ffd23d" d="M12 13h2v1h-2zM11 12h2v1h-2zM10 11h2v1h-2zM9 10h2v1h-2zM8 9h2v1h-2zM7 8h2v1h-2zM6 7h2v1h-2zM5 6h2v1h-2zM4 5h2v1h-2z"/>'
-  + '<path fill="#8a95ad" d="M5 1h3v1h-3zM4 2h3v1h-3zM3 3h3v1h-3zM2 4h3v1h-3zM1 5h3v1h-3zM1 6h2v1h-2z"/>'
-  + '<path fill="#dfe6f2" d="M5 1h1v1h-1zM4 2h1v1h-1zM3 3h1v1h-1zM2 4h1v1h-1zM1 5h1v1h-1z"/></svg>';
+// гаечный ключ и молот, 16×16 пикселей: W, w — ключ и его тень; H — рукоять молота; S, s — боёк и блик на нём
+export const TOOLS_ART = [
+  '................',
+  '.....sSS...WW...',
+  '....sSS...WW...W',
+  '...sSS....WW..WW',
+  '..sSS.....WWWWW.',
+  '.sSSHH....Wwww..',
+  '.SS..HH..Ww.....',
+  '......HHWw......',
+  '.......HH.......',
+  '......WwHH......',
+  '.....Ww..HH.....',
+  '....Ww....HH....',
+  '...Ww......HH...',
+  '.WWw........HH..',
+  '.WW.............',
+  '................',
+];
+const TOOL_COLORS = { W: '#eef2f8', w: '#9aa6bd', H: '#ffd23d', S: '#8a95ad', s: '#dfe6f2' };
 
-// заклёпки по часовой стрелке (в правом нижнем углу её нет — там плашка): [left, top]
-const RIVETS = [[3, 3], [46, 3], [90, 3], [90, 46], [3, 111], [3, 46]];
+/** Отрезки строк, где test(символ) верно, — путём SVG; (ox, oy) — сдвиг. */
+function runs(rows, test, ox = 0, oy = 0) {
+  let d = '';
+  rows.forEach((row, y) => {
+    for (let x = 0; x < row.length; x++) {
+      if (!test(row[x], x, y)) continue;
+      let w = 1;
+      while (x + w < row.length && test(row[x + w], x + w, y)) w++;
+      d += `M${x + ox} ${y + oy}h${w}v1h-${w}z`;
+      x += w - 1;
+    }
+  });
+  return d;
+}
+
+/**
+ * Значок с чёрной обводкой в пиксель (плашки под ним нет — он лежит на рамке и свисает за неё): картинка 18×18.
+ * Обводка — все пиксели, у которых рядом (в том числе по диагонали) есть цветной.
+ */
+export function toolsSvg(art = TOOLS_ART) {
+  const n = art.length;
+  const filled = (x, y) => art[y]?.[x] !== undefined && art[y][x] !== '.';
+  const padded = Array.from({ length: n + 2 }, () => '.'.repeat(n + 2));
+  const near = (_, x, y) => [-1, 0, 1].some((dy) => [-1, 0, 1].some((dx) => filled(x - 1 + dx, y - 1 + dy)));
+  return `<svg viewBox="0 0 ${n + 2} ${n + 2}" shape-rendering="crispEdges" aria-hidden="true">`
+    + `<path fill="#000" d="${runs(padded, near)}"/>`
+    + Object.entries(TOOL_COLORS).map(([key, color]) => `<path fill="${color}" d="${runs(art, (c) => c === key, 1, 1)}"/>`).join('')
+    + '</svg>';
+}
+
+const TOOLS = toolsSvg();
+
+// заклёпки [left, top] по часовой стрелке; внизу по центру её нет — там значок. В маленьких рамках — точки по углам.
+const RIVETS = {
+  lg: [[5, 5], [49, 5], [94, 5], [94, 49], [94, 94], [5, 94], [5, 49]],
+  md: [[3, 3], [52, 3], [52, 52], [3, 52]],
+  sm: [[2, 2], [41, 2], [41, 41], [2, 41]],
+};
 
 /**
  * Аватар в рамке тестера. avatarNode — обычный аватар (вкладки «Профиль» или рейтинга): из него берутся буква и
  * цвет, сам он в рамку не вставляется (у каждого экрана свои размеры и тени аватара). size — ключ SIZES.
  */
 export function testerFrame(avatarNode, size = 'lg') {
-  const box = SIZES[size] ?? SIZES.lg;
-  const mini = box !== SIZES.lg;
+  const key = Object.hasOwn(SIZES, size) ? size : 'lg';
+  const box = SIZES[key];
   const ava = el('span', { class: 'tframe-ava' }, avatarNode.textContent);
   if (avatarNode.dataset.cat) ava.dataset.cat = avatarNode.dataset.cat;      // новый интерфейс: цвет папки (--c)
   const cat = avatarNode.style.getPropertyValue('--cat');                    // рейтинг: --cat
   if (cat) ava.style.setProperty('--cat', cat);
 
   const { main, tail, width } = shine(box);
-  // маленькая рамка: заклёпки-точки по четырём углам
-  const rivets = mini ? [[1, 1], [box.w - 2, 1], [box.w - 2, box.h - 2], [1, box.h - 2]] : RIVETS;
   const body = el('span', { class: 'tframe-body' },
-    rivets.map(([x, y], i) => el('span', { class: 'tframe-rv', style: `left: ${x}px; top: ${y}px; --i: ${i}` })),
-    !mini && el('span', { class: 'tframe-word' }, 'TESTER'),
+    RIVETS[key].map(([x, y], i) => el('span', { class: 'tframe-rv', style: `left: ${x}px; top: ${y}px; --i: ${i}` })),
   );
   body.insertAdjacentHTML('beforeend',
     `<svg class="tframe-shine" width="${width}" height="${box.h}" shape-rendering="crispEdges" aria-hidden="true">`
     + `<path fill="#fff" d="${main}"/><path fill="#fff" opacity=".55" d="${tail}"/></svg>`);
-  const label = { role: 'img', 'aria-label': 'Аватар в рамке бета-тестера' };
-  if (mini) return el('span', { class: `tframe tframe-mini tframe-${size}`, ...label }, body, ava);
-  const badge = el('span', { class: 'tframe-badge' });
-  badge.innerHTML = TOOLS;
-  return el('span', { class: 'tframe', ...label }, body, ava, badge);
+  const icon = el('span', { class: 'tframe-icon' });
+  icon.innerHTML = TOOLS;
+  return el('span', { class: `tframe tframe-${key}`, role: 'img', 'aria-label': 'Аватар в рамке бета-тестера' }, body, ava, icon);
 }

@@ -758,120 +758,96 @@ h1, h2 { margin: 0 0 8px; line-height: 1.2; }
 .top-profile .top-avatar-lg { animation: top-pop 420ms cubic-bezier(0.3, 1.6, 0.5, 1) backwards; }
 .top-profile-name { font-size: 22px; font-weight: 800; overflow-wrap: anywhere; }
 
-/* ---------- рамка тестера (shell/tester-frame.js): 96×117, пиксель блика 3px — числа сверяет тест ---------- */
+/* ---------- рамка тестера (shell/tester-frame.js) ----------
+   Квадратная серебряная кайма с бликом и заклёпками, внизу по центру свисает значок — гаечный ключ и молот.
+   Вид один, размеров три: lg — профиль (аватар 78), md — пьедестал (44), sm — строка таблицы (34).
+   Числа (сторона, кайма, блик, значок) сверяет тест с SIZES. */
 .tframe {
   --tf-hi: #f4f7fb;
   --tf: #c9d1e0;
   --tf-lo: #5f6b85;
-  --tf-ink: #1d1934;
   position: relative;
   display: block;
   flex: none;
-  width: 96px;
-  height: 117px;
-  margin: 2px 10px 10px 2px;      /* место под обводку, тень и торчащую плашку */
+  width: var(--tf-box);
+  height: var(--tf-box);
+  margin: 2px 2px var(--tf-drop) 2px;      /* место под обводку и свисающий значок */
   isolation: isolate;
   user-select: none;
   -webkit-user-select: none;
 }
+.tframe-lg { --tf-box: 102px; --tf-pad: 12px; --tf-bevel: 3px; --tf-line: 2px; --tf-icon: 54px; --tf-hang: 26px; --tf-drop: 30px; }
+.tframe-md { --tf-box: 56px; --tf-pad: 6px; --tf-bevel: 2px; --tf-line: 1px; --tf-icon: 36px; --tf-hang: 20px; --tf-drop: 22px; }
+/* в строке значок свисает в поле строки — высоту ей не добавляет */
+.tframe-sm { --tf-box: 44px; --tf-pad: 5px; --tf-bevel: 1px; --tf-line: 1px; --tf-icon: 18px; --tf-hang: 9px; --tf-drop: 2px; }
+.tframe-lg { margin-right: 6px; }
 .tframe-body {
   position: absolute;
   inset: 0;
   overflow: hidden;
-  box-shadow: 0 0 0 2px #000, 4px 4px 0 2px #000;
+  box-shadow: 0 0 0 2px #000;
   background:
-    linear-gradient(var(--tf-hi), var(--tf-hi)) top / 100% 2px no-repeat,
-    linear-gradient(var(--tf-hi), var(--tf-hi)) left / 2px 100% no-repeat,
-    linear-gradient(var(--tf-lo), var(--tf-lo)) bottom / 100% 2px no-repeat,
-    linear-gradient(var(--tf-lo), var(--tf-lo)) right / 2px 100% no-repeat,
+    linear-gradient(var(--tf-hi), var(--tf-hi)) top / 100% var(--tf-bevel) no-repeat,
+    linear-gradient(var(--tf-hi), var(--tf-hi)) left / var(--tf-bevel) 100% no-repeat,
+    linear-gradient(var(--tf-lo), var(--tf-lo)) bottom / 100% var(--tf-bevel) no-repeat,
+    linear-gradient(var(--tf-lo), var(--tf-lo)) right / var(--tf-bevel) 100% no-repeat,
     var(--tf);
 }
+.tframe-lg .tframe-body { box-shadow: 0 0 0 2px #000, 4px 4px 0 2px #000; }
 .tframe-ava {
   position: absolute;
-  left: 9px;
-  top: 9px;
-  width: 78px;
-  height: 78px;
+  left: var(--tf-pad);
+  top: var(--tf-pad);
+  width: calc(var(--tf-box) - 2 * var(--tf-pad));
+  height: calc(var(--tf-box) - 2 * var(--tf-pad));
   display: grid;
   place-items: center;
-  box-shadow: 0 0 0 2px #000;
+  box-shadow: 0 0 0 var(--tf-line) #000;
   background: var(--c, var(--cat));
   color: #fff;
-  font-size: 32px;
+  font-size: 15px;
   font-weight: 800;
   line-height: 1;
 }
-.tframe-word {
-  position: absolute;
-  left: 10px;
-  bottom: 11px;
-  font: 400 8px/1 'Press Start 2P', ui-monospace, monospace;
-  color: var(--tf-ink);
-}
-.tframe-rv {
-  position: absolute;
+.tframe-md .tframe-ava { font-size: 18px; }
+.tframe-lg .tframe-ava { font-size: 32px; }
+.tframe-rv { position: absolute; width: 1px; height: 1px; background: var(--tf-lo); }
+.tframe-lg .tframe-rv {
   width: 3px;
   height: 3px;
-  background: var(--tf-lo);
-  animation: tframe-spark 3.4s steps(1) calc(1.5s + var(--i, 0) * 0.3s) infinite;
+  animation: tframe-spark 3.4s steps(1) calc(1.4s + var(--i, 0) * 0.28s) infinite;
 }
 @keyframes tframe-spark {
   0% { background: #fff; box-shadow: 3px 0 #fff, -3px 0 #fff, 0 3px #fff, 0 -3px #fff; }
   8%, 100% { background: var(--tf-lo); box-shadow: none; }
 }
-.tframe-shine { position: absolute; left: 0; top: 0; translate: -138px 0; animation: tframe-sweep 3.4s infinite; }
-@keyframes tframe-sweep {
-  0% { translate: -138px 0; animation-timing-function: steps(78); }
-  40%, 100% { translate: 96px 0; }
+.tframe-shine { position: absolute; left: 0; top: 0; animation-duration: 3.4s; animation-iteration-count: infinite; }
+.tframe-lg .tframe-shine { translate: -123px 0; animation-name: tframe-sweep-lg; }
+.tframe-md .tframe-shine { translate: -70px 0; animation-name: tframe-sweep-md; }
+.tframe-sm .tframe-shine { translate: -58px 0; animation-name: tframe-sweep-sm; }
+@keyframes tframe-sweep-lg {
+  0% { translate: -123px 0; animation-timing-function: steps(75); }
+  40%, 100% { translate: 102px 0; }
 }
-.tframe-badge {
+@keyframes tframe-sweep-md {
+  0% { translate: -70px 0; animation-timing-function: steps(63); }
+  40%, 100% { translate: 56px 0; }
+}
+@keyframes tframe-sweep-sm {
+  0% { translate: -58px 0; animation-timing-function: steps(51); }
+  40%, 100% { translate: 44px 0; }
+}
+.tframe-icon {
   position: absolute;
-  right: -8px;
-  bottom: -8px;
-  width: 32px;
-  height: 32px;
-  border: 2px solid var(--tf);
-  box-shadow: 0 0 0 2px #000;
-  background: var(--tf-ink);
+  left: calc(50% - var(--tf-icon) / 2);
+  bottom: calc(-1 * var(--tf-hang));
+  width: var(--tf-icon);
+  height: var(--tf-icon);
 }
-.tframe-badge svg { display: block; width: 32px; height: 32px; }
+.tframe-icon svg { display: block; width: 100%; height: 100%; }
 .top-profile .tframe { animation: top-pop 420ms cubic-bezier(0.3, 1.6, 0.5, 1) backwards; }
 @media (prefers-reduced-motion: reduce) {
   .tframe-rv, .tframe-shine { animation: none; }
-}
-/* маленькая рамка — в строке таблицы (sm: аватар 34, рамка 42) и на пьедестале (md: аватар 44, рамка 52):
-   кайма 3px с бликом и заклёпками-точками по углам; пиксель блика 2px — числа сверяет тест */
-.tframe-mini { width: var(--tf-box); height: var(--tf-box); margin: 2px; }
-.tframe-sm { --tf-box: 42px; }
-.tframe-md { --tf-box: 52px; }
-.tframe-mini .tframe-body {
-  box-shadow: 0 0 0 2px #000;
-  background:
-    linear-gradient(var(--tf-hi), var(--tf-hi)) top / 100% 1px no-repeat,
-    linear-gradient(var(--tf-hi), var(--tf-hi)) left / 1px 100% no-repeat,
-    linear-gradient(var(--tf-lo), var(--tf-lo)) bottom / 100% 1px no-repeat,
-    linear-gradient(var(--tf-lo), var(--tf-lo)) right / 1px 100% no-repeat,
-    var(--tf);
-}
-.tframe-mini .tframe-ava {
-  left: 4px;
-  top: 4px;
-  width: calc(var(--tf-box) - 8px);
-  height: calc(var(--tf-box) - 8px);
-  box-shadow: 0 0 0 1px #000;
-  font-size: 15px;
-}
-.tframe-md .tframe-ava { font-size: 18px; }
-.tframe-mini .tframe-rv { width: 1px; height: 1px; animation: none; }
-.tframe-sm .tframe-shine { translate: -56px 0; animation-name: tframe-sweep-sm; }
-.tframe-md .tframe-shine { translate: -66px 0; animation-name: tframe-sweep-md; }
-@keyframes tframe-sweep-sm {
-  0% { translate: -56px 0; animation-timing-function: steps(49); }
-  40%, 100% { translate: 42px 0; }
-}
-@keyframes tframe-sweep-md {
-  0% { translate: -66px 0; animation-timing-function: steps(59); }
-  40%, 100% { translate: 52px 0; }
 }
 
 /* ---------- значок (shell/badges.js): картинка 16×16, --s — сторона в px ---------- */
