@@ -175,6 +175,7 @@ export const GAMES = [
   { id: 'bubble-shooter', title: 'Шарики', emoji: '🫧', about: 'стреляй шариками, собирай по три одного цвета' },
   { id: 'snake', title: 'Змейка', emoji: '🐍', about: 'классика и уровни с препятствиями' },
   { id: 'brick-blast', title: 'Brick Blast', emoji: '🧱', about: 'разбей блоки очередью шариков' },
+  { id: 'arkanoid', title: 'Арканоид', emoji: '🟡', about: 'шариком и платформой разбей кирпичи: 210 уровней, 15 бонусов', beta: true },
   { id: 'loop', title: 'Петля', emoji: '➰', about: 'поворачивай плитки, пока все линии не замкнутся' },
   { id: 'connect-dots', title: 'Соедини точки', emoji: '🔴', about: 'соедини пары точек и заполни всё поле', best: (n) => `рекорд: уровень ${n}` },
   { id: 'mahjong', title: 'Маджонг', emoji: '🀄', about: 'пасьянс: снимай одинаковые свободные плитки' },
@@ -451,6 +452,8 @@ export const BOARDS = {
   'bubble-shooter': { by: 'уровень', score: menuLevel('bubble-shooter'), text: levelText },
   snake: { by: 'рекорд в классике', score: shellStats('snake', 'best'), text: POINTS },
   'brick-blast': { by: 'уровень', score: menuLevel('brick-blast'), text: levelText },
+  // Арканоид: уровни открываются по порядку, лучший пройденный = сколько пройдено
+  arkanoid: { by: 'пройденные уровни', score: gameStats('arkanoid', 'bestLevel'), text: count(['уровень пройден', 'уровня пройдено', 'уровней пройдено']) },
   loop: { by: 'уровень', score: menuLevel('loop'), text: levelText },
   'connect-dots': { by: 'лучший уровень', score: shellStats('connect-dots', 'best'), text: levelText },
   mahjong: { by: 'разобранные раскладки', score: shellStats('mahjong', 'wins'), text: count(['раскладка', 'раскладки', 'раскладок']) },
@@ -501,6 +504,7 @@ export const BOARD_LIMITS = {
   rubik: 1e6,
   hanoi: 1e6,
   nonogram: 100,              // уровней в игре 100
+  arkanoid: 210,              // уровней в игре 210
 };
 // побед не может быть больше сыгранных партий
 const WINS_FROM = { checkers: 'checkers', mahjong: 'mahjong', sudoku: 'sudoku', wordle: 'wordle', tictactoe: 'tictactoe', chess: 'chess', spider: 'spider', klondike: 'klondike', 'killer-sudoku': 'killer-sudoku', go: 'go', minesweeper: 'minesweeper', fifteen: 'fifteen', rubik: 'rubik', hanoi: 'hanoi' };
@@ -671,6 +675,7 @@ export const LEVEL_PRICES = {
   'connect-dots': (k) => 10 + 3 * Math.min(k, 20),           // 3×3 — 13, с 20-го (8×8 с тоннелями) — 70
   'bubble-shooter': (k) => 40 + Math.min(Math.floor(k / 2), 60),
   'brick-blast': (k) => 40 + Math.min(Math.floor(k / 2), 60),
+  arkanoid: (k) => 60 + Math.min(Math.floor(k / 2), 90),   // уровень — несколько минут: 60, со 180-го — по 150
   // змейка: уровни 1–12 — 100…1200 (как предложил владелец), каждый следующий круг карт — ещё +300
   snake: (k) => 100 * (((k - 1) % 12) + 1) + 300 * Math.floor((k - 1) / 12),
 };
@@ -748,6 +753,7 @@ export const BOARDS_V2 = {
   snake: { by: 'рекорд в классике + очки за уровни', score: snakePoints, text: POINTS },
   'bubble-shooter': levels('bubble-shooter', 'очки за пройденные уровни', (s) => menuPassed(s, 'bubble-shooter')),
   'brick-blast': levels('brick-blast', 'очки за пройденные уровни', (s) => menuPassed(s, 'brick-blast')),
+  arkanoid: levels('arkanoid', 'очки за пройденные уровни', (s) => Math.min(BOARD_LIMITS.arkanoid, nat(s?.['game:arkanoid:stats']?.bestLevel))),
   go: wins('go', 'очки за победы над ботом (сильнее бот и больше доска — дороже)'),
   chess: wins('chess', 'очки за победы над ботом (сильнее — дороже)'),
   checkers: wins('checkers', 'очки за победы над ботом (сильнее — дороже)'),

@@ -57,6 +57,10 @@ These are not owned by the copyright holder; their own licenses and notices appl
     картинки" levels — from Microsoft Fluent Emoji (https://github.com/microsoft/fluentui-emoji),
     Copyright (c) Microsoft Corporation, MIT License, see games/nonogram/LICENSE-fluent-emoji.txt. The pictures
     were reduced to puzzle grids; the "Разминка" pictures are original.
+  - games/arkanoid/levels.js — the brick layouts follow the levels of Ricochet Xtreme (Reflexive
+    Entertainment, 2001) as recreated in the fan level set "Ricochet Xtreme Homage" by Alf and BigMama
+    (https://www.ricochetuniverse.com); the layouts belong to their respective owners. Only brick positions
+    and kinds are used; the code, graphics, sounds and bonus behaviour of the game are original.
   - The Telegram Web App script is loaded from telegram.org at runtime and is not part of this
     repository.
 

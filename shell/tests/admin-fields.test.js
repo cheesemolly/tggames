@@ -15,6 +15,7 @@ import * as dots from '../../games/connect-dots/logic.js';
 import * as flags from '../../games/flags/logic.js';
 import * as bongo from '../../games/bongo-cat/logic.js';
 import * as mines from '../../games/minesweeper/logic.js';
+import * as arkanoid from '../../games/arkanoid/logic.js';
 
 const rng = () => 0.42;
 const id = (game, key, path) => fieldId({ game, key, path: path.split('.') });
@@ -75,6 +76,8 @@ test('поля панели: после правки на границах со�
     'game:flags:stats': flags.emptyStats(),
     'game:bongo-cat:stats': bongo.emptyStats(),
     'game:minesweeper:current': mines.serialize(mines.newGame({ diff: 'easy', ...mines.DIFFS.easy })),
+    'game:arkanoid:current': arkanoid.snapshot(arkanoid.newGame(5)),
+    'game:arkanoid:stats': arkanoid.emptyStats(),
   };
   const checks = {
     'game:words:progress': (p) => words.isValidProgress(p, levels),
@@ -87,6 +90,8 @@ test('поля панели: после правки на границах со�
     'game:flags:stats': flags.isValidStats,
     'game:bongo-cat:stats': bongo.isValidStats,
     'game:minesweeper:current': mines.isValidState,
+    'game:arkanoid:current': arkanoid.isValidState,
+    'game:arkanoid:stats': arkanoid.isValidStats,
   };
   for (const [key, ok] of Object.entries(checks)) assert.ok(ok(data[key]), `исходное ${key}`);
   const fields = gameFieldsOf(data).flatMap((g) => g.fields);

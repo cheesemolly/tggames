@@ -83,6 +83,10 @@ export const RULES = [
   ['game:brick-blast:stats', { type: 'fields', fields: {
     cleared: 'count', bestLevel: 'max', bricks: 'count', shots: 'count', fails: 'count',
   } }],
+  ['game:arkanoid:stats', { type: 'fields', fields: {
+    cleared: 'count', bestLevel: 'max', bricks: 'count', bonuses: 'count', fails: 'count',
+  } }],
+  // game:arkanoid:current — lww: уровень можно выбрать и ниже (переиграть), открытые уровни — в stats.bestLevel
   ['game:loop:current', { type: 'level', at: 'level' }],
   // Филворд: уровень общий для всех размеров поля (смена размера уровень не сбрасывает — с беты sync-merge)
   ['game:boggle:current', { type: 'level', at: 'level' }],

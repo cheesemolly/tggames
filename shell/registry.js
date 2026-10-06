@@ -60,6 +60,13 @@ export const games = [
     menu: { progress: 'replace' },                       // «Уровень 11»
   },
   {
+    id: 'arkanoid',
+    title: 'Арканоид',
+    load: () => import('../games/arkanoid/index.js'),
+    css: new URL('../games/arkanoid/game.css', import.meta.url),
+    menu: { progress: 'replace' },                       // «Уровень 12»
+  },
+  {
     id: 'loop',
     title: 'Петля',
     load: () => import('../games/loop/index.js'),

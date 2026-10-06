@@ -86,6 +86,10 @@ export const GAME_ICONS = {
     + '<path d="M4 16h16c0 2-1.4 3.4-3.2 3.4H7.2C5.4 19.4 4 18 4 16z"/>'),
   snake: svg('<path d="M4 18.5h9.5a3 3 0 0 0 0-6H9a3 3 0 0 1 0-6h7.5"/><circle cx="18.5" cy="6.5" r="2.4" fill="currentColor" stroke="none"/>'
     + '<circle cx="5" cy="18.5" r="1.4" fill="currentColor" stroke="none" opacity="0.5"/>'),
+  arkanoid: svg('<rect x="2.6" y="3.4" width="5.2" height="3.4" rx="1"/><rect x="9.4" y="3.4" width="5.2" height="3.4" rx="1"/>'
+    + '<rect x="16.2" y="3.4" width="5.2" height="3.4" rx="1"/><rect x="6" y="8.4" width="5.2" height="3.4" rx="1" opacity="0.5"/>'
+    + '<rect x="12.8" y="8.4" width="5.2" height="3.4" rx="1" opacity="0.5"/>'
+    + '<circle cx="14.6" cy="15.4" r="1.9" fill="currentColor" stroke="none"/><path d="M6.5 20.4h11" stroke-width="2.6"/>'),
   'brick-blast': svg('<rect x="2.5" y="3.5" width="8.4" height="4.4" rx="1.2"/><rect x="13.1" y="3.5" width="8.4" height="4.4" rx="1.2"/>'
     + '<rect x="2.5" y="9.6" width="8.4" height="4.4" rx="1.2"/><rect x="13.1" y="9.6" width="8.4" height="4.4" rx="1.2"/>'
     + '<circle cx="12" cy="19.2" r="2.4" fill="currentColor" stroke="none"/>'),

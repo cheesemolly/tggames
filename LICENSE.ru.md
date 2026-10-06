@@ -61,6 +61,10 @@ Copyright (c) 2026 cheesemolly (https://github.com/cheesemolly). Все прав
   (Clint Bellanger, https://clintbellanger.net), CC0 1.0; «Эмодзи» и «Большие картинки» — из Microsoft Fluent Emoji
   (https://github.com/microsoft/fluentui-emoji), Copyright (c) Microsoft Corporation, лицензия MIT, см.
   `games/nonogram/LICENSE-fluent-emoji.txt`. Картинки уменьшены до сеток головоломки; рисунки «Разминки» — свои;
+- `games/arkanoid/levels.js` — раскладки кирпичей повторяют уровни Ricochet Xtreme (Reflexive Entertainment, 2001)
+  в том виде, как они воссозданы в фанатском наборе «Ricochet Xtreme Homage» (Alf и BigMama,
+  https://www.ricochetuniverse.com); раскладки принадлежат их правообладателям. Взяты только места и виды
+  кирпичей; код, графика, звуки и поведение бонусов в игре — свои;
 - скрипт Telegram Web App загружается с telegram.org во время работы и не входит в репозиторий.
 
 Правила и механики известных игровых жанров (2048, судоку, маджонг-пасьянс, шашки, шахматы, игры со словами

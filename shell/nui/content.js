@@ -9,6 +9,15 @@ import { digits, plural, placeOn } from './logic.js';
 
 export const STORIES = [
   {
+    id: 'arkanoid-new',
+    label: 'Арканоид',
+    games: ['arkanoid'],
+    slides: [
+      { kicker: 'Новая игра', title: 'Арканоид', text: 'Платформой отбивай шарик и разбивай кирпичи. 210 уровней в четырёх мирах и 15 бонусов: три и восемь шариков, огненный шар, лазер, ракеты.', play: 'arkanoid' },
+      { kicker: 'Совет', title: 'Целься краем платформы', text: 'Серединой платформы шарик отбивается прямо вверх, а чем ближе к краю — тем положе. Так можно попасть в последний кирпич.', play: 'arkanoid' },
+    ],
+  },
+  {
     id: 'repair-new',
     label: 'Ремонт',
     games: ['repair'],
@@ -204,6 +213,7 @@ export function pickStories({ visible, rated = false, seen = [], week = null }) 
 
 /** Что показать баннером «Новая игра»: первая видимая игроку из списка (новые — выше). */
 export const NEW_GAMES = [
+  { id: 'arkanoid', text: '210 уровней, 15 бонусов' },
   { id: 'repair', text: '23 вида гаджетов, магазин, прошивка с ПК' },
   { id: 'hanoi', text: 'От 3 до 10 дисков, «идеально» — за минимум' },
   { id: 'rubik', text: 'На время, перемешивание как на соревнованиях' },

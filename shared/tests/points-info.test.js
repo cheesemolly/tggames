@@ -40,6 +40,8 @@ test('числа в подсказках — те же, что считает с
   has('connect-dots', [LEVEL_PRICES['connect-dots'](1), LEVEL_PRICES['connect-dots'](20), 3]);
   for (const id of ['bubble-shooter', 'brick-blast']) has(id, [LEVEL_PRICES[id](1), LEVEL_PRICES[id](120), 120]);
   assert.equal(LEVEL_PRICES['bubble-shooter'](119), 99, 'со 120-го — по 100');
+  has('arkanoid', [LEVEL_PRICES.arkanoid(1), LEVEL_PRICES.arkanoid(180), LEVEL_PRICES.arkanoid(210), 180]);
+  assert.equal(LEVEL_PRICES.arkanoid(179), 149, 'со 180-го — по 150');
   has('snake', [LEVEL_PRICES.snake(1), LEVEL_PRICES.snake(2), LEVEL_PRICES.snake(12), LEVEL_PRICES.snake(13) - LEVEL_PRICES.snake(1)]);
 });
 
