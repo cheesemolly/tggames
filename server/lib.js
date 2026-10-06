@@ -175,7 +175,7 @@ export const GAMES = [
   { id: 'bubble-shooter', title: 'Шарики', emoji: '🫧', about: 'стреляй шариками, собирай по три одного цвета' },
   { id: 'snake', title: 'Змейка', emoji: '🐍', about: 'классика и уровни с препятствиями' },
   { id: 'brick-blast', title: 'Brick Blast', emoji: '🧱', about: 'разбей блоки очередью шариков' },
-  { id: 'arkanoid', title: 'Арканоид', emoji: '🟡', about: 'шариком и платформой разбей кирпичи: 300 уровней в десяти главах, 15 бонусов', beta: true },
+  { id: 'arkanoid', title: 'Арканоид', emoji: '🟡', about: 'шариком и платформой разбей кирпичи: 300 уровней в десяти главах, 15 бонусов' },
   { id: 'loop', title: 'Петля', emoji: '➰', about: 'поворачивай плитки, пока все линии не замкнутся' },
   { id: 'connect-dots', title: 'Соедини точки', emoji: '🔴', about: 'соедини пары точек и заполни всё поле', best: (n) => `рекорд: уровень ${n}` },
   { id: 'mahjong', title: 'Маджонг', emoji: '🀄', about: 'пасьянс: снимай одинаковые свободные плитки' },
@@ -189,7 +189,7 @@ export const GAMES = [
   { id: 'fifteen', title: 'Пятнашки', emoji: '🔀', about: 'собери плитки по порядку: свайпы как в 2048, поля от 3×3 до 8×8' },
   { id: 'rubik', title: 'Кубик Рубика', emoji: '🧊', about: 'собери кубик 3×3 на время: перемешивание как на соревнованиях, среднее из 5' },
   { id: 'hanoi', title: 'Ханойская башня', emoji: '🗼', about: 'перенеси башню дисков на другой стержень: от 3 до 10 дисков, «идеально» — за минимум ходов' },
-  { id: 'repair', title: 'Ремонт гаджетов', emoji: '🔧', about: 'мастерская: чини телефоны, приставки, наушники, комплектующие ПК — закупай детали, прошивай с компьютера', beta: true, rating: false },
+  { id: 'repair', title: 'Ремонт гаджетов', emoji: '🔧', about: 'мастерская: чини телефоны, приставки, наушники, комплектующие ПК — закупай детали, прошивай с компьютера', rating: false },
   { id: 'wordle', title: 'Wordle', emoji: '🟩', about: 'угадай слово из пяти букв: русский, украинский, английский', best: false },
   { id: 'memory', title: 'Мемори', emoji: '🃏', about: 'найди пары одинаковых карточек' },
   { id: 'bongo-cat', title: 'Bongo Cat', emoji: '🐱', about: 'кот играет на инструментах, разучи мелодию' },
@@ -200,8 +200,8 @@ export const GAMES = [
   { id: 'spider', title: 'Паук', emoji: '🕷️', about: 'пасьянс как в Windows: 1, 2 или 4 масти' },
   { id: 'klondike', title: 'Косынка', emoji: '🃏', about: 'пасьянс как в Windows: из колоды по одной или по три' },
   { id: 'pinball', title: 'Пинбол', emoji: '🚀', about: 'как в Windows XP: миссии, звания, гиперпространство' },
-  { id: 'erudit', title: 'Эрудит', emoji: '🔴', about: 'скрэббл на русском против бота: поле 15×15, четыре уровня', beta: true },
-  { id: 'billiards', title: 'Бильярд', emoji: '🎱', about: 'пул-«восьмёрка» с настоящей физикой: против бота или вдвоём на одном телефоне', beta: true },
+  { id: 'erudit', title: 'Эрудит', emoji: '🔴', about: 'скрэббл на русском против бота: поле 15×15, четыре уровня' },
+  { id: 'billiards', title: 'Бильярд', emoji: '🎱', about: 'пул-«восьмёрка» с настоящей физикой: против бота или вдвоём на одном телефоне' },
 ];
 
 const fold = (text) => String(text ?? '').toLowerCase().replace(/ё/g, 'е').trim();
@@ -265,11 +265,6 @@ export function progressLines(state) {
  */
 export const SERVER_BETA = [
   // >>> серверная бета
-  'rating-points',
-  'tester-frame',
-  'badges',
-  'profile-streak',
-  'chess-online',
   // <<< конец серверной беты
 ];
 

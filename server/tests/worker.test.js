@@ -291,7 +291,7 @@ test('инлайн: пустой запрос — приглашение и вс
   assert.equal(res.is_personal, true);
   assert.equal(res.results[0].id, 'all', 'первым — «позвать играть»');
   const games = res.results.filter((r) => r.id.startsWith('g:'));
-  assert.equal(games.length, 30);
+  assert.equal(games.length, 34);
   for (const r of res.results) {
     const btn = r.reply_markup.inline_keyboard[0][0];
     assert.equal(btn.web_app, undefined, 'web_app в чужих чатах запрещён');
@@ -317,7 +317,7 @@ test('инлайн: поиск игры по названию и свои рек
   assert.deepEqual(found.results.map((r) => r.id), ['g:sudoku', 'g:killer-sudoku']);
   const byWord = await inline(env, USER.id, 'точки');
   assert.deepEqual(byWord.results.map((r) => r.id), ['g:connect-dots'], 'по любому слову названия');
-  const none = await inline(env, USER.id, 'бильярд');
+  const none = await inline(env, USER.id, 'абракадабра');
   assert.deepEqual(none.results.map((r) => r.id), ['all'], 'не нашлось — хотя бы приглашение');
 
   const mine = await inline(env, USER.id, 'рекорды');
@@ -598,9 +598,9 @@ test('убрать из рейтинга: игрок пропадает из т�
   const owner = await asUser(ADMIN);
   const masha = await asUser(USER);
   const petya = await asUser({ id: 43, first_name: 'Петя' });
-  const state = (level) => ({ 'shell:progress:words': `Уровень ${level}` });
-  await call(env, '/state', { method: 'PUT', initData: masha, payload: snapshotPush(state(90)) });
-  await call(env, '/state', { method: 'PUT', initData: petya, payload: snapshotPush(state(10)) });
+  const state = (...found) => ({ 'game:words:progress': { levels: { 0: { found } } } });
+  await call(env, '/state', { method: 'PUT', initData: masha, payload: snapshotPush(state('кот', 'слон')) });
+  await call(env, '/state', { method: 'PUT', initData: petya, payload: snapshotPush(state('кот')) });
   const mashaId = (await call(env, '/me', { initData: masha })).data.id;
   let top = await call(env, '/top/words', { initData: petya });
   assert.equal(top.data.rows[0].name, 'Маша');
@@ -612,7 +612,7 @@ test('убрать из рейтинга: игрок пропадает из т�
   assert.deepEqual(top.data.rows.map((r) => r.name), ['Петя']);
   assert.equal((await call(env, `/top/player/${pid}`, { initData: petya })).status, 404);
   assert.equal((await call(env, `/admin/player/${mashaId}`, { initData: owner })).data.boardHidden, true);
-  assert.equal((await call(env, '/state', { initData: masha })).data.data, JSON.stringify(state(90)), 'прогресс не тронут');
+  assert.equal((await call(env, '/state', { initData: masha })).data.data, JSON.stringify(state('кот', 'слон')), 'прогресс не тронут');
 
   await call(env, `/admin/player/${mashaId}/board`, { method: 'POST', initData: owner, payload: { hidden: false } });
   top = await call(env, '/top/words', { initData: petya });
@@ -714,13 +714,14 @@ test('рейтинг: сводка по играм и профиль игрок�
   const env = createEnv();
   const masha = await asUser(USER);
   const petya = await asUser({ id: 43, first_name: 'Петя', username: 'petya_secret' });
-  await save(env, masha, { 'shell:progress:words': 'Уровень 14', 'game:bongo-cat:stats': { hits: 1500 } });
-  await save(env, petya, { 'shell:progress:words': 'Уровень 30', 'shell:stats:sudoku': { played: 5, wins: 3 } });
+  const found = (...words) => ({ levels: { 0: { found: words } } });
+  await save(env, masha, { 'game:words:progress': found('кот'), 'game:bongo-cat:stats': { hits: 1500 } });
+  await save(env, petya, { 'game:words:progress': found('кот', 'слон'), 'shell:stats:sudoku': { played: 5, wins: 3 } });
 
   const top = await call(env, '/top', { initData: masha });
   const words = top.data.games.find((g) => g.game === 'words');
-  assert.deepEqual(words.leader, { name: 'Петя', text: 'уровень 30', me: false });
-  assert.deepEqual(words.me, { place: 2, text: 'уровень 14' });
+  assert.deepEqual(words.leader, { name: 'Петя', text: '25 очков', me: false });
+  assert.deepEqual(words.me, { place: 2, text: '10 очков' });
   assert.equal(words.total, 2);
   assert.equal(top.data.games.find((g) => g.game === 'sudoku').me, null, 'в судоку Маша не играла');
   assert.equal(top.data.games.find((g) => g.game === 'bongo-cat').leader.text, '1 500 ударов');
@@ -731,8 +732,8 @@ test('рейтинг: сводка по играм и профиль игрок�
   assert.equal(profile.data.name, 'Петя');
   assert.equal(profile.data.me, false);
   assert.deepEqual(profile.data.games.map((g) => [g.game, g.text, g.place, g.total]), [
-    ['words', 'уровень 30', 1, 2],
-    ['sudoku', '3 судоку', 1, 1],
+    ['words', '25 очков', 1, 2],
+    ['sudoku', '150 очков', 1, 1],
   ]);
   assert.ok(!JSON.stringify(profile.data).includes('petya_secret'));
   assert.equal((await call(env, '/top/player/nope', { initData: masha })).status, 404);
