@@ -1,9 +1,9 @@
 // Вкладка «Игры» нового интерфейса (в бете 'new-ui'): поиск по названию, папки таблетками (можно несколько),
-// «Избранное», сортировка («Сначала недавние» / «Ещё не пробовал» — в бете 'untried-only' только нетронутые игры / «По названию») и список игр с сердечком и местом в рейтинге.
+// «Избранное», сортировка (в бете 'sort-menu' — выпадающим списком; «Сначала недавние» / «Ещё не пробовал» — в бете 'untried-only' только нетронутые игры / «По названию») и список игр с сердечком и местом в рейтинге.
 // Фильтры и поиск помнятся, пока приложение открыто. #/games/<папка> (из «Все ›» на главной) — сразу с ней.
 
 import { el } from '../../shared/dom.js';
-import { pop } from '../../shared/motion.js';
+import { pop, animate, EASE_OUT } from '../../shared/motion.js';
 import { categories } from '../categories.js';
 import { CATEGORY_ICONS } from '../icons.js';
 import { UI, icon } from './icons.js';
@@ -29,6 +29,12 @@ export async function renderCatalog(container, { games, route, account, summary,
   const list = el('div', { class: 'nlist' }, skeleton('row', 5));
   const count = el('span', { class: 'nsort-count' });
   const sortBtn = el('button', { class: 'nsort-btn' }, icon('sort'), el('span', {}, SORTS[state.sort]));
+  const sortMenu = el('div', { class: 'nsort-menu', role: 'menu', 'aria-label': 'Сортировка', hidden: true });
+  const sortBox = el('div', { class: 'nsort' }, sortBtn, sortMenu);
+  if (feature('sort-menu')) {
+    sortBtn.setAttribute('aria-haspopup', 'menu');
+    sortBtn.setAttribute('aria-expanded', 'false');
+  }
   const search = el('input', {
     class: 'nsearch-input', type: 'search', placeholder: 'Найти игру', value: state.query, maxLength: 40,
     autocomplete: 'off', autocapitalize: 'off', spellcheck: false, enterkeyhint: 'search', 'aria-label': 'Найти игру',
@@ -38,7 +44,7 @@ export async function renderCatalog(container, { games, route, account, summary,
     el('h1', { class: 'npx nh1' }, 'Игры'),
     el('label', { class: 'nsearch' }, icon('search'), search),
     chips,
-    el('div', { class: 'nsortrow' }, count, sortBtn),
+    el('div', { class: 'nsortrow' }, count, sortBox),
     list,
   );
   container.replaceChildren(screen);
@@ -94,12 +100,56 @@ export async function renderCatalog(container, { games, route, account, summary,
   search.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') search.blur();
   });
-  sortBtn.addEventListener('click', () => {
-    const modes = sortModes(feature('catalog-untried'));
-    state.sort = modes[(modes.indexOf(state.sort) + 1) % modes.length];
-    sortBtn.lastChild.textContent = SORTS[state.sort];
-    pop(sortBtn, { from: 0.92 });
+  const setSort = (mode) => {
+    state.sort = mode;
+    sortBtn.lastChild.textContent = SORTS[mode];
     draw();
+  };
+
+  // в бете 'sort-menu' сортировка выбирается из выпадающего списка под кнопкой, без неё — режимы по кругу
+  let menuOpen = false;
+  const stopMenuAnimations = () => sortMenu.getAnimations?.().forEach((a) => a.cancel());
+  function openMenu() {
+    menuOpen = true;
+    sortMenu.replaceChildren(...sortModes(feature('catalog-untried')).map((mode) => el('button', {
+      class: `nsort-item${mode === state.sort ? ' on' : ''}`,
+      role: 'menuitemradio',
+      'aria-checked': String(mode === state.sort),
+      onclick: () => {
+        closeMenu();
+        if (mode !== state.sort) setSort(mode);
+      },
+    }, SORTS[mode])));
+    sortMenu.hidden = false;
+    sortBtn.setAttribute('aria-expanded', 'true');
+    stopMenuAnimations();
+    animate(sortMenu, [{ opacity: 0, transform: 'translateY(-6px) scale(0.96)' }, { opacity: 1, transform: 'none' }], { duration: 180, easing: EASE_OUT });
+  }
+  async function closeMenu() {
+    if (!menuOpen) return;
+    menuOpen = false;
+    sortBtn.setAttribute('aria-expanded', 'false');
+    await animate(sortMenu, [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateY(-4px) scale(0.98)' }], { duration: 130, easing: 'ease-in', fill: 'forwards' });
+    if (menuOpen) return;                  // успели открыть снова
+    sortMenu.hidden = true;
+    stopMenuAnimations();
+  }
+  screen.addEventListener('pointerdown', (e) => {
+    if (menuOpen && !sortBox.contains(e.target)) closeMenu();
+  });
+  sortBox.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeMenu();
+  });
+
+  sortBtn.addEventListener('click', () => {
+    if (feature('sort-menu')) {
+      if (menuOpen) closeMenu();
+      else openMenu();
+      return;
+    }
+    const modes = sortModes(feature('catalog-untried'));
+    pop(sortBtn, { from: 0.92 });
+    setSort(modes[(modes.indexOf(state.sort) + 1) % modes.length]);
   });
 
   drawChips();

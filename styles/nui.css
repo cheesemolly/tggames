@@ -414,6 +414,51 @@
 .nui .nsortrow { display: flex; align-items: center; justify-content: space-between; font-size: 13px; color: var(--n-hint); }
 .nui .nsort-btn { display: flex; align-items: center; gap: 5px; padding: 4px 0; border: 0; background: none; color: var(--n-text); font: 700 13px var(--n-font); cursor: pointer; }
 .nui .nsort-btn .ni { width: 16px; height: 16px; }
+/* выпадающий список сортировки: поверх списка игр, под своей кнопкой */
+.nui .nsortrow { position: relative; z-index: 5; }
+.nui .nsort { position: relative; }
+.nui .nsort-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 2px solid #000;
+  border-radius: 6px;
+  box-shadow: var(--n-sh);
+  background: var(--n-s1);
+  transform-origin: top right;
+}
+.nui .nsort-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 44px;
+  padding: 6px 14px;
+  border: 0;
+  background: none;
+  color: var(--n-text);
+  font: 700 13px var(--n-font);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.nui .nsort-item + .nsort-item { border-top: 1px solid var(--n-line); }
+.nui .nsort-item:active { background: var(--n-s2); }
+.nui .nsort-item.on { color: var(--n-acc); }
+/* галочка у выбранного; место под неё есть у всех строк — ширина списка не скачет */
+.nui .nsort-item::after {
+  content: '';
+  width: 5px;
+  height: 10px;
+  margin: -3px 3px 0 0;
+  border: solid transparent;
+  border-width: 0 2px 2px 0;
+  rotate: 45deg;
+}
+.nui .nsort-item.on::after { border-color: var(--n-acc); }
 .nui .nlist { display: flex; flex-direction: column; gap: 12px; }
 .nui .nrow {
   display: flex;
