@@ -10,7 +10,7 @@ import { createFx } from '../../shared/fx.js';
 import { createAudio } from '../../shared/sfx.js';
 import { createSounds } from './sounds.js';
 import {
-  COLS, ROWS, BALL_R, POWER_R, MIN_ANGLE, newLevel, startTurn, step, recall, endTurn, danger, tracePath, aimAngle,
+  COLS, ROWS, BALL_R, POWER_R, MIN_ANGLE, newLevel, startTurn, step, recall, rush, endTurn, danger, tracePath, aimAngle,
   polygon, progress, isValidState, normalizeState, emptyStats, isValidStats, LASER_LIFE, LASERS,
 } from './logic.js';
 import { pointsInfo } from '../../shared/points-info.js';
@@ -23,6 +23,7 @@ const T = {
   aimHelp: 'Проведи по полю или по ползунку, чтобы прицелиться, отпусти — бросок',
   cancel: 'Отпусти здесь — отмена',
   recall: 'Вернуть шарики',
+  rush: 'Доиграть ход сразу',
   triple: '×3 шарика на следующий бросок!',
   danger: 'Разбей блоки, пока они не дошли до низа',
   wonTitle: 'Отлично!',
@@ -57,6 +58,7 @@ const ICONS = {
   gear: svgIcon('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/>'),
   levels: svgIcon('<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>'),
   recall: svgIcon('<circle cx="12" cy="6" r="2.5" fill="currentColor" stroke="none"/><path d="M12 11v9"/><path d="m8 16 4 4 4-4"/>'),
+  rush: svgIcon('<path d="M3.5 5.5v13l8.5-6.5z"/><path d="M12 5.5v13l8.5-6.5z"/>', true),
 };
 
 let api = null;
@@ -128,6 +130,9 @@ function toggleSound() {
   sfx('click');
 }
 let holding = null;                // палец зажат во время полёта — ускорение ×2 (id касания)
+// в бете 'brick-blast-rush' кнопка во время полёта не возвращает шарики, а доигрывает ход сразу
+const rushFeature = () => Boolean(api?.feature?.('brick-blast-rush'));
+let rushing = false;               // нажали «доиграть»: ход досчитывается без показа
 const timers = new Set();
 
 function later(fn, ms) {
@@ -586,9 +591,15 @@ function loop(now) {
   const dt = Math.min(1 / 30, (now - lastFrame) / 1000 || 0);
   lastFrame = now;
   if (phase === 'fly' && sim) {
-    // затянувшийся ход ускоряется
-    const speed = (sim.t > 10 ? 2.4 : sim.t > 5 ? 1.6 : 1) * (holding !== null ? 2 : 1);
-    step(game, sim, dt * speed);
+    if (rushing) {
+      // остаток хода — сразу; долгий ход досчитывается за несколько кадров (не дольше 12 мс за кадр), экран не виснет
+      const until = performance.now() + 12;
+      rush(game, sim, Math.random, () => performance.now() < until);
+    } else {
+      // затянувшийся ход ускоряется
+      const speed = (sim.t > 10 ? 2.4 : sim.t > 5 ? 1.6 : 1) * (holding !== null ? 2 : 1);
+      step(game, sim, dt * speed);
+    }
     handleEvents();
     if (sim.done) finishTurn();
   }
@@ -685,6 +696,7 @@ function shoot() {
 
 function finishTurn() {
   holding = null;
+  rushing = false;
   const s = sim;
   const before = game.blocks.length ? game.blocks[0].r : 0;
   const firstId = game.blocks[0]?.id;
@@ -815,6 +827,7 @@ function startLevel(animateIn) {
   lastProgress = -1;
   phase = 'aim';
   sim = null;
+  rushing = false;
   aim = null;
   flashes.clear();
   lasers.clear();
@@ -920,8 +933,9 @@ function onSliderUp(e) {
 }
 
 function onRecall() {
-  if (phase !== 'fly' || !sim) return;
-  recall(sim);
+  if (phase !== 'fly' || !sim || rushing) return;
+  if (rushFeature()) rushing = true;
+  else recall(sim);
   sfx('recall');
   api.platform.haptic.impact('light');
 }
@@ -1072,8 +1086,9 @@ export default {
     ui.percent = el('div', { class: 'bk-percent' }, '0%');
     ui.wrap = el('div', { class: 'bk-wrap' }, ui.canvas);
     ui.track = el('div', { class: 'bk-track' }, el('div', { class: 'bk-track-line' }), ui.knob);
-    const recallButton = el('button', { class: 'bk-recall', 'aria-label': T.recall, title: T.recall, onclick: onRecall });
-    recallButton.innerHTML = ICONS.recall;
+    const recallText = rushFeature() ? T.rush : T.recall;
+    const recallButton = el('button', { class: 'bk-recall', 'aria-label': recallText, title: recallText, onclick: onRecall });
+    recallButton.innerHTML = rushFeature() ? ICONS.rush : ICONS.recall;
     ui.bottom = el('div', { class: 'bk-bottom', 'data-mode': 'aim' },
       ui.track, recallButton, el('div', { class: 'bk-cancel' }, T.cancel));
 
@@ -1155,6 +1170,7 @@ export default {
     toast?.dispose();
     root?.remove();
     api = host = root = ui = toast = fx = game = pending = sim = aim = shiftAnim = intro = palette = holding = fieldCache = null;
+    rushing = false;
   sprites.clear();
     phase = 'aim';
     flashes.clear();

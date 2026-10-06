@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  COLS, ROWS, BALL_R, SPEED, START_ROW, polygon, circlePolygon, generateLevel, newLevel, startTurn, step, recall,
+  COLS, ROWS, BALL_R, SPEED, START_ROW, polygon, circlePolygon, generateLevel, newLevel, startTurn, step, recall, rush, RUSH_LIMIT,
   endTurn, danger, tracePath, aimAngle, isValidState, progress, ballsFor, emptyStats, isValidStats,
   spawnLaser, normalizeState, LASER_LIFE, LASER_MAX, LASERS,
 } from '../logic.js';
@@ -101,6 +101,47 @@ test('бонусы: лазер бьёт весь ряд, ×3 — на следу
   step(u, sim, 0.3);
   recall(sim);
   assert.ok(sim.done && sim.balls.every((b) => !b.active));
+});
+
+test('доиграть ход сразу: итог как у обычного полёта — оставшиеся шарики бьют блоки, а не пропадают', () => {
+  const start = () => {
+    const s = newLevel(3, seeded(2));
+    return { s, sim: startTurn(s, 1.2), rng: seeded(7) };
+  };
+  const hp = (s) => s.blocks.map((b) => [b.id, b.hp]);
+  // обычный полёт до конца
+  const a = start();
+  while (!a.sim.done) step(a.s, a.sim, 1 / 30, a.rng);
+  // тот же бросок: 0,3 с полёта (вылетело несколько шариков) — и «сразу»
+  const b = start();
+  for (let i = 0; i < 9; i++) step(b.s, b.sim, 1 / 30, b.rng);
+  assert.ok(b.sim.launched > 0 && b.sim.launched < b.sim.count && !b.sim.done, 'часть шариков ещё не вылетела');
+  assert.equal(rush(b.s, b.sim, b.rng), true);
+  assert.ok(b.sim.done && b.sim.launched === b.sim.count && b.sim.balls.every((x) => !x.active), 'вылетели и вернулись все');
+  assert.equal(b.s.dealt, a.s.dealt);
+  assert.deepEqual(hp(b.s), hp(a.s), 'блоки — те же, что после обычного полёта');
+  assert.equal(b.sim.firstX, a.sim.firstX, 'и следующий бросок — с того же места');
+  assert.equal(endTurn(b.s, b.sim), endTurn(a.s, a.sim));
+  // «вернуть шарики» в тот же момент — ударов меньше: остаток пропал
+  const c = start();
+  for (let i = 0; i < 9; i++) step(c.s, c.sim, 1 / 30, c.rng);
+  recall(c.sim);
+  assert.ok(c.s.dealt < b.s.dealt);
+  // по частям (кадр не должен виснуть): пока считать нельзя — ход не кончен, потом досчитывается до того же итога
+  const d = start();
+  let allowed = 5;
+  assert.equal(rush(d.s, d.sim, d.rng, () => allowed-- > 0), false);
+  assert.ok(!d.sim.done && d.sim.t > 0);
+  assert.equal(rush(d.s, d.sim, d.rng), true);
+  assert.deepEqual([d.s.dealt, hp(d.s)], [a.s.dealt, hp(a.s)]);
+  // законченный ход не трогает; бесконечного счёта нет — слишком долгий ход обрывается
+  const dealt = d.s.dealt;
+  assert.equal(rush(d.s, d.sim, d.rng), true);
+  assert.equal(d.s.dealt, dealt);
+  const e = start();
+  e.sim.rushFrom = -RUSH_LIMIT;
+  assert.equal(rush(e.s, e.sim, e.rng), true);
+  assert.ok(e.sim.t < 1, 'оборван на первом же шаге');
 });
 
 test('конец хода: сдвиг вниз, проигрыш у нижнего ряда, победа — все блоки разбиты', () => {
