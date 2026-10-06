@@ -66,6 +66,17 @@ const pauseFeature = () => Boolean(api?.feature?.('flappy-pause'));
 const running = () => Boolean(game) && !finished && (game.phase === 'glide' || game.phase === 'play');
 let modalToken = 0;
 let title = null;                  // заставка: { logo, canvas, ctx, t, leaveT } — пока на экране
+// Быстрая отрисовка (в бете: api.feature('flappy-fast')) — на слабых телефонах игра тормозила: каждый кадр заново
+// рисовалось больше тысячи прямоугольников, а готовый кадр W×H увеличивался до экранных пикселей своими силами.
+// В быстром режиме:
+//   • холст на экране остаётся W×H — увеличивает его сам браузер (image-rendering: pixelated);
+//   • повторяющиеся слои фона — готовые полосы (layer); дома улицы, препятствия и надписи — готовые картинки
+//     из запаса (createPool): рисуются один раз и дальше выводятся одним drawImage;
+//   • «живое» (огонь плиты, вывески, светофор, неон, стрелки в проходе) дорисовывается поверх каждый кадр;
+//   • пока заставка закрывает весь кадр, мир под ней не рисуется.
+// Картинка та же, что и без режима.
+let fast = false;
+let still = false;                 // сейчас рисуется готовая картинка препятствия: «живое» в неё не попадает
 let soundOn = true;
 // звуки (8-бит, в бете: api.feature('flappy-sounds')) — один AudioContext на страницу, заводится при первом звуке
 const audio = createAudio(createSounds);
@@ -117,6 +128,101 @@ function px(x, y, w, h, color) {
   lc.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h));
 }
 
+/** Нарисовать в другой холст теми же px()/pixelText(), что и кадр. */
+function paintTo(ctx, paint, arg) {
+  const main = lc;
+  lc = ctx;
+  lc.save();
+  try {
+    paint(arg);
+  } finally {
+    lc.restore();
+    lc = main;
+  }
+}
+
+/**
+ * Запас готовых картинок (быстрый режим): size холстов w×h заводятся один раз и переиспользуются — вытесняется
+ * та, что дольше всех не была нужна; новые холсты на ходу не создаются. get(key, paint) → { canvas, … }:
+ * paint(slot) рисует картинку, когда её ещё нет.
+ */
+function createPool(size, w, h) {
+  const slots = [];
+  let clock = 0;
+  return {
+    get(key, paint) {
+      let slot = null;
+      for (const s of slots) if (s.key === key) slot = s;
+      if (!slot) {
+        if (slots.length < size) {
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          slot = { key: null, canvas, ctx: canvas.getContext('2d'), used: 0, live: null };
+          slots.push(slot);
+        } else {
+          slot = slots[0];
+          for (const s of slots) if (s.used < slot.used) slot = s;
+          slot.ctx.clearRect(0, 0, w, h);
+        }
+        slot.key = key;
+        paintTo(slot.ctx, paint, slot);
+      }
+      slot.used = ++clock;
+      return slot;
+    },
+    /** Забыть картинки (холсты остаются на следующую игру). */
+    clear() {
+      for (const s of slots) {
+        s.key = null;
+        s.live = null;
+        s.used = 0;
+      }
+    },
+  };
+}
+
+const FAR_H = 130;                 // дальние дома улицы не выше (60…129)
+const NEAR_H = 110;                // ближние кирпичные стены не выше (70…109)
+const TEXT_W = 64;                 // надпись-картинка: счёт до 5 цифр с обводкой
+const TEXT_H = 20;
+const obPool = createPool(6, OB_W + WALL_EXTRA + 2, PLAY_H);     // препятствия (на экране не больше четырёх)
+const farPool = createPool(9, 32, FAR_H);
+const nearPool = createPool(7, 62, NEAR_H);
+const textPool = createPool(8, TEXT_W, TEXT_H);
+
+// неизменные картинки: полосы повторяющихся слоёв фона, фонарь — рисуются один раз на всю страницу
+const stills = new Map();
+
+function sprite(key, w, h, paint) {
+  let c = stills.get(key);
+  if (!c) {
+    c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    paintTo(c.getContext('2d'), paint);
+    stills.set(key, c);
+  }
+  return c;
+}
+
+/**
+ * Слой фона с повторяющимся узором: paint(o, w) рисует его со сдвигом o на ширину w в полосе y…y+h.
+ * Быстрый режим: слой один раз рисуется в полосу шириной W + period и выводится одной картинкой со сдвигом;
+ * иначе — рисуется каждый кадр, как раньше.
+ */
+function layer(key, period, y, h, o, paint) {
+  if (!fast) {
+    paint(o, W);
+    return;
+  }
+  const strip = sprite(key, W + period, h, () => {
+    lc.translate(0, -y);
+    paint(0, W + period);
+  });
+  lc.drawImage(strip, -(o % period), y);
+}
+
 /** Детерминированный «случайный» номер для узоров фона (чтобы фон не мерцал между кадрами). */
 function hash(n) {
   let x = Math.imul(n ^ 0x9e3779b9, 0x85ebca6b);
@@ -134,19 +240,31 @@ const FONT = {
   U: '101101101101111', R: '110101110101101', G: '111100101101111',
 };
 
-function pixelText(str, x, y, scale, color, outline = null) {
+const OUTLINE = [[-1, 0], [1, 0], [0, -1], [0, 1], [1, 1]];
+
+function pixelGlyphs(str, cx, y, scale, color, outline) {
   const glyph = (ch, gx, gy, col) => {
     const bits = FONT[ch];
     if (!bits) return;
     for (let i = 0; i < 15; i++) if (bits[i] === '1') px(gx + (i % 3) * scale, gy + Math.floor(i / 3) * scale, scale, scale, col);
   };
-  const width = str.length * 4 * scale - scale;
-  let cx = Math.round(x - width / 2);
   for (const ch of str) {
-    if (outline) for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1], [1, 1]]) glyph(ch, cx + dx, y + dy, outline);
+    if (outline) for (const [dx, dy] of OUTLINE) glyph(ch, cx + dx, y + dy, outline);
     glyph(ch, cx, y, color);
     cx += 4 * scale;
   }
+}
+
+function pixelText(str, x, y, scale, color, outline = null) {
+  const width = str.length * 4 * scale - scale;
+  const cx = Math.round(x - width / 2);
+  // быстрый режим: надпись — готовой картинкой (у счёта на каждую цифру шесть слоёв точек, и так каждый кадр)
+  if (fast && !still && width + 2 <= TEXT_W && 5 * scale + 2 <= TEXT_H) {
+    const made = textPool.get(`${str}|${scale}|${color}|${outline}`, () => pixelGlyphs(str, 1, 1, scale, color, outline));
+    lc.drawImage(made.canvas, cx - 1, Math.round(y) - 1);
+    return;
+  }
+  pixelGlyphs(str, cx, y, scale, color, outline);
 }
 
 // ---------- бургер ----------
@@ -218,16 +336,19 @@ function drawBurger(s) {
 
 // ---------- фон: кухня ----------
 
-function kitchenBackground(scroll, t) {
-  // стена в плитку
-  const o0 = Math.floor(scroll * 0.2);
-  px(0, 0, W, PLAY_H, '#efe0c2');
-  for (let x = -(o0 % 12); x < W; x += 12) px(x, 0, 1, PLAY_H, '#dccba6');
-  for (let y = 8; y < PLAY_H; y += 12) px(0, y, W, 1, '#dccba6');
-  // верхние шкафы, карниз, рейлинг с поварёшками
-  const o1 = Math.floor(scroll * 0.45);
-  px(0, 10, W, 4, '#7b4a24');
-  for (let base = -(o1 % 56) - 56; base < W; base += 56) {
+// Повторяющиеся слои (для layer): o — сдвиг слоя, w — на какую ширину рисовать.
+
+const COUNTER_Y = PLAY_H - 38;     // столешница дальнего стола
+
+function kitchenTiles(o, w) {
+  px(0, 0, w, PLAY_H, '#efe0c2');
+  for (let x = -(o % 12); x < w; x += 12) px(x, 0, 1, PLAY_H, '#dccba6');
+  for (let y = 8; y < PLAY_H; y += 12) px(0, y, w, 1, '#dccba6');
+}
+
+function kitchenCabinets(o, w) {
+  px(0, 10, w, 4, '#7b4a24');
+  for (let base = -(o % 56) - 56; base < w; base += 56) {
     px(base + 3, 14, 50, 30, '#7b4a24');
     px(base + 4, 15, 23, 28, '#9c6234');
     px(base + 29, 15, 23, 28, '#9c6234');
@@ -236,7 +357,26 @@ function kitchenBackground(scroll, t) {
     px(base + 24, 34, 2, 3, '#ffd98a');
     px(base + 30, 34, 2, 3, '#ffd98a');
   }
-  px(0, 54, W, 1, '#6c6c6c');
+  px(0, 54, w, 1, '#6c6c6c');
+}
+
+function kitchenCounter(o, w) {
+  const topY = COUNTER_Y;
+  px(0, topY, w, 4, '#b8c2cc');
+  px(0, topY, w, 1, '#e3e8ec');
+  px(0, topY + 4, w, PLAY_H - topY - 4, '#8d6a4a');
+  for (let x = -(o % 35); x < w; x += 35) {
+    px(x, topY + 4, 1, PLAY_H - topY - 4, '#6e5037');
+    px(x + 15, topY + 12, 4, 2, '#d8b98a');
+  }
+}
+
+function kitchenBackground(scroll) {
+  // стена в плитку
+  layer('k-tiles', 12, 0, PLAY_H, Math.floor(scroll * 0.2), kitchenTiles);
+  // верхние шкафы, карниз, рейлинг с поварёшками
+  const o1 = Math.floor(scroll * 0.45);
+  layer('k-cabinets', 56, 10, 45, o1, kitchenCabinets);
   for (let base = -(o1 % 56) - 28; base < W; base += 56) {
     const n = Math.floor((base + o1) / 56);
     if (hash(n) < 0.5) {
@@ -250,14 +390,8 @@ function kitchenBackground(scroll, t) {
   }
   // дальний стол: столешница, шкафчики, банки и холодильник
   const o2 = Math.floor(scroll * 0.6);
-  const topY = PLAY_H - 38;
-  px(0, topY, W, 4, '#b8c2cc');
-  px(0, topY, W, 1, '#e3e8ec');
-  px(0, topY + 4, W, PLAY_H - topY - 4, '#8d6a4a');
-  for (let x = -(o2 % 35); x < W; x += 35) {
-    px(x, topY + 4, 1, PLAY_H - topY - 4, '#6e5037');
-    px(x + 15, topY + 12, 4, 2, '#d8b98a');
-  }
+  const topY = COUNTER_Y;
+  layer('k-counter', 35, topY, PLAY_H - topY, o2, kitchenCounter);
   for (let base = -(o2 % 70) - 70; base < W; base += 70) {
     const n = Math.floor((base + o2) / 70);
     if (hash(n * 7) < 0.3) {
@@ -274,23 +408,29 @@ function kitchenBackground(scroll, t) {
       px(base + 21, topY - 5, 6, 1, '#c9c9c9');
     }
   }
-  void t;
 }
 
-function kitchenGround(scroll) {
-  const o = Math.floor(scroll);
-  px(0, PLAY_H, W, 2, '#3a3a3a');
+function kitchenFloor(o, w) {
+  px(0, PLAY_H, w, 2, '#3a3a3a');
   for (let y = PLAY_H + 2, row = 0; y < H; y += 8, row++) {
-    for (let x = -(o % 16) - 16; x < W; x += 8) {
+    for (let x = -(o % 16) - 16; x < w; x += 8) {
       const col = Math.floor((x + o) / 8) + row;
       px(x, y, 8, 8, col % 2 === 0 ? '#f2f2f2' : '#2b2b2b');
     }
   }
 }
 
+function kitchenGround(scroll) {
+  layer('k-floor', 16, PLAY_H, GROUND, Math.floor(scroll), kitchenFloor);
+}
+
 // ---------- фон: ночная улица ----------
 
-function streetBackground(scroll, t) {
+/**
+ * x0…x1 — отрезок экрана, где видна улица. Быстрый режим рисует только дома, попадающие в него: улица
+ * открывается из-за стены-перехода по пикселю, и картинки домов готовятся по одной, а не все в одном кадре.
+ */
+function streetBackground(scroll, t, x0 = 0, x1 = W) {
   // небо полосами (пиксельный градиент), звёзды, луна
   const bands = ['#0a0f2c', '#0d1335', '#10173d', '#131b45', '#171f4d', '#1b2455'];
   const bh = Math.ceil(PLAY_H / bands.length);
@@ -312,57 +452,98 @@ function streetBackground(scroll, t) {
   // дальние дома с окнами
   const o1 = Math.floor(scroll * 0.2);
   for (let base = -(o1 % 34) - 34, n = Math.floor(o1 / 34) - 1; base < W; base += 34, n++) {
-    const h = 60 + Math.floor(hash(n) * 70);
-    px(base, PLAY_H - h, 32, h, '#161d44');
-    for (let wy = PLAY_H - h + 6; wy < PLAY_H - 8; wy += 8) {
-      for (let wx = base + 4; wx < base + 30; wx += 7) {
-        const lit = hash(n * 97 + wx * 13 + wy) < 0.35;
-        px(wx, wy, 3, 4, lit ? '#f7d56a' : '#232b5c');
-      }
-    }
+    if (fast && (base + 32 <= x0 || base >= x1)) continue;
+    if (fast) {
+      // корпус с тёмными окнами — готовой картинкой; какие окна горят, зависит от сдвига слоя — они поверх
+      const made = farPool.get(n, () => {
+        lc.translate(0, FAR_H - PLAY_H);
+        farHouse(0, n, 'dark');
+      });
+      lc.drawImage(made.canvas, base, PLAY_H - FAR_H);
+      farHouse(base, n, 'lit');
+    } else farHouse(base, n, 'all');
   }
   // ближние кирпичные стены, пожарные лестницы, фонари
   const o2 = Math.floor(scroll * 0.45);
   for (let base = -(o2 % 64) - 64, n = Math.floor(o2 / 64) - 1; base < W; base += 64, n++) {
-    const h = 70 + Math.floor(hash(n * 5 + 1) * 40);
-    px(base, PLAY_H - h, 62, h, '#3d2b3f');
-    for (let y = PLAY_H - h + 3; y < PLAY_H; y += 5) {
-      px(base, y, 62, 1, '#2f2031');
-      for (let x = base + ((y / 5) % 2 ? 4 : 0); x < base + 62; x += 9) px(x, y, 1, 5, '#2f2031');
-    }
-    // окно и пожарная лестница
-    px(base + 10, PLAY_H - h + 12, 12, 14, '#1b1422');
-    px(base + 11, PLAY_H - h + 13, 10, 12, hash(n * 11) < 0.5 ? '#f2c14e' : '#2a2f55');
-    for (let k = 0; k < 3; k++) {
-      const y = PLAY_H - h + 30 + k * 16;
-      if (y > PLAY_H - 10) break;
-      px(base + 30, y, 26, 1, '#15151b');
-      px(base + 30 + (k % 2 ? 0 : 20), y, 6, 16, 'rgba(20, 20, 27, 0.9)');
-    }
+    if (fast && (base + 62 <= x0 || base >= x1)) continue;
+    if (fast) {
+      const made = nearPool.get(n, () => {
+        lc.translate(0, NEAR_H - PLAY_H);
+        nearWall(0, n);
+      });
+      lc.drawImage(made.canvas, base, PLAY_H - NEAR_H);
+    } else nearWall(base, n);
   }
   // фонари с конусом света
   for (let base = -(o2 % 96) + 40; base < W + 40; base += 96) {
-    px(base, PLAY_H - 64, 2, 64, '#2a2a33');
-    px(base - 4, PLAY_H - 66, 10, 3, '#2a2a33');
-    px(base - 2, PLAY_H - 63, 6, 2, '#ffe8a0');
-    lc.fillStyle = 'rgba(255, 232, 160, 0.10)';
-    lc.beginPath();
-    lc.moveTo(base - 2, PLAY_H - 61);
-    lc.lineTo(base + 4, PLAY_H - 61);
-    lc.lineTo(base + 20, PLAY_H);
-    lc.lineTo(base - 18, PLAY_H);
-    lc.fill();
+    if (fast && (base + 20 <= x0 || base - 18 >= x1)) continue;
+    if (fast) {
+      const lamp = sprite('s-lamp', 38, 66, () => {
+        lc.translate(18, 66 - PLAY_H);
+        streetLamp(0);
+      });
+      lc.drawImage(lamp, base - 18, PLAY_H - 66);
+    } else streetLamp(base);
   }
 }
 
+/** Дальний дом № n с левым краем base. what: 'all' — весь, 'dark' — корпус и тёмные окна, 'lit' — только горящие. */
+function farHouse(base, n, what) {
+  const h = 60 + Math.floor(hash(n) * 70);
+  if (what !== 'lit') px(base, PLAY_H - h, 32, h, '#161d44');
+  for (let wy = PLAY_H - h + 6; wy < PLAY_H - 8; wy += 8) {
+    for (let wx = base + 4; wx < base + 30; wx += 7) {
+      const lit = what !== 'dark' && hash(n * 97 + wx * 13 + wy) < 0.35;
+      if (lit) px(wx, wy, 3, 4, '#f7d56a');
+      else if (what !== 'lit') px(wx, wy, 3, 4, '#232b5c');
+    }
+  }
+}
+
+/** Ближняя кирпичная стена № n: кладка, окно и пожарная лестница. */
+function nearWall(base, n) {
+  const h = 70 + Math.floor(hash(n * 5 + 1) * 40);
+  px(base, PLAY_H - h, 62, h, '#3d2b3f');
+  for (let y = PLAY_H - h + 3; y < PLAY_H; y += 5) {
+    px(base, y, 62, 1, '#2f2031');
+    for (let x = base + ((y / 5) % 2 ? 4 : 0); x < base + 62; x += 9) px(x, y, 1, 5, '#2f2031');
+  }
+  // окно и пожарная лестница
+  px(base + 10, PLAY_H - h + 12, 12, 14, '#1b1422');
+  px(base + 11, PLAY_H - h + 13, 10, 12, hash(n * 11) < 0.5 ? '#f2c14e' : '#2a2f55');
+  for (let k = 0; k < 3; k++) {
+    const y = PLAY_H - h + 30 + k * 16;
+    if (y > PLAY_H - 10) break;
+    px(base + 30, y, 26, 1, '#15151b');
+    px(base + 30 + (k % 2 ? 0 : 20), y, 6, 16, 'rgba(20, 20, 27, 0.9)');
+  }
+}
+
+function streetLamp(base) {
+  px(base, PLAY_H - 64, 2, 64, '#2a2a33');
+  px(base - 4, PLAY_H - 66, 10, 3, '#2a2a33');
+  px(base - 2, PLAY_H - 63, 6, 2, '#ffe8a0');
+  lc.fillStyle = 'rgba(255, 232, 160, 0.10)';
+  lc.beginPath();
+  lc.moveTo(base - 2, PLAY_H - 61);
+  lc.lineTo(base + 4, PLAY_H - 61);
+  lc.lineTo(base + 20, PLAY_H);
+  lc.lineTo(base - 18, PLAY_H);
+  lc.fill();
+}
+
+function streetRoad(o, w) {
+  px(0, PLAY_H, w, 10, '#56586a');
+  px(0, PLAY_H, w, 1, '#7a7c8f');
+  for (let x = -(o % 16); x < w; x += 16) px(x, PLAY_H + 1, 1, 9, '#46485a');
+  px(0, PLAY_H + 10, w, 2, '#3a3b48');
+  px(0, PLAY_H + 12, w, H - PLAY_H - 12, '#24252e');
+  for (let x = -(o % 24); x < w; x += 24) px(x, PLAY_H + 19, 12, 2, '#c9a227');
+}
+
 function streetGround(scroll) {
-  const o = Math.floor(scroll);
-  px(0, PLAY_H, W, 10, '#56586a');
-  px(0, PLAY_H, W, 1, '#7a7c8f');
-  for (let x = -(o % 16); x < W; x += 16) px(x, PLAY_H + 1, 1, 9, '#46485a');
-  px(0, PLAY_H + 10, W, 2, '#3a3b48');
-  px(0, PLAY_H + 12, W, H - PLAY_H - 12, '#24252e');
-  for (let x = -(o % 24); x < W; x += 24) px(x, PLAY_H + 19, 12, 2, '#c9a227');
+  layer('s-road', 48, PLAY_H, GROUND, Math.floor(scroll), streetRoad);
 }
 
 // ---------- препятствия ----------
@@ -374,6 +555,47 @@ function bun(x, y) {
   px(x + 1, y + 3, 4, 1, '#b8702a');
   px(x + 2, y + 1, 1, 1, '#fff3c4');
   px(x + 4, y + 2, 1, 1, '#fff3c4');
+}
+
+// «Живые» детали (меняются со временем): в готовую картинку препятствия не попадают (still) — в быстром режиме
+// дорисовываются поверх неё каждый кадр (drawLive). Позже нарисованное их не перекрывает.
+
+function stoveGlow(x, y, w, ox, t) {
+  const glow = Math.sin(t * 6 + ox) > 0 ? '#ff6a3a' : '#d24a2a';
+  px(x + 4, y + 1, 7, 1, glow);
+  px(x + w - 11, y + 1, 7, 1, glow);
+}
+
+function billboardSign(x, y, w, ox, t) {
+  const on = Math.sin(t * 7 + ox) > -0.7;
+  pixelText('BURGER', x + w / 2, y + 5, 1, on ? '#ff8a3d' : '#8a4a24');
+  px(x + 3, y + 13, w - 6, 1, on ? '#ff5d8f' : '#6a2a44');
+}
+
+const TRAFFIC = [['#ff4040', '#4a1a1a'], ['#ffc83d', '#4a3a12'], ['#3ddc84', '#123a24']];
+
+function trafficLights(x, y, t) {
+  const phase = Math.floor(t / 1.2) % 3;
+  for (let k = 0; k < 3; k++) px(x + 4, y + 2 + k * 8, 6, 6, TRAFFIC[k][phase === k ? 0 : 1]);
+}
+
+/** Неоновая трубка по краю ступеньки r уличной диагонали (x — левый край ступеньки на экране). */
+function neonEdge(x, r, t) {
+  const on = Math.sin(t * 5 + r.i * 0.6) > -0.4;
+  px(x, r.y + r.h - 2, r.w, 2, on ? '#ff4fa3' : '#8a2a5a');
+  lc.fillStyle = on ? 'rgba(255, 79, 163, 0.18)' : 'rgba(255, 79, 163, 0.05)';
+  lc.fillRect(x, r.y + r.h, r.w, 4);
+}
+
+const LIVE_PARTS = new Set(['stove', 'billboard', 'traffic']);
+
+/** Живая деталь части r (быстрый режим — поверх готовой картинки препятствия). */
+function drawLive(ox, r, t) {
+  const x = ox + r.x;
+  if (r.part === 'stove') stoveGlow(x, r.y, r.w, ox, t);
+  else if (r.part === 'billboard') billboardSign(x, r.y, r.w, ox, t);
+  else if (r.part === 'traffic') trafficLights(x, r.y, t);
+  else if (r.part === 'diag-top') neonEdge(x, r, t);
 }
 
 /** Одна часть препятствия (прямоугольник из obstacleRects) — своим рисунком. */
@@ -406,9 +628,7 @@ function drawPart(ox, ob, r, t) {
       break;
     case 'stove': {
       px(x, y, w, Math.min(3, h), '#3a3f45');
-      const glow = Math.sin(t * 6 + ox) > 0 ? '#ff6a3a' : '#d24a2a';
-      px(x + 4, y + 1, 7, 1, glow);
-      px(x + w - 11, y + 1, 7, 1, glow);
+      if (!still) stoveGlow(x, y, w, ox, t);
       if (h > 3) {
         px(x, y + 3, w, h - 3, '#9aa3ab');
         px(x + 1, y + 3, w - 2, h - 4, '#e3e6e9');
@@ -495,15 +715,12 @@ function drawPart(ox, ob, r, t) {
     case 'rope':
       px(x, y, w, h, '#2a2a33');
       break;
-    case 'billboard': {
-      const on = Math.sin(t * 7 + ox) > -0.7;
+    case 'billboard':
       px(x, y, w, h, '#1c1c24');
       px(x + 1, y + 1, w - 2, h - 2, '#2d1b3d');
-      pixelText('BURGER', x + w / 2, y + 5, 1, on ? '#ff8a3d' : '#8a4a24');
-      px(x + 3, y + 13, w - 6, 1, on ? '#ff5d8f' : '#6a2a44');
+      if (!still) billboardSign(x, y, w, ox, t);
       px(x + 6, y + 16, w - 12, 2, '#ffd23f');
       break;
-    }
     case 'tower': {
       px(x, y, w, h, '#1a2147');
       px(x + 1, y + 2, w - 2, h - 2, '#2b3566');
@@ -523,16 +740,11 @@ function drawPart(ox, ob, r, t) {
       px(x, y, w, h, '#2e2f3a');
       px(x + 1, y, 1, h, '#4a4c5c');
       break;
-    case 'traffic': {
+    case 'traffic':
       px(x, y, w, h, '#1c1c24');
       px(x + 1, y + 1, w - 2, h - 2, '#2a2a33');
-      const phase = Math.floor(t / 1.2) % 3;
-      const lights = [['#ff4040', '#4a1a1a'], ['#ffc83d', '#4a3a12'], ['#3ddc84', '#123a24']];
-      lights.forEach(([onColor, offColor], k) => {
-        px(x + 4, y + 2 + k * 8, 6, 6, phase === k ? onColor : offColor);
-      });
+      if (!still) trafficLights(x, y, t);
       break;
-    }
     case 'lamp-head':
       px(x, y, w, h, '#3a3b48');
       px(x, y, w, 1, '#56586a');
@@ -700,13 +912,7 @@ function drawDiagonal(ox, ob, t) {
           px(x, r.y + r.h - 3, r.w, 3, '#d9a86a');                   // край коробки — клапан
           px(x, r.y + r.h - 1, r.w, 1, '#a8773f');
           if (r.i % 2 === 0) px(x + 1, r.y + r.h - 3, 1, 2, '#c4905a');
-        } else {
-          // неоновая трубка по краю дома
-          const on = Math.sin(t * 5 + r.i * 0.6) > -0.4;
-          px(x, r.y + r.h - 2, r.w, 2, on ? '#ff4fa3' : '#8a2a5a');
-          lc.fillStyle = on ? 'rgba(255, 79, 163, 0.18)' : 'rgba(255, 79, 163, 0.05)';
-          lc.fillRect(x, r.y + r.h, r.w, 4);
-        }
+        } else if (!still) neonEdge(x, r, t);                         // неоновая трубка по краю дома
       } else if (ob.scene === 'kitchen') {
         px(x, r.y, r.w, 1, '#8a5a72');
       } else {
@@ -714,6 +920,24 @@ function drawDiagonal(ox, ob, t) {
       }
     }
   }
+}
+
+/** Быстрый режим: препятствие — готовой картинкой (рисуется один раз, когда появилось), живые детали — поверх. */
+function drawObstacleFast(ox, ob, t) {
+  const left = ob.type === 'door' && ob.facade === 'left' ? WALL_EXTRA : 0;   // фасад стены-перехода — слева
+  const made = obPool.get(ob, (slot) => {
+    still = true;
+    try {
+      drawObstacle(left, ob, 0);
+    } finally {
+      still = false;
+    }
+    slot.live = ob.type === 'door' ? []
+      : obstacleRects(ob).filter((r) => LIVE_PARTS.has(r.part) || (r.part === 'diag-top' && ob.scene !== 'kitchen'));
+  });
+  lc.drawImage(made.canvas, ox - left, 0);
+  if (ob.type === 'door') wallLive(ox, ob, t);
+  else for (const r of made.live) drawLive(ox, r, t);
 }
 
 function drawObstacle(ox, ob, t) {
@@ -764,33 +988,41 @@ function drawWall(ox, ob, t) {
   lc.fillRect(x, top, w, 3);
   px(x, top - 3, w, 3, '#5d626b');
   px(x, top - 3, w, 1, '#a3a9b3');
-  const arrow = toStreet ? '#5fd88a' : '#ff8a3d';
-  const ay = Math.round(top + depth / 2) - 5;
-  const ax = Math.round(x + w / 2) - 11;
-  for (let k = 0; k < 3; k++) {
-    lc.globalAlpha = Math.floor(t * 6) % 3 === k ? 1 : 0.35;
-    for (const [dx, dy] of [[0, 0], [1, 1], [2, 2], [1, 3], [0, 4]]) px(ax + k * 8 + dx * 2, ay + dy * 2, 2, 2, arrow);
-  }
-  lc.globalAlpha = 1;
   // вывеска — над проходом
   const mid = ox + OB_W / 2;
   if (toStreet) {
     px(mid - 11, top - 17, 22, 10, '#1f9d4a');
     px(mid - 11, top - 17, 22, 1, '#5fd88a');
     pixelText('EXIT', mid, top - 14, 1, '#ffffff');
-  } else {
-    const on = Math.sin(t * 8) > -0.6;
-    px(mid - 13, top - 18, 26, 10, '#1a1020');
-    pixelText('BURGER', mid, top - 15, 1, on ? '#ff8a3d' : '#7a3d1a');
+  } else px(mid - 13, top - 18, 26, 10, '#1a1020');
+  if (!still) wallLive(ox, ob, t);
+}
+
+const ARROW = [[0, 0], [1, 1], [2, 2], [1, 3], [0, 4]];
+
+/** Живое на стене-переходе: бегущие стрелки в проходе и мигающий неон «BURGER» на вывеске. */
+function wallLive(ox, ob, t) {
+  const toStreet = ob.to === 'street';
+  const [x, w] = wallBlock(ox, ob);
+  const top = ob.gapY - ob.gap / 2;
+  const depth = PLAY_H - top;
+  const arrow = toStreet ? '#5fd88a' : '#ff8a3d';
+  const ay = Math.round(top + depth / 2) - 5;
+  const ax = Math.round(x + w / 2) - 11;
+  for (let k = 0; k < 3; k++) {
+    lc.globalAlpha = Math.floor(t * 6) % 3 === k ? 1 : 0.35;
+    for (const [dx, dy] of ARROW) px(ax + k * 8 + dx * 2, ay + dy * 2, 2, 2, arrow);
   }
+  lc.globalAlpha = 1;
+  if (!toStreet) pixelText('BURGER', ox + OB_W / 2, top - 15, 1, Math.sin(t * 8) > -0.6 ? '#ff8a3d' : '#7a3d1a');
 }
 
 
 // ---------- кадр ----------
 
-function drawScene(scene, scroll, t) {
-  if (scene === 'street') streetBackground(scroll, t);
-  else kitchenBackground(scroll, t);
+function drawScene(scene, scroll, t, x0, x1) {
+  if (scene === 'street') streetBackground(scroll, t, x0, x1);
+  else kitchenBackground(scroll);
 }
 
 function drawGround(scene, scroll) {
@@ -810,9 +1042,8 @@ function segments(s, scroll) {
   return out;
 }
 
-function render() {
-  const s = game;
-  if (!s || !ui) return;
+/** Мир: фон сцен, препятствия, пол, крошки, бургер, счёт, вспышка удара. */
+function drawWorld(s) {
   // всё на экране — от одной ЦЕЛОЙ прокрутки: стены дверей и граница фона сцен совпадают до пикселя
   // (раньше граница шла по дробной координате, а стена — по округлённой: на стыке мерцала полоска)
   const d = Math.round(s.dist);
@@ -823,14 +1054,15 @@ function render() {
     lc.beginPath();
     lc.rect(Math.floor(x0), 0, Math.ceil(x1 - x0), H);
     lc.clip();
-    drawScene(scene, scroll, s.t);
+    drawScene(scene, scroll, s.t, Math.floor(x0), Math.floor(x0) + Math.ceil(x1 - x0));
     lc.restore();
   }
   for (const o of s.obstacles) {
     const ox = Math.round(o.x) - d;
     const ext = o.type === 'door' ? WALL_EXTRA : 0;      // фасад стены-перехода
     if (ox - ext > W || ox + o.w + ext < 0) continue;
-    drawObstacle(ox, o, s.t);
+    if (fast) drawObstacleFast(ox, o, s.t);
+    else drawObstacle(ox, o, s.t);
   }
   for (const [x0, x1, scene] of segs) {
     lc.save();
@@ -853,6 +1085,13 @@ function render() {
     lc.fillStyle = `rgba(255, 255, 255, ${0.85 * (1 - (s.t - flashT) / 0.3)})`;
     lc.fillRect(0, 0, W, H);
   }
+}
+
+function render() {
+  const s = game;
+  if (!s || !ui) return;
+  // быстрый режим: пока заставка закрывает весь кадр (она непрозрачная), мир под ней не рисуем
+  if (!(fast && title && title.leaveT < 0)) drawWorld(s);
   // отсчёт после паузы: мир затемнён, крупная цифра «впрыгивает» в начале каждой секунды
   if (countdown >= 0) {
     lc.fillStyle = 'rgba(16, 10, 30, 0.35)';
@@ -873,10 +1112,13 @@ function render() {
   let dx = 0;
   let dy = 0;
   if (shakeT >= 0 && s.t - shakeT < 0.3) {
-    dx = Math.round((Math.random() - 0.5) * 4) * ui.scale;
-    dy = Math.round((Math.random() - 0.5) * 4) * ui.scale;
+    dx = Math.round((Math.random() - 0.5) * 4);
+    dy = Math.round((Math.random() - 0.5) * 4);
   }
-  c.drawImage(ui.low, dx, dy, ui.canvas.width, ui.canvas.height);
+  // быстрый режим: холст на экране — те же W×H, увеличивает его браузер (раньше кадр каждый раз растягивался
+  // здесь до экранных пикселей — на слабых телефонах это было самое долгое в кадре)
+  if (fast) c.drawImage(ui.low, dx, dy);
+  else c.drawImage(ui.low, dx * ui.scale, dy * ui.scale, ui.canvas.width, ui.canvas.height);
 }
 
 function resize() {
@@ -888,10 +1130,20 @@ function resize() {
   // разница в пиксель незаметна (раньше всегда брали целое — на айфоне игра была маленьким окошком)
   const fit = Math.min(box.width / W, box.height / H) * dpr;
   ui.scale = Math.floor(fit) >= fit * 0.95 ? Math.floor(fit) : fit;
-  ui.canvas.width = Math.max(1, Math.round(W * ui.scale));
-  ui.canvas.height = Math.max(1, Math.round(H * ui.scale));
-  ui.canvas.style.width = `${ui.canvas.width / dpr}px`;
-  ui.canvas.style.height = `${ui.canvas.height / dpr}px`;
+  const width = Math.max(1, Math.round(W * ui.scale));
+  const height = Math.max(1, Math.round(H * ui.scale));
+  if (fast) {
+    // размер на экране тот же, а точек в холсте — W×H (менять их при каждом resize не нужно: холст бы стирался)
+    if (ui.canvas.width !== W || ui.canvas.height !== H) {
+      ui.canvas.width = W;
+      ui.canvas.height = H;
+    }
+  } else {
+    ui.canvas.width = width;
+    ui.canvas.height = height;
+  }
+  ui.canvas.style.width = `${width / dpr}px`;
+  ui.canvas.style.height = `${height / dpr}px`;
   render();
 }
 
@@ -1100,6 +1352,7 @@ export default {
   async init(container, gameApi) {
     api = gameApi;
     host = container;
+    fast = Boolean(api.feature?.('flappy-fast'));
     toast = createToast();
     const [savedStats, savedSound] = await Promise.all([api.storage.get('stats'), api.storage.get('sound')]);
     if (!api) return;
@@ -1128,7 +1381,7 @@ export default {
       : null;
     if (ui.pauseBtn) ui.pauseBtn.innerHTML = ICON_PAUSE;
 
-    root = el('div', { class: 'fb' },
+    root = el('div', { class: fast ? 'fb fb-fast' : 'fb' },
       el('div', { class: 'fb-header' },
         el('div', {}, el('div', { class: 'fb-title' }, T.title), ui.sub),
         el('div', { class: 'fb-actions' }, ui.pauseBtn, ui.soundBtn, statsButton),
@@ -1157,10 +1410,12 @@ export default {
     titleCanvas.width = W;
     titleCanvas.height = H;
     title = {
-      logo: createLogo(variant, { flying: burgerSprites(), burger: BURGER, pal: PAL }),
+      logo: createLogo(variant, { flying: burgerSprites(), burger: BURGER, pal: PAL, fast }),
       canvas: titleCanvas, ctx: titleCanvas.getContext('2d'), t: 0, leaveT: -1,
     };
     title.logo.draw(title.ctx, reducedMotion() ? 2.5 : 0, 0);
+    // быстрый режим: полосы кухни готовятся сейчас, под заставкой, а не в первом кадре после нажатия
+    if (fast) drawWorld(game);
     // для проверки (страница-обёртка с автопилотом): ?fbdebug в адресе
     if (new URLSearchParams(location.search).has('fbdebug')) window.__flappy = {
       get game() { return game; }, get countdown() { return countdown; }, flap: onFlap, pause: showPause, resume: closeModal,
@@ -1186,6 +1441,8 @@ export default {
     toast?.dispose();
     root?.remove();
     api = host = root = ui = toast = game = lc = title = null;
+    for (const pool of [obPool, farPool, nearPool, textPool]) pool.clear();
+    fast = still = false;
     particles = [];
     flashT = shakeT = scorePopT = -1;
     finished = false;

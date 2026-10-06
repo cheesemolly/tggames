@@ -51,6 +51,8 @@
   image-rendering: crisp-edges;
   box-shadow: 0 6px 20px rgb(0 0 0 / 0.25);
 }
+/* быстрая отрисовка: холст 160×256 увеличивает браузер — обязательно «по точкам», без сглаживания */
+[data-game="flappy-burger"] .fb-fast .fb-canvas { image-rendering: pixelated; }
 [data-game="flappy-burger"] .fb-hint {
   position: absolute;
   left: 50%;
@@ -71,6 +73,8 @@
 [data-game="flappy-burger"] .fb-hint-hand { font-size: 24px; animation: fb-tap 0.9s ease-in-out infinite; }
 @keyframes fb-tap { 50% { transform: translateY(4px) scale(0.92); } }
 [data-game="flappy-burger"] .fb-hint-hide { opacity: 0; transform: translate(-50%, 10px); }
+/* у скрытой подсказки «палец» больше не качается (раньше анимация крутилась всю игру, хотя её не видно) */
+[data-game="flappy-burger"] .fb-fast .fb-hint-hide .fb-hint-hand { animation-play-state: paused; }
 
 /* окна */
 [data-game="flappy-burger"] .fb-modal {

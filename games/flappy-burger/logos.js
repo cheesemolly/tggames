@@ -150,10 +150,28 @@ function spriteFrom(rows, pal) {
 
 /**
  * Заставка номер variant. art — спрайты игры: { flying: [3 кадра бургера с крылом 20×12], burger: строки 16×12,
- * pal: палитра }. Размер кадра — ctx.canvas (160×256).
+ * pal: палитра, fast }. Размер кадра — ctx.canvas (160×256). fast — быстрая отрисовка: неподвижная часть
+ * заставки рисуется один раз в свой холст, лучи «Хрума» — по заранее посчитанным углам (картинка та же).
  */
 export function createLogo(variant, art) {
   const flying = art.flying;
+  const fixedParts = new Map();
+  /** Неподвижная часть кадра: paint(g) рисует её; в быстром режиме — один раз, дальше выводится картинкой. */
+  const fixed = (ctx, key, paint) => {
+    if (!art.fast) {
+      paint(ctx);
+      return;
+    }
+    let c = fixedParts.get(key);
+    if (!c) {
+      c = document.createElement('canvas');
+      c.width = ctx.canvas.width;
+      c.height = ctx.canvas.height;
+      paint(c.getContext('2d'));
+      fixedParts.set(key, c);
+    }
+    ctx.drawImage(c, 0, 0);
+  };
   const topBun = spriteFrom(art.burger.slice(0, 5), art.pal);
   const bottom = spriteFrom(art.burger.slice(5), art.pal);
   const particles = [];
@@ -171,19 +189,21 @@ export function createLogo(variant, art) {
   function wave(ctx, t, dt) {
     const { width: W, height: H } = ctx.canvas;
     const floor = H - 28;
-    for (let y = 0; y < floor; y += 8) {
-      for (let x = 0; x < W; x += 8) {
-        rect(ctx, x, y, 8, 8, ((x + y) / 8) % 2 ? '#bfe4de' : '#cdebe6');
-        rect(ctx, x, y, 8, 1, '#a8d3cc');
-        rect(ctx, x, y, 1, 8, '#a8d3cc');
+    fixed(ctx, 'kitchen', (g) => {
+      for (let y = 0; y < floor; y += 8) {
+        for (let x = 0; x < W; x += 8) {
+          rect(g, x, y, 8, 8, ((x + y) / 8) % 2 ? '#bfe4de' : '#cdebe6');
+          rect(g, x, y, 8, 1, '#a8d3cc');
+          rect(g, x, y, 1, 8, '#a8d3cc');
+        }
       }
-    }
-    rect(ctx, 0, floor, W, 28, '#2a2a33');
-    for (let x = 0; x < W; x += 6) {
-      rect(ctx, x, floor + 2, 6, 6, (x / 6) % 2 ? '#2a2a33' : '#f1f1f1');
-      rect(ctx, x, floor + 8, 6, 6, (x / 6) % 2 ? '#f1f1f1' : '#2a2a33');
-    }
-    rect(ctx, 0, floor, W, 2, '#6d8f8a');
+      rect(g, 0, floor, W, 28, '#2a2a33');
+      for (let x = 0; x < W; x += 6) {
+        rect(g, x, floor + 2, 6, 6, (x / 6) % 2 ? '#2a2a33' : '#f1f1f1');
+        rect(g, x, floor + 8, 6, 6, (x / 6) % 2 ? '#f1f1f1' : '#2a2a33');
+      }
+      rect(g, 0, floor, W, 2, '#6d8f8a');
+    });
 
     const dy = (i, line) => Math.round(Math.sin(t * 6 - (i + line * 6) * 0.55) * 4);
     word(ctx, 'FLAPPY', W / 2, 58, (i) => ({ dy: dy(i, 0), style: STYLE.bun }));
@@ -288,24 +308,26 @@ export function createLogo(variant, art) {
     for (const s of stars) {
       if (Math.sin(t * 2 + s.p) > -0.3) rect(ctx, s.x, s.y, 1, 1, Math.sin(t * 3 + s.p) > 0.6 ? '#ffffff' : '#8f89c9');
     }
-    for (let y = -5; y <= 5; y++) {
-      for (let x = -5; x <= 5; x++) {
-        if (x * x + y * y <= 25 && (x - 3) * (x - 3) + (y + 2) * (y + 2) > 16) rect(ctx, 134 + x, 22 + y, 1, 1, '#f4efc9');
+    fixed(ctx, 'street', (g) => {
+      for (let y = -5; y <= 5; y++) {
+        for (let x = -5; x <= 5; x++) {
+          if (x * x + y * y <= 25 && (x - 3) * (x - 3) + (y + 2) * (y + 2) > 16) rect(g, 134 + x, 22 + y, 1, 1, '#f4efc9');
+        }
       }
-    }
-    // кирпичная стена
-    const wall = 176;
-    rect(ctx, 0, wall, W, H - wall, '#5a2a24');
-    for (let y = wall; y < H; y += 5) {
-      rect(ctx, 0, y, W, 1, '#3a1714');
-      for (let x = ((y - wall) / 5) % 2 ? 0 : 6; x < W; x += 12) rect(ctx, x, y, 1, 5, '#3a1714');
-    }
-    // вывеска на цепях
-    rect(ctx, 30, 36, 1, 16, '#6b6485');
-    rect(ctx, 129, 36, 1, 16, '#6b6485');
-    rect(ctx, 12, 52, 136, 84, '#1a1230');
-    rect(ctx, 12, 52, 136, 1, '#3b2d5c');
-    rect(ctx, 12, 135, 136, 1, '#07050f');
+      // кирпичная стена
+      const wall = 176;
+      rect(g, 0, wall, W, H - wall, '#5a2a24');
+      for (let y = wall; y < H; y += 5) {
+        rect(g, 0, y, W, 1, '#3a1714');
+        for (let x = ((y - wall) / 5) % 2 ? 0 : 6; x < W; x += 12) rect(g, x, y, 1, 5, '#3a1714');
+      }
+      // вывеска на цепях
+      rect(g, 30, 36, 1, 16, '#6b6485');
+      rect(g, 129, 36, 1, 16, '#6b6485');
+      rect(g, 12, 52, 136, 84, '#1a1230');
+      rect(g, 12, 52, 136, 1, '#3b2d5c');
+      rect(g, 12, 135, 136, 1, '#07050f');
+    });
 
     const lt = t % 7;
     const lit = (n) => {
@@ -325,7 +347,11 @@ export function createLogo(variant, art) {
 
   // ---------- 3. Хрум ----------
   let rays = null;
+  let rayAngle = null;               // быстрый режим: угол каждой точки в «лучах» (0…16 = полный оборот) + 16
+  let rayPixels = null;
   let lastChomp = -1;
+  // цвет точки одним числом — в порядке байтов этого устройства
+  const pack = (r, g, b) => new Uint32Array(new Uint8Array([r, g, b, 255]).buffer)[0];
   function chomp(ctx, t, dt) {
     const { width: W, height: H } = ctx.canvas;
     // вращающиеся лучи — через ImageData (буфер кадра маленький)
@@ -333,15 +359,28 @@ export function createLogo(variant, art) {
     const cx = W / 2;
     const cy = 74;
     const rot = t * 0.5;
-    const d = rays.data;
-    for (let y = 0; y < H; y++) {
-      for (let x = 0; x < W; x++) {
-        const ray = Math.floor(((Math.atan2(y - cy, x - cx) + rot) / (Math.PI * 2)) * 16 + 16) % 2;
-        const i = (y * W + x) * 4;
-        d[i] = 255;
-        d[i + 1] = ray ? 196 : 212;
-        d[i + 2] = ray ? 72 : 110;
-        d[i + 3] = 255;
+    if (art.fast) {
+      // арктангенс для каждой точки — один раз; в кадре остаётся сдвиг и чёт/нечет луча
+      if (!rayAngle) {
+        rayAngle = new Float32Array(W * H);
+        for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) rayAngle[y * W + x] = (Math.atan2(y - cy, x - cx) / (Math.PI * 2)) * 16 + 16;
+        rayPixels = new Uint32Array(rays.data.buffer);
+      }
+      const turn = (rot / (Math.PI * 2)) * 16;
+      const dark = pack(255, 196, 72);
+      const light = pack(255, 212, 110);
+      for (let i = 0; i < rayPixels.length; i++) rayPixels[i] = Math.floor(rayAngle[i] + turn) % 2 ? dark : light;
+    } else {
+      const d = rays.data;
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          const ray = Math.floor(((Math.atan2(y - cy, x - cx) + rot) / (Math.PI * 2)) * 16 + 16) % 2;
+          const i = (y * W + x) * 4;
+          d[i] = 255;
+          d[i + 1] = ray ? 196 : 212;
+          d[i + 2] = ray ? 72 : 110;
+          d[i + 3] = 255;
+        }
       }
     }
     ctx.putImageData(rays, 0, 0);
