@@ -1,13 +1,21 @@
 /*
  * Эрудит. Поле — сетка 15×15, фишки лежат прямо в клетках (без transform — их можно трясти и «впрыгивать»).
- * Клетки поля и рамки — из цветов темы. Игровые цвета — свои, заданы для обеих тем: фишки (--er-tile…) и
+ * Скин «telegram» (по умолчанию): клетки и рамка — из цветов темы, фишки и премии — игровые, заданы для обеих тем;
  * премии как в «Эрудите»: зелёная — буква ×2, жёлтая — буква ×3, синяя — слово ×2, красная — слово ×3.
+ * Остальные скины — свои палитры поля, премий и фишек (--er-*), одинаковые в обеих темах.
  * Размеры букв — в долях ширины поля и руки (cqw): поле и рука — контейнеры.
  */
 
 [data-game="erudit"] {
+  --er-warn: #c0392b;
+  --toast-top: 120px;
+}
+:root[data-theme="dark"] [data-game="erudit"] { --er-warn: #ff8a7a; }
+
+[data-game="erudit"], [data-game="erudit"] [data-skin="telegram"] {
   --er-cell: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 75%, var(--tg-theme-bg-color));
   --er-frame: color-mix(in srgb, var(--tg-theme-text-color) 16%, var(--tg-theme-bg-color));
+  --er-center: var(--tg-theme-hint-color);
   --er-accent: var(--tg-theme-button-color);
   --er-accent-text: var(--tg-theme-button-text-color);
   --er-tile: #f7e8c4;
@@ -21,10 +29,10 @@
   --er-p-2: #b7d5f6;
   --er-p-3: #f4b1a9;
   --er-mark: rgb(0 0 0 / 0.5);
-  --er-warn: #c0392b;
-  --toast-top: 120px;
 }
-:root[data-theme="dark"] [data-game="erudit"] {
+:root[data-theme="dark"] [data-game="erudit"]:not([data-skin]),
+:root[data-theme="dark"] [data-game="erudit"][data-skin="telegram"],
+:root[data-theme="dark"] [data-game="erudit"] [data-skin="telegram"] {
   --er-tile: #e9d8ae;
   --er-tile-fresh: #fff1c4;
   --er-tile-edge: #a8905a;
@@ -34,7 +42,34 @@
   --er-p-2: #2a4d7c;
   --er-p-3: #7d342f;
   --er-mark: rgb(255 255 255 / 0.62);
-  --er-warn: #ff8a7a;
+}
+/* Классика — картонное поле «Эрудита» с яркими премиями и белыми фишками */
+[data-game="erudit"][data-skin="classic"], [data-game="erudit"] [data-skin="classic"] {
+  --er-cell: #efe6cf; --er-frame: #b9a878; --er-center: #a3936a; --er-accent: #2f6fd0; --er-accent-text: #fff;
+  --er-tile: #fffdf6; --er-tile-fresh: #fff; --er-tile-edge: #c4bba4; --er-tile-ink: #1d1d1d; --er-star: #c0392b; --er-last: #e07b12;
+  --er-p-d: #86cf8a; --er-p-t: #f6d44d; --er-p-2: #7fb4ee; --er-p-3: #ee7d6f; --er-mark: rgb(0 0 0 / 0.55);
+}
+[data-game="erudit"][data-skin="wood"], [data-game="erudit"] [data-skin="wood"] {
+  --er-cell: #dcb787; --er-frame: #7a5230; --er-center: #8f6238; --er-accent: #7a4a1e; --er-accent-text: #fff;
+  --er-tile: #f9e9c6; --er-tile-fresh: #fff6df; --er-tile-edge: #b08d52; --er-tile-ink: #3b2814; --er-star: #a8321c; --er-last: #b3401f;
+  --er-p-d: #a9c98a; --er-p-t: #f0cf6e; --er-p-2: #8db4d6; --er-p-3: #e08a78; --er-mark: rgb(50 28 8 / 0.6);
+}
+/* Сукно — зелёный стол, премии голубые, синие, розовые и красные */
+[data-game="erudit"][data-skin="felt"], [data-game="erudit"] [data-skin="felt"] {
+  --er-cell: #2f6e50; --er-frame: #1b4532; --er-center: #9fd0b4; --er-accent: #f2c94c; --er-accent-text: #1b1b1b;
+  --er-tile: #f5edd8; --er-tile-fresh: #fff8e6; --er-tile-edge: #bfb08a; --er-tile-ink: #1f1f1f; --er-star: #b23a22; --er-last: #ff8a3d;
+  --er-p-d: #9fd8f2; --er-p-t: #4c90de; --er-p-2: #f4adc0; --er-p-3: #e2604d; --er-mark: rgb(0 0 0 / 0.58);
+}
+[data-game="erudit"][data-skin="night"], [data-game="erudit"] [data-skin="night"] {
+  --er-cell: #1c2542; --er-frame: #0c1124; --er-center: #6f7ea5; --er-accent: #8fa0ff; --er-accent-text: #0c1124;
+  --er-tile: #d3dbf6; --er-tile-fresh: #eef2ff; --er-tile-edge: #8892b8; --er-tile-ink: #141a33; --er-star: #b0304a; --er-last: #ffb347;
+  --er-p-d: #1f6a66; --er-p-t: #86691e; --er-p-2: #3c4da0; --er-p-3: #9c3858; --er-mark: rgb(255 255 255 / 0.7);
+}
+/* Тетрадь — лист в клетку, премии — маркеры, фишки — синие чернила */
+[data-game="erudit"][data-skin="paper"], [data-game="erudit"] [data-skin="paper"] {
+  --er-cell: #fdfdf6; --er-frame: #9fbbe6; --er-center: #9fbbe6; --er-accent: #e0561e; --er-accent-text: #fff;
+  --er-tile: #2f4fb0; --er-tile-fresh: #4467d4; --er-tile-edge: #1f3780; --er-tile-ink: #fff; --er-star: #ffd166; --er-last: #ffd166;
+  --er-p-d: #c9efc2; --er-p-t: #fff2a1; --er-p-2: #d9d3ff; --er-p-3: #ffd1d1; --er-mark: rgb(40 60 150 / 0.65);
 }
 
 /* ---------- раскладка ---------- */
@@ -110,6 +145,7 @@
   background: var(--er-frame);
   container-type: inline-size;
   touch-action: manipulation;
+  transition: background-color 0.3s ease;
 }
 [data-game="erudit"] .er-cell {
   position: relative;
@@ -120,6 +156,7 @@
   border-radius: 2px;
   background: var(--er-cell);
   cursor: pointer;
+  transition: background-color 0.3s ease;
 }
 [data-game="erudit"] .er-p-d { background: var(--er-p-d); }
 [data-game="erudit"] .er-p-t { background: var(--er-p-t); }
@@ -133,7 +170,7 @@
   pointer-events: none;
   transition: opacity 0.15s ease;
 }
-[data-game="erudit"] .er-center .er-mark { font-size: 3.4cqw; color: var(--tg-theme-hint-color); }
+[data-game="erudit"] .er-center .er-mark { font-size: 3.4cqw; color: var(--er-center); }
 [data-game="erudit"] .er-cursor { box-shadow: inset 0 0 0 2px var(--er-accent); z-index: 1; }
 [data-game="erudit"] .er-cursor .er-mark { opacity: 0; }
 [data-game="erudit"] .er-cursor::after {
@@ -163,7 +200,7 @@
   background: var(--er-tile);
   color: var(--er-tile-ink);
   box-shadow: inset 0 -0.45cqw 0 var(--er-tile-edge);
-  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+  transition: background-color 0.3s ease, color 0.3s ease, box-shadow 0.2s ease;
 }
 [data-game="erudit"] .er-tile b {
   font-size: 4cqw;
@@ -365,6 +402,53 @@
   transition: transform 0.1s ease;
 }
 [data-game="erudit"] .er-letter:active { transform: scale(0.9); }
+
+/* скины: образец — уголок поля 3×3 с премиями и фишкой */
+[data-game="erudit"] .er-skins { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 8px; }
+[data-game="erudit"] .er-skin {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--tg-theme-text-color);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+[data-game="erudit"] .er-swatch {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  width: 56px;
+  height: 56px;
+  padding: 2px;
+  border-radius: 10px;
+  background: var(--er-frame);
+  overflow: hidden;
+  transition: transform 0.2s ease;
+}
+[data-game="erudit"] .er-swatch i { border-radius: 2px; background: var(--er-cell); }
+[data-game="erudit"] .er-swatch .er-p-d { background: var(--er-p-d); }
+[data-game="erudit"] .er-swatch .er-p-t { background: var(--er-p-t); }
+[data-game="erudit"] .er-swatch .er-p-2 { background: var(--er-p-2); }
+[data-game="erudit"] .er-swatch .er-p-3 { background: var(--er-p-3); }
+[data-game="erudit"] .er-swatch .er-swatch-tile {
+  display: grid;
+  place-items: center;
+  border-radius: 3px;
+  background: var(--er-tile);
+  color: var(--er-tile-ink);
+  box-shadow: inset 0 -2px 0 var(--er-tile-edge);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1;
+}
+[data-game="erudit"] .er-skin:active .er-swatch { transform: scale(0.92); }
+[data-game="erudit"] .er-skin[aria-checked="true"] .er-swatch { outline: 3px solid var(--tg-theme-button-color); outline-offset: 3px; }
 
 [data-game="erudit"] .er-stats { width: 100%; border-collapse: collapse; font-size: 13px; }
 [data-game="erudit"] .er-stats th { font-size: 11px; font-weight: 600; color: var(--tg-theme-hint-color); padding: 4px 2px; }

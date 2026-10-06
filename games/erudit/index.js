@@ -3,7 +3,7 @@
 // руки выкладывают их по стрелке; можно и наоборот — сначала фишка, потом клетка. Касание выложенной в этом
 // ходу фишки возвращает её на руку. С клавиатуры — буквы, Backspace, пробел (повернуть стрелку), Enter.
 // Словарь (words/ru.json) грузится один раз на страницу; бот считает в основном потоке — перебор ходов занимает
-// миллисекунды. Партия, статистика по уровням и настройки — в api.storage игры.
+// миллисекунды. Партия, статистика по уровням и настройки (скин поля) — в api.storage игры.
 
 import { el } from '../../shared/dom.js';
 import { animate, showLayer, hideLayer, shake, reducedMotion } from '../../shared/motion.js';
@@ -18,6 +18,7 @@ import {
 } from './logic.js';
 import { createDict, generateMoves, botMove } from './engine.js';
 
+const SKINS = ['telegram', 'classic', 'wood', 'felt', 'night', 'paper'];
 const T = {
   title: 'Эрудит',
   levels: { easy: 'Лёгкий', medium: 'Средний', hard: 'Сложный', master: 'Мастер' },
@@ -81,6 +82,8 @@ const T = {
   outBot: (n) => `Бот выложил все фишки: +${n} боту, −${n} вам`,
   stats: { open: 'Статистика', title: 'Статистика', played: 'Партий', wins: 'Побед', best: 'Рекорд', move: 'Ход', note: 'Рекорд — лучший счёт партии, ход — самый дорогой ход.' },
   help: { open: 'Правила', title: 'Правила' },
+  settings: { open: 'Настройки', title: 'Настройки', skin: 'Поле' },
+  skins: { telegram: 'По умолчанию', classic: 'Классика', wood: 'Дерево', felt: 'Сукно', night: 'Ночь', paper: 'Тетрадь' },
   legend: { d: 'буква ×2', t: 'буква ×3', 2: 'слово ×2', 3: 'слово ×3' },
   values: 'Очки букв',
   rules: [
@@ -100,6 +103,7 @@ const ICONS = {
   soundOn: svgIcon('<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/>'),
   soundOff: svgIcon('<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="m16 9 5 6"/><path d="m21 9-5 6"/>'),
   stats: svgIcon('<rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="7" width="4" height="14" rx="1"/><rect x="17" y="3" width="4" height="18" rx="1"/>', true),
+  gear: svgIcon('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/>'),
   help: svgIcon('<circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 0 1 4.9.7c0 1.7-2.5 2.2-2.5 3.9"/><path d="M12 17.2v.1"/>'),
   swap: svgIcon('<path d="M4 8h14"/><path d="m15 4 4 4-4 4"/><path d="M20 16H6"/><path d="m9 12-4 4 4 4"/>'),
   pass: svgIcon('<path d="m5 5 8 7-8 7z"/><path d="M18 5v14"/>'),
@@ -111,6 +115,7 @@ const ICONS = {
 const isDebug = () => new URLSearchParams(globalThis.location?.search ?? '').has('erdebug');
 
 let api = null;
+let host = null;
 let root = null;
 let ui = null;
 let toast = null;
@@ -119,6 +124,7 @@ let dictPromise = null;            // словарь — один на стра�
 let game = null;
 let stats = emptyStats();
 let setup = { level: 'easy' };
+let settings = { skin: 'telegram' };
 let pending = [];                  // фишки этого хода на поле: { i, slot, ch, blank } — slot — место на руке
 let cursor = null;                 // { i, dir: 'h' | 'v' } — куда встанет следующая фишка
 let picked = null;                 // фишка руки, выбранная до клетки (номер места)
@@ -819,6 +825,31 @@ function showHelp() {
     T.rules.slice(2).map((text) => el('p', { class: 'er-rule' }, text)),
     el('h3', { class: 'er-section' }, T.values),
     valuesTable(),
+  ));
+}
+
+/** Образец скина: уголок поля с премиями и фишкой. */
+function swatch(id) {
+  const cells = ['3', '', 'd', '', 'tile', '', '2', '', 't'].map((p) => (p === 'tile'
+    ? el('i', { class: 'er-swatch-tile' }, 'Э')
+    : el('i', { class: p ? `er-p-${p}` : '' })));
+  return el('span', { class: 'er-swatch', 'data-skin': id }, cells);
+}
+
+function showSettings() {
+  const buttons = SKINS.map((id) => el('button', {
+    class: 'er-skin', role: 'radio', 'aria-checked': String(id === settings.skin),
+    onclick: () => {
+      settings.skin = id;
+      host.dataset.skin = id;
+      api.storage.set('settings', settings);
+      buttons.forEach((b, k) => b.setAttribute('aria-checked', String(SKINS[k] === id)));
+      sfx('pick');
+    },
+  }, swatch(id), T.skins[id]));
+  openModal(card(T.settings.title,
+    el('h3', { class: 'er-section' }, T.settings.skin),
+    el('div', { class: 'er-skins', role: 'radiogroup' }, buttons),
     pointsInfo(api, 'erudit'),
   ));
 }
@@ -961,7 +992,18 @@ export default {
 
   async init(container, gameApi) {
     api = gameApi;
+    host = container;
     toast = createToast();
+    const [saved, savedStats, savedSetup, savedSound, savedSettings] = await Promise.all([
+      api.storage.get('current'), api.storage.get('stats'), api.storage.get('setup'), api.storage.get('sound'),
+      api.storage.get('settings'),
+    ]);
+    if (!api) return;
+    soundOn = savedSound !== false;
+    stats = migrateStats(savedStats);
+    setup = { level: LEVEL_IDS.includes(savedSetup?.level) ? savedSetup.level : 'easy' };
+    settings = { skin: SKINS.includes(savedSettings?.skin) ? savedSettings.skin : 'telegram' };
+    host.dataset.skin = settings.skin;
 
     ui = {
       sub: el('div', { class: 'er-sub' }),
@@ -1000,6 +1042,7 @@ export default {
           iconButton(ICONS.restart, T.newGame, () => dict && showNewGame(true)),
           iconButton(ICONS.stats, T.stats.open, showStats),
           iconButton(ICONS.help, T.help.open, showHelp),
+          iconButton(ICONS.gear, T.settings.open, showSettings),
         ),
       ),
       el('div', { class: 'er-scores' },
@@ -1020,15 +1063,6 @@ export default {
     renderRack();
     renderInfo();
     document.addEventListener('keydown', onKeydown);
-
-    const [saved, savedStats, savedSetup, savedSound] = await Promise.all([
-      api.storage.get('current'), api.storage.get('stats'), api.storage.get('setup'), api.storage.get('sound'),
-    ]);
-    if (!api) return;
-    soundOn = savedSound !== false;
-    stats = migrateStats(savedStats);
-    setup = { level: LEVEL_IDS.includes(savedSetup?.level) ? savedSetup.level : 'easy' };
-    renderSoundBtn();
 
     const ready = await loadWords();
     if (!ready) return;
@@ -1062,11 +1096,12 @@ export default {
     toast?.dispose();
     root?.remove();
     if (globalThis.__erudit) delete globalThis.__erudit;
-    api = root = ui = toast = game = dict = cursor = picked = onModalClose = null;
+    api = host = root = ui = toast = game = dict = cursor = picked = onModalClose = null;
     pending = [];
     busy = over = modalActive = false;
     lastDir = 'h';
     stats = emptyStats();
     setup = { level: 'easy' };
+    settings = { skin: 'telegram' };
   },
 };
