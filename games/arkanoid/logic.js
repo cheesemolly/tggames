@@ -17,6 +17,9 @@ export const H = 720;
 export const BRICK_W = 32;
 export const BRICK_H = 18;
 export const LEVEL_COUNT = LEVELS.length;
+export const CHAPTER_SIZE = 30;                    // уровней в главе
+export const CHAPTERS = Math.ceil(LEVEL_COUNT / CHAPTER_SIZE);
+export const TONES = 6;                            // оттенков обычного кирпича в главе
 export const PADDLE_Y = 672;                       // верх платформы
 export const PADDLE_H = 14;
 export const PADDLE_WIDTHS = [58, 88, 122, 158];   // размеры платформы; обычный — 1
@@ -31,7 +34,7 @@ export const WEAR = 10;                            // ударов до разр
 export const BLAST_R = 40;                         // взрыв кирпича: соседи со всех сторон
 export const MISSILE_R = 50;
 export const FIRE_R = 34;                          // огненный шар: кирпич и соседи вплотную
-export const DROP_R = 15;                          // радиус падающего бонуса
+export const DROP_R = 21;                          // радиус падающего бонуса
 export const DROP_SPEED = 150;
 export const MAX_ANGLE = 1.08;                     // отскок от края платформы — 62° от вертикали
 
@@ -78,7 +81,7 @@ const SHAPES = {
 
 const d36 = (s) => parseInt(s, 36);
 
-/** Раскладка уровня n (с 1): { world, bricks: [{ kind, tone, shape, bonus, x, y, rot, scale }] }. */
+/** Раскладка уровня n (с 1): { chapter, bricks: [{ kind, tone, shape, bonus, x, y, rot, scale }] }. */
 export function parseLevel(n) {
   const src = LEVELS[n - 1];
   if (typeof src !== 'string') throw new RangeError(`нет уровня ${n}`);
@@ -97,7 +100,7 @@ export function parseLevel(n) {
   for (const t of extra.split(' ')) {
     if (t) add(d36(t.slice(0, 2)), d36(t.slice(2, 4)), t[4], d36(t.slice(5, 7)), d36(t.slice(7, 9)));
   }
-  return { world: Number(src[0]), bricks };
+  return { chapter: d36(src[0]), bricks };
 }
 
 /** Контур кирпича: форма в рамке 32 × 18 с левым верхним углом (x, y), размер и поворот — вокруг центра. */
@@ -196,11 +199,13 @@ function stuckBall(g) {
 }
 
 /** Новая партия на уровне n: три шарика в запасе, первый лежит на платформе и ждёт запуска. */
-export function newGame(n) {
-  const src = parseLevel(n);
+export const newGame = (n) => gameFrom(parseLevel(n), n);
+
+/** Партия по готовой раскладке { chapter, bricks } — так генератор уровней и тесты проверяют уровень до записи. */
+export function gameFrom(src, n = 1) {
   const bricks = src.bricks.map(makeBrick);
   const g = {
-    level: n, world: src.world, lives: LIVES, status: 'ready', time: 0,
+    level: n, chapter: src.chapter, lives: LIVES, status: 'ready', time: 0,
     bricks, grid: buildGrid(bricks),
     total: bricks.filter((b) => BREAKABLE[b.kind]).length, left: 0, broken: 0,
     paddle: { x: W / 2, size: 1 },
@@ -243,6 +248,9 @@ export function isValidState(s) {
   }
   return left > 0;
 }
+
+/** Номер уровня из сохранения, которое не прошло проверку (раскладки менялись) — партия начнётся на нём заново. */
+export const savedLevel = (s) => (Number.isInteger(s?.level) && s.level >= 1 && s.level <= LEVEL_COUNT ? s.level : null);
 
 export function restore(s) {
   const g = newGame(s.level);

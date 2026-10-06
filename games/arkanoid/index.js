@@ -1,8 +1,10 @@
-// Арканоид: платформой отбиваешь шарик и разбиваешь кирпичи. 210 уровней, 15 бонусов (три и восемь шариков,
-// огненный шар, пробойник, ловушка, лазер, ракеты, широкая и узкая платформа, бомба…), запас — три шарика на уровень.
+// Арканоид: платформой отбиваешь шарик и разбиваешь кирпичи. 300 уровней в десяти главах (у главы свой фон и
+// свой вид кирпичей), 15 бонусов (три и восемь шариков, огненный шар, пробойник, ловушка, лазер, ракеты, широкая
+// и узкая платформа, бомба…), запас — три шарика на уровень.
 // Управление: води пальцем по полю или по полосе под ним — платформа едет за пальцем; отпустил — шарик запущен.
-// С клавиатуры — стрелки и пробел. Поле рисуется на Canvas: кирпичи — заранее нарисованным слоем (перерисовывается,
-// только когда кирпич задет), шарики, бонусы и платформа — каждый кадр. Партия, статистика и звук — в api.storage.
+// С клавиатуры — стрелки и пробел. Поле рисуется на Canvas: фон и кирпичи — заранее нарисованными слоями (слой
+// кирпичей перерисовывается, только когда кирпич задет), шарики, бонусы и платформа — готовыми картинками каждый
+// кадр. Сами картинки рисует art.js. Партия, статистика и звук — в api.storage.
 
 import { el } from '../../shared/dom.js';
 import { animate, showLayer, hideLayer, shake, pop, reducedMotion } from '../../shared/motion.js';
@@ -12,15 +14,21 @@ import { createAudio } from '../../shared/sfx.js';
 import { pointsInfo } from '../../shared/points-info.js';
 import { createSounds } from './sounds.js';
 import {
-  W, H, BRICK_W, BRICK_H, LEVEL_COUNT, PADDLE_Y, PADDLE_H, BALL_R, DROP_R, WEAR, MAX_LIVES, BONUSES, BAD_BONUSES,
-  FIRE_TIME, RAIL_TIME, CATCH_TIME, LASER_TIME, MISSILES, polygon, newGame, step, launch, movePaddle, applyBonus,
-  progress, snapshot, restore, isValidState, emptyStats, isValidStats, botTarget, ballRadius, paddleW,
+  W, H, BRICK_W, BRICK_H, LEVEL_COUNT, CHAPTER_SIZE, CHAPTERS, TONES, PADDLE_Y, PADDLE_H, BALL_R, DROP_R, WEAR,
+  MAX_LIVES, BONUSES, BAD_BONUSES, FIRE_TIME, RAIL_TIME, CATCH_TIME, LASER_TIME, MISSILES, polygon, newGame, step,
+  launch, movePaddle, applyBonus, progress, snapshot, restore, isValidState, savedLevel, emptyStats, isValidStats,
+  botTarget, ballRadius, paddleW,
 } from './logic.js';
+import {
+  SKINS, TAU, AMBIENT, BONUS_LABELS, shade, alpha, rnd, path, star, paintBrick, paintBonus, bonusGlyph, paintBall,
+  paintPaddle, paintBackdrop,
+} from './art.js';
 
 const T = {
   title: 'Арканоид',
   level: (n) => `Уровень ${n}`,
-  worlds: ['Космос', 'Океан', 'Рубин', 'Вулкан'],
+  chapters: ['Космос', 'Океан', 'Джунгли', 'Пустыня', 'Льды', 'Вулкан', 'Неон', 'Карамель', 'Завод', 'Кристаллы'],
+  chapter: (i) => `Глава ${i + 1} · ${T.chapters[i]}`,
   launchTouch: 'Коснись, чтобы запустить шарик',
   launchHeld: 'Отпусти палец — шарик полетит',
   launchMouse: 'Нажми, чтобы запустить шарик',
@@ -28,8 +36,10 @@ const T = {
   help: 'Води пальцем по полю или по полосе под ним — платформа едет за пальцем',
   wonTitle: 'Отлично!',
   completed: (n) => `Уровень ${n} пройден`,
+  chapterDone: (i) => `Глава «${T.chapters[i]}» пройдена!`,
   wonInfo: (time, lives) => `Время: ${time} · Шариков в запасе: ${lives}`,
   next: (n) => `Уровень ${n}`,
+  nextChapter: (i) => `Дальше — «${T.chapters[i]}»`,
   allDone: 'Все уровни пройдены!',
   allDoneNote: 'Можно переиграть любой уровень.',
   chooseLevel: 'Выбрать уровень',
@@ -42,6 +52,7 @@ const T = {
   levels: 'Уровни',
   levelsTitle: 'Выбор уровня',
   levelsNote: 'Открыты пройденные уровни и следующий. Текущая попытка сбросится.',
+  passed: (n, of) => `${n} из ${of}`,
   lives: (n) => `Шариков в запасе: ${n}`,
   stats: {
     open: 'Статистика', title: 'Статистика', level: 'Уровень', cleared: 'Пройдено уровней', bestLevel: 'Лучший уровень',
@@ -51,8 +62,8 @@ const T = {
     open: 'Справка', title: 'Как играть', bonuses: 'Бонусы', bricks: 'Кирпичи',
     rules: 'Разбей все кирпичи шариком и не дай ему упасть. На уровень — три шарика. Платформу ведёт палец, отпустил — шарик запущен. Чем ближе к краю платформы попал шарик, тем положе он отлетит.',
     brickList: [
-      ['n', 'Обычный — один удар.'],
-      ['h', 'Крепкий — три удара.'],
+      ['n', 'Обычный — один удар. В каждой главе выглядит по-своему.'],
+      ['h', 'Крепкий — три удара, точки показывают, сколько осталось.'],
       ['p', 'С бонусом — из него выпадает бонус, лови платформой.'],
       ['e', 'Взрывной — сносит соседей, цепочкой.'],
       ['x', 'Стальной — разбивать не обязательно; ломается взрывом, огнём, ракетой или после десяти ударов.'],
@@ -67,7 +78,7 @@ const T = {
     slow: ['Медленнее', 'Шарики летят медленнее.'],
     fire: ['Огненный шар', `${FIRE_TIME} секунд шарик сносит кирпич и соседние, даже стальные.`],
     rail: ['Пробойник', `${RAIL_TIME} секунд шарик прошивает всё насквозь.`],
-    small: ['Маленький шарик', 'Шарик меньше — попасть труднее.'],
+    small: ['Мелкий шарик', 'Шарик меньше — попасть труднее.'],
     normal: ['Обычный шарик', 'Шарик снова обычный: размер, скорость, без огня.'],
     catch: ['Ловушка', `${CATCH_TIME} секунд платформа ловит шарик. Отпусти палец — запуск.`],
     laser: ['Лазер', `${LASER_TIME} секунд платформа стреляет сама.`],
@@ -91,8 +102,10 @@ const ICONS = {
   info: svgIcon('<circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 1 1 3.6 2.3c-.8.5-1.2 1-1.2 1.9"/><path d="M12 17h.01"/>'),
 };
 
-const PAD = 2;                       // поля картинки кирпича, в единицах поля
-const TAU = Math.PI * 2;
+const PAD = 4;                       // поля картинки кирпича (свечение неона выходит за контур), в единицах поля
+const PADDLE_PAD = 10;               // поля картинки платформы
+const VARIED = new Set(['wood', 'stone', 'magma']);     // у этих видов узор на кирпичах не одинаковый — три варианта
+const STRIP_MIN = 64;                // полоса для пальца под полем — не ниже (CSS: .ak-strip min-height)
 
 let api = null;
 let host = null;
@@ -112,14 +125,18 @@ let dprNow = 1;
 let palette = null;
 let brickLayer = null;               // слой кирпичей: перерисовывается, когда кирпич задет
 let bricksDirty = true;
+let gifts = [];                      // живые кирпичи с бонусом — на них мерцает звёздочка
 let bgCache = null;
-const sprites = new Map();           // картинки кирпичей, шариков и бонусов
+const sprites = new Map();           // картинки кирпичей, шариков, бонусов и платформы
 const flashes = new Map();           // id кирпича → время удара
+let ghosts = [];                     // только что разбитые кирпичи: светлый силуэт тает
 let rings = [];                      // взрывы: { x, y, r, t }
 let popups = [];                     // всплывающие подписи: { text, x, y, t, color }
+let ambient = [];                    // живые мелочи главы: звёзды, пузыри, снег…
 let intro = 0;                       // время начала появления уровня
 let shownW = 0;                      // ширина платформы на экране — догоняет настоящую плавно
 let dieAt = 0;                       // когда потерян шарик (платформа мигает)
+let lastShake = 0;
 let modalActive = false;
 let modalToken = 0;
 let soundOn = true;
@@ -197,34 +214,21 @@ function readPalette() {
     return getComputedStyle(probe).color;
   };
   palette = {
-    worlds: [0, 1, 2, 3].map((w) => ({
-      bg: v(`--ak-w${w}-bg`), bg2: v(`--ak-w${w}-bg2`), deco: v(`--ak-w${w}-deco`), hard: v(`--ak-w${w}-hard`),
-      tones: [0, 1, 2, 3].map((t) => v(`--ak-w${w}-t${t}`)),
+    chapters: Array.from({ length: CHAPTERS }, (_, i) => ({
+      bg: v(`--ak-c${i}-bg`), bg2: v(`--ak-c${i}-bg2`), mist: v(`--ak-c${i}-mist`), ink: v(`--ak-c${i}-ink`),
+      glow: v(`--ak-c${i}-glow`), hard: v(`--ak-c${i}-hard`),
+      tones: Array.from({ length: TONES }, (__, t) => v(`--ak-c${i}-t${t}`)),
     })),
-    steel: v('--ak-steel'), boom: v('--ak-boom'), bonus: v('--ak-bonus'), ball: v('--ak-ball'), fire: v('--ak-fire'),
-    rail: v('--ak-rail'), paddle: v('--ak-paddle'), good: v('--ak-good'), bad: v('--ak-bad'), neutral: v('--ak-neutral'),
-    text: v('--ak-field-text'),
+    steel: v('--ak-steel'), boom: v('--ak-boom'), gift: v('--ak-gift'), gift2: v('--ak-gift2'), gift3: v('--ak-gift3'),
+    ball: v('--ak-ball'), fire: v('--ak-fire'), rail: v('--ak-rail'), paddle: v('--ak-paddle'), text: v('--ak-field-text'),
+    bonus: Object.fromEntries(BONUSES.map((id) => [id, v(`--ak-b-${id}`)])),
   };
   probe.remove();
 }
 
-/** rgb(…) → светлее (k > 0) или темнее (k < 0). */
-function shade(rgb, k) {
-  const m = rgb.match(/\d+(\.\d+)?/g);
-  if (!m) return rgb;
-  const [r, g, b] = m.slice(0, 3).map(Number).map((n) => Math.round(k > 0 ? n + (255 - n) * k : n * (1 + k)));
-  return `rgb(${r}, ${g}, ${b})`;
-}
-
-function alpha(rgb, a) {
-  const m = rgb.match(/\d+(\.\d+)?/g);
-  return m ? `rgba(${m[0]}, ${m[1]}, ${m[2]}, ${a})` : rgb;
-}
-
-const brickColor = (world, kind, tone) => (kind === 'n' ? palette.worlds[world].tones[tone]
-  : kind === 'h' ? palette.worlds[world].hard
-    : kind === 'x' ? palette.steel : kind === 'e' ? palette.boom : kind === 'p' ? palette.bonus : palette.ball);
-const bonusColor = (type) => (BAD_BONUSES.includes(type) ? palette.bad : type === 'normal' ? palette.neutral : palette.good);
+const chapterPal = () => palette.chapters[game.chapter];
+const brickColor = (kind, tone) => (kind === 'n' ? chapterPal().tones[tone] : kind === 'h' ? chapterPal().hard
+  : kind === 'x' ? palette.steel : kind === 'e' ? palette.boom : kind === 'p' ? palette.gift : palette.ball);
 
 // ---------- картинки ----------
 
@@ -235,151 +239,37 @@ function makeCanvas(w, h) {
   return c;
 }
 
-function path(c, pts) {
-  c.beginPath();
-  pts.forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y)));
-  c.closePath();
-}
-
-function star(c, x, y, r, rays, inner = 0.42) {
-  c.beginPath();
-  for (let i = 0; i < rays * 2; i++) {
-    const a = (i / (rays * 2)) * TAU - Math.PI / 2;
-    const d = i % 2 ? r * inner : r;
-    c.lineTo(x + Math.cos(a) * d, y + Math.sin(a) * d);
-  }
-  c.closePath();
-}
-
 /**
- * Картинка кирпича (рисуется один раз на мир, вид, оттенок, форму и состояние): градиент сверху вниз, блик, кромка
- * и значок вида. state — оставшаяся прочность (у крепкого и стального). Картинка — рамка 32 × 18 с полями PAD.
- * s — пикселей холста на единицу поля (у образцов в справке — свой, с другим prefix).
+ * Картинка кирпича (рисуется один раз на главу, вид, оттенок, форму и состояние) — рамка 32 × 18 с полями PAD.
+ * state — оставшаяся прочность (у крепкого — 1…3, у стального — доля). s — пикселей холста на единицу поля
+ * (у образцов в справке — свой, с другим prefix).
  */
-function brickSprite(world, kind, tone, shape, state, s = scale * dprNow, prefix = 'b') {
-  const key = `${prefix}|${world}|${kind}|${tone}|${shape}|${state}`;
+function brickSprite(chapter, b, state, s = scale * dprNow, prefix = 'b') {
+  const skin = SKINS[chapter];
+  const variant = VARIED.has(skin) && (b.kind === 'n' || b.kind === 'h') ? b.id % 3 : 0;
+  const key = `${prefix}|${chapter}|${b.kind}|${b.tone}|${b.shape}|${state}|${variant}`;
   let img = sprites.get(key);
   if (img) return img;
   img = makeCanvas((BRICK_W + PAD * 2) * s, (BRICK_H + PAD * 2) * s);
   const c = img.getContext('2d');
   c.setTransform(s, 0, 0, s, PAD * s, PAD * s);
   // контур чуть меньше рамки — между кирпичами остаётся зазор
-  const kx = (BRICK_W - 1.6) / BRICK_W;
-  const ky = (BRICK_H - 1.6) / BRICK_H;
-  const pts = polygon(shape, 0, 0).map(([x, y]) => [BRICK_W / 2 + (x - BRICK_W / 2) * kx, BRICK_H / 2 + (y - BRICK_H / 2) * ky]);
-  const cx = pts.reduce((sum, p) => sum + p[0], 0) / pts.length;
-  const cy = pts.reduce((sum, p) => sum + p[1], 0) / pts.length;
-  let color = brickColor(world, kind, tone);
-  if (kind === 'h') color = shade(color, (3 - state) * 0.2);                // чем меньше осталось, тем светлее
-  if (kind === 'x') color = shade(color, -(WEAR - state) * 0.035);
-  c.lineJoin = 'round';
-
-  if (kind === 't') {
-    // запертый шарик: шарик в пузыре
-    c.fillStyle = alpha(palette.ball, 0.16);
-    c.beginPath();
-    c.arc(cx, cy, 8.6, 0, TAU);
-    c.fill();
-    c.strokeStyle = alpha(palette.ball, 0.75);
-    c.lineWidth = 1.1;
-    c.stroke();
-    const g = c.createRadialGradient(cx - 1.6, cy - 1.8, 0.5, cx, cy, 5.2);
-    g.addColorStop(0, '#ffffff');
-    g.addColorStop(0.45, palette.ball);
-    g.addColorStop(1, shade(palette.ball, -0.35));
-    c.fillStyle = g;
-    c.beginPath();
-    c.arc(cx, cy, 5, 0, TAU);
-    c.fill();
-    sprites.set(key, img);
-    return img;
-  }
-
-  const g = c.createLinearGradient(0, 0, 0, BRICK_H);
-  g.addColorStop(0, shade(color, 0.3));
-  g.addColorStop(0.5, color);
-  g.addColorStop(1, shade(color, -0.28));
-  path(c, pts);
-  c.fillStyle = g;
-  c.strokeStyle = color;
-  c.lineWidth = 1.2;
-  c.stroke();
-  c.fill();
-  c.save();
-  path(c, pts);
-  c.clip();
-  // блик сверху
-  const gl = c.createLinearGradient(0, 0, 0, BRICK_H * 0.55);
-  gl.addColorStop(0, 'rgba(255, 255, 255, 0.4)');
-  gl.addColorStop(1, 'rgba(255, 255, 255, 0)');
-  c.fillStyle = gl;
-  c.fillRect(0, 0, BRICK_W, BRICK_H * 0.55);
-  if (kind === 'x') {
-    // сталь: тёмная рамка и заклёпки, трещины по мере износа
-    c.strokeStyle = 'rgba(0, 0, 0, 0.35)';
-    c.lineWidth = 3;
-    path(c, pts);
-    c.stroke();
-    c.fillStyle = 'rgba(255, 255, 255, 0.55)';
-    for (const dx of [-6, 6]) {
-      c.beginPath();
-      c.arc(cx + dx, cy, 1.3, 0, TAU);
-      c.fill();
-    }
-    if (state <= WEAR * 0.6) {
-      c.strokeStyle = 'rgba(0, 0, 0, 0.55)';
-      c.lineWidth = 0.9;
-      c.beginPath();
-      c.moveTo(cx - 9, cy - 6);
-      c.lineTo(cx - 3, cy);
-      c.lineTo(cx - 6, cy + 6);
-      if (state <= WEAR * 0.3) {
-        c.moveTo(cx + 10, cy - 7);
-        c.lineTo(cx + 4, cy + 1);
-        c.lineTo(cx + 8, cy + 7);
-      }
-      c.stroke();
-    }
-  } else if (kind === 'h') {
-    // крепкий: рамка и точки — сколько ударов осталось
-    c.strokeStyle = 'rgba(255, 255, 255, 0.5)';
-    c.lineWidth = 2.2;
-    path(c, pts);
-    c.stroke();
-    c.fillStyle = 'rgba(255, 255, 255, 0.92)';
-    for (let i = 0; i < state; i++) {
-      c.beginPath();
-      c.arc(cx + (i - (state - 1) / 2) * 5.2, cy + (shape === 'U' ? 2.5 : shape === 'D' ? -2.5 : 0), 1.7, 0, TAU);
-      c.fill();
-    }
-  } else if (kind === 'e') {
-    // взрывной: искра
-    c.fillStyle = '#ffe36b';
-    star(c, cx, cy + (shape === 'U' ? 2 : shape === 'D' ? -2 : 0), 6, 8, 0.5);
-    c.fill();
-    c.fillStyle = '#ffffff';
-    c.beginPath();
-    c.arc(cx, cy + (shape === 'U' ? 2 : shape === 'D' ? -2 : 0), 1.8, 0, TAU);
-    c.fill();
-  } else if (kind === 'p') {
-    // с бонусом: звёздочка
-    c.fillStyle = '#ffffff';
-    star(c, cx, cy + (shape === 'U' ? 2 : shape === 'D' ? -2 : 0), 6.2, 4, 0.34);
-    c.fill();
-  }
-  c.restore();
-  // светлая кромка
-  c.strokeStyle = 'rgba(255, 255, 255, 0.28)';
-  c.lineWidth = 0.6;
-  path(c, pts);
-  c.stroke();
+  const kx = (BRICK_W - 1.4) / BRICK_W;
+  const ky = (BRICK_H - 1.4) / BRICK_H;
+  const pts = polygon(b.shape, 0, 0).map(([x, y]) => [BRICK_W / 2 + (x - BRICK_W / 2) * kx, BRICK_H / 2 + (y - BRICK_H / 2) * ky]);
+  const pal = palette.chapters[chapter];
+  paintBrick(c, {
+    skin, kind: b.kind, shape: b.shape, pts, color: b.kind === 'h' ? pal.hard : pal.tones[b.tone], state, pal: palette,
+    px: s, seed: b.tone * 10 + variant + 1,
+  });
   sprites.set(key, img);
   return img;
 }
 
-function drawBrick(c, b, world) {
-  const state = b.kind === 'h' ? b.hp : b.kind === 'x' ? Math.ceil((b.hp / WEAR) * 3) * (WEAR / 3) : 0;
-  const img = brickSprite(world, b.kind, b.tone, b.shape, state);
+const brickState = (b) => (b.kind === 'h' ? b.hp : b.kind === 'x' ? Math.ceil((b.hp / WEAR) * 3) / 3 : 0);
+
+function drawBrick(c, b, chapter) {
+  const img = brickSprite(chapter, b, brickState(b));
   const w = BRICK_W + PAD * 2;
   const h = BRICK_H + PAD * 2;
   if (!b.rot && b.scale === 1) {
@@ -394,231 +284,78 @@ function drawBrick(c, b, world) {
   c.restore();
 }
 
-/** Шарик: готовая картинка на цвет (объём и блик). */
+/** Шарик с ореолом: готовая картинка на цвет; ореол — 2.1 радиуса. */
 function ballSprite(color) {
   const key = `ball|${color}`;
   let img = sprites.get(key);
   if (img) return img;
   const r = BALL_R * scale * dprNow;
-  img = makeCanvas(r * 2 + 4, r * 2 + 4);
+  img = makeCanvas(r * 4.2 + 2, r * 4.2 + 2);
   const c = img.getContext('2d');
-  const m = img.width / 2;
-  const g = c.createRadialGradient(m - r * 0.35, m - r * 0.4, r * 0.1, m, m, r);
-  g.addColorStop(0, '#ffffff');
-  g.addColorStop(0.4, color);
-  g.addColorStop(1, shade(color, -0.4));
-  c.fillStyle = g;
-  c.beginPath();
-  c.arc(m, m, r, 0, TAU);
-  c.fill();
+  c.translate(img.width / 2, img.height / 2);
+  paintBall(c, r, color);
   sprites.set(key, img);
   return img;
 }
 
-/** Значок бонуса белым, в круге радиуса r с центром в нуле. */
-function bonusGlyph(c, type, r) {
-  const u = r / 10;
-  c.save();
-  c.scale(u, u);
-  c.fillStyle = '#ffffff';
-  c.strokeStyle = '#ffffff';
-  c.lineWidth = 1.7;
-  c.lineCap = 'round';
-  c.lineJoin = 'round';
-  const dot = (x, y, d) => {
-    c.beginPath();
-    c.arc(x, y, d, 0, TAU);
-    c.fill();
-  };
-  const line = (...p) => {
-    c.beginPath();
-    for (let i = 0; i < p.length; i += 2) (i ? c.lineTo(p[i], p[i + 1]) : c.moveTo(p[i], p[i + 1]));
-    c.stroke();
-  };
-  if (type === 'split3') {
-    dot(0, -3.6, 2.2);
-    dot(-4, 3, 2.2);
-    dot(4, 3, 2.2);
-  } else if (type === 'split8') {
-    for (let k = 0; k < 8; k++) dot(Math.cos((k / 8) * TAU) * 5, Math.sin((k / 8) * TAU) * 5, 1.5);
-  } else if (type === 'fast') {
-    line(-5, -4, -1, 0, -5, 4);
-    line(1, -4, 5, 0, 1, 4);
-  } else if (type === 'slow') {
-    line(5, -4, 1, 0, 5, 4);
-    line(-1, -4, -5, 0, -1, 4);
-  } else if (type === 'fire') {
-    c.beginPath();
-    c.moveTo(0, -6.5);
-    c.bezierCurveTo(5, -1.5, 5.5, 2.5, 3.2, 5);
-    c.bezierCurveTo(1.5, 6.6, -1.5, 6.6, -3.2, 5);
-    c.bezierCurveTo(-5.5, 2.5, -3, 0, -2.2, -2.4);
-    c.bezierCurveTo(-1, -1, 0, -3, 0, -6.5);
-    c.fill();
-  } else if (type === 'rail') {
-    line(0, 6, 0, -6);
-    line(-3.6, -2.4, 0, -6, 3.6, -2.4);
-    line(-5.5, 2.5, -2.6, 2.5);
-    line(2.6, 2.5, 5.5, 2.5);
-  } else if (type === 'small') {
-    dot(0, 0, 1.9);
-    c.lineWidth = 1.3;
-    c.setLineDash([2.2, 2.6]);
-    c.beginPath();
-    c.arc(0, 0, 5.6, 0, TAU);
-    c.stroke();
-  } else if (type === 'normal') {
-    c.beginPath();
-    c.arc(0, 0, 4.6, 0, TAU);
-    c.stroke();
-  } else if (type === 'catch') {
-    c.lineWidth = 2.2;
-    line(-4.6, -5, -4.6, 0.5);
-    c.beginPath();
-    c.arc(0, 0.5, 4.6, Math.PI, 0, true);
-    c.stroke();
-    line(4.6, 0.5, 4.6, -5);
-  } else if (type === 'laser') {
-    line(-3.2, 6, -3.2, -6);
-    line(3.2, 6, 3.2, -6);
-  } else if (type === 'missile') {
-    c.beginPath();
-    c.moveTo(0, -6.8);
-    c.lineTo(3, -1.6);
-    c.lineTo(3, 3.6);
-    c.lineTo(5.2, 6.4);
-    c.lineTo(-5.2, 6.4);
-    c.lineTo(-3, 3.6);
-    c.lineTo(-3, -1.6);
-    c.closePath();
-    c.fill();
-  } else if (type === 'expand') {
-    line(-6, 0, 6, 0);
-    line(-3, -3, -6, 0, -3, 3);
-    line(3, -3, 6, 0, 3, 3);
-  } else if (type === 'shrink') {
-    line(-6.5, 0, -1.5, 0);
-    line(1.5, 0, 6.5, 0);
-    line(-4.5, -3, -1.5, 0, -4.5, 3);
-    line(4.5, -3, 1.5, 0, 4.5, 3);
-  } else if (type === 'bomb') {
-    dot(-0.6, 1.4, 4.8);
-    line(2.4, -2.4, 4.4, -4.8);
-    dot(5.2, -5.6, 1.1);
-  } else if (type === 'life') {
-    c.lineWidth = 2.4;
-    line(0, -5, 0, 5);
-    line(-5, 0, 5, 0);
-  }
-  c.restore();
-}
-
-/** Падающий бонус: цветной кружок со значком (зелёный — полезный, красный — вредный). px — радиус в пикселях холста. */
-function bonusSprite(type, px = DROP_R * scale * dprNow, key = `drop|${type}`) {
+/** Падающий бонус: готовая картинка радиуса px пикселей холста (со свечением вокруг — холст шире в 3,2 раза). */
+function bonusSprite(type, px = DROP_R * 0.94 * scale * dprNow, key = `drop|${type}`) {
   let img = sprites.get(key);
   if (img) return img;
-  img = makeCanvas(px * 2 + 4, px * 2 + 4);
+  img = makeCanvas(px * 3.2, px * 3.2);
   const c = img.getContext('2d');
-  const m = img.width / 2;
-  const color = bonusColor(type);
-  const g = c.createRadialGradient(m - px * 0.3, m - px * 0.35, px * 0.1, m, m, px);
-  g.addColorStop(0, shade(color, 0.45));
-  g.addColorStop(0.6, color);
-  g.addColorStop(1, shade(color, -0.35));
-  c.fillStyle = g;
-  c.beginPath();
-  c.arc(m, m, px, 0, TAU);
-  c.fill();
-  c.strokeStyle = 'rgba(255, 255, 255, 0.55)';
-  c.lineWidth = Math.max(1, px * 0.1);
-  c.beginPath();
-  c.arc(m, m, px * 0.92, 0, TAU);
-  c.stroke();
-  c.translate(m, m);
-  bonusGlyph(c, type, px * 0.86);
+  c.translate(img.width / 2, img.height / 2);
+  paintBonus(c, type, px, palette, 1);
   sprites.set(key, img);
   return img;
+}
+
+function platformSprite(w, mode) {
+  const key = `pad|${w}|${mode}|${game.chapter}`;
+  let img = sprites.get(key);
+  if (img) return img;
+  const s = scale * dprNow;
+  img = makeCanvas((w + PADDLE_PAD * 2) * s, (PADDLE_H + PADDLE_PAD * 2) * s);
+  const c = img.getContext('2d');
+  c.setTransform(s, 0, 0, s, PADDLE_PAD * s, PADDLE_PAD * s);
+  paintPaddle(c, w, PADDLE_H, { paddle: palette.paddle, glow: chapterPal().glow, good: palette.bonus.catch, px: s, mode });
+  sprites.set(key, img);
+  return img;
+}
+
+function copyCanvas(src, cssW, cssH, className) {
+  const canvas = el('canvas', { class: className });
+  canvas.width = src.width;
+  canvas.height = src.height;
+  canvas.style.width = `${cssW}px`;
+  canvas.style.height = `${cssH}px`;
+  canvas.getContext('2d').drawImage(src, 0, 0);
+  return canvas;
 }
 
 /** Значок бонуса для справки — отдельный холст нужного размера. */
-function bonusIcon(type, size = 30) {
+function bonusIcon(type, size = 40) {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  const src = bonusSprite(type, (size / 2 - 2) * dpr, `icon|${type}|${size}`);
-  const canvas = el('canvas', { class: 'ak-bonus-icon' });
-  canvas.width = src.width;
-  canvas.height = src.height;
-  canvas.style.width = `${size}px`;
-  canvas.style.height = `${size}px`;
-  canvas.getContext('2d').drawImage(src, 0, 0);
-  return canvas;
+  const src = bonusSprite(type, (size / 3.2) * dpr, `icon|${type}|${size}`);
+  return copyCanvas(src, size, size, 'ak-bonus-icon');
 }
 
-/** Образец кирпича для справки. */
+/** Образец кирпича для справки — в виде текущей главы. */
 function brickIcon(kind) {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  const src = brickSprite(game.world, kind, 0, kind === 't' ? 'C' : 'R', kind === 'h' ? 3 : kind === 'x' ? WEAR : 0, 1.2 * dpr, 'icon');
-  const canvas = el('canvas', { class: 'ak-brick-icon' });
-  canvas.width = src.width;
-  canvas.height = src.height;
-  canvas.style.width = `${(BRICK_W + PAD * 2) * 1.2}px`;
-  canvas.style.height = `${(BRICK_H + PAD * 2) * 1.2}px`;
-  canvas.getContext('2d').drawImage(src, 0, 0);
-  return canvas;
+  const b = { id: 0, kind, tone: 0, shape: kind === 't' ? 'C' : 'R' };
+  const src = brickSprite(game.chapter, b, kind === 'h' ? 3 : kind === 'x' ? 1 : 0, 1.3 * dpr, 'icon');
+  return copyCanvas(src, (BRICK_W + PAD * 2) * 1.3, (BRICK_H + PAD * 2) * 1.3, 'ak-brick-icon');
 }
 
-function rnd(seed) {
-  let x = seed >>> 0;
-  return () => {
-    x = (x * 1664525 + 1013904223) >>> 0;
-    return x / 4294967296;
-  };
-}
-
-/** Фон поля под мир уровня: градиент и редкий узор (звёзды, пузыри, ромбы, искры) — рисуется заранее. */
+/** Фон поля под главу и уровень — рисуется заранее. */
 function background() {
   if (bgCache) return bgCache;
-  const w = palette.worlds[game.world];
   bgCache = makeCanvas(ui.canvas.width, ui.canvas.height);
   const c = bgCache.getContext('2d');
   const s = scale * dprNow;
   c.setTransform(s, 0, 0, s, 0, 0);
-  const g = c.createLinearGradient(0, 0, 0, H);
-  g.addColorStop(0, w.bg);
-  g.addColorStop(1, w.bg2);
-  c.fillStyle = g;
-  c.fillRect(0, 0, W, H);
-  const r = rnd(game.level * 7919 + 17);
-  c.fillStyle = w.deco;
-  c.strokeStyle = w.deco;
-  c.lineWidth = 1;
-  for (let i = 0; i < 70; i++) {
-    const x = r() * W;
-    const y = r() * H;
-    const d = 1 + r() * 2.2;
-    c.globalAlpha = 0.25 + r() * 0.5;
-    if (game.world === 0) {
-      c.beginPath();
-      c.arc(x, y, d * 0.7, 0, TAU);
-      c.fill();
-    } else if (game.world === 1) {
-      c.beginPath();
-      c.arc(x, y, d * 2.4, 0, TAU);
-      c.stroke();
-    } else if (game.world === 2) {
-      path(c, [[x, y - d * 3], [x + d * 2, y], [x, y + d * 3], [x - d * 2, y]]);
-      c.stroke();
-    } else {
-      path(c, [[x, y - d * 2.4], [x + d * 2.2, y + d * 1.6], [x - d * 2.2, y + d * 1.6]]);
-      c.fill();
-    }
-  }
-  c.globalAlpha = 1;
-  // пол: за эту линию шарик падать не должен
-  const fl = c.createLinearGradient(0, PADDLE_Y + PADDLE_H, 0, H);
-  fl.addColorStop(0, 'rgba(0, 0, 0, 0)');
-  fl.addColorStop(1, 'rgba(0, 0, 0, 0.35)');
-  c.fillStyle = fl;
-  c.fillRect(0, PADDLE_Y + PADDLE_H, W, H - PADDLE_Y - PADDLE_H);
+  paintBackdrop(c, game.chapter, chapterPal(), game.level, W, H, PADDLE_Y + PADDLE_H + 12);
   return bgCache;
 }
 
@@ -631,13 +368,24 @@ function redrawBricks() {
   c.clearRect(0, 0, brickLayer.width, brickLayer.height);
   const s = scale * dprNow;
   c.setTransform(s, 0, 0, s, 0, 0);
-  for (const b of game.bricks) if (b.hp > 0) drawBrick(c, b, game.world);
+  gifts = [];
+  for (const b of game.bricks) {
+    if (b.hp <= 0) continue;
+    drawBrick(c, b, game.chapter);
+    if (b.kind === 'p') gifts.push(b);
+  }
   bricksDirty = false;
 }
 
-// ---------- отрисовка ----------
+function makeAmbient() {
+  const cfg = AMBIENT[game.chapter];
+  const r = rnd(game.level * 131 + 9);
+  ambient = reducedMotion() ? [] : Array.from({ length: cfg.n }, (_, i) => ({
+    x: r() * W, y: r() * H, s: cfg.size[0] + r() * (cfg.size[1] - cfg.size[0]), ph: r() * TAU, k: r(), i,
+  }));
+}
 
-const STRIP_MIN = 64;                // полоса для пальца под полем — не ниже (CSS: .ak-strip min-height)
+// ---------- отрисовка ----------
 
 function resize() {
   const box = ui.stage.getBoundingClientRect();
@@ -655,20 +403,21 @@ function resize() {
   ui.canvas.width = Math.round(W * scale * dpr);
   ui.canvas.height = Math.round(H * scale * dpr);
   ui.strip.style.width = `${W * scale}px`;
-  draw(performance.now());
+  draw(performance.now(), 0);
 }
 
 /**
  * Текст — в пикселях, а не в единицах поля: Safari не рисует шрифт меньше ~1px, даже если холст увеличен масштабом.
  * x, y — в единицах поля, size — в CSS-пикселях.
  */
-function text(c, str, x, y, size, color, { align = 'center', weight = 800, a = 1 } = {}) {
+function text(c, str, x, y, size, color, { align = 'center', weight = 800, a = 1, spacing = 0 } = {}) {
   c.save();
   c.setTransform(dprNow, 0, 0, dprNow, 0, 0);
   c.font = `${weight} ${Math.round(size)}px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`;
+  if (spacing && 'letterSpacing' in c) c.letterSpacing = `${spacing}px`;
   c.textAlign = align;
   c.textBaseline = 'middle';
-  c.globalAlpha = a * 0.4;
+  c.globalAlpha = a * 0.55;
   c.fillStyle = '#000000';
   c.fillText(str, x * scale, y * scale + 1.2);
   c.globalAlpha = a;
@@ -677,45 +426,54 @@ function text(c, str, x, y, size, color, { align = 'center', weight = 800, a = 1
   c.restore();
 }
 
-function roundRect(c, x, y, w, h, r) {
-  c.beginPath();
-  c.moveTo(x + r, y);
-  c.arcTo(x + w, y, x + w, y + h, r);
-  c.arcTo(x + w, y + h, x, y + h, r);
-  c.arcTo(x, y + h, x, y, r);
-  c.arcTo(x, y, x + w, y, r);
-  c.closePath();
+function drawAmbient(c, now, dt) {
+  if (!ambient.length) return;
+  const cfg = AMBIENT[game.chapter];
+  const pal = chapterPal();
+  const base = cfg.color === 'white' ? 'rgb(255, 255, 255)' : cfg.color === 'tones' ? null : pal[cfg.color];
+  for (const p of ambient) {
+    let a = 0.55;
+    if (cfg.kind === 'twinkle') a = 0.12 + 0.8 * (0.5 + 0.5 * Math.sin((now / 520) * (0.6 + p.k) + p.ph));
+    else if (cfg.kind === 'rise') {
+      p.y -= cfg.speed * (0.5 + p.k) * dt;
+      p.x += Math.sin(now / 700 + p.ph) * 8 * dt;
+      if (p.y < -8) p.y = H + 8;
+    } else if (cfg.kind === 'fall') {
+      p.y += cfg.speed * (0.5 + p.k) * dt;
+      p.x += Math.sin(now / 900 + p.ph) * 10 * dt;
+      if (p.y > H + 8) p.y = -8;
+    } else {
+      p.x += cfg.speed * (0.4 + p.k) * dt;
+      p.y += Math.sin(now / 800 + p.ph) * 9 * dt;
+      if (p.x > W + 8) p.x = -8;
+      a = 0.3 + 0.5 * (0.5 + 0.5 * Math.sin(now / 600 + p.ph));
+    }
+    c.globalAlpha = a;
+    if (cfg.ring) {
+      c.strokeStyle = base;
+      c.lineWidth = 1;
+      c.beginPath();
+      c.arc(p.x, p.y, p.s, 0, TAU);
+      c.stroke();
+    } else {
+      c.fillStyle = base ?? pal.tones[p.i % TONES];
+      c.beginPath();
+      c.arc(p.x, p.y, p.s, 0, TAU);
+      c.fill();
+    }
+  }
+  c.globalAlpha = 1;
 }
 
 function drawPaddle(c, now) {
   const w = shownW || paddleW(game);
-  const x = game.paddle.x - w / 2;
-  const y = PADDLE_Y;
-  // мигает после потери шарика
-  const blink = now - dieAt < 900 ? 0.45 + 0.55 * Math.abs(Math.sin((now - dieAt) / 75)) : 1;
-  c.globalAlpha = blink;
   const fxs = game.fx;
-  if (fxs.laser > 0 || fxs.missile > 0) {
-    c.fillStyle = shade(palette.paddle, -0.45);
-    if (fxs.laser > 0) {
-      c.fillRect(x + 5, y - 6, 6, 8);
-      c.fillRect(x + w - 11, y - 6, 6, 8);
-    } else c.fillRect(game.paddle.x - 4, y - 8, 8, 10);
-  }
-  roundRect(c, x, y, w, PADDLE_H, PADDLE_H / 2);
-  c.fillStyle = shade(palette.paddle, -0.3);
-  c.fill();
-  roundRect(c, x + 1.5, y + 1.2, w - 3, PADDLE_H - 5, (PADDLE_H - 5) / 2);
-  c.fillStyle = palette.paddle;
-  c.fill();
-  roundRect(c, x + 6, y + 2.6, w - 12, 2.6, 1.3);
-  c.fillStyle = 'rgba(255, 255, 255, 0.55)';
-  c.fill();
-  if (fxs.catch > 0) {
-    roundRect(c, x + 4, y - 2.4, w - 8, 3.4, 1.7);
-    c.fillStyle = palette.good;
-    c.fill();
-  }
+  const mode = fxs.laser > 0 ? 'laser' : fxs.missile > 0 ? 'missile' : fxs.catch > 0 ? 'catch' : '';
+  // картинка — на ширину, кратную четырём; пока платформа растёт или сжимается, она растягивается
+  const img = platformSprite(Math.round(paddleW(game) / 4) * 4, mode);
+  // мигает после потери шарика
+  if (now - dieAt < 900) c.globalAlpha = 0.45 + 0.55 * Math.abs(Math.sin((now - dieAt) / 75));
+  c.drawImage(img, game.paddle.x - w / 2 - PADDLE_PAD, PADDLE_Y - PADDLE_PAD, w + PADDLE_PAD * 2, PADDLE_H + PADDLE_PAD * 2);
   c.globalAlpha = 1;
 }
 
@@ -725,16 +483,17 @@ function drawBalls(c, now) {
   const rail = game.fx.rail > 0;
   const color = fire ? palette.fire : rail ? palette.rail : palette.ball;
   const img = ballSprite(color);
-  const size = (r * 2 * img.width) / (BALL_R * 2 * scale * dprNow);
+  const size = r * 4.2;
   for (const b of game.balls) {
     if (b.stuck === null) {
       // след по ходу полёта
-      const n = fire || rail ? 5 : 3;
+      const n = fire || rail ? 6 : 3;
+      const gap = r * (rail ? 1.7 : fire ? 1.25 : 1.05);
       c.fillStyle = color;
       for (let k = n; k >= 1; k--) {
-        c.globalAlpha = (rail ? 0.34 : 0.2) * (1 - k / (n + 1));
+        c.globalAlpha = (rail ? 0.36 : fire ? 0.3 : 0.2) * (1 - k / (n + 1));
         c.beginPath();
-        c.arc(b.x - b.dx * k * r * (rail ? 1.7 : 1.05), b.y - b.dy * k * r * (rail ? 1.7 : 1.05), r * (1 - k * 0.12), 0, TAU);
+        c.arc(b.x - b.dx * k * gap, b.y - b.dy * k * gap, r * (1 - k * 0.11), 0, TAU);
         c.fill();
       }
       c.globalAlpha = 1;
@@ -745,21 +504,20 @@ function drawBalls(c, now) {
 }
 
 function drawChips(c) {
-  // сколько осталось у временных бонусов: значок и дуга, слева внизу
+  // сколько осталось у временных бонусов: значок и дуга под платформой (ниже неё — 34 единицы поля)
   const list = [['fire', game.fx.fire / FIRE_TIME], ['rail', game.fx.rail / RAIL_TIME], ['catch', game.fx.catch / CATCH_TIME],
     ['laser', game.fx.laser / LASER_TIME], ['missile', game.fx.missile / MISSILES]].filter((x) => x[1] > 0);
   if (!list.length) return;
-  // под платформой (ниже неё — 34 единицы поля), чтобы она их не закрывала
   const y = H - 17;
   c.save();
   list.forEach(([type, part], i) => {
     const x = 20 + i * 36;
-    c.globalAlpha = 0.9;
-    c.fillStyle = 'rgba(0, 0, 0, 0.45)';
+    c.globalAlpha = 0.92;
+    c.fillStyle = 'rgba(0, 0, 0, 0.5)';
     c.beginPath();
     c.arc(x, y, 15, 0, TAU);
     c.fill();
-    c.strokeStyle = palette.good;
+    c.strokeStyle = palette.bonus[type];
     c.lineWidth = 3.2;
     c.beginPath();
     c.arc(x, y, 13.4, -Math.PI / 2, -Math.PI / 2 + TAU * Math.min(1, part));
@@ -771,22 +529,38 @@ function drawChips(c) {
   c.restore();
 }
 
-function draw(now) {
+function draw(now, dt) {
   const c = ui.ctx;
   if (!game || !palette) return;
   const s = scale * dprNow;
   c.setTransform(1, 0, 0, 1, 0, 0);
   c.drawImage(background(), 0, 0);
+  c.setTransform(s, 0, 0, s, 0, 0);
+  drawAmbient(c, now, dt);
   if (bricksDirty) redrawBricks();
   // появление уровня: кирпичи проявляются и съезжают сверху
-  const k = intro ? Math.min(1, (now - intro) / 480) : 1;
-  const ease = 1 - (1 - k) * (1 - k);
+  const k = intro ? Math.min(1, (now - intro) / 520) : 1;
+  const ease = 1 - (1 - k) ** 3;
+  c.setTransform(1, 0, 0, 1, 0, 0);
   c.globalAlpha = ease;
-  c.drawImage(brickLayer, 0, Math.round(-(1 - ease) * 26 * dprNow));
+  c.drawImage(brickLayer, 0, Math.round(-(1 - ease) * 34 * dprNow));
   c.globalAlpha = 1;
   c.setTransform(s, 0, 0, s, 0, 0);
 
-  // вспышки ударов
+  // на кирпичах с бонусом мерцает искра
+  if (k >= 1 && !reducedMotion()) {
+    c.fillStyle = '#ffffff';
+    for (const b of gifts) {
+      if (b.hp <= 0) continue;
+      const a = 0.5 + 0.5 * Math.sin(now / 260 + b.id * 1.7);
+      c.globalAlpha = a * 0.9;
+      star(c, b.cx + 9 * Math.cos(now / 900 + b.id), b.cy - 3 + 2 * Math.sin(now / 700 + b.id), 1.6 + 1.6 * a, 4, 0.3);
+      c.fill();
+    }
+    c.globalAlpha = 1;
+  }
+
+  // вспышки ударов и тающие силуэты разбитых кирпичей
   for (const [id, t] of flashes) {
     const a = 1 - (now - t) / 170;
     if (a <= 0) {
@@ -799,51 +573,68 @@ function draw(now) {
     c.fillStyle = `rgba(255, 255, 255, ${0.6 * a})`;
     c.fill();
   }
+  if (ghosts.length) {
+    ghosts = ghosts.filter((g) => now - g.t < 160);
+    for (const g of ghosts) {
+      const p = (now - g.t) / 160;
+      c.globalAlpha = 0.7 * (1 - p);
+      c.fillStyle = g.color;
+      c.save();
+      c.translate(g.cx, g.cy);
+      c.scale(1 + p * 0.35, 1 + p * 0.35);
+      c.translate(-g.cx, -g.cy);
+      path(c, g.pts);
+      c.fill();
+      c.restore();
+    }
+    c.globalAlpha = 1;
+  }
 
-  // взрывы: расходящееся кольцо
-  rings = rings.filter((e) => now - e.t < 320);
+  // взрывы: вспышка и расходящееся кольцо
+  rings = rings.filter((e) => now - e.t < 340);
   for (const e of rings) {
-    const p = (now - e.t) / 320;
+    const p = (now - e.t) / 340;
+    c.fillStyle = '#fff3c4';
+    c.globalAlpha = 0.6 * (1 - p) * (1 - p);
+    c.beginPath();
+    c.arc(e.x, e.y, e.r * (0.35 + p * 0.5), 0, TAU);
+    c.fill();
     c.globalAlpha = 1 - p;
-    c.strokeStyle = '#ffd36b';
-    c.lineWidth = 5 * (1 - p) + 1;
+    c.strokeStyle = e.color ?? '#ffd36b';
+    c.lineWidth = 6 * (1 - p) + 1;
     c.beginPath();
     c.arc(e.x, e.y, 6 + (e.r - 4) * (1 - (1 - p) * (1 - p)), 0, TAU);
     c.stroke();
-    c.fillStyle = '#fff3c4';
-    c.globalAlpha = 0.5 * (1 - p) * (1 - p);
-    c.beginPath();
-    c.arc(e.x, e.y, e.r * 0.6 * (0.4 + p * 0.6), 0, TAU);
-    c.fill();
   }
   c.globalAlpha = 1;
 
   // выстрелы
   for (const sh of game.shots) {
     if (sh.kind === 'laser') {
-      c.fillStyle = alpha(palette.good, 0.55);
+      c.fillStyle = alpha(palette.bonus.laser, 0.55);
       c.fillRect(sh.x - 3.4, sh.y - 12, 6.8, 16);
       c.fillStyle = '#ffffff';
       c.fillRect(sh.x - 1.6, sh.y - 14, 3.2, 18);
     } else {
       c.fillStyle = palette.fire;
-      c.fillRect(sh.x - 2, sh.y + 6, 4, 9);
+      c.fillRect(sh.x - 2.4, sh.y + 6, 4.8, 10);
       c.fillStyle = '#ffffff';
-      path(c, [[sh.x, sh.y - 9], [sh.x + 3.6, sh.y - 2], [sh.x + 3.6, sh.y + 7], [sh.x - 3.6, sh.y + 7], [sh.x - 3.6, sh.y - 2]]);
+      path(c, [[sh.x, sh.y - 10], [sh.x + 4.2, sh.y - 2], [sh.x + 4.2, sh.y + 7], [sh.x - 4.2, sh.y + 7], [sh.x - 4.2, sh.y - 2]]);
       c.fill();
     }
   }
 
-  // падающие бонусы и освобождённые шарики
+  // падающие бонусы (с подписью) и освобождённые шарики
   for (const p of game.drops) {
     const img = bonusSprite(p.type);
-    const d = DROP_R * 2 + 4 / (scale * dprNow);
-    const sway = reducedMotion() ? 1 : 1 + 0.06 * Math.sin(now / 130 + p.id);
-    c.drawImage(img, p.x - (d * sway) / 2, p.y - (d * sway) / 2, d * sway, d * sway);
+    const d = DROP_R * 0.94 * 3.2 * (reducedMotion() ? 1 : 1 + 0.05 * Math.sin(now / 130 + p.id));
+    c.drawImage(img, p.x - d / 2, p.y - d / 2, d, d);
+    text(c, BONUS_LABELS[p.type], Math.max(40, Math.min(W - 40, p.x)), p.y + DROP_R + 12, 10.5,
+      BAD_BONUSES.includes(p.type) ? '#ffc2bd' : '#ffffff', { weight: 800 });
   }
   if (game.loose.length) {
     const img = ballSprite(palette.ball);
-    const d = BALL_R * 2 + 4 / (scale * dprNow);
+    const d = BALL_R * 4.2;
     c.globalAlpha = 0.6 + (reducedMotion() ? 0 : 0.3 * Math.sin(now / 90));
     for (const p of game.loose) c.drawImage(img, p.x - d / 2, p.y - d / 2, d, d);
     c.globalAlpha = 1;
@@ -857,10 +648,10 @@ function draw(now) {
   for (const p of popups) {
     const q = (now - p.t) / p.life;
     const a = q < 0.15 ? q / 0.15 : q > 0.7 ? (1 - q) / 0.3 : 1;
-    text(c, p.text, p.x, p.y - q * p.rise, p.size, p.color, { a });
+    text(c, p.text, p.x, p.y - q * p.rise, p.size, p.color, { a, spacing: p.spacing });
   }
   // подсказка запуска
-  if (game.status === 'ready' && phase === 'play' && !modalActive && now - intro > 600 && now - dieAt > 700) {
+  if (game.status === 'ready' && phase === 'play' && !modalActive && now - intro > 1900 && now - dieAt > 700) {
     text(c, pointer !== null && touchUsed ? T.launchHeld : touchUsed ? T.launchTouch : T.launchMouse, W / 2, PADDLE_Y - 64, 14, palette.text, { weight: 600, a: 0.85 });
   }
   drawChips(c);
@@ -890,7 +681,7 @@ function loop(now) {
   const target = paddleW(game);
   shownW = shownW ? shownW + (target - shownW) * Math.min(1, dt * 14) : target;
   if (reducedMotion() || Math.abs(shownW - target) < 0.5) shownW = target;
-  draw(now);
+  draw(now, dt);
   rafAt = now;
   raf = requestAnimationFrame(loop);
 }
@@ -917,11 +708,11 @@ function burstAt(x, y, color, count = 5) {
   fx?.burst(canvasOffset[0] + x * scale, canvasOffset[1] + y * scale, color, count, { speed: 170, size: 4.5 });
 }
 
-function popup(str, x, y, color = '#ffffff', { size = 14, life = 1000, rise = 34 } = {}) {
+function popup(str, x, y, color = '#ffffff', { size = 14, life = 1000, rise = 34, spacing = 0 } = {}) {
   const now = performance.now();
   // несколько бонусов подряд — подписи столбиком, а не друг на друге
   const fresh = popups.filter((p) => now - p.t < 500 && p.size === size).length;
-  popups.push({ text: str, x: Math.max(70, Math.min(W - 70, x)), y: y - fresh * 30, color, size, life, rise, t: now });
+  popups.push({ text: str, x: Math.max(70, Math.min(W - 70, x)), y: y - fresh * 30, color, size, life, rise, spacing, t: now });
 }
 
 function handleEvents(now) {
@@ -939,7 +730,10 @@ function handleEvents(now) {
       saveDirty = true;
       stats.bricks += 1;
       sfx('break', { step: e.tone }, 50);
-      burstAt(e.x, e.y, brickColor(game.world, e.kind, e.tone));
+      const color = brickColor(e.kind, e.tone);
+      const b = game.bricks[e.id];
+      if (ghosts.length < 40 && !reducedMotion()) ghosts.push({ pts: b.pts, cx: b.cx, cy: b.cy, color: shade(color, 0.6), t: now });
+      burstAt(e.x, e.y, color);
       if (now - lastHaptic > 70) {
         api.platform.haptic.impact('light');
         lastHaptic = now;
@@ -947,6 +741,10 @@ function handleEvents(now) {
     } else if (e.type === 'explode') {
       rings.push({ x: e.x, y: e.y, r: e.r, t: now });
       sfx('explode', null, 70);
+      if (!reducedMotion() && now - lastShake > 260) {
+        lastShake = now;
+        shake(ui.canvas, { distance: 3, duration: 180 });
+      }
     } else if (e.type === 'paddle') sfx('paddle', null, 40);
     else if (e.type === 'wall') sfx('wall', null, 60);
     else if (e.type === 'launch') sfx('launch');
@@ -958,11 +756,11 @@ function handleEvents(now) {
       sfx('gain', null, 60);
       popup('+1', game.paddle.x, PADDLE_Y - 18, palette.ball);
     } else if (e.type === 'defuse') {
-      rings.push({ x: e.x, y: e.y, r: 26, t: now });
+      rings.push({ x: e.x, y: e.y, r: 30, t: now });
       sfx('explode', null, 70);
     } else if (e.type === 'help') sfx('drop');
     else if (e.type === 'lost') sfx('lost', null, 120);
-    else if (e.type === 'bonus') onBonus(e.bonus);
+    else if (e.type === 'bonus') onBonus(e.bonus, now);
     else if (e.type === 'die') onDie(now);
   }
   const ended = game.events.find((e) => e.type === 'win' || e.type === 'lose');
@@ -972,14 +770,16 @@ function handleEvents(now) {
   else if (ended?.type === 'lose') lost();
 }
 
-function onBonus(type) {
+function onBonus(type, now) {
   stats.bonuses += 1;
+  if (type === 'bomb') return;
   const bad = BAD_BONUSES.includes(type);
-  if (type !== 'bomb') {
-    sfx(type === 'life' ? 'life' : bad ? 'bad' : 'good');
-    popup(T.bonus[type][0], game.paddle.x, PADDLE_Y - 20, bonusColor(type) === palette.neutral ? '#ffffff' : shade(bonusColor(type), 0.35));
-    api.platform.haptic.impact(bad ? 'medium' : 'light');
-  }
+  const color = palette.bonus[type];
+  sfx(type === 'life' ? 'life' : bad ? 'bad' : 'good');
+  // кольцо цвета бонуса от платформы и подпись
+  rings.push({ x: game.paddle.x, y: PADDLE_Y, r: 46, t: now, color });
+  popup(T.bonus[type][0], game.paddle.x, PADDLE_Y - 24, shade(color, 0.45), { size: 15 });
+  api.platform.haptic.impact(bad ? 'medium' : 'light');
 }
 
 function onDie(now) {
@@ -1021,18 +821,26 @@ function renderHud(force = false) {
 function startLevel(animateIn) {
   phase = 'play';
   flashes.clear();
+  ghosts = [];
   rings = [];
   popups = [];
   bgCache = null;
   bricksDirty = true;
+  // картинки кирпичей и платформы — под главу; при смене главы прежние не нужны
+  if (host.dataset.chapter !== String(game.chapter)) sprites.clear();
+  host.dataset.chapter = String(game.chapter);
   shownW = 0;
   dieAt = 0;
   lastLives = -1;
   lastProgress = -1;
-  ui.sub.textContent = `${T.level(game.level)} · ${T.worlds[game.world]}`;
+  ui.sub.textContent = `${T.level(game.level)} · ${T.chapters[game.chapter]}`;
   renderHud(true);
+  makeAmbient();
   intro = animateIn && !reducedMotion() ? performance.now() : 0;
-  if (animateIn) popup(T.level(game.level), W / 2, 520, '#ffffff', { size: 26, life: 1400, rise: 20 });
+  if (animateIn) {
+    popup(T.chapter(game.chapter).toUpperCase(), W / 2, 536, chapterPal().glow, { size: 12, life: 1700, rise: 14, spacing: 2 });
+    popup(T.level(game.level), W / 2, 572, '#ffffff', { size: 28, life: 1700, rise: 14 });
+  }
   kick();
 }
 
@@ -1052,6 +860,7 @@ function won() {
   api.storage.set('stats', stats);
   const done = game;
   const last = done.level >= LEVEL_COUNT;
+  const chapterEnd = done.level % CHAPTER_SIZE === 0;
   // следующий уровень сохранён сразу, на экране — пройденный
   pending = snapshot(newGame(last ? done.level : done.level + 1));
   save();
@@ -1059,15 +868,15 @@ function won() {
   api.platform.haptic.notification('success');
   later(() => {
     if (!ui) return;
-    const w = palette.worlds[done.world];
-    fx?.confetti([...w.tones, palette.ball, palette.bonus], 130);
+    const pal = palette.chapters[done.chapter];
+    fx?.confetti([...pal.tones, palette.ball, pal.glow], chapterEnd ? 200 : 130);
     const stars = [0, 1, 2].map(() => el('span', { class: 'ak-won-star' }, '★'));
     const title = el('h2', { class: 'ak-won-title' }, last ? T.allDone : T.wonTitle);
     const cardEl = el('div', { class: 'ak-card ak-won', role: 'dialog', 'aria-label': T.wonTitle },
       el('div', { class: 'ak-won-rays', 'aria-hidden': 'true' }),
       el('div', { class: 'ak-won-stars' }, stars),
       title,
-      el('div', { class: 'ak-won-badge' }, T.completed(done.level)),
+      el('div', { class: 'ak-won-badge' }, chapterEnd ? T.chapterDone(done.chapter) : T.completed(done.level)),
       el('div', { class: 'ak-won-info' }, T.wonInfo(clock(done.time), done.lives)),
       last ? el('div', { class: 'ak-won-info' }, T.allDoneNote) : null,
       el('button', {
@@ -1083,7 +892,7 @@ function won() {
           closeModal();
           startLevel(true);
         },
-      }, last ? T.chooseLevel : T.next(done.level + 1)),
+      }, last ? T.chooseLevel : chapterEnd ? T.nextChapter(done.chapter + 1) : T.next(done.level + 1)),
     );
     openModal(cardEl);
     stars.forEach((s, k) => animate(s, [
@@ -1231,27 +1040,41 @@ function showInfo() {
   ));
 }
 
-/** Выбор уровня: открыты пройденные (stats.bestLevel) и следующий за ними. */
+/** Выбор уровня по главам: открыты пройденные (stats.bestLevel) и следующий за ними; следующая глава — с замком. */
 function showLevels(force = false) {
   if (phase !== 'play' && !force) return;
   const max = Math.min(LEVEL_COUNT, Math.max(stats.bestLevel + 1, game.level));
-  const cells = [];
-  for (let n = 1; n <= Math.min(LEVEL_COUNT, max + 3); n++) {
-    const open = n <= max;
-    cells.push(el('button', {
-      class: `ak-lvl${open ? '' : ' ak-lvl-locked'}${n === game.level ? ' ak-lvl-current' : ''}${n <= stats.bestLevel ? ' ak-lvl-passed' : ''}`,
-      disabled: !open,
-      onclick: () => {
-        closeModal();
-        if (n === game.level && game.broken === 0) return;
-        playLevel(n);
-      },
-    }, open ? String(n) : '🔒', n <= stats.bestLevel ? el('span', { class: 'ak-lvl-done' }, '✓') : null));
+  const sections = [];
+  for (let ch = 0; ch < CHAPTERS; ch++) {
+    const first = ch * CHAPTER_SIZE + 1;
+    const lastOf = Math.min(LEVEL_COUNT, first + CHAPTER_SIZE - 1);
+    const locked = first > max;
+    const passed = Math.max(0, Math.min(stats.bestLevel, lastOf) - first + 1);
+    const head = el('div', { class: 'ak-chapter-head' },
+      el('span', { class: 'ak-chapter-dot', style: `background: var(--ak-c${ch}-glow)` }),
+      el('b', {}, locked ? `🔒 ${T.chapter(ch)}` : T.chapter(ch)),
+      locked ? null : el('span', { class: 'ak-chapter-count' }, T.passed(passed, lastOf - first + 1)),
+    );
+    if (locked) {
+      sections.push(el('div', { class: 'ak-chapter ak-chapter-locked' }, head));
+      break;                                     // дальше — только одна закрытая глава
+    }
+    const cells = [];
+    for (let n = first; n <= Math.min(lastOf, max + 3); n++) {
+      const open = n <= max;
+      cells.push(el('button', {
+        class: `ak-lvl${open ? '' : ' ak-lvl-locked'}${n === game.level ? ' ak-lvl-current' : ''}${n <= stats.bestLevel ? ' ak-lvl-passed' : ''}`,
+        disabled: !open,
+        onclick: () => {
+          closeModal();
+          if (n === game.level && game.broken === 0) return;
+          playLevel(n);
+        },
+      }, open ? String(n) : '🔒', n <= stats.bestLevel ? el('span', { class: 'ak-lvl-done' }, '✓') : null));
+    }
+    sections.push(el('div', { class: 'ak-chapter' }, head, el('div', { class: 'ak-levels' }, cells)));
   }
-  openModal(card(T.levelsTitle,
-    el('p', { class: 'ak-note' }, T.levelsNote),
-    el('div', { class: 'ak-levels' }, cells),
-  ));
+  openModal(card(T.levelsTitle, el('p', { class: 'ak-note' }, T.levelsNote), sections));
   ui.modal.querySelector('.ak-lvl-current')?.scrollIntoView({ block: 'center' });
 }
 
@@ -1288,6 +1111,9 @@ function debugHook() {
     bonus: (type) => {
       applyBonus(game, type);
       handleEvents(performance.now());
+    },
+    drop: (type, x = W / 2, y = 300) => {
+      game.drops.push({ id: game.nextId++, type, x, y });
     },
     bot: (on = true) => {
       bot = on;
@@ -1363,8 +1189,9 @@ export default {
 
     readPalette();
     touchUsed = Boolean(window.matchMedia?.('(pointer: coarse)').matches);
+    // сохранение не прошло проверку (раскладки уровней менялись) — тот же уровень, но с начала
     const fresh = !isValidState(saved);
-    game = fresh ? newGame(1) : restore(saved);
+    game = fresh ? newGame(savedLevel(saved) ?? 1) : restore(saved);
     if (fresh) save();
     else api.progress(T.level(game.level));
     ui.resizeObserver = new ResizeObserver(() => resize());
@@ -1403,6 +1230,7 @@ export default {
     fx?.dispose();
     toast?.dispose();
     root?.remove();
+    if (host) delete host.dataset.chapter;
     if (window.__arkanoid) delete window.__arkanoid;
     api = host = root = ui = toast = fx = game = pending = palette = brickLayer = bgCache = pointer = canvasOffset = null;
     stats = emptyStats();
@@ -1410,11 +1238,15 @@ export default {
     sprites.clear();
     flashes.clear();
     keys.clear();
+    gifts = [];
+    ghosts = [];
     rings = [];
     popups = [];
+    ambient = [];
     intro = 0;
     shownW = 0;
     dieAt = 0;
+    lastShake = 0;
     modalActive = false;
     bricksDirty = true;
     saveDirty = false;

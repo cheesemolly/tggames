@@ -175,7 +175,7 @@ export const GAMES = [
   { id: 'bubble-shooter', title: 'Шарики', emoji: '🫧', about: 'стреляй шариками, собирай по три одного цвета' },
   { id: 'snake', title: 'Змейка', emoji: '🐍', about: 'классика и уровни с препятствиями' },
   { id: 'brick-blast', title: 'Brick Blast', emoji: '🧱', about: 'разбей блоки очередью шариков' },
-  { id: 'arkanoid', title: 'Арканоид', emoji: '🟡', about: 'шариком и платформой разбей кирпичи: 210 уровней, 15 бонусов', beta: true },
+  { id: 'arkanoid', title: 'Арканоид', emoji: '🟡', about: 'шариком и платформой разбей кирпичи: 300 уровней в десяти главах, 15 бонусов', beta: true },
   { id: 'loop', title: 'Петля', emoji: '➰', about: 'поворачивай плитки, пока все линии не замкнутся' },
   { id: 'connect-dots', title: 'Соедини точки', emoji: '🔴', about: 'соедини пары точек и заполни всё поле', best: (n) => `рекорд: уровень ${n}` },
   { id: 'mahjong', title: 'Маджонг', emoji: '🀄', about: 'пасьянс: снимай одинаковые свободные плитки' },
@@ -504,7 +504,7 @@ export const BOARD_LIMITS = {
   rubik: 1e6,
   hanoi: 1e6,
   nonogram: 100,              // уровней в игре 100
-  arkanoid: 210,              // уровней в игре 210
+  arkanoid: 300,              // уровней в игре 300
 };
 // побед не может быть больше сыгранных партий
 const WINS_FROM = { checkers: 'checkers', mahjong: 'mahjong', sudoku: 'sudoku', wordle: 'wordle', tictactoe: 'tictactoe', chess: 'chess', spider: 'spider', klondike: 'klondike', 'killer-sudoku': 'killer-sudoku', go: 'go', minesweeper: 'minesweeper', fifteen: 'fifteen', rubik: 'rubik', hanoi: 'hanoi' };

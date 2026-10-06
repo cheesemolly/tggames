@@ -4,11 +4,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  W, H, BRICK_W, BRICK_H, LEVEL_COUNT, PADDLE_Y, PADDLE_WIDTHS, BALL_R, SMALL_R, BALL_SPEED, SPEED_K, MAX_BALLS, LIVES,
+  W, H, BRICK_W, BRICK_H, LEVEL_COUNT, CHAPTERS, CHAPTER_SIZE, TONES, PADDLE_Y, PADDLE_WIDTHS, BALL_R, SMALL_R, BALL_SPEED, SPEED_K, MAX_BALLS, LIVES,
   MAX_LIVES, WEAR, BONUSES, BONUS_WEIGHTS, FIRE_TIME, RAIL_TIME, CATCH_TIME, LASER_TIME, MISSILES, MAX_ANGLE, HELP_AFTER,
   HELP_BONUSES,
   parseLevel, polygon, closestPoint, newGame, step, launch, movePaddle, applyBonus, progress, snapshot, restore,
-  isValidState, emptyStats, isValidStats, botTarget, ballRadius, ballSpeed, paddleW,
+  isValidState, savedLevel, gameFrom, emptyStats, isValidStats, botTarget, ballRadius, ballSpeed, paddleW,
 } from '../logic.js';
 import { ALPHABET, CODES, LEVELS } from '../levels.js';
 
@@ -62,24 +62,27 @@ function run(g, seconds, rng = seeded(1), until = () => false) {
 
 const types = (g) => g.events.map((e) => e.type);
 
-test('все 210 уровней разбираются: кирпичи в поле, есть что разбивать, виды известны', () => {
-  assert.equal(LEVEL_COUNT, 210);
-  assert.equal(LEVELS.length, 210);
+test('все 300 уровней разбираются: кирпичи в поле, есть что разбивать, виды известны', () => {
+  assert.equal(LEVEL_COUNT, 300);
+  assert.equal(LEVELS.length, 300);
+  assert.equal(CHAPTERS, 10);
+  assert.equal(CHAPTER_SIZE, 30);
   assert.equal(new Set(CODES).size, CODES.length);
   assert.ok(CODES.length <= ALPHABET.length);
   for (let n = 1; n <= LEVEL_COUNT; n++) {
-    const { world, bricks } = parseLevel(n);
-    assert.ok(world >= 0 && world <= 3, `уровень ${n}: мир`);
+    const { chapter, bricks } = parseLevel(n);
+    assert.equal(chapter, Math.floor((n - 1) / CHAPTER_SIZE), `уровень ${n}: глава`);
     assert.ok(bricks.some((b) => 'nhpe'.includes(b.kind)), `уровень ${n}: нечего разбивать`);
     for (const b of bricks) {
       assert.ok('nhpext'.includes(b.kind) && 'RabcdUDC'.includes(b.shape), `уровень ${n}: вид кирпича`);
+      assert.ok(b.tone >= 0 && b.tone < TONES, `уровень ${n}: оттенок`);
       assert.ok(b.bonus === null || BONUSES.includes(b.bonus), `уровень ${n}: бонус ${b.bonus}`);
       assert.ok(b.x >= 0 && b.x <= W - BRICK_W && b.y >= 0 && b.y + BRICK_H <= PADDLE_Y - 150, `уровень ${n}: кирпич вне поля (${b.x}, ${b.y})`);
       assert.ok(b.scale > 0.3 && b.scale <= 1.5, `уровень ${n}: размер`);
     }
   }
   assert.throws(() => parseLevel(0));
-  assert.throws(() => parseLevel(211));
+  assert.throws(() => parseLevel(301));
 });
 
 test('контуры: прямоугольник, треугольники, поворот вокруг центра', () => {
@@ -438,11 +441,18 @@ test('сохранение: прочность кирпичей и запас в
   assert.deepEqual([back.level, back.lives, back.left, back.status], [11, g.lives, g.left, 'ready']);
   assert.equal(back.balls.length, 1, 'шарик снова на платформе');
 
-  for (const bad of [null, {}, { ...saved, v: 2 }, { ...saved, level: 0 }, { ...saved, level: 211 }, { ...saved, lives: 0 },
+  for (const bad of [null, {}, { ...saved, v: 2 }, { ...saved, level: 0 }, { ...saved, level: 301 }, { ...saved, lives: 0 },
     { ...saved, lives: 9 }, { ...saved, hp: saved.hp.slice(1) }, { ...saved, hp: saved.hp.map(() => 99) },
     { ...saved, hp: saved.hp.map(() => 0) }, { ...saved, hp: 'x' }, { ...saved, time: -1 }]) {
     assert.equal(isValidState(bad), false);
   }
+  // раскладки менялись: сохранение не проходит проверку, но уровень из него берётся
+  assert.equal(savedLevel({ ...saved, hp: [1, 2, 3] }), 11);
+  assert.equal(savedLevel({ level: 301 }), null);
+  assert.equal(savedLevel(null), null);
+  // партия по готовой раскладке (так уровни проверяет генератор)
+  const custom = gameFrom({ chapter: 4, bricks: [{ kind: 'n', tone: 0, shape: 'R', bonus: null, x: 100, y: 100, rot: 0, scale: 1 }] }, 7);
+  assert.deepEqual([custom.level, custom.chapter, custom.total, custom.bricks.length], [7, 4, 1, 1]);
   assert.equal(isValidStats(emptyStats()), true);
   assert.equal(isValidStats({ ...emptyStats(), bricks: -1 }), false);
   assert.equal(isValidStats(null), false);
@@ -467,9 +477,9 @@ function botPlays(n, seed, limit = 900) {
   return Infinity;
 }
 
-test('бот проходит уровни: первый, с «дверями», из одних взрывных, лабиринт и каждый десятый', () => {
-  const list = new Set([1, 2, 17, 54, 67, 112]);
-  for (let n = 10; n <= LEVEL_COUNT; n += 10) list.add(n);
+test('бот проходит уровни: первые и каждый седьмой (в каждой главе — по четыре)', () => {
+  const list = new Set([1, 2, 3]);
+  for (let n = 7; n <= LEVEL_COUNT; n += 7) list.add(n);
   for (const n of list) {
     const t = botPlays(n, n);
     assert.ok(t < Infinity, `уровень ${n} не пройден за 15 минут игры`);

@@ -20,7 +20,7 @@ export const GAME_FIELDS = [
   { game: 'brick-blast', key: 'stats', path: ['bestLevel'], label: 'Пройдено уровней', min: 0, max: 100000, note: 'открывает выбор уровня до этого числа + 1' },
   { game: 'brick-blast', key: 'current', path: ['balls'], label: 'Шариков', min: 1, max: 999, run: true },
 
-  { game: 'arkanoid', key: 'stats', path: ['bestLevel'], label: 'Пройдено уровней', min: 0, max: 210, note: 'открывает выбор уровня до этого числа + 1' },
+  { game: 'arkanoid', key: 'stats', path: ['bestLevel'], label: 'Пройдено уровней', min: 0, max: 300, note: 'открывает выбор уровня до этого числа + 1' },
   { game: 'arkanoid', key: 'current', path: ['lives'], label: 'Шариков в запасе', min: 1, max: 5, run: true },
 
   { game: 'bubble-shooter', key: 'current', path: ['level'], label: 'Уровень', min: 1, max: 100000, run: true, note: 'поле остаётся прежним, дальше — следующий номер' },

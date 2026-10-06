@@ -1,8 +1,11 @@
 /*
  * Арканоид. Страница — в цветах темы Telegram; поле рисуется на Canvas и всегда тёмное (кирпичи и шарик яркие),
  * игра читает цвета --ak-* через проверочный элемент (Canvas не понимает var() и color-mix()).
- * Четыре мира уровней — свои фон, узор и оттенки кирпичей (--ak-wN-*): 0 «Космос», 1 «Океан», 2 «Рубин», 3 «Вулкан».
- * Цвета кирпичей и бонусов — игровые (смысловые), одинаковые в светлой и тёмной теме.
+ * Десять глав — у каждой свои цвета (--ak-cN-*): bg и bg2 — небо сверху и снизу, mist — туманности, лучи, сияние,
+ * ink — силуэты, glow — акцент главы (торцы платформы, черта под ней, свечение рамки), hard — крепкий кирпич,
+ * t0…t5 — шесть оттенков обычных кирпичей. Главы: 0 «Космос», 1 «Океан», 2 «Джунгли», 3 «Пустыня», 4 «Льды»,
+ * 5 «Вулкан», 6 «Неон», 7 «Карамель», 8 «Завод», 9 «Кристаллы». Как выглядит кирпич главы — в art.js.
+ * Цвета кирпичей и бонусов (--ak-b-*) — игровые (смысловые), одинаковые в светлой и тёмной теме.
  */
 
 [data-game="arkanoid"] {
@@ -13,30 +16,56 @@
   --ak-accent: var(--tg-theme-button-color);
   --ak-accent-text: var(--tg-theme-button-text-color);
 
-  --ak-w0-bg: #0b1030; --ak-w0-bg2: #171d4a; --ak-w0-deco: rgb(255 255 255 / 0.55);
-  --ak-w0-t0: #3a9bff; --ak-w0-t1: #5fd4ff; --ak-w0-t2: #a98bff; --ak-w0-t3: #4a5fe0; --ak-w0-hard: #2fc7a0;
-  --ak-w1-bg: #06283a; --ak-w1-bg2: #0b4152; --ak-w1-deco: rgb(140 230 255 / 0.4);
-  --ak-w1-t0: #ffc83a; --ak-w1-t1: #4fc7d9; --ak-w1-t2: #e9b872; --ak-w1-t3: #ff9440; --ak-w1-hard: #7ddf64;
-  --ak-w2-bg: #2a0c18; --ak-w2-bg2: #40142a; --ak-w2-deco: rgb(255 170 190 / 0.35);
-  --ak-w2-t0: #f0465a; --ak-w2-t1: #ffd3dc; --ak-w2-t2: #ff8fa6; --ak-w2-t3: #b23a5c; --ak-w2-hard: #f5a524;
-  --ak-w3-bg: #1f1410; --ak-w3-bg2: #38190f; --ak-w3-deco: rgb(255 190 120 / 0.35);
-  --ak-w3-t0: #ff8a3a; --ak-w3-t1: #ffd27a; --ak-w3-t2: #e2845c; --ak-w3-t3: #a66bff; --ak-w3-hard: #4fc3f7;
+  --ak-c0-bg: #070b24; --ak-c0-bg2: #1a1446; --ak-c0-mist: #6a3fd1; --ak-c0-ink: #2a3a8c; --ak-c0-glow: #7fd0ff; --ak-c0-hard: #2fd3a8;
+  --ak-c0-t0: #3a9bff; --ak-c0-t1: #5fe0ff; --ak-c0-t2: #a98bff; --ak-c0-t3: #ff7ac8; --ak-c0-t4: #ffd166; --ak-c0-t5: #e8f1ff;
+  --ak-c1-bg: #0a5a72; --ak-c1-bg2: #031c30; --ak-c1-mist: #7fe8ff; --ak-c1-ink: #02141f; --ak-c1-glow: #ffd98a; --ak-c1-hard: #2f7bff;
+  --ak-c1-t0: #ffc83a; --ak-c1-t1: #4fd6e0; --ak-c1-t2: #ff8a5c; --ak-c1-t3: #7be08a; --ak-c1-t4: #b98cff; --ak-c1-t5: #f2fbff;
+  --ak-c2-bg: #0c3a24; --ak-c2-bg2: #04160f; --ak-c2-mist: #9be36a; --ak-c2-ink: #03140d; --ak-c2-glow: #ffe36b; --ak-c2-hard: #b06cff;
+  --ak-c2-t0: #6fd14f; --ak-c2-t1: #ffb238; --ak-c2-t2: #ff5f6d; --ak-c2-t3: #3fc6a8; --ak-c2-t4: #c98a4a; --ak-c2-t5: #f7f3c8;
+  --ak-c3-bg: #1b1035; --ak-c3-bg2: #a8452f; --ak-c3-mist: #ffb45a; --ak-c3-ink: #2a1424; --ak-c3-glow: #ffe9a8; --ak-c3-hard: #4c8dff;
+  --ak-c3-t0: #f2b84b; --ak-c3-t1: #e2703a; --ak-c3-t2: #3fb7c9; --ak-c3-t3: #f25c54; --ak-c3-t4: #9b6cd9; --ak-c3-t5: #fff1cf;
+  --ak-c4-bg: #061a33; --ak-c4-bg2: #0e3350; --ak-c4-mist: #5dffc0; --ak-c4-ink: #0a2540; --ak-c4-glow: #b9a6ff; --ak-c4-hard: #2f6fed;
+  --ak-c4-t0: #8fd8ff; --ak-c4-t1: #f3fbff; --ak-c4-t2: #5aa9ff; --ak-c4-t3: #9d8cff; --ak-c4-t4: #57e0c8; --ak-c4-t5: #ff9ec4;
+  --ak-c5-bg: #0f0808; --ak-c5-bg2: #3b0f0a; --ak-c5-mist: #ff6a1a; --ak-c5-ink: #0a0505; --ak-c5-glow: #ffb347; --ak-c5-hard: #4fc3f7;
+  --ak-c5-t0: #ff7a2f; --ak-c5-t1: #ffc23d; --ak-c5-t2: #ff4438; --ak-c5-t3: #c9c2bb; --ak-c5-t4: #b06cff; --ak-c5-t5: #ffe9c7;
+  --ak-c6-bg: #0a0420; --ak-c6-bg2: #1d0a3f; --ak-c6-mist: #ff3df2; --ak-c6-ink: #05020f; --ak-c6-glow: #3df5ff; --ak-c6-hard: #ff5577;
+  --ak-c6-t0: #ff3df2; --ak-c6-t1: #3df5ff; --ak-c6-t2: #fff23d; --ak-c6-t3: #7dff5a; --ak-c6-t4: #ff7a3d; --ak-c6-t5: #b68cff;
+  --ak-c7-bg: #3a1440; --ak-c7-bg2: #24092a; --ak-c7-mist: #ff8fc7; --ak-c7-ink: #3a1338; --ak-c7-glow: #fff0b3; --ak-c7-hard: #ff9f43;
+  --ak-c7-t0: #ff6fae; --ak-c7-t1: #7fe3ff; --ak-c7-t2: #ffe066; --ak-c7-t3: #8ff5a6; --ak-c7-t4: #c89bff; --ak-c7-t5: #fff6fb;
+  --ak-c8-bg: #16222e; --ak-c8-bg2: #0c1219; --ak-c8-mist: #6f9cc0; --ak-c8-ink: #0a1016; --ak-c8-glow: #ffb300; --ak-c8-hard: #ef4444;
+  --ak-c8-t0: #ffb300; --ak-c8-t1: #ff6b35; --ak-c8-t2: #4db6e6; --ak-c8-t3: #9be564; --ak-c8-t4: #e6edf2; --ak-c8-t5: #c084fc;
+  --ak-c9-bg: #0c0626; --ak-c9-bg2: #24104a; --ak-c9-mist: #8a5cff; --ak-c9-ink: #2a1560; --ak-c9-glow: #ff9df5; --ak-c9-hard: #5b8cff;
+  --ak-c9-t0: #c77dff; --ak-c9-t1: #5ee6ff; --ak-c9-t2: #ff5fa2; --ak-c9-t3: #7dffb0; --ak-c9-t4: #ffd95e; --ak-c9-t5: #f4eeff;
 
+  /* особые кирпичи — во всех главах одинаковые */
   --ak-steel: #6f7785;
   --ak-boom: #ff4b33;
-  --ak-bonus: #ff5fd0;
+  --ak-gift: #ff5fd0; --ak-gift2: #a56bff; --ak-gift3: #5fd4ff;
   --ak-ball: #fff0a0;
   --ak-fire: #ff7a1a;
   --ak-rail: #5ff2ff;
   --ak-paddle: var(--tg-theme-button-color);
-  --ak-good: #3ecf6a;
-  --ak-bad: #f0465a;
-  --ak-neutral: #5b8def;
   --ak-field-text: #ffffff;
+
+  /* бонусы: у каждого свой цвет; вредные — красные (и другой формы) */
+  --ak-b-split3: #2fcf74; --ak-b-split8: #12c2b0; --ak-b-slow: #58c4ff; --ak-b-fire: #ff8a1f; --ak-b-rail: #f4f7ff;
+  --ak-b-normal: #94a3b8; --ak-b-catch: #a56bff; --ak-b-laser: #ffd21f; --ak-b-missile: #e85cff; --ak-b-expand: #3b82f6;
+  --ak-b-life: #ff6fa8; --ak-b-fast: #f23a3a; --ak-b-small: #f23a3a; --ak-b-shrink: #f23a3a; --ak-b-bomb: #a3162e;
+
+  --ak-glow: var(--ak-c0-glow);
   --toast-top: 110px;
   --toast-bg: var(--ak-text);
   --toast-fg: var(--ak-page);
 }
+[data-game="arkanoid"][data-chapter="1"] { --ak-glow: var(--ak-c1-glow); }
+[data-game="arkanoid"][data-chapter="2"] { --ak-glow: var(--ak-c2-glow); }
+[data-game="arkanoid"][data-chapter="3"] { --ak-glow: var(--ak-c3-glow); }
+[data-game="arkanoid"][data-chapter="4"] { --ak-glow: var(--ak-c4-glow); }
+[data-game="arkanoid"][data-chapter="5"] { --ak-glow: var(--ak-c5-glow); }
+[data-game="arkanoid"][data-chapter="6"] { --ak-glow: var(--ak-c6-glow); }
+[data-game="arkanoid"][data-chapter="7"] { --ak-glow: var(--ak-c7-glow); }
+[data-game="arkanoid"][data-chapter="8"] { --ak-glow: var(--ak-c8-glow); }
+[data-game="arkanoid"][data-chapter="9"] { --ak-glow: var(--ak-c9-glow); }
 
 /* ---------- раскладка ---------- */
 
@@ -57,8 +86,30 @@
 [data-game="arkanoid"] .ak { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
 [data-game="arkanoid"] .ak-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 4px; }
 [data-game="arkanoid"] .ak-titles { min-width: 0; }
-[data-game="arkanoid"] .ak-title { font-size: 20px; font-weight: 700; line-height: 1.2; }
-[data-game="arkanoid"] .ak-sub { font-size: 13px; color: var(--ak-hint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+[data-game="arkanoid"] .ak-title { font-size: 20px; font-weight: 800; line-height: 1.2; letter-spacing: 0.2px; }
+[data-game="arkanoid"] .ak-sub {
+  position: relative;
+  padding-left: 13px;
+  font-size: 13px;
+  color: var(--ak-hint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* точка цвета главы перед «Уровень 31 · Океан» */
+[data-game="arkanoid"] .ak-sub::before {
+  content: '';
+  position: absolute;
+  left: 1px;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  margin-top: -4px;
+  border-radius: 50%;
+  background: var(--ak-glow);
+  box-shadow: 0 0 6px var(--ak-glow);
+  transition: background-color 0.5s ease, box-shadow 0.5s ease;
+}
 [data-game="arkanoid"] .ak-actions { flex: none; display: flex; gap: 6px; }
 [data-game="arkanoid"] .ak-icon-btn {
   display: grid;
@@ -68,7 +119,7 @@
   height: 36px;
   padding: 0;
   border: 0;
-  border-radius: 10px;
+  border-radius: 11px;
   background: var(--ak-surface);
   color: var(--ak-text);
   font: inherit;
@@ -88,23 +139,23 @@
   height: 11px;
   border-radius: 50%;
   background: radial-gradient(circle at 35% 30%, #ffffff, #ffd84a 45%, #c98a00);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ak-text) 18%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ak-text) 18%, transparent), 0 0 6px rgb(255 216 74 / 0.6);
   transition: opacity 0.3s ease, transform 0.3s ease;
 }
-[data-game="arkanoid"] .ak-life-off { opacity: 0.18; transform: scale(0.7); }
+[data-game="arkanoid"] .ak-life-off { opacity: 0.18; transform: scale(0.7); box-shadow: 0 0 0 1px color-mix(in srgb, var(--ak-text) 18%, transparent); }
 [data-game="arkanoid"] .ak-progress-track {
   position: relative;
   flex: 1;
   height: 6px;
   border-radius: 3px;
   overflow: hidden;
-  background: color-mix(in srgb, var(--ak-text) 18%, transparent);
+  background: color-mix(in srgb, var(--ak-text) 16%, transparent);
 }
 [data-game="arkanoid"] .ak-progress-fill {
   width: 100%;
   height: 100%;
   border-radius: 3px;
-  background: linear-gradient(90deg, #ff8a00, #ffc21a);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--ak-glow) 55%, var(--ak-accent)), var(--ak-glow));
   transform: scaleX(0);
   transform-origin: left center;
   transition: transform 0.3s ease-out;
@@ -118,28 +169,38 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* поле и полоса для пальца под ним */
 /* поле — сверху во всю ширину, полоса для пальца занимает всё, что осталось под ним (не меньше 64 px) */
 [data-game="arkanoid"] .ak-stage { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; touch-action: none; }
 [data-game="arkanoid"] .ak-wrap { flex: none; display: flex; justify-content: center; }
-[data-game="arkanoid"] .ak-canvas { display: block; border-radius: 10px; touch-action: none; cursor: none; }
+[data-game="arkanoid"] .ak-canvas {
+  display: block;
+  border-radius: 14px;
+  touch-action: none;
+  cursor: none;
+  /* рамка светится цветом главы */
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.08), 0 8px 26px rgb(0 0 0 / 0.35), 0 0 30px -8px var(--ak-glow);
+  transition: box-shadow 0.6s ease;
+}
 [data-game="arkanoid"] .ak-strip {
   flex: 1;
   display: grid;
   place-items: center;
   width: 100%;
   min-height: 64px;
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--ak-text) 7%, transparent);
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--ak-text) 9%, transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--ak-text) 9%, transparent), color-mix(in srgb, var(--ak-text) 3%, transparent));
   color: var(--ak-hint);
   font-size: 13px;
   touch-action: none;
 }
 [data-game="arkanoid"] .ak-strip span { transition: opacity 0.4s ease; }
+[data-game="arkanoid"] .ak-strip span::before { content: '‹  '; white-space: pre; opacity: 0.6; }
+[data-game="arkanoid"] .ak-strip span::after { content: '  ›'; white-space: pre; opacity: 0.6; }
 [data-game="arkanoid"] .ak-strip-used span { opacity: 0; }
 /* мышью полоса не нужна — поле во всю высоту */
 @media (hover: hover) and (pointer: fine) {
-  [data-game="arkanoid"] .ak-strip { flex: none; min-height: 0; height: 0; opacity: 0; }
+  [data-game="arkanoid"] .ak-strip { flex: none; min-height: 0; height: 0; border: 0; opacity: 0; }
   [data-game="arkanoid"] .ak-stage { justify-content: center; }
 }
 
@@ -179,13 +240,13 @@
 [data-game="arkanoid"] .ak-stat-label { font-size: 12px; color: var(--ak-hint); }
 
 /* справка: бонусы и кирпичи */
-[data-game="arkanoid"] .ak-bonus-list { display: grid; gap: 8px; }
-[data-game="arkanoid"] .ak-bonus-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
+[data-game="arkanoid"] .ak-bonus-list { display: grid; gap: 6px; }
+[data-game="arkanoid"] .ak-bonus-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
 [data-game="arkanoid"] .ak-bonus-row > div { min-width: 0; font-size: 13px; line-height: 1.35; }
 [data-game="arkanoid"] .ak-bonus-row b { display: block; font-size: 14px; }
 [data-game="arkanoid"] .ak-bonus-row span { color: var(--ak-hint); }
 [data-game="arkanoid"] .ak-bonus-icon, [data-game="arkanoid"] .ak-brick-icon { flex: none; }
-[data-game="arkanoid"] .ak-brick-icon { padding: 3px; border-radius: 6px; background: #141a3c; box-sizing: content-box; }
+[data-game="arkanoid"] .ak-brick-icon { border-radius: 8px; background: #121632; }
 
 /* победа: лучи, звёзды, плашка */
 [data-game="arkanoid"] .ak-won {
@@ -196,7 +257,7 @@
   gap: 10px;
   padding: 20px 16px 16px;
   text-align: center;
-  background: radial-gradient(circle at 50% 28%, color-mix(in srgb, var(--ak-accent) 45%, var(--ak-surface)), var(--ak-surface) 72%);
+  background: radial-gradient(circle at 50% 28%, color-mix(in srgb, var(--ak-glow) 38%, var(--ak-surface)), var(--ak-surface) 72%);
   box-shadow: 0 12px 40px rgb(0 0 0 / 0.35);
 }
 [data-game="arkanoid"] .ak-won > * { position: relative; }
@@ -227,9 +288,10 @@
   font-size: 30px;
   font-weight: 900;
   letter-spacing: 0.5px;
-  text-shadow: 0 2px 0 rgb(0 0 0 / 0.25), 0 0 18px color-mix(in srgb, var(--ak-accent) 60%, transparent);
+  text-shadow: 0 2px 0 rgb(0 0 0 / 0.25), 0 0 18px color-mix(in srgb, var(--ak-glow) 60%, transparent);
 }
 [data-game="arkanoid"] .ak-won-badge {
+  max-width: 100%;
   padding: 5px 14px;
   border-radius: 14px;
   background: var(--ak-accent);
@@ -241,8 +303,13 @@
 [data-game="arkanoid"] .ak-won-info { font-size: 13px; color: var(--ak-hint); }
 [data-game="arkanoid"] .ak-won .btn { width: 100%; margin-top: 4px; }
 
-/* выбор уровня */
-[data-game="arkanoid"] .ak-levels { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin-top: 10px; }
+/* выбор уровня: главы */
+[data-game="arkanoid"] .ak-chapter { margin-top: 14px; }
+[data-game="arkanoid"] .ak-chapter-head { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+[data-game="arkanoid"] .ak-chapter-dot { flex: none; width: 10px; height: 10px; border-radius: 50%; }
+[data-game="arkanoid"] .ak-chapter-count { margin-left: auto; font-size: 12px; color: var(--ak-hint); font-variant-numeric: tabular-nums; }
+[data-game="arkanoid"] .ak-chapter-locked { opacity: 0.5; }
+[data-game="arkanoid"] .ak-levels { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin-top: 8px; }
 [data-game="arkanoid"] .ak-lvl {
   position: relative;
   padding: 10px 0;
