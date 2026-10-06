@@ -167,7 +167,7 @@ test('баннер «Новая игра» и приветствие', () => {
 
 test('настройки по умолчанию — всё включено (хранилища нет — не падает)', () => {
   assert.deepEqual(getPrefs(), DEFAULT_PREFS);
-  assert.deepEqual(DEFAULT_PREFS, { sound: true, haptics: true, motion: true });
+  assert.deepEqual(DEFAULT_PREFS, { sound: true, haptics: true, motion: true, dock: false });
 });
 
 test('заставка: новая пиксельная — у того, кто видит бету (не «как игрок»), после релиза — у всех', () => {

@@ -26,7 +26,7 @@ import { renderHome } from './nui/home.js';
 import { renderCatalog } from './nui/catalog.js';
 import { renderProfile, renderNoRating, streakSheet } from './nui/profile.js';
 import { tabBar, skeleton } from './nui/ui.js';
-import { installAudioGate, applyPrefs, DEFAULT_PREFS } from './nui/prefs.js';
+import { installAudioGate, applyPrefs, dockTabs, getPrefs, DEFAULT_PREFS } from './nui/prefs.js';
 import { markVisit, noteOpened } from './nui/store.js';
 import { installMouseDrag } from './nui/drag.js';
 
@@ -306,7 +306,7 @@ function applyChrome() {
     platform.forceScheme('dark');
     platform.setChrome(NUI_BG);
     installAudioGate();
-    applyPrefs(platform);
+    applyPrefs(platform, undefined, feature('tabbar-dock'));
   } else if (was) {
     // «Смотреть как игрок» — всё как у игроков; у тех, кто нового не видел, ничего не трогаем
     platform.forceScheme(null);
@@ -327,6 +327,7 @@ function renderNui(screen, route) {
   lastPlace = location.hash || '#/';
 
   screen.classList.add('nscreen');
+  dockTabs(feature('tabbar-dock') && getPrefs().dock);   // бета узнаётся после входа — проверяем на каждом экране
   const body = el('div', { class: 'nbody' });
   screen.append(body, tabBar(tab, {
     onTab: (_, same) => {
@@ -353,7 +354,8 @@ function renderNui(screen, route) {
       betaCount: isTester() ? BETA.length : null,
       admin: account.isAdmin,
       feedback: () => openFeedback({ account, toast }),
-      onPrefs: (prefs) => applyPrefs(platform, prefs),
+      dockable: feature('tabbar-dock'),
+      onPrefs: (prefs) => applyPrefs(platform, prefs, feature('tabbar-dock')),
     });
   } else if (!account.enabled) {
     renderNoRating(body, { platform });

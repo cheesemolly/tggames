@@ -481,6 +481,20 @@
   background: var(--n-s1);
   font-family: var(--n-font);
 }
+/* прикреплённые к низу (настройка «Панель внизу прикреплена», бета 'tabbar-dock'): во всю ширину, без зазора и тени;
+   переход — плавно (переключается из шторки настроек) */
+.nui .ntabs { transition: left 0.25s ease, right 0.25s ease, bottom 0.25s ease, height 0.25s ease, padding 0.25s ease, border-radius 0.25s ease, box-shadow 0.25s ease; }
+.nui.ntabs-dock .ntabs {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: calc(64px + max(env(safe-area-inset-bottom), var(--n-sb)));
+  padding: 0 20px max(env(safe-area-inset-bottom), var(--n-sb));
+  border-width: 2px 0 0;
+  border-radius: 0;
+  box-shadow: 0 -3px 0 rgba(0, 0, 0, 0.35);
+}
+.nui.ntabs-dock .nscreen .scroll { padding-bottom: calc(92px + max(env(safe-area-inset-bottom), var(--n-sb))); }
 .nui .ntab {
   flex: 1;
   max-width: 80px;

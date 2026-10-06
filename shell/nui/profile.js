@@ -11,7 +11,7 @@ import { getPrefs, setPref } from './prefs.js';
 import { firstName } from './content.js';
 import { bestPlaces, streakOf, dayKey, monthCells, MONTHS, WEEKDAYS, digits, plural } from './logic.js';
 
-export function renderProfile(container, { games, account, platform, summary, betaCount = null, admin = false, feedback, onPrefs }) {
+export function renderProfile(container, { games, account, platform, summary, betaCount = null, admin = false, feedback, onPrefs, dockable = false }) {
   const name = account.current ? account.name : platform.user?.first_name ?? null;
   const shown = firstName(name) ?? 'Гость';
   const rank = el('div', { class: 'nrank-box' }, skeleton('card'));
@@ -31,7 +31,7 @@ export function renderProfile(container, { games, account, platform, summary, be
     el('div', { class: 'nprof-head' },
       avatar(shown, 'nava-lg'),
       el('span', { class: 'nprof-name npx' }, shown),
-      el('button', { class: 'niconbtn', 'aria-label': 'Настройки', onclick: () => settingsSheet({ account, onPrefs }) }, icon('gear')),
+      el('button', { class: 'niconbtn', 'aria-label': 'Настройки', onclick: () => settingsSheet({ account, onPrefs, dockable }) }, icon('gear')),
     ),
     rank,
     el('h2', { class: 'npx nsec-title' }, 'Лучшие места'),
@@ -115,7 +115,7 @@ function menuLink(iconName, text, href) {
 
 // ---------- шторка настроек ----------
 
-export function settingsSheet({ account, onPrefs }) {
+export function settingsSheet({ account, onPrefs, dockable = false }) {
   const prefs = getPrefs();
   const row = (iconName, title, key, note = null) => el('div', { class: 'nset-row' },
     icon(iconName),
@@ -131,7 +131,8 @@ export function settingsSheet({ account, onPrefs }) {
         row('sound', 'Звуки в играх', 'sound', 'Общий выключатель поверх звука каждой игры'),
         row('vibe', 'Вибрация', 'haptics')),
       group('Приложение',
-        row('sparkle', 'Анимации', 'motion', 'Выключи — всё будет появляться сразу, без движения')),
+        row('sparkle', 'Анимации', 'motion', 'Выключи — всё будет появляться сразу, без движения'),
+        dockable && row('panel', 'Панель внизу прикреплена', 'dock', 'Вкладки прижаты к нижнему краю, а не плавают над экраном')),
       group('Аккаунт', el('div', { class: 'nset-row' },
         icon('plane'),
         el('span', { class: 'nset-text' }, account.enabled ? 'Вход через Telegram' : 'Без аккаунта'),

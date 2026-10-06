@@ -6,7 +6,8 @@
 // создают игры, заводятся через подмену ниже и при выключении стоят на паузе (suspend).
 
 const KEY = 'tggames-prefs';
-export const DEFAULT_PREFS = { sound: true, haptics: true, motion: true };
+// dock — нижние вкладки прикреплены к низу экрана, а не плавают над ним (в бете 'tabbar-dock')
+export const DEFAULT_PREFS = { sound: true, haptics: true, motion: true, dock: false };
 
 export function getPrefs() {
   try {
@@ -69,9 +70,18 @@ function setMuted(on) {
   }
 }
 
-/** Применить настройки: звук, вибрация (platform.setHaptics), меньше анимаций (класс на <html>). */
-export function applyPrefs(platform, prefs = getPrefs()) {
+/**
+ * Применить настройки: звук, вибрация (platform.setHaptics), меньше анимаций и прикреплённые вкладки (классы на
+ * <html>). dockOn — открыта ли настройка вкладок (бета 'tabbar-dock'): у игроков до релиза панель плавает, как была.
+ */
+export function applyPrefs(platform, prefs = getPrefs(), dockOn = true) {
   setMuted(!prefs.sound);
   platform.setHaptics?.(prefs.haptics);
   document.documentElement.classList.toggle('reduce-motion', !prefs.motion);
+  dockTabs(dockOn && prefs.dock);
+}
+
+/** Нижние вкладки прикреплены к низу (класс на <html>, стили — styles/nui.css). */
+export function dockTabs(on) {
+  document.documentElement.classList.toggle('ntabs-dock', Boolean(on));
 }
