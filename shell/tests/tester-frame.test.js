@@ -37,11 +37,26 @@ test('рамка тестера: три размера одного вида; б
 
 test('значок рамки — ключ и молот 16×16 с обводкой в пиксель', () => {
   assert.equal(TOOLS_ART.length, 16);
-  assert.ok(TOOLS_ART.every((row) => row.length === 16 && /^[.WwHSs]+$/.test(row)));
+  assert.ok(TOOLS_ART.every((row) => row.length === 16 && /^[.LMhSDYy]+$/.test(row)));
   const svg = toolsSvg();
   assert.ok(svg.startsWith('<svg viewBox="0 0 18 18"'));
+  // симметрия силуэта: левая и правая половины занимают одни и те же строки и доходят до своих краёв
+  const span = (from, to) => {
+    const ys = TOOLS_ART.flatMap((row, y) => (/[^.]/.test(row.slice(from, to)) ? [y] : []));
+    return [ys[0], ys.at(-1)];
+  };
+  assert.deepEqual(span(0, 8), span(8, 16), 'ключ и молот — на одной высоте сверху и снизу');
+  const top = (from, to) => TOOLS_ART.findIndex((row) => /[^.]/.test(row.slice(from, to)));
+  assert.equal(top(0, 7), top(9, 16), 'зев ключа и боёк молота начинаются с одной строки');
+  const edge = (x) => TOOLS_ART.some((row) => row[x] !== '.');
+  assert.ok(edge(0) && edge(15), 'и слева, и справа рисунок доходит до края');
+  // стержни — отражения друг друга: рукоять молота идёт по x + y = 14…15, ключ — по x − y = 0…1
+  for (let y = 8; y <= 10; y++) {
+    assert.match(TOOLS_ART[y][14 - y] + TOOLS_ART[y][15 - y], /^Yy$/, `рукоять, строка ${y}`);
+    assert.match(TOOLS_ART[y][y] + TOOLS_ART[y][y + 1], /^ML$/, `ключ, строка ${y}`);
+  }
   // одиночный пиксель: обводка 3×3 вокруг него, сам он сдвинут на пиксель обводки
-  const dot = toolsSvg(['...', '.W.', '...']);
+  const dot = toolsSvg(['...', '.L.', '...']);
   assert.ok(dot.includes('<path fill="#000" d="M1 1h3v1h-3zM1 2h3v1h-3zM1 3h3v1h-3z"/>'));
   assert.ok(dot.includes('<path fill="#eef2f8" d="M2 2h1v1h-1z"/>'));
 });

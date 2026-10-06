@@ -776,8 +776,8 @@ h1, h2 { margin: 0 0 8px; line-height: 1.2; }
   user-select: none;
   -webkit-user-select: none;
 }
-.tframe-lg { --tf-box: 102px; --tf-pad: 12px; --tf-bevel: 3px; --tf-line: 2px; --tf-icon: 54px; --tf-hang: 26px; --tf-drop: 30px; }
-.tframe-md { --tf-box: 56px; --tf-pad: 6px; --tf-bevel: 2px; --tf-line: 1px; --tf-icon: 36px; --tf-hang: 20px; --tf-drop: 22px; }
+.tframe-lg { --tf-box: 102px; --tf-pad: 12px; --tf-bevel: 3px; --tf-line: 2px; --tf-icon: 36px; --tf-hang: 18px; --tf-drop: 22px; }
+.tframe-md { --tf-box: 56px; --tf-pad: 6px; --tf-bevel: 2px; --tf-line: 1px; --tf-icon: 18px; --tf-hang: 9px; --tf-drop: 11px; }
 /* в строке значок свисает в поле строки — высоту ей не добавляет */
 .tframe-sm { --tf-box: 44px; --tf-pad: 5px; --tf-bevel: 1px; --tf-line: 1px; --tf-icon: 18px; --tf-hang: 9px; --tf-drop: 2px; }
 .tframe-lg { margin-right: 6px; }
