@@ -866,6 +866,8 @@ h1, h2 { margin: 0 0 8px; line-height: 1.2; }
   transition: border-color 0.2s ease;
 }
 .top-search-input:focus { outline: none; border-color: var(--tg-theme-button-color); }
+.top-search-input[type="search"] { appearance: none; -webkit-appearance: none; }
+.top-list > .top-none { margin: 0; animation: top-sub-in 180ms ease-out; }
 .top-search .account-btn { flex: none; }
 .top-search .account-btn:disabled { opacity: 0.6; }
 .top-search-note { margin: 6px 2px 0; font-size: 13px; }

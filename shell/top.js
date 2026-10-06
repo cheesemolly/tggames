@@ -1,7 +1,8 @@
 // Рейтинг (в бете: shell/beta.js, id 'leaderboard'). Три экрана:
 //   #/top               — сводка: по каждой игре лидер и твоё место;
 //                         с общим рейтингом (в бете 'leaderboard-overall') — две вкладки: #/top — «Общий»
-//                         (сумма очков за места во всех играх, считает сервер), #/top/games — «По играм»;
+//                         (сумма очков за места во всех играх, считает сервер), #/top/games — «По играм»
+//                         (в бете 'top-game-search' — с поиском игры по названию);
 //   #/top/<игра>        — таблица игры: пьедестал из трёх и список до 50-го места (твоё — всегда видно);
 //   #/top/player/<pid>  — профиль игрока: его места во всех играх. Разработчик (в бете 'leaderboard-no-admin') мест
 //                         не занимает, в профиле у него бейдж admin; найти игрока можно по @нику (в бете 'player-search').
@@ -17,6 +18,7 @@ import { el } from '../shared/dom.js';
 import { GAME_ICONS } from './icons.js';
 import { categoryOfGame, byFolderAndPlace } from './categories.js';
 import { feature } from './beta.js';
+import { filterGames } from './nui/logic.js';
 import { message } from '../platform/errors.js';
 import { showLayer, hideLayer, pop, shake } from '../shared/motion.js';
 
@@ -292,18 +294,18 @@ export async function renderTop(container, {
 
     let list = res.data.games.filter((g) => games.some((x) => x.id === g.game));
     if (feature('top-sort')) list = byFolderAndPlace(list, (g) => g.game, (g) => g.me?.place ?? null);
-    show(
-      header,
-      tabs,
-      searchForm,
-      outsideNote,
-      meLink,
-      el('div', { class: 'top-list' }, list.map((g, i) => el('a', {
+    list = list.map((g) => ({ ...g, title: titleOf(g.game) }));
+    // в бете 'top-game-search' вверху вкладки «По играм» — поиск игры; поиск игрока остаётся во вкладке «Общий»
+    const byGame = overall && feature('top-game-search');
+    const rows = el('div', { class: 'top-list' });
+    const drawRows = () => {
+      const found = byGame ? filterGames(list, { query: gameQuery }) : list;
+      rows.replaceChildren(...(found.length ? found.map((g, i) => el('a', {
         class: 'top-row top-game', href: `#/top/${encodeURIComponent(g.game)}`, style: `--i: ${i}; ${catStyle(g.game)}`,
       },
         tile(g.game),
         el('span', { class: 'top-row-main' },
-          el('span', { class: 'top-row-name' }, titleOf(g.game)),
+          el('span', { class: 'top-row-name' }, g.title),
           el('span', { class: 'top-row-sub' }, g.leader
             ? `🥇 ${g.leader.me ? 'Ты' : g.leader.name} — ${g.leader.text}`
             : 'Пока никого — будь первым'),
@@ -312,7 +314,16 @@ export async function renderTop(container, {
             : res.data.outside ? 'Ты вне рейтинга' : 'Тебя здесь пока нет'),
         ),
         el('span', { class: 'top-chevron' }, '›'),
-      ))),
+      )) : [el('p', { class: 'hint top-empty top-none' }, 'Такой игры не нашлось. Попробуй другое название.')]));
+    };
+    drawRows();
+    show(
+      header,
+      tabs,
+      byGame ? gameSearch(drawRows) : searchForm,
+      outsideNote,
+      meLink,
+      rows,
     );
   };
   return load();
@@ -322,6 +333,31 @@ export async function renderTop(container, {
 export function overallLine(summary) {
   const me = summary?.overall?.me;
   return me ? `Ты: ${placeText(me.place, 0)} · ${pointsText(me.points)}` : null;
+}
+
+// что искали во вкладке «По играм» — помнится, пока приложение открыто (как поиск в «Играх»)
+let gameQuery = '';
+
+/**
+ * Поиск игры во вкладке «По играм» (в бете 'top-game-search'): поле вверху экрана, список сужается по мере набора —
+ * по тем же правилам, что в «Играх» (filterGames). Enter убирает клавиатуру.
+ */
+function gameSearch(onChange) {
+  const input = el('input', {
+    class: 'top-search-input', type: 'search', placeholder: 'Найти игру', value: gameQuery, maxLength: 40,
+    autocomplete: 'off', autocapitalize: 'off', spellcheck: false, enterkeyhint: 'search', 'aria-label': 'Найти игру',
+  });
+  input.addEventListener('input', () => {
+    gameQuery = input.value;
+    onChange();
+  });
+  return el('form', {
+    class: 'top-search', novalidate: true,
+    onsubmit: (e) => {
+      e.preventDefault();
+      input.blur();
+    },
+  }, el('div', { class: 'top-search-row' }, input));
 }
 
 /**
