@@ -801,6 +801,7 @@
   box-shadow: var(--n-sh);
   background: var(--n-s1);
 }
+.nui .nscreen .top-profile .tframe-ava { color: var(--n-on); }
 .nui .nscreen .top-profile-name { font-family: var(--n-px); font-size: 16px; font-weight: 400; line-height: 1.4; }
 .nui .nscreen .nskel-row { margin-top: 12px; }
 

@@ -757,6 +757,88 @@ h1, h2 { margin: 0 0 8px; line-height: 1.2; }
 .top-profile { display: grid; justify-items: center; gap: 10px; margin: 4px 0 18px; text-align: center; }
 .top-profile .top-avatar-lg { animation: top-pop 420ms cubic-bezier(0.3, 1.6, 0.5, 1) backwards; }
 .top-profile-name { font-size: 22px; font-weight: 800; overflow-wrap: anywhere; }
+
+/* ---------- рамка тестера (shell/tester-frame.js): 96×117, пиксель блика 3px — числа сверяет тест ---------- */
+.tframe {
+  --tf-hi: #f4f7fb;
+  --tf: #c9d1e0;
+  --tf-lo: #5f6b85;
+  --tf-ink: #1d1934;
+  position: relative;
+  display: block;
+  flex: none;
+  width: 96px;
+  height: 117px;
+  margin: 2px 10px 10px 2px;      /* место под обводку, тень и торчащую плашку */
+  isolation: isolate;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.tframe-body {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  box-shadow: 0 0 0 2px #000, 4px 4px 0 2px #000;
+  background:
+    linear-gradient(var(--tf-hi), var(--tf-hi)) top / 100% 2px no-repeat,
+    linear-gradient(var(--tf-hi), var(--tf-hi)) left / 2px 100% no-repeat,
+    linear-gradient(var(--tf-lo), var(--tf-lo)) bottom / 100% 2px no-repeat,
+    linear-gradient(var(--tf-lo), var(--tf-lo)) right / 2px 100% no-repeat,
+    var(--tf);
+}
+.tframe-ava {
+  position: absolute;
+  left: 9px;
+  top: 9px;
+  width: 78px;
+  height: 78px;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 0 0 2px #000;
+  background: var(--c, var(--cat));
+  color: #fff;
+  font-size: 32px;
+  font-weight: 800;
+  line-height: 1;
+}
+.tframe-word {
+  position: absolute;
+  left: 10px;
+  bottom: 11px;
+  font: 400 8px/1 'Press Start 2P', ui-monospace, monospace;
+  color: var(--tf-ink);
+}
+.tframe-rv {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  background: var(--tf-lo);
+  animation: tframe-spark 3.4s steps(1) calc(1.5s + var(--i, 0) * 0.3s) infinite;
+}
+@keyframes tframe-spark {
+  0% { background: #fff; box-shadow: 3px 0 #fff, -3px 0 #fff, 0 3px #fff, 0 -3px #fff; }
+  8%, 100% { background: var(--tf-lo); box-shadow: none; }
+}
+.tframe-shine { position: absolute; left: 0; top: 0; translate: -138px 0; animation: tframe-sweep 3.4s infinite; }
+@keyframes tframe-sweep {
+  0% { translate: -138px 0; animation-timing-function: steps(78); }
+  40%, 100% { translate: 96px 0; }
+}
+.tframe-badge {
+  position: absolute;
+  right: -8px;
+  bottom: -8px;
+  width: 32px;
+  height: 32px;
+  border: 2px solid var(--tf);
+  box-shadow: 0 0 0 2px #000;
+  background: var(--tf-ink);
+}
+.tframe-badge svg { display: block; width: 32px; height: 32px; }
+.top-profile .tframe { animation: top-pop 420ms cubic-bezier(0.3, 1.6, 0.5, 1) backwards; }
+@media (prefers-reduced-motion: reduce) {
+  .tframe-rv, .tframe-shine { animation: none; }
+}
 .top-profile-sum { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; width: 100%; }
 .top-stat {
   display: grid;

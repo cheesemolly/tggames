@@ -19,6 +19,7 @@ import { GAME_ICONS } from './icons.js';
 import { categoryOfGame, byFolderAndPlace } from './categories.js';
 import { feature } from './beta.js';
 import { filterGames } from './nui/logic.js';
+import { testerFrame } from './tester-frame.js';
 import { message } from '../platform/errors.js';
 import { showLayer, hideLayer, pop, shake, reducedMotion } from '../shared/motion.js';
 
@@ -113,7 +114,8 @@ export async function renderTop(container, {
           el('button', { class: 'back-chip', onclick: onBack, 'aria-label': 'Назад' }, '‹ Назад'),
         ),
         el('div', { class: 'top-profile' },
-          avatar(p.name, 'top-avatar-lg'),
+          // рамка тестера (в бете 'tester-frame'): сервер помечает бета-тестеров и разработчика
+          p.tester && feature('tester-frame') ? testerFrame(avatar(p.name, 'top-avatar-lg')) : avatar(p.name, 'top-avatar-lg'),
           el('div', { class: 'top-profile-name' }, p.name,
             p.admin && el('span', { class: 'top-admin' }, 'admin'),
             p.me && el('span', { class: 'top-you' }, 'это ты')),

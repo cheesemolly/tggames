@@ -263,6 +263,7 @@ export function progressLines(state) {
 export const SERVER_BETA = [
   // >>> серверная бета
   'rating-points',
+  'tester-frame',
   // <<< конец серверной беты
 ];
 

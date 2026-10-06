@@ -267,6 +267,7 @@ function progressLines(state) {
 const SERVER_BETA = [
   // >>> серверная бета
   'rating-points',
+  'tester-frame',
   // <<< конец серверной беты
 ];
 
@@ -1678,7 +1679,8 @@ function applyAdmin(doc, data, stamp, rules = RULES) {
 //                                    [{ place, name, pid, points, firsts, games, me }], me } — очки за места (lib.js)
 //   GET  /top/<игра>              -> { game, by, total, rows: [{ place, name, text, pid, me }], me }
 //   GET  /top/player/<pid>        -> { name, me, games: [{ game, text, place, total, points? }], overall?, admin?,
-//                                    outside? } — профиль (разработчик — вне мест, но с бейджем admin: 'leaderboard-no-admin')
+//                                    outside?, tester? } — профиль (разработчик — вне мест, но с бейджем admin:
+//                                    'leaderboard-no-admin'; tester — рамка тестера на аватаре: 'tester-frame')
 //   POST /top/find  { username }  -> { pid } — поиск игрока по @нику, только точное совпадение; сам ник в ответ не попадает
 //   POST /top/suggest { q }       -> { players: [{ pid, name }] } — автодополнение: до 10 игроков, у кого имя
 //                                    начинается с q (кириллица тоже) или @ник совпал целиком; сам ник в ответ не попадает
@@ -2270,6 +2272,9 @@ async function topRoutes(request, env, path, player, admin, origin) {
     const banned = await env.DB.prepare('SELECT banned, tg_id FROM users WHERE id = ?').bind(who.user_id).first();
     if (!banned || banned.banned) return fail('no_player', 404, origin);
     const ownerProfile = noAdmin && adminIds.includes(Number(banned.tg_id));
+    // рамка тестера на аватаре (в бете 'tester-frame'): у бета-тестеров и разработчика
+    const tester = betaOpen('tester-frame', beta)
+      && (adminIds.includes(Number(banned.tg_id)) || await isTester(env, who.user_id));
     if (ownerProfile) {
       // разработчик вне мест: результаты видны, мест и очков нет
       const own = Object.fromEntries(ranked.filter((r) => r.user_id === who.user_id).map((r) => [r.game_id, r]));
@@ -2277,6 +2282,7 @@ async function topRoutes(request, env, path, player, admin, origin) {
         name: who.name, me: who.user_id === player.id, admin: true, outside: true,
         games: GAMES.filter((g) => games.has(g.id) && own[g.id]).map((g) => ({ game: g.id, text: text(g.id, own[g.id].value), place: null, total: null })),
         ...(withOverall && { overall: null }),
+        ...(tester && { tester: true }),
       }, 200, origin);
     }
     const found = Object.fromEntries(all.filter((r) => r.user_id === who.user_id).map((r) => [r.game_id, r]));
@@ -2287,6 +2293,7 @@ async function topRoutes(request, env, path, player, admin, origin) {
         game: g.id, text: text(g.id, found[g.id].value), place: found[g.id].place, total: found[g.id].total,
         ...(withOverall && { points: overallPoints(found[g.id].place) }),
       })),
+      ...(tester && { tester: true }),
     };
     if (withOverall) {
       const ranking = overall();

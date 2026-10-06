@@ -1011,6 +1011,39 @@ test('бета-тестер: видит бету (игры в рейтинге, 
   }
 });
 
+test('рамка тестера: в профиле рейтинга tester — у бета-тестера и разработчика; в бете — только тем, кто видит бету', async () => {
+  const lib = await import('../lib.js');
+  const wasBeta = [...lib.SERVER_BETA];
+  lib.SERVER_BETA.splice(0, lib.SERVER_BETA.length, 'tester-frame');
+  try {
+    const env = createEnv();
+    const owner = await asUser(ADMIN);
+    const masha = await asUser(USER);
+    const petya = await asUser({ id: 43, first_name: 'Петя' });
+    for (const who of [owner, masha, petya]) await save(env, who, { 'shell:stats:flappy-burger': { played: 1, wins: 0, best: 14 } });
+    const pidOf = async (who) => (await call(env, '/top', { initData: who })).data.mePid;
+    const [ownerPid, mashaPid, petyaPid] = [await pidOf(owner), await pidOf(masha), await pidOf(petya)];
+    const profile = async (pid, who) => (await call(env, `/top/player/${pid}`, { initData: who })).data;
+    const mashaId = (await call(env, '/me', { initData: masha })).data.id;
+    await call(env, `/admin/player/${mashaId}/tester`, { method: 'POST', initData: owner, payload: { on: true } });
+
+    assert.equal((await profile(mashaPid, owner)).tester, true, 'тестер — с рамкой');
+    assert.equal((await profile(mashaPid, masha)).tester, true, 'и сам себя видит с рамкой');
+    assert.equal((await profile(ownerPid, masha)).tester, true, 'разработчик — тоже');
+    assert.equal('tester' in (await profile(petyaPid, owner)), false, 'обычный игрок — без рамки');
+    assert.equal('tester' in (await profile(mashaPid, petya)), false, 'пока в бете — игроку поле не отдаётся');
+
+    lib.SERVER_BETA.splice(0, lib.SERVER_BETA.length);
+    assert.equal((await profile(mashaPid, petya)).tester, true, 'после релиза рамку видят все');
+    assert.equal('tester' in (await profile(petyaPid, petya)), false);
+
+    await call(env, `/admin/player/${mashaId}/tester`, { method: 'POST', initData: owner, payload: { on: false } });
+    assert.equal('tester' in (await profile(mashaPid, petya)), false, 'сняли отметку — рамки нет');
+  } finally {
+    lib.SERVER_BETA.splice(0, lib.SERVER_BETA.length, ...wasBeta);
+  }
+});
+
 // ---------- бета sync-refresh: сохранения — только от нового клиента ----------
 
 test('старый клиент: у владельца и тестера (бета sync-merge) — только слияние, у игрока — любой; после релиза — у всех', async () => {

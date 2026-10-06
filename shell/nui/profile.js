@@ -8,10 +8,12 @@ import { icon } from './icons.js';
 import { avatar, gameArt, openSheet, switchButton, skeleton } from './ui.js';
 import { getVisits } from './store.js';
 import { getPrefs, setPref } from './prefs.js';
+import { testerFrame } from '../tester-frame.js';
 import { firstName } from './content.js';
 import { bestPlaces, streakOf, dayKey, monthCells, MONTHS, WEEKDAYS, digits, plural } from './logic.js';
 
-export function renderProfile(container, { games, account, platform, summary, betaCount = null, admin = false, feedback, onPrefs, dockable = false }) {
+// tester — аватар в рамке тестера (в бете 'tester-frame'): у бета-тестеров и разработчика.
+export function renderProfile(container, { games, account, platform, summary, betaCount = null, admin = false, tester = false, feedback, onPrefs, dockable = false }) {
   const name = account.current ? account.name : platform.user?.first_name ?? null;
   const shown = firstName(name) ?? 'Гость';
   const rank = el('div', { class: 'nrank-box' }, skeleton('card'));
@@ -29,7 +31,7 @@ export function renderProfile(container, { games, account, platform, summary, be
 
   const screen = el('div', { class: 'scroll nscroll nprofile' },
     el('div', { class: 'nprof-head' },
-      avatar(shown, 'nava-lg'),
+      tester ? testerFrame(avatar(shown, 'nava-lg')) : avatar(shown, 'nava-lg'),
       el('span', { class: 'nprof-name npx' }, shown),
       el('button', { class: 'niconbtn', 'aria-label': 'Настройки', onclick: () => settingsSheet({ account, onPrefs, dockable }) }, icon('gear')),
     ),
