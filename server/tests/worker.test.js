@@ -1442,3 +1442,23 @@ test('очки рейтинга: в бете владелец видит очк�
     lib.SERVER_BETA.splice(0, lib.SERVER_BETA.length, ...wasBeta);
   }
 });
+
+test('смена мер: игроки, посчитанные старой версией, пересчитываются при просмотре рейтинга', async () => {
+  const lib = await import('../lib.js');
+  const wasBeta = [...lib.SERVER_BETA];
+  lib.SERVER_BETA.splice(0, lib.SERVER_BETA.length, 'rating-points');
+  try {
+    const env = createEnv();
+    const masha = await asUser(USER);
+    const owner = await asUser(ADMIN);
+    await save(env, masha, { 'shell:stats:sudoku': { played: 2, wins: 2 }, 'shell:stats:sudoku:hard': { played: 2, wins: 2 } });
+    // как до обновления: очков «pts:» ещё нет, версия старая
+    env.DB.prepare("DELETE FROM board_scores WHERE game_id LIKE 'pts:%'").run();
+    env.DB.prepare('UPDATE board_players SET ver = 0').run();
+    const rows = (await call(env, '/top/sudoku', { initData: owner })).data.rows.map((r) => [r.name, r.text]);
+    assert.deepEqual(rows, [['Маша', '400 очков']]);
+    assert.equal(env.DB.prepare('SELECT ver FROM board_players').first().ver, lib.BOARD_VERSION);
+  } finally {
+    lib.SERVER_BETA.splice(0, lib.SERVER_BETA.length, ...wasBeta);
+  }
+});

@@ -31,6 +31,8 @@ const env = {
       const stmt = db.prepare(sql);
       return { bind: (...args) => wrap(stmt, args), ...wrap(stmt, []) };
     },
+    // как D1: пакет запросов — по очереди
+    batch: async (statements) => statements.map((st) => st.run()),
   },
 };
 

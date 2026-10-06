@@ -40,7 +40,7 @@
 
 import {
   checkInitData, timingSafeEqual, validateState, parseAdminIds, isAdmin, displayName,
-  publicGames, findGames, startAppLink, progressLines, shiftEntities, GAMES, BOARDS, boardScores, boardPoints, pointsView, boardFor, boardName,
+  publicGames, findGames, startAppLink, progressLines, shiftEntities, GAMES, BOARDS, boardScores, boardPoints, pointsView, boardFor, BOARD_VERSION, boardName,
   PERKS, isPerk, SERVER_BETA, SYNC_PROTOCOL, overallPoints, overallRanking, withoutUsers, parseUsername, matchPlayers, REPORT_MAX, REPORT_PER_HOUR, reportMessage, START_TEXT, WELCOME_TEXT, WELCOME_MEDIA,
 } from './lib.js';
 import {
@@ -365,11 +365,13 @@ async function ensureBoardTables(env) {
     user_id INTEGER NOT NULL, game_id TEXT NOT NULL, value INTEGER NOT NULL, updated_at INTEGER NOT NULL,
     PRIMARY KEY (user_id, game_id))`).run();
   await env.DB.prepare('CREATE INDEX IF NOT EXISTS board_scores_game ON board_scores(game_id, value DESC)').run();
-  // «убрать из рейтинга» (панель владельца) — столбец добавлен позже
-  try {
-    await env.DB.prepare('ALTER TABLE board_players ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0').run();
-  } catch {
-    // уже есть
+  // «убрать из рейтинга» (панель владельца) и версия подсчёта (BOARD_VERSION) — столбцы добавлены позже
+  for (const column of ['hidden', 'ver']) {
+    try {
+      await env.DB.prepare(`ALTER TABLE board_players ADD COLUMN ${column} INTEGER NOT NULL DEFAULT 0`).run();
+    } catch {
+      // уже есть
+    }
   }
   boardReady.add(env.DB);
 }
@@ -395,7 +397,7 @@ function randomPid() {
  */
 async function indexBoard(env, userId, state, firstName = null) {
   await ensureBoardTables(env);
-  const known = await env.DB.prepare('SELECT pid, name FROM board_players WHERE user_id = ?').bind(userId).first();
+  const known = await env.DB.prepare('SELECT pid, name, ver FROM board_players WHERE user_id = ?').bind(userId).first();
   if (!known) {
     let name = firstName;
     if (name == null) {
@@ -414,27 +416,39 @@ async function indexBoard(env, userId, state, firstName = null) {
   const old = await env.DB.prepare('SELECT game_id, value FROM board_scores WHERE user_id = ?').bind(userId).all();
   const before = Object.fromEntries((old.results ?? []).map((r) => [r.game_id, r.value]));
   const now = Date.now();
+  // записи — одним пакетом (batch): при пересчёте после смены мер у игрока меняются десятки строк сразу,
+  // а запросов за один вызов воркера у Cloudflare ограниченное число
+  const writes = [];
   for (const [game, value] of Object.entries(scores)) {
     if (before[game] === value) continue;
-    dropTopCache(env);
-    await env.DB.prepare(
+    writes.push(env.DB.prepare(
       `INSERT INTO board_scores (user_id, game_id, value, updated_at) VALUES (?, ?, ?, ?)
        ON CONFLICT(user_id, game_id) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
-    ).bind(userId, game, value, now).run();
+    ).bind(userId, game, value, now));
   }
   for (const game of Object.keys(before)) {
     if (game in scores) continue;
-    dropTopCache(env);
-    await env.DB.prepare('DELETE FROM board_scores WHERE user_id = ? AND game_id = ?').bind(userId, game).run();
+    writes.push(env.DB.prepare('DELETE FROM board_scores WHERE user_id = ? AND game_id = ?').bind(userId, game));
   }
+  if (writes.length) dropTopCache(env);
+  if (known?.ver !== BOARD_VERSION) {
+    writes.push(env.DB.prepare('UPDATE board_players SET ver = ? WHERE user_id = ?').bind(BOARD_VERSION, userId));
+  }
+  if (writes.length) await env.DB.batch(writes);
 }
 
-/** Прогресс, сохранённый до появления рейтинга, досчитывается понемногу — при просмотре рейтинга. */
-async function backfillBoard(env, limit = 8) {
+const BACKFILL_LIMIT = 10;
+
+/**
+ * Прогресс, сохранённый до появления рейтинга или посчитанный старой версией мер (ver < BOARD_VERSION),
+ * досчитывается понемногу — при просмотре рейтинга (на игрока — 3–4 запроса, записи одним пакетом).
+ * Возвращает, скольких досчитал: BACKFILL_LIMIT — возможно, остались ещё.
+ */
+async function backfillBoard(env, limit = BACKFILL_LIMIT) {
   const rows = await env.DB.prepare(
     `SELECT s.user_id, s.data FROM states s LEFT JOIN board_players b ON b.user_id = s.user_id
-     WHERE b.user_id IS NULL LIMIT ?`,
-  ).bind(limit).all();
+     WHERE b.user_id IS NULL OR b.ver < ? LIMIT ?`,
+  ).bind(BOARD_VERSION, limit).all();
   for (const row of rows.results ?? []) {
     let state = {};
     try {
@@ -444,6 +458,7 @@ async function backfillBoard(env, limit = 8) {
     }
     await indexBoard(env, row.user_id, state);
   }
+  return (rows.results ?? []).length;
 }
 
 // Места: по очкам, при равенстве — кто раньше. Заблокированных и убранных владельцем в рейтинге нет.
@@ -460,9 +475,9 @@ const TOP_CACHE_MS = 60 * 1000;
 async function rankedRows(env) {
   const cached = topCache.get(env.DB);
   if (cached && Date.now() - cached.at < TOP_CACHE_MS) return cached.rows;
-  await backfillBoard(env);
+  const pending = await backfillBoard(env) === BACKFILL_LIMIT;   // досчитаны не все — следующий просмотр продолжит
   const rows = (await env.DB.prepare(RANKED).all()).results ?? [];
-  topCache.set(env.DB, { at: Date.now(), rows });
+  if (!pending) topCache.set(env.DB, { at: Date.now(), rows });
   return rows;
 }
 
