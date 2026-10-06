@@ -393,6 +393,10 @@ test('статистика: уровни, провалы, «Своя игра» 
   lv.done = true;
   st = recordGame(st, lv, 3);
   assert.equal(st.levelsCleared, 1);
+  assert.deepEqual(st.byPressure, { calm: 1 }, 'пройдено по давлению — для очков рейтинга');
+  const timed = newLevel(5, { set: 'mix', pressure: 'time' }, seeded(1));
+  timed.done = true;
+  assert.deepEqual(recordGame(st, timed, 1).byPressure, { calm: 1, time: 1 });
   assert.equal(st.bestLevel, 4);
   assert.equal(st.stars, 3);
   assert.equal(st.perfect, 1);

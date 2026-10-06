@@ -781,9 +781,9 @@ test('общий рейтинг: очки за места во всех игра
     const petya = await asUser({ id: 43, first_name: 'Петя', username: 'petya_secret' });
     const vasya = await asUser({ id: 44, first_name: 'Вася' });
     const owner = await asUser(ADMIN);
-    await save(env, masha, { 'shell:progress:words': 'Уровень 14', 'game:bongo-cat:stats': { hits: 1500 } });
-    await save(env, petya, { 'shell:progress:words': 'Уровень 30', 'shell:stats:sudoku': { played: 5, wins: 3 } });
-    await save(env, vasya, { 'shell:progress:words': 'Уровень 20' });
+    await save(env, masha, { 'shell:stats:flappy-burger': { played: 1, wins: 0, best: 14 }, 'game:bongo-cat:stats': { hits: 1500 } });
+    await save(env, petya, { 'shell:stats:flappy-burger': { played: 1, wins: 0, best: 30 }, 'shell:stats:pinball': { played: 5, wins: 0, best: 3 } });
+    await save(env, vasya, { 'shell:stats:flappy-burger': { played: 1, wins: 0, best: 20 } });
 
     // в бете: у игрока общего рейтинга нет ни в сводке, ни в профиле
     const top = await call(env, '/top', { initData: masha });
@@ -793,7 +793,7 @@ test('общий рейтинг: очки за места во всех игра
     assert.equal(profile.data.overall, undefined);
     assert.ok(profile.data.games.every((g) => g.points === undefined));
 
-    // владелец видит: слова — Петя 100, Вася 93, Маша 86; Bongo Cat — Маша 100; судоку — Петя 100
+    // владелец видит: Flappy — Петя 100, Вася 93, Маша 86; Bongo Cat — Маша 100; Пинбол — Петя 100
     const own = await call(env, '/top', { initData: owner });
     assert.deepEqual(own.data.overall.rows.map((r) => [r.place, r.name, r.points, r.firsts, r.games]), [
       [1, 'Петя', 200, 2, 2],
@@ -804,7 +804,7 @@ test('общий рейтинг: очки за места во всех игра
     assert.equal(own.data.overall.me, null, 'у владельца результатов нет');
     const mine = await call(env, `/top/player/${pid}`, { initData: owner });
     assert.deepEqual(mine.data.overall, { place: 2, total: 3, points: 186 });
-    assert.deepEqual(mine.data.games.map((g) => [g.game, g.place, g.points]), [['words', 3, 86], ['bongo-cat', 1, 100]]);
+    assert.deepEqual(mine.data.games.map((g) => [g.game, g.place, g.points]), [['flappy-burger', 3, 86], ['bongo-cat', 1, 100]]);
     assert.ok(!JSON.stringify(own.data).includes('petya_secret'), 'и здесь — без ников');
 
     // после релиза — всем
@@ -827,11 +827,11 @@ test('рейтинг: разработчик вне мест, профиль с 
     const masha = await asUser(USER);
     const petya = await asUser({ id: 43, first_name: 'Петя', username: 'Petya_Secret' });
     const vasya = await asUser({ id: 44, first_name: 'Вася', username: 'vasya_banned' });
-    await save(env, owner, { 'shell:progress:words': 'Уровень 99', 'shell:stats:sudoku': { played: 9, wins: 9 } });
-    await save(env, masha, { 'shell:progress:words': 'Уровень 14' });
-    await save(env, petya, { 'shell:progress:words': 'Уровень 30' });
-    await save(env, vasya, { 'shell:progress:words': 'Уровень 5' });
-    const names = async (who, game = 'words') => (await call(env, `/top/${game}`, { initData: who })).data.rows.map((r) => [r.place, r.name]);
+    await save(env, owner, { 'shell:stats:flappy-burger': { played: 1, wins: 0, best: 99 }, 'shell:stats:pinball': { played: 9, wins: 0, best: 9 } });
+    await save(env, masha, { 'shell:stats:flappy-burger': { played: 1, wins: 0, best: 14 } });
+    await save(env, petya, { 'shell:stats:flappy-burger': { played: 1, wins: 0, best: 30 } });
+    await save(env, vasya, { 'shell:stats:flappy-burger': { played: 1, wins: 0, best: 5 } });
+    const names = async (who, game = 'flappy-burger') => (await call(env, `/top/${game}`, { initData: who })).data.rows.map((r) => [r.place, r.name]);
 
     // в бете: игроки видят разработчика на месте, поиска у них нет
     assert.deepEqual(await names(masha), [[1, 'Владелец'], [2, 'Петя'], [3, 'Маша'], [4, 'Вася']]);
@@ -839,22 +839,22 @@ test('рейтинг: разработчик вне мест, профиль с 
 
     // владелец: себя в местах не видит, места остальных пересчитаны; «ты вне рейтинга»
     assert.deepEqual(await names(owner), [[1, 'Петя'], [2, 'Маша'], [3, 'Вася']]);
-    const ownTable = await call(env, '/top/words', { initData: owner });
+    const ownTable = await call(env, '/top/flappy-burger', { initData: owner });
     assert.equal(ownTable.data.total, 3);
     assert.equal(ownTable.data.outside, true);
-    assert.equal((await call(env, '/top/sudoku', { initData: owner })).data.rows.length, 0, 'в судоку играл только он');
+    assert.equal((await call(env, '/top/pinball', { initData: owner })).data.rows.length, 0, 'в пинбол играл только он');
     const summary = await call(env, '/top', { initData: owner });
     assert.equal(summary.data.outside, true);
-    assert.deepEqual(summary.data.games.find((g) => g.game === 'words').leader, { name: 'Петя', text: 'уровень 30', me: false });
+    assert.deepEqual(summary.data.games.find((g) => g.game === 'flappy-burger').leader, { name: 'Петя', text: '30 очков', me: false });
     assert.ok(!summary.data.overall.rows.some((r) => r.name === 'Владелец'));
     const ownProfile = await call(env, `/top/player/${summary.data.mePid}`, { initData: owner });
     assert.equal(ownProfile.data.admin, true);
     assert.equal(ownProfile.data.outside, true);
-    assert.deepEqual(ownProfile.data.games.map((g) => [g.game, g.text, g.place]), [['words', 'уровень 99', null], ['sudoku', '9 судоку', null]]);
+    assert.deepEqual(ownProfile.data.games.map((g) => [g.game, g.text, g.place]), [['flappy-burger', '99 очков', null], ['pinball', '9 очков', null]]);
     assert.equal(ownProfile.data.overall, null);
 
     // поиск: @ник, в любом регистре, ссылкой t.me; в ответе только pid
-    const petyaPid = (await call(env, '/top/words', { initData: owner })).data.rows.find((r) => r.name === 'Петя').pid;
+    const petyaPid = (await call(env, '/top/flappy-burger', { initData: owner })).data.rows.find((r) => r.name === 'Петя').pid;
     for (const q of ['@petya_secret', 'PETYA_SECRET', 'https://t.me/Petya_Secret', ' petya_secret ']) {
       const found = await call(env, '/top/find', { method: 'POST', initData: owner, payload: { username: q } });
       assert.equal(found.status, 200, q);
@@ -1416,4 +1416,29 @@ test('слияние: откат — копия прогресса до пере
 
   assert.equal((await call(env, `/admin/player/${id}`, { method: 'DELETE', initData: owner })).status, 200);
   assert.equal(env.DB.prepare('SELECT 1 FROM states_premerge WHERE user_id = ?').bind(id).first(), null, 'удаление игрока стирает и копию');
+});
+
+test('очки рейтинга: в бете владелец видит очки, игрок — прежние уровни и победы; после релиза — все очки', async () => {
+  const lib = await import('../lib.js');
+  const wasBeta = [...lib.SERVER_BETA];
+  lib.SERVER_BETA.splice(0, lib.SERVER_BETA.length, 'rating-points');
+  try {
+    const env = createEnv();
+    const masha = await asUser(USER);
+    const petya = await asUser({ id: 43, first_name: 'Петя' });
+    const owner = await asUser(ADMIN);
+    // Маша: 3 лёгких судоку, Петя: 1 экспертное — по победам Маша выше, по очкам Петя (400 > 150)
+    await save(env, masha, { 'shell:stats:sudoku': { played: 3, wins: 3 }, 'shell:stats:sudoku:easy': { played: 3, wins: 3 } });
+    await save(env, petya, { 'shell:stats:sudoku': { played: 1, wins: 1 }, 'shell:stats:sudoku:expert': { played: 1, wins: 1 } });
+    const rows = async (who) => (await call(env, '/top/sudoku', { initData: who })).data.rows.map((r) => [r.name, r.text]);
+
+    assert.deepEqual(await rows(masha), [['Маша', '3 судоку'], ['Петя', '1 судоку']]);
+    assert.deepEqual(await rows(owner), [['Петя', '400 очков'], ['Маша', '150 очков']]);
+    assert.match((await call(env, '/top/sudoku', { initData: owner })).data.by, /очки/);
+
+    lib.SERVER_BETA.splice(0, lib.SERVER_BETA.length);
+    assert.deepEqual(await rows(masha), [['Петя', '400 очков'], ['Маша', '150 очков']]);
+  } finally {
+    lib.SERVER_BETA.splice(0, lib.SERVER_BETA.length, ...wasBeta);
+  }
 });

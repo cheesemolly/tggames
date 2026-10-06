@@ -266,6 +266,7 @@ function progressLines(state) {
  */
 const SERVER_BETA = [
   // >>> серверная бета
+  'rating-points',
   // <<< конец серверной беты
 ];
 
@@ -487,6 +488,263 @@ function boardScores(state) {
   return out;
 }
 
+// ---------- очки рейтинга (в бете: 'rating-points') ----------
+
+/*
+ * Вместо «уровня» и «побед» — очки за каждое пройденное (владелец, 2026-10-06: «в зависимости от сложности начисляем
+ * очки за кол-во решённых полей и суммируем… ОБЯЗАТЕЛЬНО СБАЛАНСИРУЙ ВСЕ»). Баланс: ≈ 50 очков за минуту обычной игры,
+ * сложное — дороже за минуту (умение ценится выше времени), маленькое и лёгкое — дешевле (чтобы его не фармили).
+ * Считается из уже синхронизированной статистики: по вариантам оболочки (shell:stats:<игра>:<вариант> — сложность,
+ * размер, режим) и прогрессу игр. Победы, записанные до появления вариантов (старые), — по самой дешёвой цене (legacy).
+ * Игры, где мера и так честная (рекорд Flappy, Пинбола, Block Blast, плитка 2048, удары Bongo Cat), — без изменений.
+ * Общий рейтинг по-прежнему из мест в каждой игре — так что очки разных игр между собой не складываются.
+ * Хранятся рядом со старыми (board_scores, game_id «pts:<игра>»); после релиза беты старые для этих игр не нужны.
+ */
+
+/** Цены побед по вариантам оболочки. legacy — цена победы без варианта (старые записи и неизвестные варианты). */
+const lvl = (base, ids) => Object.fromEntries(ids.map((id, k) => [id, base[k]]));
+const CHECKERS_LEVELS = lvl([15, 30, 60, 120, 250], ['novice', 'easy', 'medium', 'hard', 'master']);
+const GO_LEVEL = [15, 30, 60, 120, 240];
+const GO_SIZE = { 9: 1, 13: 2, 19: 4 };
+const HANOI = {
+  3: { 3: 5, 4: 10, 5: 20, 6: 40, 7: 80, 8: 160, 9: 320, 10: 640 },     // ходов вдвое больше с каждым диском
+  4: { 3: 5, 4: 8, 5: 12, 6: 18, 7: 25, 8: 35, 9: 45, 10: 60 },          // на четырёх стержнях ходов куда меньше
+};
+const WIN_POINTS = {
+  sudoku: { legacy: 50, by: { easy: 50, medium: 100, hard: 200, expert: 400 } },
+  'killer-sudoku': { legacy: 80, by: { easy: 80, medium: 160, hard: 300, expert: 550 } },
+  minesweeper: { legacy: 30, by: { easy: 30, medium: 120, hard: 350, custom: 10 } },   // своё поле бывает 5×5 с одной миной
+  mahjong: { legacy: 40, by: { kid: 40, butterfly: 70, tower: 75, fortress: 90, pyramid: 120, turtle: 160 } },
+  klondike: { legacy: 60, by: { 'draw-1': 60, 'draw-3': 120 } },
+  spider: { legacy: 60, by: { 'suits-1': 60, 'suits-2': 180, 'suits-4': 450 } },
+  chess: { legacy: 20, by: lvl([20, 40, 80, 150, 250, 400, 600], [1, 2, 3, 4, 5, 6, 7].map((n) => `level-${n}`)) },
+  checkers: {
+    legacy: 15,
+    by: Object.fromEntries(['classic', 'giveaway'].flatMap((m) => Object.entries(CHECKERS_LEVELS).map(([l, p]) => [`${m}-${l}`, p]))),
+  },
+  go: {
+    legacy: 15,
+    by: Object.fromEntries(Object.entries(GO_SIZE).flatMap(([size, k]) => GO_LEVEL.map((p, i) => [`${size}-${i + 1}`, p * k]))),
+  },
+  // против бота; «вдвоём» в статистику оболочки не пишется
+  tictactoe: { legacy: 3, by: { 'classic-easy': 3, 'classic-medium': 8, 'classic-hard': 20, 'gomoku-easy': 20, 'gomoku-medium': 50, 'gomoku-hard': 120 } },
+  fifteen: { legacy: 20, by: { 3: 20, 4: 60, 5: 150, 6: 300, 7: 500, 8: 800 } },
+  hanoi: { legacy: 5, by: Object.fromEntries(Object.entries(HANOI).flatMap(([pegs, row]) => Object.entries(row).map(([n, p]) => [`${pegs}-${n}`, p]))) },
+  rubik: { legacy: 200, by: { '3x3': 200 } },
+  wordle: { legacy: 50, by: {} },                                        // язык не важен — 50 за слово
+};
+
+const nat = (v) => (Number.isInteger(v) && v > 0 ? v : 0);
+const MAX_PLAYED = 1e5;
+
+/** Очки за победы по вариантам: Σ цена × победы варианта (не больше сыгранных) + старые победы по legacy. */
+function winPoints(state, id) {
+  const table = WIN_POINTS[id];
+  const total = state?.[`shell:stats:${id}`];
+  if (!table || !total) return 0;
+  const played = nat(total.played);
+  const wins = Math.min(nat(total.wins), played, MAX_PLAYED);
+  let points = 0;
+  let counted = 0;
+  const prefix = `shell:stats:${id}:`;
+  for (const [key, row] of Object.entries(state)) {
+    if (!key.startsWith(prefix) || !row || typeof row !== 'object') continue;
+    const variant = key.slice(prefix.length);
+    const w = Math.min(nat(row.wins), nat(row.played), wins - counted);
+    if (w <= 0) continue;
+    counted += w;
+    points += w * (table.by[variant] ?? table.legacy);
+  }
+  return points + (wins - counted) * table.legacy;
+}
+
+/** Слова из слова: каждое найденное слово по длине (3 буквы — 10, 4 — 15… как предложил владелец). */
+const WORD_POINTS = { 3: 10, 4: 15, 5: 20, 6: 30, 7: 40, 8: 55, 9: 70 };
+function wordsPoints(state) {
+  const levels = state?.['game:words:progress']?.levels;
+  if (!levels || typeof levels !== 'object') return 0;
+  let points = 0;
+  for (const [i, lv] of Object.entries(levels)) {
+    if (!/^\d+$/.test(i) || Number(i) >= 100 || !Array.isArray(lv?.found)) continue;
+    const seen = new Set();
+    for (const w of lv.found.slice(0, 400)) {
+      if (typeof w !== 'string' || !/^[а-яё]{3,9}$/.test(w) || seen.has(w)) continue;
+      seen.add(w);
+      points += WORD_POINTS[w.length];
+    }
+  }
+  return points;
+}
+
+/** Филворд: пройденные поля по размеру (маленькие дёшевы — их не фармят) + 5 за бонусное слово. */
+const BOGGLE_FIELD_POINTS = { 5: 25, 6: 60, 7: 110, 8: 180 };
+function bogglePoints(state) {
+  const stats = state?.['game:boggle:stats'];
+  let points = 0;
+  for (const [size, p] of Object.entries(BOGGLE_FIELD_POINTS)) {
+    const s = stats?.[size];
+    points += Math.min(nat(s?.played), MAX_PLAYED) * p + Math.min(nat(s?.bonus), 1e6) * 5;
+  }
+  return points;
+}
+
+/** Японский кроссворд: решённая картинка — ¾ очка за клетку (5×5 — 20, 15×15 — 170, 20×20 — 300). */
+// клеток в уровнях games/nonogram/levels.js (тест сверяет)
+const NONOGRAM_CELLS = [
+  25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 132, 192, 168, 169, 192, 210, 156, 176, 180, 208,
+  224, 225, 130, 208, 210, 224, 168, 196, 169, 196, 196, 240, 256, 240, 256, 256, 156, 208, 208, 224,
+  240, 240, 256, 165, 168, 224, 256, 256, 256, 176, 240, 256, 256, 256, 240, 225, 225, 225, 225, 225,
+  225, 225, 225, 225, 225, 225, 225, 225, 225, 225, 225, 225, 225, 225, 225, 225, 225, 225, 225, 225,
+  400, 400, 400, 400, 400, 400, 400, 400, 400, 400, 400, 400, 400, 400, 400, 400, 400, 400, 400, 400,
+];
+const nonogramLevelPoints = (cells) => Math.round((cells * 0.75) / 5) * 5;
+function nonogramPoints(state) {
+  const done = state?.['game:nonogram:progress']?.done;
+  if (!Array.isArray(done)) return 0;
+  return done.slice(0, 100).reduce((sum, v, i) => sum + (Number(v) > 0 ? nonogramLevelPoints(NONOGRAM_CELLS[i]) : 0), 0);
+}
+
+/** Три в ряд: уровень k (1–100) — 40 + 4k: дальше — сложнее и дороже (1-й — 44, 100-й — 440). */
+const match3LevelPoints = (k) => 40 + 4 * k;
+function match3Points(state) {
+  const p = state?.['game:match3:progress'];
+  const list = Array.isArray(p?.done) ? p.done : Array.isArray(p?.stars) ? p.stars : null;
+  if (!list) return 0;
+  return list.slice(0, 100).reduce((sum, v, i) => sum + (Number(v) > 0 ? match3LevelPoints(i + 1) : 0), 0);
+}
+
+/** Сумма цен уровней 1…passed (уровни бесконечные — не больше MAX_LEVELS). */
+const MAX_LEVELS = 10000;
+function levelsSum(passed, price) {
+  let points = 0;
+  for (let k = 1; k <= Math.min(passed, MAX_LEVELS); k++) points += price(k);
+  return points;
+}
+const menuPassed = (state, id) => Math.max(0, (levelOf(state?.[`shell:progress:${id}`]) ?? 1) - 1);
+
+// цены уровня k — растут, пока растёт поле, дальше ровные
+const LEVEL_PRICES = {
+  loop: (k) => 10 + 2 * Math.min(k, 25),                     // 3×3 — 12, с 25-го (10×10) — 60
+  'connect-dots': (k) => 10 + 3 * Math.min(k, 20),           // 3×3 — 13, с 20-го (8×8 с тоннелями) — 70
+  'bubble-shooter': (k) => 40 + Math.min(Math.floor(k / 2), 60),
+  'brick-blast': (k) => 40 + Math.min(Math.floor(k / 2), 60),
+  // змейка: уровни 1–12 — 100…1200 (как предложил владелец), каждый следующий круг карт — ещё +300
+  snake: (k) => 100 * (((k - 1) % 12) + 1) + 300 * Math.floor((k - 1) / 12),
+};
+
+/** Соедини точки: пройденные уровни — из прогресса уровней (бета), до него — рекорд забега. */
+function connectDotsPassed(state) {
+  const level = nat(state?.['game:connect-dots:progress']?.level);
+  const best = nat(state?.['shell:stats:connect-dots']?.best);
+  return Math.max(level - 1, best);
+}
+
+/** Мемори: уровень по давлению — «Спокойно» 25, «Жизни» 50, «На время» 75; до счётчика — как «Спокойно». */
+const MEMORY_POINTS = { calm: 25, lives: 50, time: 75 };
+function memoryPoints(state) {
+  const s = state?.['game:memory:stats'];
+  const cleared = Math.min(nat(s?.levelsCleared), MAX_PLAYED);
+  let points = 0;
+  let counted = 0;
+  for (const [mode, p] of Object.entries(MEMORY_POINTS)) {
+    const n = Math.min(nat(s?.byPressure?.[mode]), cleared - counted);
+    counted += n;
+    points += n * p;
+  }
+  return points + (cleared - counted) * MEMORY_POINTS.calm;
+}
+
+/** Змейка: рекорд классики + уровни. */
+function snakePoints(state) {
+  const best = Math.min(nat(state?.['shell:stats:snake']?.best), 1e5);
+  return best + levelsSum(nat(state?.['game:snake:levels']?.best), LEVEL_PRICES.snake);
+}
+
+/**
+ * Флаги: победа (от 70% верных) по режиму и длине — тест 10 — 25, 20 — 55; ввод 10 — 50, 20 — 110; марафон — рекорд
+ * верных × 3 (тест) или × 6 (ввод). Победы до счётчика — по цене теста на 10.
+ */
+const FLAG_POINTS = { 'test-10': 25, 'test-20': 55, 'type-10': 50, 'type-20': 110 };
+const FLAG_MARATHON = { test: 3, type: 6 };
+function flagsPoints(state) {
+  const s = state?.['game:flags:stats'];
+  let points = 0;
+  let counted = 0;
+  for (const [key, n] of Object.entries(s?.won ?? {})) {
+    const w = Math.min(nat(n), MAX_PLAYED);
+    counted += w;
+    points += w * (FLAG_POINTS[key] ?? 0);                 // победы марафона — только для учёта, очки за рекорд
+  }
+  for (const [mode, k] of Object.entries(FLAG_MARATHON)) points += Math.min(nat(s?.marathon?.[mode]), 196) * k;
+  const shellWins = Math.min(nat(state?.['shell:stats:flags']?.wins), nat(state?.['shell:stats:flags']?.played));
+  return points + Math.max(0, shellWins - counted) * FLAG_POINTS['test-10'];
+}
+
+const wins = (id, by) => ({ by, score: (s) => winPoints(s, id), text: POINTS });
+const levels = (id, by, passed) => ({ by, score: (s) => levelsSum(passed(s), LEVEL_PRICES[id]), text: POINTS });
+
+/** Новые меры (бета 'rating-points'); игры, которых тут нет, считаются как в BOARDS. */
+const BOARDS_V2 = {
+  words: { by: 'очки за найденные слова (длиннее — дороже)', score: wordsPoints, text: POINTS },
+  boggle: { by: 'очки за пройденные поля (больше поле — дороже)', score: bogglePoints, text: POINTS },
+  wordle: wins('wordle', 'очки за угаданные слова'),
+  rubik: wins('rubik', 'очки за собранные кубики'),
+  fifteen: wins('fifteen', 'очки за собранные поля (больше поле — дороже)'),
+  hanoi: wins('hanoi', 'очки за собранные башни (больше дисков — дороже)'),
+  nonogram: { by: 'очки за решённые картинки (больше — дороже)', score: nonogramPoints, text: POINTS },
+  minesweeper: wins('minesweeper', 'очки за разминированные поля (сложнее — дороже)'),
+  'killer-sudoku': wins('killer-sudoku', 'очки за решённые судоку (сложнее — дороже)'),
+  sudoku: wins('sudoku', 'очки за решённые судоку (сложнее — дороже)'),
+  match3: { by: 'очки за пройденные уровни (дальше — дороже)', score: match3Points, text: POINTS },
+  loop: levels('loop', 'очки за пройденные уровни', (s) => menuPassed(s, 'loop')),
+  'connect-dots': levels('connect-dots', 'очки за пройденные уровни', connectDotsPassed),
+  mahjong: wins('mahjong', 'очки за разобранные раскладки (больше плиток — дороже)'),
+  klondike: wins('klondike', 'очки за разложенные пасьянсы (по три карты — дороже)'),
+  spider: wins('spider', 'очки за разложенные пасьянсы (больше мастей — дороже)'),
+  memory: { by: 'очки за уровни («Жизни» и «На время» — дороже)', score: memoryPoints, text: POINTS },
+  snake: { by: 'рекорд в классике + очки за уровни', score: snakePoints, text: POINTS },
+  'bubble-shooter': levels('bubble-shooter', 'очки за пройденные уровни', (s) => menuPassed(s, 'bubble-shooter')),
+  'brick-blast': levels('brick-blast', 'очки за пройденные уровни', (s) => menuPassed(s, 'brick-blast')),
+  go: wins('go', 'очки за победы над ботом (сильнее бот и больше доска — дороже)'),
+  chess: wins('chess', 'очки за победы над ботом (сильнее — дороже)'),
+  checkers: wins('checkers', 'очки за победы над ботом (сильнее — дороже)'),
+  tictactoe: wins('tictactoe', 'очки за победы над ботом (гомоку и сильный бот — дороже)'),
+  flags: { by: 'очки за партии (ввод и 20 флагов — дороже) + рекорд марафона', score: flagsPoints, text: POINTS },
+};
+
+const POINTS_PREFIX = 'pts:';
+const MAX_POINTS = 1e8;   // больше — явно испорченные данные
+
+/** Очки по новым мерам: { 'pts:<игра>': целое > 0 } (пишутся в board_scores рядом со старыми). */
+function boardPoints(state) {
+  const out = {};
+  for (const [id, board] of Object.entries(BOARDS_V2)) {
+    let value;
+    try {
+      value = board.score(state);
+    } catch {
+      value = null;
+    }
+    if (Number.isInteger(value) && value > 0 && value <= MAX_POINTS) out[POINTS_PREFIX + id] = value;
+  }
+  return out;
+}
+
+/**
+ * Строки рейтинга для смотрящего: с новыми очками — «pts:<игра>» вместо старых строк этих игр, без них — только
+ * старые. rows — из RANKED (места уже посчитаны внутри каждого game_id).
+ */
+function pointsView(rows, on) {
+  if (!on) return rows.filter((r) => !r.game_id.startsWith(POINTS_PREFIX));
+  return rows.flatMap((r) => {
+    if (r.game_id.startsWith(POINTS_PREFIX)) return [{ ...r, game_id: r.game_id.slice(POINTS_PREFIX.length) }];
+    return BOARDS_V2[r.game_id] ? [] : [r];
+  });
+}
+
+/** Мера игры для смотрящего: новые очки или прежняя. */
+const boardFor = (id, on) => (on && BOARDS_V2[id]) || BOARDS[id];
+
 // ---------- общий рейтинг (в бете: 'leaderboard-overall') ----------
 
 /**
@@ -670,7 +928,7 @@ const RULES = [
   } }],
   ['game:flags:stats', { type: 'fields', fields: {
     games: 'count', answers: 'count', correct: 'count', 'best.test': 'max', 'best.type': 'max', bestStreak: 'max',
-    'misses.*': 'count',
+    'misses.*': 'count', 'won.*': 'count', 'marathon.*': 'max',
   } }],
   ['game:checkers:stats', { type: 'fields', fields: COUNT4('*.*.') }],
   ['game:flappy-burger:stats', { type: 'fields', fields: { games: 'count', best: 'max', total: 'count', streets: 'count' } }],
@@ -683,7 +941,7 @@ const RULES = [
   ['game:memory:progress', { type: 'fields', fields: { level: 'max' } }],
   ['game:memory:stats', { type: 'fields', fields: {
     levelsCleared: 'count', bestLevel: 'max', stars: 'count', perfect: 'count', fails: 'count', bestCombo: 'max',
-    'free.*.played': 'count', 'free.*.bestMoves': 'min',
+    'free.*.played': 'count', 'free.*.bestMoves': 'min', 'byPressure.*': 'count',
   } }],
   ['game:memory:boosters', { type: 'fields', fields: { peek: { spend: 2 }, magnet: { spend: 2 } } }],
   ['game:memory:seenSpecials', { type: 'fields', fields: { '': 'union' } }],
@@ -1796,7 +2054,8 @@ async function indexBoard(env, userId, state, firstName = null) {
     await env.DB.prepare('UPDATE board_players SET name = ? WHERE user_id = ?').bind(boardName(firstName), userId).run();
   }
 
-  const scores = boardScores(state);
+  // старые меры и новые очки (бета 'rating-points', game_id «pts:<игра>») — рядом: кому что показать, решает topRoutes
+  const scores = { ...boardScores(state), ...boardPoints(state) };
   const old = await env.DB.prepare('SELECT game_id, value FROM board_scores WHERE user_id = ?').bind(userId).all();
   const before = Object.fromEntries((old.results ?? []).map((r) => [r.game_id, r.value]));
   const now = Date.now();
@@ -1905,9 +2164,12 @@ async function searchable(env) {
 
 async function topRoutes(request, env, path, player, admin, origin) {
   await ensureBoardTables(env);
-  const ranked = await rankedRows(env);
   // бета (игры и функции рейтинга) открыта владельцу и бета-тестерам
   const beta = admin || await isTester(env, player.id);
+  // очки вместо уровней и побед (бета 'rating-points'): строки «pts:<игра>» вместо старых строк этих игр
+  const pointsOn = betaOpen('rating-points', beta);
+  const ranked = pointsView(await rankedRows(env), pointsOn);
+  const board = (game) => boardFor(game, pointsOn);
   // разработчик тестирует игры и иначе стоит везде первым — в местах его нет (в бете 'leaderboard-no-admin'),
   // профиль по-прежнему открывается, с бейджем admin
   const adminIds = parseAdminIds(env.ADMIN_IDS);
@@ -1917,7 +2179,7 @@ async function topRoutes(request, env, path, player, admin, origin) {
   const outside = noAdmin && admin;   // смотрит сам разработчик: его мест нет — экран так и скажет
   // игры в бете в рейтинге видят только владелец и бета-тестеры
   const games = new Set(GAMES.filter((g) => BOARDS[g.id] && (beta || !g.beta)).map((g) => g.id));
-  const text = (game, value) => BOARDS[game].text(value);
+  const text = (game, value) => board(game).text(value);
   // общий рейтинг — сумма очков за места по играм (overallRanking в lib.js); пока в бете — только владельцу
   const withOverall = betaOpen('leaderboard-overall', beta);
   const overall = () => overallRanking(all, games);
@@ -1927,12 +2189,12 @@ async function topRoutes(request, env, path, player, admin, origin) {
     const byGame = {};
     for (const r of all.filter((x) => x.place === 1 || x.user_id === player.id)) {
       if (!games.has(r.game_id)) continue;
-      const item = byGame[r.game_id] ??= { game: r.game_id, by: BOARDS[r.game_id].by, total: r.total, leader: null, me: null };
+      const item = byGame[r.game_id] ??= { game: r.game_id, by: board(r.game_id).by, total: r.total, leader: null, me: null };
       if (r.place === 1) item.leader = { name: r.name, text: text(r.game_id, r.value), me: r.user_id === player.id };
       if (r.user_id === player.id) item.me = { place: r.place, text: text(r.game_id, r.value) };
     }
     const list = GAMES.filter((g) => games.has(g.id))
-      .map((g) => byGame[g.id] ?? { game: g.id, by: BOARDS[g.id].by, total: 0, leader: null, me: null });
+      .map((g) => byGame[g.id] ?? { game: g.id, by: board(g.id).by, total: 0, leader: null, me: null });
     const mine = await env.DB.prepare('SELECT pid FROM board_players WHERE user_id = ?').bind(player.id).first();
     const out = { games: list, mePid: mine?.pid ?? null, ...(outside && { outside: true }) };
     if (withOverall) {
@@ -2019,7 +2281,7 @@ async function topRoutes(request, env, path, player, admin, origin) {
   const mine = list.find((r) => r.user_id === player.id);
   return json({
     game,
-    by: BOARDS[game].by,
+    by: board(game).by,
     total: list[0]?.total ?? 0,
     rows: list.filter((r) => r.place <= TOP_LIMIT).map((r) => ({
       place: r.place, name: r.name, text: text(game, r.value), pid: r.pid, me: r.user_id === player.id,

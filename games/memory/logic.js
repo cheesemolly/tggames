@@ -401,6 +401,8 @@ export function recordGame(stats, s, stars) {
   }
   if (s.mode === 'levels') {
     out.levelsCleared++;
+    // пройдено по давлению (для очков рейтинга: «Жизни» и «На время» ценятся выше; с 2026-10-06)
+    out.byPressure = { ...stats.byPressure, [s.pressure]: (stats.byPressure?.[s.pressure] ?? 0) + 1 };
     out.bestLevel = Math.max(out.bestLevel, s.level);
     out.stars += stars;
     if (s.mistakes === 0) out.perfect++;

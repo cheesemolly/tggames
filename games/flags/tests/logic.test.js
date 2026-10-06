@@ -115,4 +115,13 @@ test('игра: 10 флагов без повторов, ответы, коне�
   assert.equal(st.correct, 6);
   assert.ok(Object.values(st.misses).reduce((a, b) => a + b, 0) === 7);
   assert.ok(isValidStats(st));
+  // для очков рейтинга: 6 из 10 — не победа, марафон — рекорд по режиму
+  assert.deepEqual(st.won, {});
+  assert.deepEqual(st.marathon, { type: 0 });
+  const w = { ...s, correct: 8 };
+  st = recordGame(st, w);
+  st = recordGame(st, w);
+  assert.deepEqual(st.won, { 'test-10': 2 });
+  assert.equal(recordGame({ ...emptyStats() }, { ...m, correct: 40 }).marathon.type, 40);
+  assert.ok(isValidStats(st));
 });

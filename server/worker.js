@@ -40,7 +40,7 @@
 
 import {
   checkInitData, timingSafeEqual, validateState, parseAdminIds, isAdmin, displayName,
-  publicGames, findGames, startAppLink, progressLines, shiftEntities, GAMES, BOARDS, boardScores, boardName,
+  publicGames, findGames, startAppLink, progressLines, shiftEntities, GAMES, BOARDS, boardScores, boardPoints, pointsView, boardFor, boardName,
   PERKS, isPerk, SERVER_BETA, SYNC_PROTOCOL, overallPoints, overallRanking, withoutUsers, parseUsername, matchPlayers, REPORT_MAX, REPORT_PER_HOUR, reportMessage, START_TEXT, WELCOME_TEXT, WELCOME_MEDIA,
 } from './lib.js';
 import {
@@ -409,7 +409,8 @@ async function indexBoard(env, userId, state, firstName = null) {
     await env.DB.prepare('UPDATE board_players SET name = ? WHERE user_id = ?').bind(boardName(firstName), userId).run();
   }
 
-  const scores = boardScores(state);
+  // старые меры и новые очки (бета 'rating-points', game_id «pts:<игра>») — рядом: кому что показать, решает topRoutes
+  const scores = { ...boardScores(state), ...boardPoints(state) };
   const old = await env.DB.prepare('SELECT game_id, value FROM board_scores WHERE user_id = ?').bind(userId).all();
   const before = Object.fromEntries((old.results ?? []).map((r) => [r.game_id, r.value]));
   const now = Date.now();
@@ -518,9 +519,12 @@ async function searchable(env) {
 
 async function topRoutes(request, env, path, player, admin, origin) {
   await ensureBoardTables(env);
-  const ranked = await rankedRows(env);
   // бета (игры и функции рейтинга) открыта владельцу и бета-тестерам
   const beta = admin || await isTester(env, player.id);
+  // очки вместо уровней и побед (бета 'rating-points'): строки «pts:<игра>» вместо старых строк этих игр
+  const pointsOn = betaOpen('rating-points', beta);
+  const ranked = pointsView(await rankedRows(env), pointsOn);
+  const board = (game) => boardFor(game, pointsOn);
   // разработчик тестирует игры и иначе стоит везде первым — в местах его нет (в бете 'leaderboard-no-admin'),
   // профиль по-прежнему открывается, с бейджем admin
   const adminIds = parseAdminIds(env.ADMIN_IDS);
@@ -530,7 +534,7 @@ async function topRoutes(request, env, path, player, admin, origin) {
   const outside = noAdmin && admin;   // смотрит сам разработчик: его мест нет — экран так и скажет
   // игры в бете в рейтинге видят только владелец и бета-тестеры
   const games = new Set(GAMES.filter((g) => BOARDS[g.id] && (beta || !g.beta)).map((g) => g.id));
-  const text = (game, value) => BOARDS[game].text(value);
+  const text = (game, value) => board(game).text(value);
   // общий рейтинг — сумма очков за места по играм (overallRanking в lib.js); пока в бете — только владельцу
   const withOverall = betaOpen('leaderboard-overall', beta);
   const overall = () => overallRanking(all, games);
@@ -540,12 +544,12 @@ async function topRoutes(request, env, path, player, admin, origin) {
     const byGame = {};
     for (const r of all.filter((x) => x.place === 1 || x.user_id === player.id)) {
       if (!games.has(r.game_id)) continue;
-      const item = byGame[r.game_id] ??= { game: r.game_id, by: BOARDS[r.game_id].by, total: r.total, leader: null, me: null };
+      const item = byGame[r.game_id] ??= { game: r.game_id, by: board(r.game_id).by, total: r.total, leader: null, me: null };
       if (r.place === 1) item.leader = { name: r.name, text: text(r.game_id, r.value), me: r.user_id === player.id };
       if (r.user_id === player.id) item.me = { place: r.place, text: text(r.game_id, r.value) };
     }
     const list = GAMES.filter((g) => games.has(g.id))
-      .map((g) => byGame[g.id] ?? { game: g.id, by: BOARDS[g.id].by, total: 0, leader: null, me: null });
+      .map((g) => byGame[g.id] ?? { game: g.id, by: board(g.id).by, total: 0, leader: null, me: null });
     const mine = await env.DB.prepare('SELECT pid FROM board_players WHERE user_id = ?').bind(player.id).first();
     const out = { games: list, mePid: mine?.pid ?? null, ...(outside && { outside: true }) };
     if (withOverall) {
@@ -632,7 +636,7 @@ async function topRoutes(request, env, path, player, admin, origin) {
   const mine = list.find((r) => r.user_id === player.id);
   return json({
     game,
-    by: BOARDS[game].by,
+    by: board(game).by,
     total: list[0]?.total ?? 0,
     rows: list.filter((r) => r.place <= TOP_LIMIT).map((r) => ({
       place: r.place, name: r.name, text: text(game, r.value), pid: r.pid, me: r.user_id === player.id,

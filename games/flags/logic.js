@@ -140,13 +140,21 @@ export function emptyStats() {
 export function recordGame(stats, s) {
   const misses = { ...stats.misses };
   for (const code of s.wrong) misses[code] = (misses[code] ?? 0) + 1;
+  // для очков рейтинга (с 2026-10-06): победы по режиму и длине партии, рекорд марафона по режиму
+  const total = asked(s);
+  const won = total > 0 && s.correct / total >= WIN_SHARE;
+  const key = `${s.mode}-${s.length}`;
   return {
     games: stats.games + 1,
-    answers: stats.answers + asked(s),
+    answers: stats.answers + total,
     correct: stats.correct + s.correct,
     best: { ...stats.best, [s.mode]: Math.max(stats.best[s.mode] ?? 0, s.correct) },
     bestStreak: Math.max(stats.bestStreak, s.bestStreak),
     misses,
+    won: won ? { ...stats.won, [key]: (stats.won?.[key] ?? 0) + 1 } : { ...stats.won },
+    marathon: s.length === 'marathon'
+      ? { ...stats.marathon, [s.mode]: Math.max(stats.marathon?.[s.mode] ?? 0, s.correct) }
+      : { ...stats.marathon },
   };
 }
 

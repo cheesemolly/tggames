@@ -61,7 +61,7 @@ export const RULES = [
   } }],
   ['game:flags:stats', { type: 'fields', fields: {
     games: 'count', answers: 'count', correct: 'count', 'best.test': 'max', 'best.type': 'max', bestStreak: 'max',
-    'misses.*': 'count',
+    'misses.*': 'count', 'won.*': 'count', 'marathon.*': 'max',
   } }],
   ['game:checkers:stats', { type: 'fields', fields: COUNT4('*.*.') }],
   ['game:flappy-burger:stats', { type: 'fields', fields: { games: 'count', best: 'max', total: 'count', streets: 'count' } }],
@@ -74,7 +74,7 @@ export const RULES = [
   ['game:memory:progress', { type: 'fields', fields: { level: 'max' } }],
   ['game:memory:stats', { type: 'fields', fields: {
     levelsCleared: 'count', bestLevel: 'max', stars: 'count', perfect: 'count', fails: 'count', bestCombo: 'max',
-    'free.*.played': 'count', 'free.*.bestMoves': 'min',
+    'free.*.played': 'count', 'free.*.bestMoves': 'min', 'byPressure.*': 'count',
   } }],
   ['game:memory:boosters', { type: 'fields', fields: { peek: { spend: 2 }, magnet: { spend: 2 } } }],
   ['game:memory:seenSpecials', { type: 'fields', fields: { '': 'union' } }],
