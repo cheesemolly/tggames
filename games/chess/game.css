@@ -135,6 +135,25 @@
 [data-game="chess"] .ch-name { font-weight: 700; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 [data-game="chess"] .ch-status { font-size: 13px; color: var(--tg-theme-hint-color); white-space: nowrap; animation: ch-blink 1s ease-in-out infinite; }
 @keyframes ch-blink { 50% { opacity: 0.4; } }
+/* партия с другом: подпись-подсказка не мигает; плашку можно нажать, пока ждём друга (показать ссылку) */
+[data-game="chess"] .ch-status-still { animation: none; }
+[data-game="chess"] .ch-player-link { cursor: pointer; }
+[data-game="chess"] .ch-player-link .ch-status { color: var(--tg-theme-link-color); }
+/* кнопка «проверить» лежит поверх правого края плашки и места в ней не занимает: у игры с ботом раскладка прежняя */
+[data-game="chess"] .ch-player { position: relative; }
+[data-game="chess"] .ch-refresh {
+  position: absolute;
+  right: 2px;
+  top: 3px;
+  width: 32px;
+  height: 32px;
+  opacity: 0;
+  scale: 0.6;
+  pointer-events: none;
+  color: var(--tg-theme-button-color);
+  transition: opacity 0.2s ease, scale 0.2s ease, transform 0.12s ease;
+}
+[data-game="chess"] .ch-refresh-on { opacity: 1; scale: 1; pointer-events: auto; }
 [data-game="chess"] .ch-caps { display: flex; align-items: center; height: 16px; min-width: 0; overflow: hidden; }
 [data-game="chess"] .ch-cap { width: 16px; height: 16px; margin-right: -4px; flex: none; }
 [data-game="chess"] .ch-cap .ch-svg { width: 100%; height: 100%; filter: none; }
@@ -255,6 +274,7 @@
 }
 [data-game="chess"] .ch-tool:active { transform: scale(0.92); }
 [data-game="chess"] .ch-tool:disabled { opacity: 0.35; }
+[data-game="chess"] .ch-tool-off .ch-count { display: none; }
 [data-game="chess"] .ch-tool-label { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 [data-game="chess"] .ch-count {
   position: absolute;
@@ -323,6 +343,40 @@
 [data-game="chess"] .ch-style-sample { display: flex; gap: 2px; padding: 4px 6px; border-radius: 8px; background: #d9c6a5; }
 [data-game="chess"] .ch-style-sample .ch-svg { width: 30px; height: 30px; }
 [data-game="chess"] .ch-note { margin: 12px 0 0; font-size: 13px; color: var(--tg-theme-hint-color); }
+/* партия с другом: вкладки «С ботом / С другом», текст, ссылка-приглашение */
+[data-game="chess"] .ch-tab-icon { display: grid; place-items: center; height: 22px; color: var(--tg-theme-hint-color); transition: color 0.2s ease; }
+[data-game="chess"] .ch-option[aria-checked="true"] .ch-tab-icon { color: var(--tg-theme-button-color); }
+[data-game="chess"] .ch-about { margin: 12px 0 0; font-size: 14px; line-height: 1.4; overflow-wrap: anywhere; }
+[data-game="chess"] .ch-link {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--tg-theme-secondary-bg-color);
+  color: var(--tg-theme-link-color);
+  font-size: 13px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  user-select: all;
+  -webkit-user-select: all;
+}
+[data-game="chess"] .ch-wait { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 16px 0 0; font-size: 14px; color: var(--tg-theme-hint-color); }
+[data-game="chess"] .ch-dots { display: inline-flex; gap: 4px; }
+[data-game="chess"] .ch-dots i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; animation: ch-dots 1.2s ease-in-out infinite; }
+[data-game="chess"] .ch-dots i:nth-child(2) { animation-delay: 0.2s; }
+[data-game="chess"] .ch-dots i:nth-child(3) { animation-delay: 0.4s; }
+@keyframes ch-dots { 0%, 60%, 100% { opacity: 0.25; } 30% { opacity: 1; } }
+[data-game="chess"] .ch-text-btn {
+  display: block;
+  margin: 10px auto 0;
+  padding: 8px 12px;
+  border: 0;
+  background: none;
+  color: var(--tg-theme-link-color);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+[data-game="chess"] .ch-stats-friend { margin-top: 6px; }
 [data-game="chess"] .ch-play { width: 100%; margin-top: 14px; }
 [data-game="chess"] .ch-btns { display: flex; gap: 8px; margin-top: 12px; }
 [data-game="chess"] .ch-btns .btn { flex: 1; }
@@ -359,5 +413,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   [data-game="chess"] .ch-piece { transition: none; }
-  [data-game="chess"] .ch-status, [data-game="chess"] .ch-mated { animation: none; }
+  [data-game="chess"] .ch-status, [data-game="chess"] .ch-mated, [data-game="chess"] .ch-dots i { animation: none; }
+  [data-game="chess"] .ch-refresh, [data-game="chess"] .ch-tab-icon { transition: none; }
 }

@@ -269,6 +269,7 @@ export const SERVER_BETA = [
   'tester-frame',
   'badges',
   'profile-streak',
+  'chess-online',
   // <<< конец серверной беты
 ];
 
@@ -911,6 +912,65 @@ export function boardName(firstName) {
   // без служебных символов (переворот направления текста и т.п. — ими можно «подделать» чужое имя)
   const name = String(firstName ?? '').replace(/[\p{Cc}\p{Cf}]/gu, '').replace(/\s+/g, ' ').trim();
   return [...name].slice(0, 24).join('') || 'Игрок';
+}
+
+// ---------- партии с другом по сети (комнаты) ----------
+
+/**
+ * Игры, в которые можно играть вдвоём по сети. Правил игры сервер не знает: он хранит ходы, следит за очередью и
+ * номером состояния (seq), а законность хода проверяют оба приложения (правила — в коде игры). В рейтинг такие
+ * партии не идут. beta — id функции (shell/beta.js): пока он в SERVER_BETA, комнаты игры открыты владельцу и
+ * тестерам; move — как выглядит ход; ends — чем партия кончается сама ('win' — победил сделавший ход, 'draw' —
+ * ничья); say — как назвать ход в сообщении бота.
+ */
+export const ROOM_GAMES = {
+  chess: {
+    beta: 'chess-online',
+    title: 'Шахматы',
+    emoji: '♟️',
+    maxMoves: 1000,
+    move: /^[a-h][1-8][a-h][1-8][qrbn]?$/,
+    ends: { checkmate: 'win', stalemate: 'draw', repetition: 'draw', fifty: 'draw', material: 'draw' },
+    say: (move) => `${move.slice(0, 2)}–${move.slice(2, 4)}`,
+  },
+};
+
+export const ROOM_CODE_LENGTH = 10;
+export const ROOM_CODE_RE = /^[a-z0-9]{10}$/;
+export const ROOM_SEEN_EVERY_MS = 15 * 1000;      // «смотрит партию» пишется в базу не чаще (запись в D1 ограничена)
+// Не спрашивал партию дольше — значит, не смотрит: о ходе соперника ему напишет бот. Больше самого редкого опроса
+// приложения (shell/online.js, 30 с) вместе с порогом записи выше.
+export const ROOM_AWAY_MS = 50 * 1000;
+export const ROOM_KEEP_MS = 30 * 24 * 60 * 60 * 1000;     // партия без ходов дольше — удаляется
+export const ROOM_KEEP_DONE_MS = 3 * 24 * 60 * 60 * 1000; // оконченная и приглашение без ответа — столько
+
+/** Параметр ссылки-приглашения: t.me/<бот>?startapp=chess_<код> (разбирает shell/online.js — тест сверяет). */
+export const roomParam = (game, code) => `${game}_${code}`;
+
+/** Место игрока в комнате: 0 — создатель, 1 — гость, −1 — не участник. */
+export const roomSeat = (room, userId) => (room.host === userId ? 0 : room.guest === userId ? 1 : -1);
+
+/** Чья очередь (место) — ходят строго по очереди, первым — room.first; партия не идёт — null. */
+export function roomTurn(room) {
+  if (room.status !== 'play') return null;
+  return room.moves.length % 2 === 0 ? room.first : 1 - room.first;
+}
+
+/** Комната, как её видит игрок на месте seat: ни id, ни ников — только имена. */
+export function roomView(room, seat) {
+  return {
+    code: room.code,
+    game: room.game,
+    status: room.status,                 // wait — ждём второго игрока, play — идёт, over — окончена
+    seq: room.seq,
+    you: seat,
+    first: room.first,
+    turn: roomTurn(room),
+    moves: room.moves,
+    players: [{ name: room.name0 }, room.guest == null ? null : { name: room.name1 }],
+    result: room.result,                 // { by, winner: место | null } или null
+    at: room.updated_at,
+  };
 }
 
 // ---------- оформление сообщений (entities) ----------

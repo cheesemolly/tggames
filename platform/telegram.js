@@ -98,8 +98,9 @@ function createTelegramPlatform(tg) {
   return {
     isTelegram: true,
     user: tg.initDataUnsafe?.user ?? null,
-    // Параметр из ссылки t.me/<бот>?startapp=<игра> (инлайн-режим бота) — какую игру открыть сразу.
-    startParam: tg.initDataUnsafe?.start_param ?? null,
+    // Параметр из ссылки t.me/<бот>?startapp=<игра> (инлайн-режим бота) — какую игру открыть сразу. Кнопка бота
+    // «Открыть партию» (web_app) передаёт то же самое в адресе: ?startapp=chess_<код> (shell/online.js).
+    startParam: tg.initDataUnsafe?.start_param ?? new URLSearchParams(location.search).get('startapp'),
     // Сырая строка с подписью: сервер по ней узнаёт игрока. Читается каждый раз — Telegram её обновляет.
     get initData() { return tg.initData; },
     get colorScheme() { return forced ?? tg.colorScheme; },

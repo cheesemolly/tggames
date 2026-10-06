@@ -15,10 +15,11 @@ export const retryable = (res) => res.error === 'network' || res.error === 'serv
 
 /**
  * account — platform/account.js (signIn, offline), sync — shell/sync.js (pull),
- * inGame() — открыта ли сейчас игра, redraw() — перерисовать экран, onError(res) — ошибка, которую повтор не исправит.
+ * inGame() — открыта ли сейчас игра, redraw() — перерисовать экран, onError(res) — ошибка, которую повтор не исправит,
+ * onReady() — вошли и прогресс подтянут (здесь оболочка открывает ссылку-приглашение в партию с другом).
  */
 export function createLogin({
-  account, sync, inGame, redraw, onError = () => {},
+  account, sync, inGame, redraw, onError = () => {}, onReady = () => {},
   delays = RETRY_DELAYS, schedule = setTimeout, cancel = clearTimeout, doc = globalThis.document,
 }) {
   let timer = null;
@@ -36,6 +37,7 @@ export function createLogin({
     redraw();                 // имя и рейтинг — сразу, не дожидаясь прогресса
     await sync.pull();
     redraw();                 // прогресс мог смениться серверным
+    onReady();
   }
 
   async function attemptOnce() {

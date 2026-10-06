@@ -25,6 +25,14 @@
 //   POST /top/find  { username }  -> { pid } — поиск игрока по @нику, только точное совпадение; сам ник в ответ не попадает
 //   POST /top/suggest { q }       -> { players: [{ pid, name }] } — автодополнение: до 10 игроков, у кого имя
 //                                    начинается с q (кириллица тоже) или @ник совпал целиком; сам ник в ответ не попадает
+// Партии с другом по сети (в бете 'chess-online'; ROOM_GAMES в lib.js — какие игры). В ответах — комната глазами
+// игрока: { code, game, status: wait|play|over, seq, you, first, turn, moves, players: [{ name }, …], result, at }
+// (места: 0 — создатель, 1 — гость; ни id, ни ников). Правил игр сервер не знает — их проверяют приложения.
+//   POST /rooms  { game, first: 'me'|'them'|'random' } -> { room } — приглашение; прежнее без ответа удаляется
+//   POST /rooms/<код>/join        -> { room } — войти вторым игроком (участнику — просто комната); 409 room_full
+//   GET  /rooms/<код>?seq=<n>     -> { same: true } — ничего нового | { room } — опрос, пока ждёшь соперника
+//   POST /rooms/<код>/move  { seq, move, over? } -> { room } | 409 { error, room } — не твой ход / состояние новее
+//   POST /rooms/<код>/resign      -> { room } — сдаться; своё приглашение без ответа — удалить ({ gone: true })
 // Панель (только для ADMIN_IDS):
 //   GET    /admin/players?q=&limit=&offset=
 //   GET    /admin/player/<id>
@@ -47,6 +55,7 @@ import {
   checkInitData, timingSafeEqual, validateState, parseAdminIds, isAdmin, displayName,
   publicGames, findGames, startAppLink, progressLines, shiftEntities, GAMES, BOARDS, boardScores, boardPoints, pointsView, boardFor, BOARD_VERSION, boardName,
   PERKS, isPerk, FRAMES, BADGES, isBadge, wearOf, visitStreak, SERVER_BETA, SYNC_PROTOCOL, overallPoints, overallRanking, withoutUsers, parseUsername, matchPlayers, REPORT_MAX, REPORT_PER_HOUR, reportMessage, START_TEXT, WELCOME_TEXT, WELCOME_MEDIA,
+  ROOM_GAMES, ROOM_CODE_LENGTH, ROOM_SEEN_EVERY_MS, ROOM_AWAY_MS, ROOM_KEEP_MS, ROOM_KEEP_DONE_MS, roomParam, roomSeat, roomTurn, roomView,
 } from './lib.js';
 import {
   MERGE_PROTOCOL, loadDoc, saveDoc, applyPush, applyAdmin, entriesSince, isDeviceId,
@@ -138,6 +147,7 @@ export default {
       }
       if (path === '/state' && request.method === 'PUT') return await putState(request, env, player, user, origin, admin);
       if (path === '/top' || path.startsWith('/top/')) return await topRoutes(request, env, path, player, admin, origin);
+      if (path === '/rooms' || path.startsWith('/rooms/')) return await roomRoutes(request, env, ctx, path, url, auth, origin);
       if (path === '/report' && request.method === 'POST') {
         if (!betaOpen('feedback', admin) && !(await isTester(env, player.id))) return fail('not_found', 404, origin);
         const { text } = await body(request);
@@ -889,6 +899,196 @@ async function isTester(env, userId) {
   return Boolean(await env.DB.prepare('SELECT 1 FROM beta_testers WHERE user_id = ?').bind(userId).first());
 }
 
+// ---------- партии с другом по сети (комнаты) ----------
+// Таблицу обработчик заводит сам. Правил игр здесь нет (ROOM_GAMES в lib.js): сервер хранит ходы, следит за
+// очередью и номером состояния (seq — растёт с каждым событием: пришёл второй игрок, ход, сдача) и пишет игроку
+// через бота, когда соперник походил, а самого его в партии нет. Приложение не держит соединение, а спрашивает
+// комнату, пока ждёт хода (shell/online.js), — «ничего нового» отвечается одной строкой.
+
+const ROOMS_PER_MINUTE = 6;         // приглашений в минуту от игрока
+const ROOM_POLLS_PER_MINUTE = 40;   // приложение спрашивает не чаще раза в 5 с — это от зацикливания
+const ROOM_SWEEP_EVERY_MS = 60 * 60 * 1000;
+const roomsReady = new WeakSet();
+const roomSwept = new WeakMap();
+const roomLog = new Map();
+const roomPollLog = new Map();
+
+async function ensureRooms(env) {
+  if (roomsReady.has(env.DB)) return;
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS rooms (
+    code TEXT PRIMARY KEY, game TEXT NOT NULL, host INTEGER NOT NULL, guest INTEGER, first INTEGER NOT NULL,
+    moves TEXT NOT NULL, seq INTEGER NOT NULL, status TEXT NOT NULL, result TEXT, name0 TEXT NOT NULL, name1 TEXT,
+    created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+    seen0 INTEGER NOT NULL DEFAULT 0, seen1 INTEGER NOT NULL DEFAULT 0)`).run();
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS rooms_host ON rooms(host, game, status)').run();
+  roomsReady.add(env.DB);
+}
+
+/** Старые партии удаляются сами: брошенные — через месяц без ходов, оконченные и приглашения без ответа — через три дня. */
+async function sweepRooms(env, now) {
+  if (now - (roomSwept.get(env.DB) ?? 0) < Number(env.ROOM_SWEEP_EVERY_MS ?? ROOM_SWEEP_EVERY_MS)) return;
+  roomSwept.set(env.DB, now);
+  await env.DB.prepare("DELETE FROM rooms WHERE updated_at < ? OR (status != 'play' AND updated_at < ?)")
+    .bind(now - ROOM_KEEP_MS, now - ROOM_KEEP_DONE_MS).run();
+}
+
+function roomCode() {
+  const bytes = crypto.getRandomValues(new Uint8Array(ROOM_CODE_LENGTH));
+  return [...bytes].map((b) => (b % 36).toString(36)).join('');
+}
+
+async function loadRoom(env, code) {
+  const row = await env.DB.prepare('SELECT * FROM rooms WHERE code = ?').bind(code).first();
+  if (!row) return null;
+  const parse = (text, empty) => {
+    try {
+      return JSON.parse(text) ?? empty;
+    } catch {
+      return empty;
+    }
+  };
+  return { ...row, moves: parse(row.moves, []), result: row.result ? parse(row.result, null) : null };
+}
+
+// D1 отдаёт число изменённых строк в meta.changes, node:sqlite (локальный сервер) — в changes
+const wrote = (res) => (res?.meta?.changes ?? res?.changes ?? 0) > 0;
+
+/**
+ * Сообщение игроку от бота с кнопкой, открывающей партию, — только если он её сейчас не смотрит (давно не спрашивал).
+ * Заблокировал бота — просто не получит. Ответ игроку этим не задерживается (ctx.waitUntil).
+ */
+function roomNote(env, ctx, room, seat, text, now) {
+  if (now - (seat ? room.seen1 : room.seen0) < ROOM_AWAY_MS) return null;
+  const spec = ROOM_GAMES[room.game];
+  const job = async () => {
+    try {
+      const to = await env.DB.prepare('SELECT tg_id FROM users WHERE id = ?').bind(seat ? room.guest : room.host).first();
+      if (!to) return;
+      const url = new URL(appUrl(env));
+      url.searchParams.set('startapp', roomParam(room.game, room.code));
+      const rival = seat ? room.name0 : room.name1;
+      await api(env, 'sendMessage', {
+        chat_id: to.tg_id,
+        text: `${spec.emoji} <b>${escapeHtml(spec.title)}</b> · ${escapeHtml(rival ?? 'друг')}\n${text}`,
+        parse_mode: 'HTML',
+        reply_markup: { inline_keyboard: [[{ text: '▶️ Открыть партию', web_app: { url: url.href } }]] },
+      });
+    } catch (err) {
+      console.error('сообщение о партии не ушло', err);
+    }
+  };
+  if (ctx?.waitUntil) {
+    ctx.waitUntil(job());
+    return null;
+  }
+  return job();
+}
+
+async function roomRoutes(request, env, ctx, path, url, { player, admin, user }, origin) {
+  await ensureRooms(env);
+  const now = Date.now();
+  // пока функция игры в серверной бете — комнаты только владельцу и бета-тестерам (тестера спрашиваем, только если нужно)
+  const open = async (game) => {
+    const spec = Object.hasOwn(ROOM_GAMES, game) ? ROOM_GAMES[game] : null;
+    if (!spec) return false;
+    return !SERVER_BETA.includes(spec.beta) || admin || await isTester(env, player.id);
+  };
+
+  if (path === '/rooms' && request.method === 'POST') {
+    const { game, first } = await body(request);
+    if (!(await open(game))) return fail('not_found', 404, origin);
+    if (!allowed(roomLog, ROOMS_PER_MINUTE, player.tg_id)) return fail('too_many', 429, origin);
+    await sweepRooms(env, now);
+    // приглашение у игрока одно на игру: новое заменяет прежнее, на которое никто не пришёл
+    await env.DB.prepare("DELETE FROM rooms WHERE host = ? AND game = ? AND status = 'wait'").bind(player.id, game).run();
+    const firstSeat = first === 'me' ? 0 : first === 'them' ? 1 : crypto.getRandomValues(new Uint8Array(1))[0] & 1;
+    const code = roomCode();
+    await env.DB.prepare(
+      `INSERT INTO rooms (code, game, host, first, moves, seq, status, name0, created_at, updated_at, seen0)
+       VALUES (?, ?, ?, ?, '[]', 1, 'wait', ?, ?, ?, ?)`,
+    ).bind(code, game, player.id, firstSeat, boardName(user?.first_name), now, now, now).run();
+    return json({ room: roomView(await loadRoom(env, code), 0) }, 200, origin);
+  }
+
+  const m = path.match(/^\/rooms\/([a-z0-9]{10})(\/join|\/move|\/resign)?$/);
+  if (!m) return fail('not_found', 404, origin);
+  const [, code, action = ''] = m;
+  if ((action ? 'POST' : 'GET') !== request.method) return fail('not_found', 404, origin);
+  const room = await loadRoom(env, code);
+  if (!room || !Object.hasOwn(ROOM_GAMES, room.game)) return fail('no_room', 404, origin);
+  if (!(await open(room.game))) return fail('not_found', 404, origin);
+  const spec = ROOM_GAMES[room.game];
+  const seat = roomSeat(room, player.id);
+  const view = (r) => roomView(r, roomSeat(r, player.id));
+
+  if (action === '/join') {
+    if (seat >= 0) return json({ room: view(room) }, 200, origin);
+    if (room.status !== 'wait' || room.guest != null) return fail('room_full', 409, origin);
+    await env.DB.prepare(
+      "UPDATE rooms SET guest = ?, name1 = ?, status = 'play', seq = seq + 1, updated_at = ?, seen1 = ? WHERE code = ? AND guest IS NULL AND status = 'wait'",
+    ).bind(player.id, boardName(user?.first_name), now, now, code).run();
+    const fresh = await loadRoom(env, code);
+    if (!fresh) return fail('no_room', 404, origin);
+    if (fresh.guest !== player.id) return fail('room_full', 409, origin);       // второго игрока успели привести раньше
+    await roomNote(env, ctx, fresh, 0, `Друг в игре — партия началась. ${roomTurn(fresh) === 0 ? 'Твой ход.' : 'Первый ход — за соперником.'}`, now);
+    return json({ room: view(fresh) }, 200, origin);
+  }
+
+  if (seat < 0) return fail('not_member', 403, origin);
+
+  if (!action) {
+    if (!allowed(roomPollLog, ROOM_POLLS_PER_MINUTE, player.tg_id)) return fail('too_many', 429, origin);
+    if (now - (seat ? room.seen1 : room.seen0) >= ROOM_SEEN_EVERY_MS) {
+      await env.DB.prepare(`UPDATE rooms SET seen${seat} = ? WHERE code = ?`).bind(now, code).run();
+    }
+    if (url.searchParams.get('seq') === String(room.seq)) return json({ same: true }, 200, origin);
+    return json({ room: view(room) }, 200, origin);
+  }
+
+  // состояние уже другое (соперник сдался, ход принят раньше) — отдаём свежую комнату, приложение перерисуется
+  const stale = (error, r = room) => json({ error, room: view(r) }, 409, origin);
+
+  if (action === '/move') {
+    const { seq, move, over } = await body(request);
+    if (room.status !== 'play') return stale('not_playing');
+    if (roomTurn(room) !== seat) return stale('not_your_turn');
+    if (seq !== room.seq) return stale('stale');
+    if (typeof move !== 'string' || !spec.move.test(move) || room.moves.length >= spec.maxMoves) return fail('bad_move', 400, origin);
+    // партия кончилась этим ходом — говорит приложение: проиграть своим ходом нельзя, поэтому победитель — ходивший
+    let result = null;
+    if (over != null) {
+      if (typeof over !== 'string' || !Object.hasOwn(spec.ends, over)) return fail('bad_move', 400, origin);
+      result = { by: over, winner: spec.ends[over] === 'win' ? seat : null };
+    }
+    const res = await env.DB.prepare(
+      `UPDATE rooms SET moves = ?, seq = seq + 1, status = ?, result = ?, updated_at = ?, seen${seat} = ? WHERE code = ? AND seq = ? AND status = 'play'`,
+    ).bind(JSON.stringify([...room.moves, move]), result ? 'over' : 'play', result ? JSON.stringify(result) : null, now, now, code, room.seq).run();
+    const fresh = await loadRoom(env, code);
+    if (!fresh) return fail('no_room', 404, origin);
+    if (!wrote(res)) return stale('stale', fresh);
+    await roomNote(env, ctx, fresh, 1 - seat, `Соперник походил: ${spec.say(move)}. ${result ? 'Партия окончена — загляни.' : 'Твоя очередь.'}`, now);
+    return json({ room: view(fresh) }, 200, origin);
+  }
+
+  if (action === '/resign') {
+    if (room.status === 'wait') {
+      await env.DB.prepare("DELETE FROM rooms WHERE code = ? AND status = 'wait'").bind(code).run();
+      return json({ gone: true }, 200, origin);
+    }
+    if (room.status === 'over') return json({ room: view(room) }, 200, origin);
+    const result = { by: 'resign', winner: 1 - seat };
+    const res = await env.DB.prepare(
+      `UPDATE rooms SET status = 'over', result = ?, seq = seq + 1, updated_at = ?, seen${seat} = ? WHERE code = ? AND status = 'play'`,
+    ).bind(JSON.stringify(result), now, now, code).run();
+    const fresh = await loadRoom(env, code);
+    if (!fresh) return fail('no_room', 404, origin);
+    if (wrote(res)) await roomNote(env, ctx, fresh, 1 - seat, 'Соперник сдался — победа за тобой!', now);
+    return json({ room: view(fresh) }, 200, origin);
+  }
+
+  return fail('not_found', 404, origin);
+}
+
 // ---------- панель владельца ----------
 
 async function adminRoutes(request, env, path, url, origin) {
@@ -1019,6 +1219,9 @@ async function adminRoutes(request, env, path, url, origin) {
     await env.DB.prepare('DELETE FROM board_scores WHERE user_id = ?').bind(id).run();
     await env.DB.prepare('DELETE FROM board_players WHERE user_id = ?').bind(id).run();
     await env.DB.prepare('DELETE FROM states WHERE user_id = ?').bind(id).run();
+    // партии с другом: в них его имя и ходы
+    await ensureRooms(env);
+    await env.DB.prepare('DELETE FROM rooms WHERE host = ? OR guest = ?').bind(id, id).run();
     try {
       await env.DB.prepare('DELETE FROM states_premerge WHERE user_id = ?').bind(id).run();
     } catch {

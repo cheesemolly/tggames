@@ -36,7 +36,7 @@ export function gatedStorage(storage, allowed) {
 }
 
 export function openGame(container, entry, {
-  platform, onExit, beta = false, feature = () => true, perk = () => false, fresh = () => false,
+  platform, onExit, beta = false, feature = () => true, perk = () => false, fresh = () => false, online = () => null,
 }) {
   const gameStorage = createStorage(`game:${entry.id}`);
   let game = null;
@@ -109,6 +109,10 @@ export function openGame(container, entry, {
       feature: (id) => Boolean(feature(id)),
       // особый скин, выданный владельцем этому игроку (shell/perks.js)
       perk: (id) => Boolean(perk(id)),
+      // партии с другом по сети (shell/online.js); null — недоступны: игрок не вошёл (вне Telegram) или функция в бете
+      get online() {
+        return online() ?? null;
+      },
       finish: (result) => {
         if (thisRun === run && live(thisRun)) onFinish(result).catch(showError);
       },

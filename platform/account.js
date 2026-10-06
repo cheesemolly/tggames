@@ -10,6 +10,7 @@ export { ERRORS, message } from './errors.js';
 
 let topCache = null;        // { at, promise } — последняя сводка рейтинга
 const TOP_CACHE_MS = 30 * 1000;
+const ROOM_TIMEOUT_MS = 12 * 1000;
 let me = null;              // { id, tgId, name, username, isAdmin, beta, banned, perks, cosmetics? } или null
 
 export const account = {
@@ -58,13 +59,14 @@ export const account = {
   // bounded — и отправку при уходе (keepalive) обрывать по таймауту (бета sync-refresh): приложение свернули, а не
   // закрыли — зависшая отправка иначе держала бы все следующие сохранения и перечитывание. Если страницу закрывают,
   // таймер уже не сработает, и браузер доведёт запрос до конца, как раньше.
-  async request(path, { method = 'GET', payload = null, keepalive = false, bounded = false } = {}) {
+  // timeoutMs — свой предел для этого запроса (опрос партии с другом: проще спросить ещё раз, чем ждать 20 с)
+  async request(path, { method = 'GET', payload = null, keepalive = false, bounded = false, timeoutMs = null } = {}) {
     if (!this.enabled) return { ok: false, error: 'no_init_data' };
     const headers = { Authorization: `tma ${platform.initData}` };
     if (payload) headers['Content-Type'] = 'application/json';
 
     // отправку при закрытии не обрываем: её и так доводит браузер
-    const limit = keepalive && !bounded ? 0 : this.timeoutMs;
+    const limit = keepalive && !bounded ? 0 : timeoutMs ?? this.timeoutMs;
     const abort = limit > 0 ? new AbortController() : null;
     const timer = abort && setTimeout(() => abort.abort(), limit);
     const send = (alive) => fetch(API_URL + path, {
@@ -147,6 +149,13 @@ export const account = {
   /** Обратная связь (как /report в боте): отзыв сразу приходит владельцу. */
   report(text) {
     return this.request('/report', { method: 'POST', payload: { text } });
+  },
+
+  // ---------- партии с другом по сети (в бете 'chess-online'; shell/online.js) ----------
+
+  /** Запрос к комнатам: /rooms<tail>. Не висит дольше ROOM_TIMEOUT_MS — опрос и отправка хода просто повторятся. */
+  roomRequest(tail = '', { method = 'GET', payload = null } = {}) {
+    return this.request(`/rooms${tail}`, { method, payload, timeoutMs: ROOM_TIMEOUT_MS });
   },
 
   // ---------- рейтинг (в ответах только имя игрока — без ника и id) ----------

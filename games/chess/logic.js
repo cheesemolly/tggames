@@ -1,7 +1,7 @@
-// Партия против бота без экрана: проверка сохранения, статистика по уровням, съеденные фигуры и запись
-// ходов по-русски. Отдельно от index.js — чтобы проверять в тестах без браузера.
+// Партия без экрана: проверка сохранения, статистика по уровням, съеденные фигуры, запись ходов по-русски и
+// партия с другом по сети (проверка присланных ходов, итог). Отдельно от index.js — чтобы проверять в тестах без браузера.
 
-import { WHITE, BLACK, PAWN, KNIGHT, BISHOP, ROOK, QUEEN, typeOf, colorOf, fromFen, make, moveFromUci, outcome } from './rules.js';
+import { WHITE, BLACK, PAWN, KNIGHT, BISHOP, ROOK, QUEEN, START_FEN, typeOf, colorOf, fromFen, make, moveFromUci, outcome } from './rules.js';
 import { LEVELS } from './engine.js';
 import { RU_LETTER } from './pieces.js';
 
@@ -71,4 +71,79 @@ export function recordGame(stats, level, result) {
   else if (result === 'lose') row.losses += 1;
   else row.draws += 1;
   return stats;
+}
+
+// ---------- партия с другом по сети (api.online; в бете 'chess-online') ----------
+
+const COUNTS = ['played', 'wins', 'losses', 'draws'];
+
+/** Мой цвет в партии с другом: белыми играет тот, кто ходит первым. room — комната с сервера. */
+export const onlineColor = (room) => (room.you === room.first ? WHITE : BLACK);
+
+/** Имя соперника (второго игрока может ещё не быть). */
+export const rivalName = (room) => room.players?.[1 - room.you]?.name ?? null;
+
+/**
+ * Ходы партии с другом: сервер правил не знает, поэтому проверяем сами — все ходы законны с начальной позиции
+ * и после конца партии ходов нет. → { ok, over } — over: итог позиции по правилам (как outcome) или null.
+ */
+export function checkLine(moves) {
+  const bad = { ok: false, over: null };
+  if (!Array.isArray(moves)) return bad;
+  try {
+    const p = fromFen(START_FEN);
+    let over = null;
+    for (const u of moves) {
+      if (over) return bad;
+      const m = typeof u === 'string' ? moveFromUci(p, u) : 0;
+      if (!m) return bad;
+      make(p, m);
+      over = outcome(p);
+    }
+    return { ok: true, over };
+  } catch {
+    return bad;
+  }
+}
+
+/**
+ * Чем партия с другом кончилась для меня: { result: 'win' | 'lose' | 'draw' | 'void', reason } или null — ещё идёт.
+ * over — итог позиции по правилам (outcome) или null; иначе итог берётся из комнаты (сдача). 'void' — сдались,
+ * не успев сделать по ходу: партия не состоялась и в статистику не идёт.
+ */
+export function onlineResult(room, over) {
+  if (over) {
+    const result = over.winner === undefined ? 'draw' : over.winner === onlineColor(room) ? 'win' : 'lose';
+    return { result, reason: over.result };
+  }
+  if (room.status !== 'over' || !room.result) return null;
+  const reason = room.result.by === 'resign' ? 'resign' : 'ended';
+  if (reason === 'resign' && room.moves.length < 2) return { result: 'void', reason };
+  const { winner } = room.result;
+  return { result: winner == null ? 'draw' : winner === room.you ? 'win' : 'lose', reason };
+}
+
+export const emptyOnline = () => ({ played: 0, wins: 0, losses: 0, draws: 0 });
+
+const isCounts = (row) => Boolean(row) && COUNTS.every((k) => Number.isInteger(row[k]) && row[k] >= 0);
+
+/** Статистика партий с другом — stats.online, рядом с уровнями бота (у старых сохранений её нет). */
+export const onlineStats = (stats) => (isCounts(stats?.online) ? stats.online : emptyOnline());
+
+/** Итог партии с другом в статистику: 'win' | 'lose' | 'draw' (отменённая партия не считается). */
+export function recordOnline(stats, result) {
+  if (!['win', 'lose', 'draw'].includes(result)) return stats;
+  const row = { ...onlineStats(stats) };
+  row.played += 1;
+  if (result === 'win') row.wins += 1;
+  else if (result === 'lose') row.losses += 1;
+  else row.draws += 1;
+  stats.online = row;
+  return stats;
+}
+
+/** Запись о начатой партии с другом (хранилище 'online'): { code, name, on } — on: открывать её, а не бота. */
+export function isValidOnline(s) {
+  return Boolean(s) && typeof s.code === 'string' && /^[a-z0-9]{10}$/.test(s.code)
+    && (s.name === null || typeof s.name === 'string') && typeof s.on === 'boolean';
 }

@@ -6,6 +6,11 @@
 // в материале; ниже — запись партии по-русски (Кр, Ф, Л, С, К). Инструменты: вернуть ход (свой и ответ бота),
 // подсказка (3 за партию — стрелка), повернуть доску, сдаться. Ничьи — сами: пат, троекратное повторение,
 // 50 ходов, мало фигур для мата. Конец партии — экран результата оболочки с причиной.
+//
+// Партия с другом по сети (в бете 'chess-online', api.online): в окне новой партии — «С другом»; создаётся комната,
+// ссылку на неё отправляют другу. Доска та же, но ходы уходят на сервер и приходят с него (опросом, пока ждём хода);
+// сервер правил не знает — присланные ходы проверяются здесь. Возврата хода и подсказок нет. Итог — своё окно и своя
+// строка статистики (в рейтинг не идёт). Партия с ботом на это время откладывается, её сохранение не трогается.
 
 import { el } from '../../shared/dom.js';
 import { animate, showLayer, hideLayer, reducedMotion, shake } from '../../shared/motion.js';
@@ -19,7 +24,10 @@ import {
 } from './rules.js';
 import { LEVELS, chooseMove, bestMove } from './engine.js';
 import { pieceSvg } from './pieces.js';
-import { HINTS_PER_GAME, emptyStats, isValidStats, isValidGame, capturedOf, ruSan, recordGame } from './logic.js';
+import {
+  HINTS_PER_GAME, emptyStats, isValidStats, isValidGame, capturedOf, ruSan, recordGame,
+  onlineColor, rivalName, checkLine, onlineResult, onlineStats, recordOnline, isValidOnline,
+} from './logic.js';
 import { pointsInfo } from '../../shared/points-info.js';
 
 const T = {
@@ -47,7 +55,52 @@ const T = {
   draw: 'Ничья',
   reasons: {
     checkmate: 'Мат', stalemate: 'Пат', repetition: 'Позиция повторилась трижды', fifty: '50 ходов без взятий и ходов пешками',
-    material: 'Не хватает фигур для мата', resign: 'Сдача',
+    material: 'Не хватает фигур для мата', resign: 'Сдача', ended: 'Партия окончена',
+  },
+  // партия с другом по сети
+  rival: 'Соперник',
+  vsBot: 'С ботом',
+  vsFriend: 'С другом',
+  botLevel: 'Уровень бота',
+  botResume: 'Продолжить партию с ботом',
+  friendAbout: 'Создай партию и отправь другу ссылку. Он откроет её в Telegram — и вы играете, каждый со своего телефона. В рейтинг такие партии не идут.',
+  create: 'Создать партию',
+  creating: 'Создаю…',
+  invite: 'Позови друга',
+  inviteText: 'Отправь другу ссылку. Как только он её откроет, партия начнётся. Ждать здесь не обязательно: бот напишет.',
+  inviteMade: 'Партия создана, ждём друга.',
+  showLink: 'Показать ссылку',
+  tapForLink: 'показать ссылку',
+  shareText: 'Сыграем в шахматы? ♟️',
+  send: 'Отправить',
+  copy: 'Скопировать',
+  copied: 'Скопировано',
+  copyFail: 'Скопируй вручную',
+  cancelInvite: 'Отменить приглашение',
+  waitingFriend: 'Ждём друга…',
+  friendWord: 'друг',
+  joined: (name) => `${name} в игре — партия началась`,
+  paused: 'бот напишет о ходе',
+  offline: 'нет связи…',
+  refresh: 'Проверить, не походил ли соперник',
+  busyFriend: (name) => `Идёт партия, соперник — ${name}. Доиграй её или сдайся — и можно будет создать новую.`,
+  pausedFriend: (name) => `Партия с другом ждёт тебя, соперник — ${name}.`,
+  backToFriend: 'Вернуться к партии',
+  busyInvite: (name) => `Сначала доиграй эту партию (соперник — ${name}), потом открой ссылку ещё раз`,
+  versus: (name) => `соперник — ${name}`,
+  aborted: 'Партия отменена',
+  seeBoard: 'К доске',
+  gone: 'Партии больше нет: приглашение отменено или вышел срок',
+  badRoom: 'Партия остановлена: пришёл ход не по правилам',
+  errors: {
+    no_room: 'Партия не найдена — ссылка устарела',
+    not_member: 'Это чужая партия',
+    room_full: 'В этой партии уже двое',
+    finished: 'Эта партия уже закончена',
+    not_found: 'Игра с другом пока недоступна',
+    too_many: 'Слишком часто — попробуй через минуту',
+    network: 'Сервер не отвечает — попробуй ещё раз',
+    other: 'Не получилось — попробуй ещё раз',
   },
   stats: 'Статистика',
   settings: 'Настройки',
@@ -85,7 +138,11 @@ const ICONS = {
   soundOn: svgIcon('<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/>'),
   soundOff: svgIcon('<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="m16 9 5 6"/><path d="m21 9-5 6"/>'),
   bot: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 4v4M9 13h.01M15 13h.01M9 17h6"/></svg>',
+  friend: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20a6 6 0 0 1 12 0"/><circle cx="17.5" cy="9.5" r="2.4"/><path d="M17 14.3a4.8 4.8 0 0 1 4 4.7"/></svg>',
+  refresh: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>',
 };
+
+const COLORS = ['white', 'black', 'random'];
 
 let api = null;
 let host = null;
@@ -105,10 +162,14 @@ let flipped = false;
 let hintMove = 0;
 let modalActive = false;
 let modalToken = 0;
+let modalName = '';             // какое окно открыто ('invite' закрывается само, когда друг пришёл)
 let soundOn = true;
 let settings = { theme: 'telegram', pieces: 'classic', coords: true };
-let setup = { level: 3, color: 'white' };
+let setup = { level: 3, color: 'white', friend: 'random' };
 let stats = {};
+let net = null;                 // партия с другом по сети: { session, name, done, sending }; null — играем с ботом
+let stored = null;              // запись 'online' в хранилище — начатая партия с другом: { code, name, on }
+let botGame = null;             // партия с ботом, отложенная на время игры с другом
 let worker = null;
 let requestId = 0;
 const els = new Map();          // клетка → элемент фигуры
@@ -157,13 +218,13 @@ function rebuild() {
 }
 
 function save() {
-  if (!api || !game) return;
+  if (!api || !game || game.online) return;       // партия с другом живёт на сервере, сохранение — только у бота
   if (over || !game.moves.length) api.storage.remove('current');
   else api.storage.set('current', game);
 }
 
 const levelOf = (id) => LEVELS.find((l) => l.id === id) ?? LEVELS[2];
-const myTurn = () => !over && pos.turn === game.player;
+const myTurn = () => !over && pos.turn === game.player && (!net || net.session.room.status === 'play');
 const bottomWhite = () => (game.player === WHITE) !== flipped;
 
 // ---------- доска ----------
@@ -339,14 +400,47 @@ function paintPlayers() {
   };
   row(ui.me, game.player);
   row(ui.them, game.player ^ 8);
-  ui.them.name.textContent = `${T.bot} · ${levelOf(game.level).name}`;
-  ui.them.status.textContent = busy && !myTurn() ? T.thinking : '';
-  ui.them.root.classList.toggle('ch-turn', !over && pos.turn !== game.player);
-  ui.me.root.classList.toggle('ch-turn', !over && pos.turn === game.player);
+  paintFace();
+  const room = net ? net.session.room : null;
+  const playing = !room || room.status === 'play';
+  let status = busy && !myTurn() ? T.thinking : '';
+  let still = false;              // подпись не мигает: это не «думает», а подсказка, что делать
+  let stuck = false;              // опрос остановлен или нет связи — рядом кнопка «проверить»
+  if (net) {
+    const { state } = net.session;
+    const theirs = !over && playing && pos.turn !== game.player;
+    stuck = !net.done && (state === 'paused' || state === 'offline');
+    still = !net.done && (state === 'paused' || !playing);
+    if (net.done) status = '';
+    else if (state === 'offline') status = T.offline;
+    else if (!playing) status = T.tapForLink;
+    else status = theirs ? (state === 'paused' ? T.paused : T.thinking) : '';
+    ui.them.name.textContent = net.name ?? T.waitingFriend;
+  } else {
+    ui.them.name.textContent = `${T.bot} · ${levelOf(game.level).name}`;
+  }
+  ui.them.status.textContent = status;
+  ui.them.status.classList.toggle('ch-status-still', still);
+  ui.them.refresh.classList.toggle('ch-refresh-on', stuck);
+  ui.them.refresh.tabIndex = stuck ? 0 : -1;
+  ui.them.root.classList.toggle('ch-player-link', Boolean(net) && !net.done && !playing);
+  ui.them.root.classList.toggle('ch-turn', !over && playing && pos.turn !== game.player);
+  ui.me.root.classList.toggle('ch-turn', !over && playing && pos.turn === game.player);
   ui.hintBtn.querySelector('.ch-count').textContent = String(game.hints);
+  ui.hintBtn.classList.toggle('ch-tool-off', Boolean(game.online));     // с другом подсказок нет — и счётчика тоже
   ui.hintBtn.disabled = !game.hints || Boolean(over) || !myTurn() || busy;
   ui.undoBtn.disabled = !canUndo();
-  ui.resignBtn.disabled = Boolean(over) || !game.moves.length;
+  ui.resignBtn.disabled = net ? net.done || !playing : Boolean(over) || !game.moves.length;
+}
+
+/** Аватар соперника: значок бота или первая буква имени друга. */
+function paintFace() {
+  const key = net ? `friend:${net.name ?? ''}` : 'bot';
+  if (ui.them.face === key) return;
+  ui.them.face = key;
+  ui.them.avatar.classList.toggle('ch-avatar-bot', !net);
+  if (net) ui.them.avatar.textContent = (net.name ?? '').trim().charAt(0).toUpperCase() || '?';
+  else ui.them.avatar.innerHTML = ICONS.bot;
 }
 
 function paintMoves() {
@@ -491,7 +585,8 @@ function playerMove(m) {
   selected = -1;
   hintMove = 0;
   applyMove(m, false);
-  if (!over) botTurn();
+  if (net) sendMove();
+  else if (!over) botTurn();
 }
 
 /** Сделать ход (позиция, запись, анимация, звук); партия кончилась — итог. */
@@ -512,7 +607,7 @@ function applyMove(m, byBot) {
   over = outcome(pos, legal);
   save();
   paintAll();
-  if (over) finish();
+  if (over && !net) finish();       // итог партии с другом — после ответа сервера (sendMove, syncRoom)
 }
 
 // ---------- бот ----------
@@ -577,6 +672,7 @@ function askEngine(level) {
 }
 
 async function botTurn() {
+  if (!game || game.online) return;
   busy = true;
   paintPlayers();
   const token = requestId + 1;
@@ -597,7 +693,7 @@ async function botTurn() {
 // ---------- инструменты ----------
 
 function canUndo() {
-  if (!game || over || busy || !myTurn()) return false;
+  if (!game || game.online || over || busy || !myTurn()) return false;
   const botFirst = fromFen(game.startFen).turn !== game.player;
   return game.moves.length >= (botFirst ? 3 : 2);
 }
@@ -647,7 +743,7 @@ function onFlip() {
 }
 
 function onResign() {
-  if (over || !game.moves.length) return;
+  if (net ? net.done || net.session.room.status !== 'play' : over || !game.moves.length) return;
   openModal(card(T.resignAsk,
     el('div', { class: 'ch-btns' },
       el('button', { class: 'btn btn-secondary', onclick: closeModal }, T.cancel),
@@ -657,6 +753,10 @@ function onResign() {
 }
 
 function resign() {
+  if (net) {
+    resignOnline();
+    return;
+  }
   if (over) return;
   requestId++;
   busy = false;
@@ -683,17 +783,21 @@ function finish() {
 
 // ---------- окна ----------
 
-function openModal(content) {
+function openModal(content, name = '') {
   if (!modalActive) sfx('click');
   modalToken++;
+  modalName = name;
   ui.modal.replaceChildren(content);
   if (!modalActive) showLayer(ui.modal);
+  // одно окно сменяет другое (новая партия → приглашение, итог → новая партия) — новое проявляется, а не выскакивает
+  else animate(content, [{ opacity: 0, translate: '0 10px' }, { opacity: 1, translate: '0 0' }], { duration: 220, easing: 'ease-out' });
   modalActive = true;
 }
 
 function closeModal() {
   if (!modalActive) return;
   modalActive = false;
+  modalName = '';
   const token = ++modalToken;
   hideLayer(ui.modal, () => token === modalToken).then(() => {
     if (ui && token === modalToken) ui.modal.replaceChildren();
@@ -723,30 +827,107 @@ function radioGroup(cls, items, isOn, onPick) {
   return buttons;
 }
 
-function showNewGame() {
-  const draft = { ...setup };
-  const inProgress = game && !over && game.moves.length >= 2;
-  openModal(card(T.newGame,
-    el('h3', { class: 'ch-section' }, T.level),
+const colorOptions = () => COLORS.map((id) => ({ id, body: [el('span', { class: `ch-color-dot ch-color-${id}` }), el('b', {}, T.colors[id])] }));
+
+/** Настройки партии с ботом; friends — в окне есть выбор «С ботом / С другом» (тогда заголовок — «Уровень бота»). */
+function botPane(draft, withFriends) {
+  const current = game.online ? botGame : over ? null : game;      // начатая партия с ботом
+  return [
+    game.online && botGame ? el('button', { class: 'btn btn-secondary ch-play', onclick: () => { closeModal(); backToBot(); } }, T.botResume) : null,
+    el('h3', { class: 'ch-section' }, withFriends ? T.botLevel : T.level),
     el('div', { class: 'ch-levels', role: 'radiogroup' }, radioGroup('ch-option',
       LEVELS.map((l) => ({ id: l.id, body: [el('b', {}, `${l.id}. ${l.name}`), el('span', {}, l.hint)] })),
       (id) => draft.level === id, (id) => { draft.level = id; })),
     el('h3', { class: 'ch-section' }, T.color),
-    el('div', { class: 'ch-row3', role: 'radiogroup' }, radioGroup('ch-option ch-option-sm',
-      ['white', 'black', 'random'].map((id) => ({ id, body: [el('span', { class: `ch-color-dot ch-color-${id}` }), el('b', {}, T.colors[id])] })),
+    el('div', { class: 'ch-row3', role: 'radiogroup' }, radioGroup('ch-option ch-option-sm', colorOptions(),
       (id) => draft.color === id, (id) => { draft.color = id; })),
-    inProgress ? el('p', { class: 'ch-note' }, T.abandon) : null,
-    el('button', { class: 'btn ch-play', onclick: () => { setup = draft; api.storage.set('setup', setup); closeModal(); startGame(); } }, T.play),
-  ));
+    current && current.moves.length >= 2 ? el('p', { class: 'ch-note' }, T.abandon) : null,
+    el('button', {
+      class: 'btn ch-play',
+      onclick: () => {
+        setup = { ...setup, level: draft.level, color: draft.color };
+        api.storage.set('setup', setup);
+        closeModal();
+        preferBot();
+        startGame();
+      },
+    }, T.play),
+  ];
+}
+
+/** Партия с другом: создать, вернуться в начатую или показать ссылку — смотря что сейчас идёт. */
+function friendPane(draft) {
+  const room = net && !net.done ? net.session.room : null;
+  if (room?.status === 'wait') {
+    return [el('p', { class: 'ch-about' }, T.inviteMade), el('button', { class: 'btn ch-play', onclick: showInvite }, T.showLink)];
+  }
+  if (room) return [el('p', { class: 'ch-about' }, T.busyFriend(net.name ?? T.friendWord))];
+  if (stored) {
+    return [
+      el('p', { class: 'ch-about' }, T.pausedFriend(stored.name ?? T.friendWord)),
+      el('button', { class: 'btn ch-play', onclick: () => { closeModal(); resumeOnline(); } }, T.backToFriend),
+    ];
+  }
+  const create = el('button', { class: 'btn ch-play' }, T.create);
+  create.addEventListener('click', () => {
+    setup = { ...setup, friend: draft.friend };
+    api.storage.set('setup', setup);
+    createFriendGame(create);
+  });
+  return [
+    el('p', { class: 'ch-about' }, T.friendAbout),
+    el('h3', { class: 'ch-section' }, T.color),
+    el('div', { class: 'ch-row3', role: 'radiogroup' }, radioGroup('ch-option ch-option-sm', colorOptions(),
+      (id) => draft.friend === id, (id) => { draft.friend = id; })),
+    create,
+  ];
+}
+
+/** Окно новой партии; tab — какую вкладку открыть ('bot' | 'friend'), если есть партии с другом. */
+function showNewGame(tab = null) {
+  const draft = { ...setup };
+  const withFriends = Boolean(friends());
+  let mode = withFriends ? tab ?? (net && !net.done ? 'friend' : 'bot') : 'bot';
+  const pane = el('div', { class: 'ch-pane' });
+  const paint = () => pane.replaceChildren(...(mode === 'friend' ? friendPane(draft) : botPane(draft, withFriends)).filter(Boolean));
+  const tabIcon = (html) => {
+    const node = el('i', { class: 'ch-tab-icon' });
+    node.innerHTML = html;
+    return node;
+  };
+  const tabs = withFriends ? [
+    el('h3', { class: 'ch-section' }, T.rival),
+    el('div', { class: 'ch-row2', role: 'radiogroup' }, radioGroup('ch-option ch-option-sm',
+      [{ id: 'bot', body: [tabIcon(ICONS.bot), el('b', {}, T.vsBot)] }, { id: 'friend', body: [tabIcon(ICONS.friend), el('b', {}, T.vsFriend)] }],
+      (id) => mode === id,
+      (id) => {
+        if (mode === id) return;
+        mode = id;
+        paint();
+        animate(pane, [{ opacity: 0, translate: '0 8px' }, { opacity: 1, translate: '0 0' }], { duration: 220, easing: 'ease-out' });
+      })),
+  ] : [];
+  paint();
+  openModal(card(T.newGame, ...tabs, pane), 'new');
+}
+
+/** Игрок выбрал бота: начатая партия с другом остаётся на сервере, но при открытии игры будет бот. */
+function preferBot() {
+  if (!stored?.on) return;
+  stored = { ...stored, on: false };
+  api.storage.set('online', stored);
 }
 
 function startGame() {
   requestId++;
-  // брошенная партия (новая поверх начатой) — поражение
-  if (game && !over && game.moves.length >= 2) {
-    recordGame(stats, game.level, 'lose');
+  // брошенная партия с ботом (новая поверх начатой) — поражение; партия с другом тут ни при чём
+  const dropped = game?.online ? botGame : over ? null : game;
+  if (dropped && dropped.moves.length >= 2) {
+    recordGame(stats, dropped.level, 'lose');
     api.storage.set('stats', stats);
   }
+  leaveRoom();
+  botGame = null;
   const player = setup.color === 'random' ? (Math.random() < 0.5 ? WHITE : BLACK) : setup.color === 'black' ? BLACK : WHITE;
   game = { v: 1, startFen: START_FEN, moves: [], level: setup.level, player, hints: HINTS_PER_GAME };
   over = null;
@@ -782,8 +963,16 @@ function showStats() {
         const r = stats[l.id];
         return el('div', { class: 'ch-stats-row' }, el('span', {}, l.name), el('b', {}, r.wins), el('b', {}, r.draws), el('b', {}, r.losses));
       }),
+      friendRow(),
     ),
   ));
+}
+
+/** Строка «С другом» в статистике — когда такие партии доступны или уже были. */
+function friendRow() {
+  const r = onlineStats(stats);
+  if (!friends() && !r.played) return null;
+  return el('div', { class: 'ch-stats-row ch-stats-friend' }, el('span', {}, T.vsFriend), el('b', {}, r.wins), el('b', {}, r.draws), el('b', {}, r.losses));
 }
 
 function showSettings() {
@@ -845,8 +1034,311 @@ function playerBar(isBot) {
   const avatar = el('span', { class: `ch-avatar${isBot ? ' ch-avatar-bot' : ''}` });
   if (isBot) avatar.innerHTML = ICONS.bot;
   else avatar.textContent = (api.platform.user?.first_name ?? '').trim().charAt(0).toUpperCase() || 'Я';
-  const bar = el('div', { class: 'ch-player' }, avatar, el('div', { class: 'ch-player-main' }, el('div', { class: 'ch-player-top' }, name, status), caps));
-  return { root: bar, name, status, caps };
+  // «проверить, не походил ли соперник» — видна, только когда опрос партии с другом остановлен или нет связи
+  const refresh = isBot ? el('button', { class: 'ch-icon-btn ch-refresh', 'aria-label': T.refresh, title: T.refresh, tabIndex: -1 }) : null;
+  if (refresh) refresh.innerHTML = ICONS.refresh;
+  const bar = el('div', { class: 'ch-player' }, avatar, el('div', { class: 'ch-player-main' }, el('div', { class: 'ch-player-top' }, name, status), caps), refresh);
+  return { root: bar, name, status, caps, avatar, refresh, face: isBot ? 'bot' : 'me' };
+}
+
+// ---------- партия с другом по сети ----------
+
+/** Партии по сети: есть у вошедшего игрока, пока функция ему открыта (бета 'chess-online'); иначе null. */
+const friends = () => (api?.feature('chess-online') ? api.online ?? null : null);
+
+function remember(room) {
+  const next = { code: room.code, name: rivalName(room), on: true };
+  if (stored && stored.code === next.code && stored.name === next.name && stored.on) return;
+  stored = next;
+  api.storage.set('online', stored);
+}
+
+function forget() {
+  if (!stored) return;
+  stored = null;
+  api.storage.remove('online');
+}
+
+function leaveRoom() {
+  net?.session.close();
+  net = null;
+}
+
+/** Войти в комнату: доска — по её ходам, дальше партия живёт по ответам сервера. → вошли ли. */
+function enterRoom(room) {
+  const on = friends();
+  const line = checkLine(room.moves);
+  if (!on || !line.ok) {
+    toast.show(T.badRoom, 3500);
+    return false;
+  }
+  // партия с ботом ждёт своей очереди — её сохранение не трогаем
+  if (!game?.online) botGame = game && !over && game.moves.length ? game : null;
+  leaveRoom();
+  requestId++;                       // бот, который сейчас думает, уже не ответит
+  busy = false;
+  closePromo();
+  endDrag();
+  net = { session: null, name: rivalName(room), done: false, sending: false };
+  net.session = on.open(room, { onRoom: syncRoom, onGone: onRoomGone, onState: () => net && paintPlayers() });
+  game = { v: 1, startFen: START_FEN, moves: room.moves.slice(), level: 0, player: onlineColor(room), hints: 0, online: true };
+  flipped = false;
+  selected = -1;
+  hintMove = 0;
+  over = null;
+  rebuild();
+  over = line.over;
+  buildSquares();
+  renderPieces();
+  paintAll();
+  if (room.status === 'over' || over) finishOnline();
+  else remember(room);
+  return true;
+}
+
+/** Комната изменилась на сервере: пришёл друг, соперник походил или сдался — либо сервер не принял наш ход. */
+function syncRoom(room, was = null) {
+  if (!net || net.done) return;
+  const line = checkLine(room.moves);
+  if (!line.ok) {
+    toast.show(T.badRoom, 3500);
+    forget();
+    backToBot();
+    return;
+  }
+  net.name = rivalName(room) ?? net.name;
+  const local = game.moves;
+  const agrees = room.moves.length >= local.length && local.every((u, i) => u === room.moves[i]);
+  if (agrees && room.moves.length === local.length + 1 && !over) {
+    selected = -1;
+    hintMove = 0;
+    applyMove(moveFromUci(pos, room.moves[local.length], legal), true);    // ход соперника — с анимацией и звуком
+  } else if (!agrees || room.moves.length !== local.length) {
+    game.moves = room.moves.slice();                                         // разошлись с сервером — доска по его ходам
+    selected = -1;
+    hintMove = 0;
+    closePromo();
+    endDrag();
+    rebuild();
+    over = line.over;
+    renderPieces();
+  }
+  if (was?.status === 'wait' && room.status === 'play') {
+    if (modalName === 'invite') closeModal();                                // приглашение больше не нужно
+    toast.show(T.joined(net.name ?? T.friendWord), 2600);
+    sfx('start');
+    api.platform.haptic.notification('success');
+  }
+  paintAll();
+  if (room.status === 'over' || over) finishOnline();
+  else remember(room);
+}
+
+function onRoomGone() {
+  if (!net) return;
+  toast.show(T.gone, 3500);
+  forget();
+  backToBot();
+}
+
+/** Свой ход уходит на сервер (доска его уже показала); сервер не принял — доска возвращается к его состоянию. */
+async function sendMove() {
+  const { session } = net;
+  net.sending = true;
+  const res = await session.move(game.moves[game.moves.length - 1], over ? over.result : null);
+  if (!net || net.session !== session) return;
+  net.sending = false;
+  if (res.ok) {
+    if (over || res.room.status === 'over') finishOnline();
+    else {
+      remember(res.room);
+      paintPlayers();
+    }
+  } else if (res.room) syncRoom(res.room);
+  else if (res.error !== 'closed') onRoomGone();
+}
+
+async function resignOnline() {
+  if (!net || net.done) return;
+  const { session } = net;
+  const res = await session.resign();
+  if (!net || net.session !== session) return;
+  if (res.room) syncRoom(res.room);
+  else if (!res.ok && res.error !== 'closed') onRoomGone();
+}
+
+/** Партия с другом окончена: итог — своим окном (не api.finish: в рейтинг и статистику оболочки она не идёт). */
+function finishOnline() {
+  if (!net || net.done) return;
+  net.done = true;
+  const { room } = net.session;
+  net.session.close();
+  const end = onlineResult(room, over) ?? { result: 'draw', reason: 'ended' };
+  // сдача: по правилам позиция не окончена — помечаем сами, чтобы доска больше не принимала ходы
+  if (!over) {
+    over = { result: 'resign' };
+    if (end.result === 'win') over.winner = game.player;
+    else if (end.result === 'lose') over.winner = game.player ^ 8;
+  }
+  selected = -1;
+  hintMove = 0;
+  closePromo();
+  paintAll();
+  forget();
+  if (end.result !== 'void') {
+    recordOnline(stats, end.result);
+    api.storage.set('stats', stats);
+  }
+  later(() => sfx(end.result === 'void' ? 'draw' : end.result), 250);
+  api.platform.haptic.notification(end.result === 'win' ? 'success' : end.result === 'lose' ? 'error' : 'warning');
+  later(() => showOnlineResult(end), reducedMotion() ? 300 : 1300);
+}
+
+function showOnlineResult(end) {
+  if (!net?.done) return;
+  const title = { win: T.win, lose: T.lose, draw: T.draw, void: T.aborted }[end.result];
+  const moves = Math.ceil(game.moves.length / 2);
+  const parts = [
+    T.reasons[end.reason],
+    net.name ? T.versus(net.name) : null,
+    moves ? `${moves} ${plural(moves, ['ход', 'хода', 'ходов'])}` : null,
+  ];
+  openModal(card(title,
+    el('p', { class: 'ch-about' }, parts.filter(Boolean).join(' · ')),
+    el('div', { class: 'ch-btns' },
+      el('button', { class: 'btn btn-secondary', onclick: closeModal }, T.seeBoard),
+      el('button', { class: 'btn', onclick: () => showNewGame('friend') }, T.newGame),
+    ),
+  ), 'result');
+}
+
+/** Вернуться к игре с ботом: отложенная партия продолжается, нет её — новая. Партия с другом остаётся на сервере. */
+function backToBot() {
+  const parked = botGame;
+  leaveRoom();
+  botGame = null;
+  preferBot();
+  if (!parked || !isValidGame(parked)) {
+    startGame();
+    return;
+  }
+  requestId++;
+  game = parked;
+  over = null;
+  busy = false;
+  flipped = false;
+  selected = -1;
+  hintMove = 0;
+  closePromo();
+  rebuild();
+  buildSquares();
+  renderPieces();
+  paintAll();
+  if (!myTurn()) botTurn();
+}
+
+/** Вернуться в начатую партию с другом (запись 'online'): при открытии игры или из окна новой партии. */
+async function resumeOnline() {
+  const on = friends();
+  if (!on || !stored) return;
+  const { code } = stored;
+  const res = await on.load(code);
+  if (!api || stored?.code !== code) return;        // игру закрыли или запись сменилась, пока ждали ответа
+  if (res.ok) enterRoom(res.room);
+  else if (res.error === 'no_room' || res.error === 'not_member') {
+    forget();                                       // партии больше нет: вышел срок или её отменили
+    toast.show(T.gone, 3500);
+  } else toast.show(T.errors[res.error] ?? T.errors.other, 3000);
+}
+
+/** Игру открыли по ссылке-приглашению. */
+async function openInvite(code) {
+  const on = friends();
+  if (!on) return;
+  // партия с другом — одна за раз: начатую сначала надо доиграть (а оконченную — увидеть итог)
+  if (stored && stored.code !== code) {
+    const current = await on.load(stored.code);
+    if (!api) return;
+    if (current.ok && current.room.status !== 'wait') {
+      const busyWith = current.room.status === 'play';
+      if (enterRoom(current.room) && busyWith) toast.show(T.busyInvite(rivalName(current.room) ?? T.friendWord), 4500);
+      return;
+    }
+    if (!current.ok && current.error !== 'no_room' && current.error !== 'not_member') {
+      toast.show(T.errors[current.error] ?? T.errors.other, 3000);
+      return;
+    }
+    forget();                                       // своё приглашение без ответа или партии уже нет
+  }
+  const res = await on.join(code);
+  if (!api) return;
+  if (!res.ok) toast.show(T.errors[res.error] ?? T.errors.other, 3500);
+  else if (res.room.status === 'over') toast.show(T.errors.finished, 3500);
+  else enterRoom(res.room);
+}
+
+async function createFriendGame(button) {
+  const on = friends();
+  if (!on || button.disabled) return;
+  button.disabled = true;
+  button.textContent = T.creating;
+  const res = await on.create({ first: { white: 'me', black: 'them' }[setup.friend] ?? 'random' });
+  if (!api) return;
+  if (res.ok && enterRoom(res.room)) {
+    showInvite();
+    return;
+  }
+  button.disabled = false;
+  button.textContent = T.create;
+  shake(button, { distance: 4, duration: 260 });
+  if (!res.ok) toast.show(T.errors[res.error] ?? T.errors.other, 3000);
+}
+
+/** Окно с приглашением: ссылка, «Отправить» (окно Telegram «переслать») и «Скопировать». */
+function showInvite() {
+  const on = friends();
+  if (!on || !net || net.done || net.session.room.status !== 'wait') return;
+  const { code } = net.session.room;
+  const link = el('div', { class: 'ch-link' }, on.link(code));
+  const copy = el('button', { class: 'btn btn-secondary' }, T.copy);
+  copy.addEventListener('click', async () => {
+    const ok = await on.copy(code);
+    if (!api) return;
+    copy.textContent = ok ? T.copied : T.copyFail;
+    if (!ok) {
+      const range = document.createRange();
+      range.selectNodeContents(link);
+      const selection = getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+    later(() => { copy.textContent = T.copy; }, 1800);
+  });
+  openModal(card(T.invite,
+    el('p', { class: 'ch-about' }, T.inviteText),
+    link,
+    el('div', { class: 'ch-btns' }, copy, el('button', { class: 'btn', onclick: () => on.share(code, T.shareText) }, T.send)),
+    el('p', { class: 'ch-wait' }, el('span', { class: 'ch-dots' }, el('i'), el('i'), el('i')), T.waitingFriend),
+    el('button', { class: 'ch-text-btn', onclick: cancelInvite }, T.cancelInvite),
+  ), 'invite');
+}
+
+async function cancelInvite() {
+  if (!net || net.done || net.session.room.status !== 'wait') return;
+  const { session } = net;
+  closeModal();
+  const res = await session.resign();
+  if (!api || !net || net.session !== session) return;
+  if (res.ok && res.gone) {
+    forget();
+    backToBot();
+  } else if (res.room) syncRoom(res.room);          // пока отменяли, друг успел войти
+  else if (res.error !== 'closed') onRoomGone();
+}
+
+/** Нажатие на плашку соперника: пока ждём друга — показать ссылку. */
+function onRivalTap() {
+  if (net && !net.done && net.session.room.status === 'wait') showInvite();
 }
 
 function onKeydown(e) {
@@ -865,8 +1357,9 @@ export default {
     api = gameApi;
     host = container;
     toast = createToast();
-    const [saved, savedStats, savedSettings, savedSetup, savedSound] = await Promise.all([
+    const [saved, savedStats, savedSettings, savedSetup, savedSound, savedOnline] = await Promise.all([
       api.storage.get('current'), api.storage.get('stats'), api.storage.get('settings'), api.storage.get('setup'), api.storage.get('sound'),
+      api.storage.get('online'),
     ]);
     if (!api) return;
     soundOn = savedSound !== false;
@@ -876,8 +1369,9 @@ export default {
       pieces: ['classic', 'flat'].includes(savedSettings?.pieces) ? savedSettings.pieces : 'classic',
       coords: savedSettings?.coords !== false,
     };
-    const knownSetup = savedSetup && LEVELS.some((l) => l.id === savedSetup.level) && ['white', 'black', 'random'].includes(savedSetup.color);
-    if (knownSetup) setup = { level: savedSetup.level, color: savedSetup.color };
+    const knownSetup = savedSetup && LEVELS.some((l) => l.id === savedSetup.level) && COLORS.includes(savedSetup.color);
+    if (knownSetup) setup = { level: savedSetup.level, color: savedSetup.color, friend: COLORS.includes(savedSetup.friend) ? savedSetup.friend : 'random' };
+    stored = isValidOnline(savedOnline) ? savedOnline : null;
     host.dataset.skin = settings.theme;
 
     const soundBtn = iconButton(soundOn ? ICONS.soundOn : ICONS.soundOff, soundOn ? T.soundOn : T.soundOff, () => {
@@ -906,6 +1400,12 @@ export default {
     ui.arrow = document.createElementNS(ns, 'g');
     arrowSvg.append(ui.arrow);
     ui.board = el('div', { class: 'ch-board' }, ui.squares, ui.marks, ui.coords, ui.pieces, arrowSvg);
+    ui.them.refresh.addEventListener('click', (e) => {
+      e.stopPropagation();
+      sfx('click');
+      net?.session.check();
+    });
+    ui.them.root.addEventListener('click', onRivalTap);
     ui.undoBtn = toolButton(ICONS.undo, T.undo, onUndo);
     ui.hintBtn = toolButton(ICONS.hint, T.hint, onHint, el('span', { class: 'ch-count' }));
     ui.resignBtn = toolButton(ICONS.resign, T.resign, onResign);
@@ -925,7 +1425,7 @@ export default {
           soundBtn,
           iconButton(ICONS.stats, T.stats, showStats),
           iconButton(ICONS.gear, T.settings, showSettings),
-          iconButton(ICONS.plus, T.newGame, showNewGame),
+          iconButton(ICONS.plus, T.newGame, () => showNewGame()),
         ),
       ),
       el('div', { class: 'ch-mid' }, ui.them.root, ui.board, ui.me.root),
@@ -938,6 +1438,11 @@ export default {
     document.addEventListener('keydown', onKeydown);
     startWorker();
 
+    // партия с другом: открыли по ссылке-приглашению или в прошлый раз играли в неё — доска с ботом рисуется сразу,
+    // а комната подтягивается с сервера следом
+    const on = friends();
+    const invite = on?.takeInvite() ?? null;
+    const toFriend = Boolean(on) && Boolean(invite || stored?.on);
     if (isValidGame(saved)) {
       game = saved;
       over = null;
@@ -948,8 +1453,10 @@ export default {
       if (!myTurn()) botTurn();
     } else {
       startGame();
-      if (!knownSetup) showNewGame();
+      if (!knownSetup && !toFriend) showNewGame();
     }
+    if (invite) openInvite(invite);
+    else if (toFriend) resumeOnline();
     // для проверки (страница-обёртка): ?chdebug в адресе
     if (new URLSearchParams(location.search).has('chdebug')) {
       window.__ch = {
@@ -968,14 +1475,35 @@ export default {
         promo: (from, to) => tryMove(sqFrom(from), sqFrom(to)),
         hint: () => onHint(),
         name: sqName,
+        // партия с другом: состояние и действия без окон
+        get net() { return net ? { state: net.session.state, room: net.session.room, done: net.done, name: net.name } : null; },
+        get stored() { return stored; },
+        get modal() { return modalName; },
+        friend: {
+          create: async (color = 'white') => {
+            setup = { ...setup, friend: color };
+            const res = await friends().create({ first: { white: 'me', black: 'them' }[color] ?? 'random' });
+            return res.ok && enterRoom(res.room) ? res.room.code : res.error;
+          },
+          open: (code) => openInvite(code),
+          resume: () => resumeOnline(),
+          bot: () => backToBot(),
+          resign: () => resignOnline(),
+          check: () => net?.session.check(),
+          invite: () => showInvite(),
+          dialog: (tab) => showNewGame(tab),
+        },
       };
     }
   },
 
   getState() {
-    if (!game || over || !game.moves.length) return null;
-    save();
-    return { moves: game.moves.length };
+    if (!game) return null;
+    const bot = game.online ? botGame : over ? null : game;      // начатая партия с ботом (при игре с другом — отложенная)
+    const moves = bot?.moves.length ?? 0;
+    if (moves && !game.online) save();
+    if (stored) return { moves, online: true };                    // партия с другом ждёт на сервере
+    return moves ? { moves } : null;
   },
 
   destroy() {
@@ -983,6 +1511,9 @@ export default {
     timers.clear();
     requestId++;
     dropWorker();
+    leaveRoom();
+    stored = botGame = null;
+    modalName = '';
     document.removeEventListener('keydown', onKeydown);
     toast?.dispose();
     root?.remove();

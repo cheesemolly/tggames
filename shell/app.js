@@ -21,6 +21,7 @@ import { setBetaViewer, seesBeta, feature, inBeta, playerView, BETA } from './be
 import { lockPageScroll } from './no-scroll.js';
 import { finishSplash, SEES_BETA_KEY } from './splash.js';
 import { createLogin } from './login.js';
+import { ONLINE_GAMES, onlineFeature, parseRoomParam, createOnline } from './online.js';
 // новый интерфейс (в бете 'new-ui', концепт 7 «Пиксель») — shell/nui/
 import { renderHome } from './nui/home.js';
 import { renderCatalog } from './nui/catalog.js';
@@ -83,6 +84,51 @@ const ownsKey = (gameId, key) => key.startsWith(`game:${gameId}:`) || key === `s
 /** Игры, которые видит этот игрок: игры из беты — только владельцу. */
 const visibleGames = () => games.filter((g) => feature(g.id));
 
+// ---------- партии с другом по сети (shell/online.js; в бете 'chess-online') ----------
+
+// Ссылка-приглашение (t.me/<бот>?startapp=chess_<код> или кнопка бота «Открыть партию»): игра и код комнаты.
+// Открывается после входа — только тогда известно, видит ли игрок бету, и есть аккаунт, от имени которого играть.
+let invite = parseRoomParam(platform.startParam);
+const onlines = new Map();
+
+/** api.online для игры: партии по сети есть у вошедшего игрока, в играх с комнатами и пока функция ему открыта. */
+function onlineFor(gameId) {
+  if (!account.current || !ONLINE_GAMES.includes(gameId) || !feature(onlineFeature(gameId))) return null;
+  if (!onlines.has(gameId)) {
+    onlines.set(gameId, createOnline({
+      account,
+      platform,
+      gameId,
+      // код из ссылки отдаётся игре один раз: перезапуск игры (свежий прогресс с другого устройства) не входит заново
+      takeInvite() {
+        if (invite?.game !== gameId) return null;
+        const { code } = invite;
+        invite = null;
+        return code;
+      },
+    }));
+  }
+  return onlines.get(gameId);
+}
+
+/** Вошли и прогресс подтянут — открыть партию из ссылки-приглашения. */
+function openInvite() {
+  if (!invite || !account.current) return;
+  const { game } = invite;
+  if (!games.some((g) => g.id === game) || !ONLINE_GAMES.includes(game)) {
+    invite = null;
+    return;
+  }
+  if (!feature(game) || !feature(onlineFeature(game))) {
+    invite = null;
+    toast.show('Игра по ссылке пока открыта только бета-тестерам', 3500);
+    return;
+  }
+  // replaceState, а не location.replace: без hashchange, экран рисуем сами (и когда игра уже открыта — заново)
+  history.replaceState(null, '', `#/game/${game}`);
+  show(currentRoute());
+}
+
 function show(route) {
   session?.close();
   session = null;
@@ -111,6 +157,7 @@ function show(route) {
     // «Назад» из игры возвращает в её папку, а не на главную.
     session = openGame(screen, entry, {
       platform, beta: seesBeta(), feature, perk: hasPerk, fresh: () => syncBeta() || mergeBeta(), onExit: () => backFrom(route),
+      online: () => onlineFor(entry.id),
     });
     return;
   }
@@ -486,6 +533,7 @@ if (account.enabled && stableLogin()) {
       redraw();
     },
     onError: (res) => toast.show(message(res.error), 3000),
+    onReady: openInvite,
   });
   login.start().catch((err) => console.error(err)).finally(finishSplash);
 } else if (account.enabled) {
@@ -498,6 +546,7 @@ if (account.enabled && stableLogin()) {
     }
     await sync.pull();
     redraw();
+    openInvite();
   })().catch((err) => console.error(err)).finally(finishSplash);
 } else {
   finishSplash();

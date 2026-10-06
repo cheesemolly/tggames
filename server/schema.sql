@@ -97,3 +97,25 @@ CREATE TABLE IF NOT EXISTS reports (
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS reports_tg ON reports(tg_id, created_at);
+
+/* Партии с другом по сети (комнаты). Обработчик заводит таблицу сам. Правил игр сервер не знает: хранит ходы,
+   следит за очередью и номером состояния. Старые партии удаляются сами: без ходов дольше 30 дней, оконченные и
+   приглашения без ответа — через 3 дня. */
+CREATE TABLE IF NOT EXISTS rooms (
+  code       TEXT PRIMARY KEY,            /* случайный код из ссылки-приглашения */
+  game       TEXT NOT NULL,               /* id игры (ROOM_GAMES в lib.js) */
+  host       INTEGER NOT NULL,            /* users.id создателя */
+  guest      INTEGER,                     /* users.id второго игрока; NULL — ещё не пришёл */
+  first      INTEGER NOT NULL,            /* кто ходит первым: 0 — создатель, 1 — гость */
+  moves      TEXT NOT NULL,               /* ходы — JSON-массив строк */
+  seq        INTEGER NOT NULL,            /* номер состояния: растёт с каждым событием */
+  status     TEXT NOT NULL,               /* wait | play | over */
+  result     TEXT,                        /* итог — JSON { by, winner } */
+  name0      TEXT NOT NULL,               /* имя создателя, как в рейтинге (без фамилии и ника) */
+  name1      TEXT,                        /* имя гостя */
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,            /* последнее событие */
+  seen0      INTEGER NOT NULL DEFAULT 0,  /* когда создатель последний раз смотрел партию: не смотрит — о ходе пишет бот */
+  seen1      INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS rooms_host ON rooms(host, game, status);
