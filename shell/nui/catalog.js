@@ -1,5 +1,5 @@
 // Вкладка «Игры» нового интерфейса (в бете 'new-ui'): поиск по названию, папки таблетками (можно несколько),
-// «Избранное», сортировка («Сначала недавние» / «Ещё не пробовал» — в бете 'catalog-untried' / «По названию») и список игр с сердечком и местом в рейтинге.
+// «Избранное», сортировка («Сначала недавние» / «Ещё не пробовал» — в бете 'untried-only' только нетронутые игры / «По названию») и список игр с сердечком и местом в рейтинге.
 // Фильтры и поиск помнятся, пока приложение открыто. #/games/<папка> (из «Все ›» на главной) — сразу с ней.
 
 import { el } from '../../shared/dom.js';
@@ -10,7 +10,7 @@ import { UI, icon } from './icons.js';
 import { gameRow, fillPlaces, skeleton } from './ui.js';
 import { collectGames } from './games.js';
 import { flipFav } from './store.js';
-import { filterGames, sortGames, sortModes, SORTS, placesOf, plural } from './logic.js';
+import { filterGames, sortGames, sortModes, untriedGames, untriedEmptyText, SORTS, placesOf, plural } from './logic.js';
 import { feature } from '../beta.js';
 
 const state = { query: '', cats: [], fav: false, sort: 'recent', preset: null };
@@ -70,7 +70,10 @@ export async function renderCatalog(container, { games, route, account, summary,
 
   const recent = Object.fromEntries(items.map((g) => [g.id, g.at]));
   function draw() {
-    const shown = sortGames(filterGames(items, state), state.sort, recent);
+    const found = filterGames(items, state);
+    const only = state.sort === 'untried' && feature('untried-only');
+    const shown = only ? untriedGames(found) : sortGames(found, state.sort, recent);
+    const done = only ? untriedEmptyText(found, items) : null;
     count.textContent = `${shown.length} ${plural(shown.length, ['игра', 'игры', 'игр'])}`;
     list.replaceChildren(...(shown.length
       ? shown.map((g, i) => {
@@ -80,7 +83,7 @@ export async function renderCatalog(container, { games, route, account, summary,
       })
       : [el('div', { class: 'nempty' },
         el('p', { class: 'npx' }, 'Пусто'),
-        el('p', {}, state.fav ? 'Нажми сердечко у игры — она появится здесь.' : 'Ничего не нашлось. Попробуй другое название или сними фильтры.'))]));
+        el('p', {}, done ?? (state.fav ? 'Нажми сердечко у игры — она появится здесь.' : 'Ничего не нашлось. Попробуй другое название или сними фильтры.')))]));
     fillPlaces(list, places);
   }
 

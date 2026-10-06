@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  addVisit, streakOf, shiftDay, monthCells, MAX_DAYS, fold, filterGames, sortGames, sortModes, triedGame, touchRecent, toggleFav,
+  addVisit, streakOf, shiftDay, monthCells, MAX_DAYS, fold, filterGames, sortGames, sortModes, triedGame, untriedGames, untriedEmptyText, touchRecent, toggleFav,
   placesOf, bestPlaces, pickBanners,
 } from '../nui/logic.js';
 import { STORIES, NEW_GAMES, pickStories, weekStory, weekId, firstName } from '../nui/content.js';
@@ -87,6 +87,22 @@ test('сортировка «Ещё не пробовал»: сначала не
   assert.equal(triedGame({ progress: 'Уровень 2' }), true);
   assert.equal(triedGame({ save: true }), true);
   assert.equal(triedGame({ at: 5 }), true);
+});
+
+test('«Ещё не пробовал» — только нетронутые: остальных в списке нет, всё попробовано — так и написано', () => {
+  const items = [
+    { id: 'a', title: 'А', cat: 'x', tried: true }, { id: 'b', title: 'Б', cat: 'y', tried: false },
+    { id: 'c', title: 'В', cat: 'x', tried: true }, { id: 'd', title: 'Г', cat: 'y', tried: false },
+  ];
+  assert.deepEqual(untriedGames(items).map((g) => g.id), ['b', 'd']);
+  const inX = filterGames(items, { cats: ['x'] });
+  assert.deepEqual(untriedGames(inX), []);
+  assert.match(untriedEmptyText(inX, items), /Сними фильтры/, 'в папке всё попробовано, а в других — нет');
+  const all = items.map((g) => ({ ...g, tried: true }));
+  assert.deepEqual(untriedGames(all), []);
+  assert.equal(untriedEmptyText(all, all), 'Вы попробовали все игры.');
+  assert.equal(untriedEmptyText(filterGames(all, { cats: ['x'] }), all), 'Вы попробовали все игры.');
+  assert.equal(untriedEmptyText([], all), null, 'поиск ничего не нашёл — обычный текст');
 });
 
 test('недавние и избранное: не больше 60 записей, сердечко переключается', () => {

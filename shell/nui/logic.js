@@ -102,6 +102,16 @@ export const sortModes = (untried) => Object.keys(SORTS).filter((m) => untried |
 export const triedGame = ({ played = 0, progress = null, save = false, at = 0 }) =>
   played > 0 || (progress != null && progress !== '') || Boolean(save) || at > 0;
 
+/** В бете 'untried-only' режим «Ещё не пробовал» — только нетронутые игры (в порядке папок), остальных в списке нет. */
+export const untriedGames = (items) => items.filter((g) => !g.tried);
+
+/** Что написать в пустом списке «Ещё не пробовал»: found — игры после поиска и фильтров, all — все игры.
+ *  null — пусто не из-за режима (ничего не нашлось) — текст как обычно. */
+export function untriedEmptyText(found, all) {
+  if (!found.length) return null;
+  return all.every((g) => g.tried) ? 'Вы попробовали все игры.' : 'Здесь всё попробовано. Сними фильтры — остались другие игры.';
+}
+
 /** recent — сначала те, во что играл недавно (recent: id → время), остальные в прежнем порядке; name — по алфавиту;
  *  untried — сначала игры, которые ещё не пробовал (в порядке папок), потом остальные как в recent. */
 export function sortGames(items, mode, recent = {}) {
