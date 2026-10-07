@@ -207,7 +207,8 @@ const GAMES = [
   { id: 'erudit', title: 'Эрудит', emoji: '🔴', about: 'скрэббл на русском против бота: поле 15×15, четыре уровня' },
   { id: 'billiards', title: 'Бильярд', emoji: '🎱', about: 'пул-«восьмёрка» с настоящей физикой: против бота или вдвоём на одном телефоне' },
   { id: 'cities', title: 'Города', emoji: '🟢', about: 'игра в города против бота: город на последнюю букву предыдущего, маршрут на глобусе', beta: true },
-  { id: 'word-circle', title: 'Круг слов', emoji: '🌄', about: 'буквы по кругу: проведи по ним, собери слова и заполни кроссворд — 600 уровней, монеты и подсказки', beta: true, best: (n) => `уровень ${n}` },
+  { id: 'word-circle', title: 'Круг слов', emoji: '🌄', about: 'буквы по кругу: проведи по ним, собери слова и заполни кроссворд — 600 уровней, монеты и подсказки', beta: true },
+  { id: 'subwords', title: 'Слоги', emoji: '🎈', about: 'слова разрезаны на слоги-кружки: собери слова темы, 56 тем, классика и на время', beta: true },
 ];
 
 const fold = (text) => String(text ?? '').toLowerCase().replace(/ё/g, 'е').trim();
@@ -445,6 +446,25 @@ function nonogramSolved(state) {
   return list.slice(0, 100).reduce((sum, v) => sum + (Number(v) > 0 ? 1 : 0), 0);
 }
 
+/**
+ * Слоги: звёзды «Классики» по темам и рекорды «На время» — из прогресса игры. Одна звезда за тему — 30 очков,
+ * две — 50, три — 80; рекорд «На время» по теме идёт в очки как есть (не больше 200 за тему).
+ */
+const SUBWORDS_STAR_POINTS = [0, 30, 50, 80];
+const SUBWORDS_TOPICS = 100;
+const subwordsEntries = (map) => (map && typeof map === 'object' && !Array.isArray(map) ? Object.values(map).slice(0, SUBWORDS_TOPICS) : []);
+function subwordsStars(state) {
+  const total = subwordsEntries(state?.['game:subwords:progress']?.stars)
+    .reduce((sum, v) => sum + (Number.isInteger(v) && v > 0 ? Math.min(v, 3) : 0), 0);
+  return total || null;
+}
+function subwordsPoints(state) {
+  const p = state?.['game:subwords:progress'];
+  const stars = subwordsEntries(p?.stars).reduce((sum, v) => sum + (SUBWORDS_STAR_POINTS[Number.isInteger(v) && v > 0 ? Math.min(v, 3) : 0]), 0);
+  const timed = subwordsEntries(p?.timed).reduce((sum, v) => sum + (Number.isInteger(v) && v > 0 ? Math.min(v, 200) : 0), 0);
+  return stars + timed;
+}
+
 /** Круг слов: уровень, на котором игрок, — из прогресса игры (между устройствами берётся больший). */
 function wordCircleLevel(state) {
   const level = state?.['game:word-circle:progress']?.level;
@@ -473,6 +493,7 @@ const BOARDS = {
   billiards: { by: 'победы над ботом', score: shellStats('billiards', 'wins'), text: WINS },
   cities: { by: 'победы над ботом', score: shellStats('cities', 'wins'), text: WINS },
   'word-circle': { by: 'уровень', score: wordCircleLevel, text: levelText },
+  subwords: { by: 'звёзды', score: subwordsStars, text: count(['звезда', 'звезды', 'звёзд']) },
   'block-blast': { by: 'рекорд', score: shellStats('block-blast', 'best'), text: POINTS },
   sudoku: { by: 'решённые судоку', score: shellStats('sudoku', 'wins'), text: count(['судоку', 'судоку', 'судоку']) },
   'killer-sudoku': { by: 'решённые судоку', score: shellStats('killer-sudoku', 'wins'), text: count(['судоку', 'судоку', 'судоку']) },
@@ -523,6 +544,7 @@ const BOARD_LIMITS = {
   billiards: 1e5,
   cities: 1e5,
   'word-circle': 1e4,
+  subwords: 300,              // не больше трёх звёзд за тему, тем не больше ста
 };
 // побед не может быть больше сыгранных партий
 const WINS_FROM = { checkers: 'checkers', mahjong: 'mahjong', sudoku: 'sudoku', wordle: 'wordle', tictactoe: 'tictactoe', chess: 'chess', spider: 'spider', klondike: 'klondike', 'killer-sudoku': 'killer-sudoku', go: 'go', minesweeper: 'minesweeper', fifteen: 'fifteen', rubik: 'rubik', hanoi: 'hanoi', erudit: 'erudit', billiards: 'billiards', cities: 'cities' };
@@ -786,6 +808,7 @@ const BOARDS_V2 = {
   erudit: wins('erudit', 'очки за победы над ботом (сильнее — дороже)'),
   billiards: wins('billiards', 'очки за победы над ботом (сильнее — дороже)'),
   cities: wins('cities', 'очки за победы над ботом (сильнее — дороже)'),
+  subwords: { by: 'очки за звёзды и рекорды «На время»', score: subwordsPoints, text: POINTS },
   'word-circle': levels('word-circle', 'очки за пройденные уровни (дальше — дороже)', (s) => Math.max(0, (wordCircleLevel(s) ?? 1) - 1)),
   tictactoe: wins('tictactoe', 'очки за победы над ботом (гомоку и сильный бот — дороже)'),
   flags: { by: 'очки за партии (ввод и 20 флагов — дороже) + рекорд марафона', score: flagsPoints, text: POINTS },
@@ -1117,6 +1140,9 @@ const RULES = [
   ['game:word-circle:progress', { type: 'fields', fields: { level: 'max', coins: { spend: 100 } } }],
   ['game:word-circle:current', { type: 'level', at: 'level' }],
   ['game:word-circle:stats', { type: 'fields', fields: { levels: 'count', words: 'count', bonus: 'count', hints: 'count' } }],
+  // слоги: звёзды и рекорды по темам — лучшее, время темы — меньшее
+  ['game:subwords:progress', { type: 'fields', fields: { 'stars.*': 'max', 'time.*': 'min', 'timed.*': 'max' } }],
+  ['game:subwords:stats', { type: 'fields', fields: { words: 'count', levels: 'count', runs: 'count', hints: 'count' } }],
   ['game:cities:stats', { type: 'fields', fields: {
     '*.played': 'count', '*.wins': 'count', '*.losses': 'count', '*.best': 'max',
     'total.cities': 'count', 'total.km': 'count', 'total.far': 'max',

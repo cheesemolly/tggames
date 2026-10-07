@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { POINTS_INFO, pointsInfo } from '../points-info.js';
 import {
   GAMES, BOARDS, BOARDS_V2, WIN_POINTS, WORD_POINTS, BOGGLE_FIELD_POINTS, MEMORY_POINTS, FLAG_POINTS, FLAG_MARATHON,
-  LEVEL_PRICES, match3LevelPoints, nonogramLevelPoints,
+  LEVEL_PRICES, match3LevelPoints, nonogramLevelPoints, SUBWORDS_STAR_POINTS,
 } from '../../server/lib.js';
 
 const text = (id) => POINTS_INFO[id].lines.join(' ');
@@ -42,6 +42,9 @@ test('числа в подсказках — те же, что считает с
   assert.equal(LEVEL_PRICES['bubble-shooter'](119), 99, 'со 120-го — по 100');
   has('arkanoid', [LEVEL_PRICES.arkanoid(1), LEVEL_PRICES.arkanoid(180), LEVEL_PRICES.arkanoid(300), 180]);
   assert.equal(LEVEL_PRICES.arkanoid(179), 149, 'со 180-го — по 150');
+  has('word-circle', [LEVEL_PRICES['word-circle'](1), LEVEL_PRICES['word-circle'](170), 170]);
+  assert.equal(LEVEL_PRICES['word-circle'](169), 99, 'со 170-го — по 100');
+  has('subwords', SUBWORDS_STAR_POINTS.slice(1));
   has('snake', [LEVEL_PRICES.snake(1), LEVEL_PRICES.snake(2), LEVEL_PRICES.snake(12), LEVEL_PRICES.snake(13) - LEVEL_PRICES.snake(1)]);
 });
 

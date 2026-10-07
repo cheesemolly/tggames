@@ -9,6 +9,15 @@ import { digits, plural, placeOn } from './logic.js';
 
 export const STORIES = [
   {
+    id: 'subwords-new',
+    label: 'Слоги',
+    games: ['subwords'],
+    slides: [
+      { kicker: 'Новая игра', title: 'Слоги', text: 'Слова разрезаны на слоги — кружки в общей куче. Собери из них слова темы: фрукты, планеты, герои сказок. 56 тем, два режима — спокойный и на время.', play: 'subwords' },
+      { kicker: 'Совет', title: 'Начинай с длинных слогов', text: 'Большой кружок — длинный слог, такие встречаются реже и сразу подсказывают слово. А короткие «ка», «на», «ра» подходят ко многим словам — их оставь на потом.', play: 'subwords' },
+    ],
+  },
+  {
     id: 'word-circle-new',
     label: 'Круг слов',
     games: ['word-circle'],
@@ -249,6 +258,7 @@ export function pickStories({ visible, rated = false, seen = [], week = null }) 
 
 /** Что показать баннером «Новая игра»: первая видимая игроку из списка (новые — выше). */
 export const NEW_GAMES = [
+  { id: 'subwords', text: 'Собери слова из слогов-кружков' },
   { id: 'word-circle', text: 'Буквы по кругу, слова — в кроссворд' },
   { id: 'cities', text: 'Против бота, с маршрутом на глобусе' },
   { id: 'billiards', text: 'Пул с настоящей физикой: бот или вдвоём' },

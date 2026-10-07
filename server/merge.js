@@ -114,6 +114,9 @@ export const RULES = [
   ['game:word-circle:progress', { type: 'fields', fields: { level: 'max', coins: { spend: 100 } } }],
   ['game:word-circle:current', { type: 'level', at: 'level' }],
   ['game:word-circle:stats', { type: 'fields', fields: { levels: 'count', words: 'count', bonus: 'count', hints: 'count' } }],
+  // слоги: звёзды и рекорды по темам — лучшее, время темы — меньшее
+  ['game:subwords:progress', { type: 'fields', fields: { 'stars.*': 'max', 'time.*': 'min', 'timed.*': 'max' } }],
+  ['game:subwords:stats', { type: 'fields', fields: { words: 'count', levels: 'count', runs: 'count', hints: 'count' } }],
   ['game:cities:stats', { type: 'fields', fields: {
     '*.played': 'count', '*.wins': 'count', '*.losses': 'count', '*.best': 'max',
     'total.cities': 'count', 'total.km': 'count', 'total.far': 'max',

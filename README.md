@@ -70,6 +70,9 @@
     <td align="center"><img src="media/readme/cities.gif" width="220" alt="города"><br><b>города</b> <sup>скоро</sup><br><sub>города против бота, маршрут на глобусе</sub></td>
     <td align="center"><img src="media/readme/word-circle.gif" width="220" alt="круг слов"><br><b>круг слов</b> <sup>скоро</sup><br><sub>веди по буквам — слова встают в кроссворд</sub></td>
   </tr>
+  <tr>
+    <td align="center"><img src="media/readme/subwords.gif" width="220" alt="слоги"><br><b>слоги</b> <sup>скоро</sup><br><sub>собери слова из слогов-кружков, 56 тем</sub></td>
+  </tr>
 </table>
 
 ## что есть

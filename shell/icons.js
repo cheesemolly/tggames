@@ -24,6 +24,9 @@ export const GAME_ICONS = {
     + '<circle cx="7.6" cy="9.4" r="1.5" fill="currentColor" stroke="none"/>'
     + '<circle cx="12" cy="16.2" r="1.5" fill="currentColor" stroke="none"/>'
     + '<circle cx="16.4" cy="9.4" r="1.5" fill="currentColor" stroke="none"/>'),
+  // слоги: куча кружков, один выбран (с обводкой)
+  subwords: svg('<circle cx="8" cy="9" r="4.6"/><circle cx="16.2" cy="8" r="3.3"/><circle cx="14.6" cy="16" r="4.6"/>'
+    + '<circle cx="14.6" cy="16" r="1.5" fill="currentColor" stroke="none"/><circle cx="6.6" cy="17.6" r="2.2"/>'),
 
   // Головоломки
   sudoku: svg('<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/>'

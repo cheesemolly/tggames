@@ -264,4 +264,11 @@ export const games = [
     css: new URL('../games/word-circle/game.css', import.meta.url),
     menu: { progress: 'replace' },                       // «Уровень 14»
   },
+  {
+    id: 'subwords',
+    title: 'Слоги',
+    load: () => import('../games/subwords/index.js'),
+    css: new URL('../games/subwords/game.css', import.meta.url),
+    menu: { progress: 'replace' },                       // «Звёзд: 12»
+  },
 ];

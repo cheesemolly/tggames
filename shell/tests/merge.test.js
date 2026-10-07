@@ -327,7 +327,7 @@ async function cases() {
   const g = {};
   for (const id of ['flags', 'checkers', 'flappy-burger', 'bongo-cat', 'snake', 'memory', 'bubble-shooter', 'brick-blast',
     'loop', 'connect-dots', 'mahjong', '2048', 'boggle', 'block-blast', 'sudoku', 'tictactoe', 'wordle', 'chess', 'spider', 'klondike',
-    'minesweeper', 'fifteen', 'rubik', 'hanoi', 'repair', 'arkanoid', 'erudit', 'billiards', 'cities', 'word-circle']) {
+    'minesweeper', 'fifteen', 'rubik', 'hanoi', 'repair', 'arkanoid', 'erudit', 'billiards', 'cities', 'word-circle', 'subwords']) {
     g[id] = await mod(id);
   }
   const pinball = await mod('pinball', 'rules.js');
@@ -347,6 +347,8 @@ async function cases() {
     ['game:cities:stats', g.cities.emptyStats(), g.cities.isValidStats],
     ['game:word-circle:stats', g['word-circle'].emptyStats(), g['word-circle'].isValidStats],
     ['game:word-circle:progress', g['word-circle'].emptyProgress(), g['word-circle'].isValidProgress],
+    ['game:subwords:stats', g.subwords.emptyStats(), g.subwords.isValidStats],
+    ['game:subwords:progress', { stars: { fruits: 2, pets: 1 }, time: { fruits: 41000, pets: 90000 }, timed: { fruits: 38 } }, g.subwords.isValidProgress],
     ['game:loop:stats', g.loop.emptyStats(), g.loop.isValidStats],
     ['game:connect-dots:stats', g['connect-dots'].emptyStats(), g['connect-dots'].isValidStats],
     ['game:mahjong:stats', buckets(g.mahjong, ['kid', 'butterfly', 'turtle']), everyBucket(g.mahjong)],
@@ -414,6 +416,8 @@ function playOn(r, key, value) {
     v.current = int(r, 0, 5);
   }
   if (key === 'game:match3:progress') v.done[int(r, 0, 20)] = 1;
+  // звёзд за тему в «Слогах» не больше трёх
+  if (key === 'game:subwords:progress') for (const id of Object.keys(v.stars)) v.stars[id] = Math.min(3, v.stars[id]);
   return v;
 }
 
