@@ -271,4 +271,11 @@ export const games = [
     css: new URL('../games/subwords/game.css', import.meta.url),
     menu: { progress: 'replace' },                       // «Звёзд: 12»
   },
+  {
+    id: 'crostic',
+    title: 'Кростик',
+    load: () => import('../games/crostic/index.js'),
+    css: new URL('../games/crostic/game.css', import.meta.url),
+    menu: { progress: 'replace' },                       // «Уровень 14»
+  },
 ];

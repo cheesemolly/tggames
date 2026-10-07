@@ -1,0 +1,463 @@
+/*
+ * Кростик. Сверху шапка (уровень, попытки, монеты), посередине страница с прокруткой — лист с фразой и вопросами,
+ * внизу — строка текущего вопроса и клавиатура. Клетка — кнопка: буква в цветном прямоугольнике и номер под ним;
+ * цвет клетки — по номеру (--m, один из шести цветов скина), одинаковые номера одного цвета.
+ * Скин «telegram» (по умолчанию): фон, лист, текст и кнопки — из цветов темы; цвета клеток — игровые, заданы для
+ * обеих тем. Остальные скины — свои палитры (--cr-*), одинаковые в обеих темах.
+ */
+
+[data-game="crostic"] {
+  --cr-warn: #e5484d;
+  --cr-ok: #2fa66a;
+  --cr-star: #f5b400;
+  --cr-coin: #f5b400;
+  --cr-cell: 30px;
+  --cr-acell: 28px;
+  --toast-top: calc(100% - 318px);
+}
+
+[data-game="crostic"], [data-game="crostic"] [data-skin="telegram"] {
+  --cr-bg: var(--tg-theme-bg-color);
+  --cr-sheet: var(--tg-theme-secondary-bg-color);
+  --cr-ink: var(--tg-theme-text-color);
+  --cr-hint: var(--tg-theme-hint-color);
+  --cr-line: color-mix(in srgb, var(--tg-theme-text-color) 12%, transparent);
+  --cr-rule: transparent;
+  --cr-dock: var(--tg-theme-bg-color);
+  --cr-key: color-mix(in srgb, var(--tg-theme-text-color) 10%, var(--tg-theme-bg-color));
+  --cr-key-ink: var(--tg-theme-text-color);
+  --cr-accent: var(--tg-theme-button-color);
+  --cr-accent-text: var(--tg-theme-button-text-color);
+  --cr-m1: #f6a5c0;
+  --cr-m2: #9cc3f5;
+  --cr-m3: #f8c37a;
+  --cr-m4: #f0df70;
+  --cr-m5: #a5dc9a;
+  --cr-m6: #c3aef0;
+  --cr-on: #23204a;
+  --cr-closed: 40%;
+}
+:root[data-theme="dark"] [data-game="crostic"]:not([data-skin]),
+:root[data-theme="dark"] [data-game="crostic"][data-skin="telegram"],
+:root[data-theme="dark"] [data-game="crostic"] [data-skin="telegram"] {
+  --cr-m1: #ee8fb0;
+  --cr-m2: #86b4f0;
+  --cr-m3: #f3b45e;
+  --cr-m4: #e8d45a;
+  --cr-m5: #8fd083;
+  --cr-m6: #b39ae8;
+  --cr-on: #1a1733;
+  --cr-closed: 40%;
+}
+/* Тетрадь — как в исходной игре: лист в линейку, яркие маркеры, синяя ручка */
+[data-game="crostic"][data-skin="notebook"], [data-game="crostic"] [data-skin="notebook"] {
+  --cr-bg: #e7e1d2; --cr-sheet: #fdfaf0; --cr-ink: #22306b; --cr-hint: #7b84a6; --cr-line: rgb(34 48 107 / 0.16); --cr-rule: #cfdcf2;
+  --cr-dock: #f1ebdc; --cr-key: #fffdf6; --cr-key-ink: #22306b; --cr-accent: #e0457b; --cr-accent-text: #fff;
+  --cr-m1: #ff9ec4; --cr-m2: #8fd0ff; --cr-m3: #ffc46b; --cr-m4: #ffe873; --cr-m5: #b4e77e; --cr-m6: #c9b3ff; --cr-on: #1d2a66; --cr-closed: 55%;
+}
+[data-game="crostic"][data-skin="chalk"], [data-game="crostic"] [data-skin="chalk"] {
+  --cr-bg: #1c3a31; --cr-sheet: #244a3e; --cr-ink: #f1f4ea; --cr-hint: #9fbcae; --cr-line: rgb(255 255 255 / 0.14); --cr-rule: transparent;
+  --cr-dock: #1c3a31; --cr-key: #2c5a4b; --cr-key-ink: #f1f4ea; --cr-accent: #ffd166; --cr-accent-text: #1c3a31;
+  --cr-m1: #f4b6c8; --cr-m2: #a9d7f7; --cr-m3: #ffd9a0; --cr-m4: #fff1a8; --cr-m5: #bfe8b0; --cr-m6: #d6c5f7; --cr-on: #1c3a31; --cr-closed: 22%;
+}
+[data-game="crostic"][data-skin="kraft"], [data-game="crostic"] [data-skin="kraft"] {
+  --cr-bg: #cdb48d; --cr-sheet: #e6d3ae; --cr-ink: #3b2a17; --cr-hint: #7b6547; --cr-line: rgb(59 42 23 / 0.18); --cr-rule: transparent;
+  --cr-dock: #cdb48d; --cr-key: #f0e2c5; --cr-key-ink: #3b2a17; --cr-accent: #b3541e; --cr-accent-text: #fff;
+  --cr-m1: #e58f6b; --cr-m2: #8fb5a0; --cr-m3: #e9b85c; --cr-m4: #d9c77a; --cr-m5: #a8c078; --cr-m6: #b79ac0; --cr-on: #2e2011; --cr-closed: 45%;
+}
+[data-game="crostic"][data-skin="night"], [data-game="crostic"] [data-skin="night"] {
+  --cr-bg: #0d1226; --cr-sheet: #161d3a; --cr-ink: #e8ecff; --cr-hint: #8d97c4; --cr-line: rgb(255 255 255 / 0.1); --cr-rule: transparent;
+  --cr-dock: #0d1226; --cr-key: #1e2750; --cr-key-ink: #e8ecff; --cr-accent: #6ee7ff; --cr-accent-text: #06202a;
+  --cr-m1: #ff7ab8; --cr-m2: #5fb8ff; --cr-m3: #ffb057; --cr-m4: #ffe45c; --cr-m5: #6ee79a; --cr-m6: #b18cff; --cr-on: #0d1226; --cr-closed: 24%;
+}
+[data-game="crostic"][data-skin="candy"], [data-game="crostic"] [data-skin="candy"] {
+  --cr-bg: #fff0f5; --cr-sheet: #ffffff; --cr-ink: #4a2540; --cr-hint: #a6849a; --cr-line: rgb(74 37 64 / 0.12); --cr-rule: transparent;
+  --cr-dock: #ffe3ed; --cr-key: #ffffff; --cr-key-ink: #4a2540; --cr-accent: #ff5d8f; --cr-accent-text: #fff;
+  --cr-m1: #ff8fb3; --cr-m2: #7cc6ff; --cr-m3: #ffb347; --cr-m4: #ffe066; --cr-m5: #8fe3a1; --cr-m6: #c59cff; --cr-on: #3a1830; --cr-closed: 50%;
+}
+
+/* ---------- раскладка ---------- */
+
+.game-root[data-game="crostic"] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+[data-game="crostic"] .btn { background: var(--cr-accent); color: var(--cr-accent-text); }
+[data-game="crostic"] .cr {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  isolation: isolate;
+  background: var(--cr-bg);
+  color: var(--cr-ink);
+  transition: background-color 0.4s ease, color 0.3s ease;
+}
+
+/* шапка */
+[data-game="crostic"] .cr-header { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px 6px; }
+[data-game="crostic"] .cr-heading { display: grid; gap: 4px; min-width: 0; }
+[data-game="crostic"] .cr-level { font-size: 17px; font-weight: 800; line-height: 1.1; white-space: nowrap; }
+[data-game="crostic"] .cr-lives { display: flex; gap: 2px; color: var(--cr-warn); }
+[data-game="crostic"] .cr-heart { display: grid; transition: color 0.25s ease, opacity 0.25s ease; }
+[data-game="crostic"] .cr-heart-off { color: var(--cr-hint); opacity: 0.35; }
+[data-game="crostic"] .cr-actions { flex: none; display: flex; align-items: center; gap: 6px; }
+[data-game="crostic"] .cr-coins {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 30px;
+  padding: 0 10px 0 6px;
+  border-radius: 999px;
+  background: var(--cr-sheet);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+[data-game="crostic"] .cr-coin { display: grid; color: var(--cr-coin); }
+[data-game="crostic"] .cr-icon-btn, [data-game="crostic"] .cr-bar-btn {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: var(--cr-sheet);
+  color: var(--cr-ink);
+  font-size: 15px;
+  cursor: pointer;
+  transition: transform 0.1s ease, opacity 0.2s ease;
+}
+[data-game="crostic"] .cr-icon-btn:active, [data-game="crostic"] .cr-bar-btn:active { transform: scale(0.92); }
+[data-game="crostic"] .cr-muted { opacity: 0.6; }
+
+/* страница */
+[data-game="crostic"] .cr-page { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 4px 10px 12px; }
+[data-game="crostic"] .cr-sheet {
+  padding: 12px;
+  border-radius: 16px;
+  background-color: var(--cr-sheet);
+  background-image: repeating-linear-gradient(to bottom, transparent 0 27px, var(--cr-rule) 27px 28px);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.1);
+  transition: background-color 0.4s ease;
+}
+[data-game="crostic"] .cr-top { margin: -12px -12px 0; padding: 12px 12px 8px; border-radius: 16px 16px 0 0; transition: box-shadow 0.2s ease; }
+[data-game="crostic"] .cr-sticky .cr-top {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--cr-sheet);
+  box-shadow: 0 8px 10px -8px rgb(0 0 0 / 0.28);
+}
+[data-game="crostic"] .cr-caption { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; }
+[data-game="crostic"] .cr-caption::after { content: ""; flex: 1; height: 1px; background: var(--cr-line); }
+[data-game="crostic"] .cr-caption-q { margin-top: 10px; margin-bottom: 4px; }
+[data-game="crostic"] .cr-tag { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--cr-hint); }
+[data-game="crostic"] .cr-phrase { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 14px; padding: 2px 0; }
+[data-game="crostic"] .cr-word { display: flex; align-items: flex-start; gap: 2px; }
+[data-game="crostic"] .cr-mark {
+  display: grid;
+  align-items: end;
+  height: calc(var(--cr-cell) * 1.14);
+  padding: 0 1px;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+[data-game="crostic"] .cr-dash { display: grid; place-items: center; width: calc(var(--cr-cell) * 0.5); height: calc(var(--cr-cell) * 1.14); font-weight: 800; }
+
+[data-game="crostic"] .cr-cell {
+  flex: none;
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  width: var(--s);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+[data-game="crostic"] .cr-pcell { --s: var(--cr-cell); }
+[data-game="crostic"] .cr-acell { --s: var(--cr-acell); }
+[data-game="crostic"] .cr-cell b {
+  display: grid;
+  place-items: center;
+  width: var(--s);
+  height: calc(var(--s) * 1.14);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--m) var(--cr-closed), var(--cr-sheet));
+  box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--m) 70%, transparent);
+  color: var(--cr-on);
+  font-size: calc(var(--s) * 0.6);
+  font-weight: 800;
+  line-height: 1;
+  transition: background-color 0.25s ease, box-shadow 0.15s ease, scale 0.15s ease;
+}
+[data-game="crostic"] .cr-cell b span { display: block; }
+[data-game="crostic"] .cr-cell i { font-style: normal; font-size: 10px; line-height: 1; color: var(--cr-hint); font-variant-numeric: tabular-nums; transition: color 0.15s ease; }
+[data-game="crostic"] .cr-open b { background: var(--m); box-shadow: inset 0 -2px 0 rgb(0 0 0 / 0.14); }
+[data-game="crostic"] .cr-same b { box-shadow: inset 0 0 0 2px var(--cr-accent); animation: cr-same 1.3s ease-in-out infinite; }
+[data-game="crostic"] .cr-sel b { box-shadow: 0 0 0 2.5px var(--cr-accent), 0 4px 10px rgb(0 0 0 / 0.22); scale: 1.08; animation: none; }
+[data-game="crostic"] .cr-sel i, [data-game="crostic"] .cr-same i { color: var(--cr-ink); font-weight: 800; }
+[data-game="crostic"] .cr-flash b { animation: cr-flash 0.6s ease-out; }
+@keyframes cr-same { 50% { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--cr-accent) 35%, transparent); } }
+@keyframes cr-flash { 0% { filter: brightness(1.5); } 100% { filter: brightness(1); } }
+
+[data-game="crostic"] .cr-tip {
+  max-height: 60px;
+  margin: 2px 0 6px;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 1.3;
+  color: var(--cr-hint);
+  transition: max-height 0.3s ease, opacity 0.3s ease, margin 0.3s ease;
+}
+[data-game="crostic"] .cr-tip-off { max-height: 0; margin: 0; opacity: 0; }
+
+/* вопросы */
+[data-game="crostic"] .cr-clues { display: grid; gap: 2px; }
+[data-game="crostic"] .cr-clue {
+  display: grid;
+  gap: 7px;
+  margin: 0 -4px;
+  padding: 8px;
+  border-radius: 12px;
+  cursor: pointer;
+  scroll-margin: calc(var(--cr-top-h, 0px) + 6px) 0 6px;
+  transition: background-color 0.2s ease;
+}
+[data-game="crostic"] .cr-clue.cr-active { background: color-mix(in srgb, var(--cr-accent) 13%, transparent); }
+[data-game="crostic"] .cr-q { display: flex; align-items: flex-start; gap: 8px; font-size: 15px; line-height: 1.3; }
+[data-game="crostic"] .cr-q-num {
+  flex: none;
+  display: grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--cr-ink) 12%, transparent);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+}
+[data-game="crostic"] .cr-q-num[hidden] { display: none; }
+[data-game="crostic"] .cr-q-text { flex: 1; min-width: 0; overflow-wrap: anywhere; transition: color 0.2s ease; }
+[data-game="crostic"] .cr-check { flex: none; display: grid; color: var(--cr-ok); opacity: 0; transition: opacity 0.2s ease; }
+[data-game="crostic"] .cr-solved .cr-check { opacity: 1; }
+[data-game="crostic"] .cr-solved .cr-q-text { color: var(--cr-hint); }
+[data-game="crostic"] .cr-answer { display: flex; gap: 2px; }
+
+/* строка вопроса и клавиатура */
+[data-game="crostic"] .cr-dock {
+  flex: none;
+  display: grid;
+  gap: 6px;
+  padding: 6px 6px calc(8px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--cr-line);
+  background: var(--cr-dock);
+  transition: background-color 0.4s ease;
+}
+[data-game="crostic"] .cr-bar { display: grid; grid-template-columns: 34px minmax(0, 1fr) 34px; align-items: center; gap: 6px; min-height: 40px; }
+[data-game="crostic"] .cr-bar-btn { background: var(--cr-key); color: var(--cr-key-ink); }
+[data-game="crostic"] .cr-bar-mid { display: flex; align-items: center; justify-content: center; gap: 8px; min-width: 0; font-size: 15px; line-height: 1.2; }
+[data-game="crostic"] .cr-bar-text { min-width: 0; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+[data-game="crostic"] .cr-bar-phrase .cr-bar-text { font-size: 13px; color: var(--cr-hint); text-align: center; }
+[data-game="crostic"] .cr-keys { display: grid; gap: 5px; }
+[data-game="crostic"] .cr-key-row { display: flex; justify-content: center; gap: 3px; }
+[data-game="crostic"] .cr-key {
+  flex: none;
+  width: calc((100% - 33px) / 12);
+  max-width: 40px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: var(--cr-key);
+  color: var(--cr-key-ink);
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: opacity 0.25s ease, scale 0.08s ease, background-color 0.3s ease;
+}
+[data-game="crostic"] .cr-key:active { scale: 0.9; }
+[data-game="crostic"] .cr-key.cr-used { opacity: 0.24; }
+[data-game="crostic"] .cr-key-miss { animation: cr-key-miss 0.45s ease-out; }
+@keyframes cr-key-miss { 0%, 60% { background: var(--cr-warn); color: #fff; } }
+[data-game="crostic"] .cr-hint-key {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: calc((100% - 33px) / 12 * 2.6 + 6px);
+  max-width: 110px;
+  background: var(--cr-accent);
+  color: var(--cr-accent-text);
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+[data-game="crostic"] .cr-hint-key.cr-dim { opacity: 0.45; }
+
+/* загрузка */
+[data-game="crostic"] .cr-load {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: var(--cr-bg);
+  color: var(--cr-hint);
+  text-align: center;
+}
+[data-game="crostic"] .cr-load[hidden] { display: none; }
+[data-game="crostic"] .cr-load p { margin: 0; }
+
+/* итог уровня */
+[data-game="crostic"] .cr-result {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  background: color-mix(in srgb, var(--cr-bg) 80%, transparent);
+}
+[data-game="crostic"] .cr-result[hidden] { display: none; }
+[data-game="crostic"] .cr-result-card {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  width: min(340px, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 18px 16px 16px;
+  border-radius: 22px;
+  background: var(--cr-sheet);
+  text-align: center;
+  box-shadow: 0 12px 34px rgb(0 0 0 / 0.24);
+}
+[data-game="crostic"] .cr-result-card h2 { margin: 0; font-size: 24px; }
+[data-game="crostic"] .cr-stars { display: flex; gap: 6px; color: color-mix(in srgb, var(--cr-ink) 16%, transparent); }
+[data-game="crostic"] .cr-stars i { display: grid; transition: color 0.2s ease; }
+[data-game="crostic"] .cr-stars svg { width: 46px; height: 46px; }
+[data-game="crostic"] .cr-star-on { color: var(--cr-star); }
+[data-game="crostic"] .cr-note { margin: 0; font-size: 13px; color: var(--cr-hint); }
+[data-game="crostic"] .cr-quote {
+  width: 100%;
+  margin: 4px 0 2px;
+  padding: 12px 12px 10px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--cr-ink) 7%, transparent);
+}
+[data-game="crostic"] .cr-quote blockquote { margin: 0; font-size: 17px; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
+[data-game="crostic"] .cr-quote blockquote::before { content: "«"; }
+[data-game="crostic"] .cr-quote blockquote::after { content: "»"; }
+[data-game="crostic"] .cr-quote figcaption { margin-top: 6px; font-size: 13px; color: var(--cr-hint); }
+[data-game="crostic"] .cr-quote figcaption::before { content: "— "; }
+[data-game="crostic"] .cr-gain { display: flex; align-items: center; gap: 4px; font-size: 18px; font-variant-numeric: tabular-nums; }
+[data-game="crostic"] .cr-broken { display: grid; color: var(--cr-warn); }
+[data-game="crostic"] .cr-broken svg { width: 52px; height: 52px; }
+[data-game="crostic"] .cr-result-actions { display: grid; gap: 6px; width: 100%; margin-top: 4px; }
+[data-game="crostic"] .cr-result-actions .btn { padding: 12px 16px; }
+
+/* ---------- окна ---------- */
+
+[data-game="crostic"] .cr-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  background: color-mix(in srgb, var(--tg-theme-bg-color) 72%, transparent);
+}
+[data-game="crostic"] .cr-dialog {
+  width: 100%;
+  max-width: 380px;
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--tg-theme-secondary-bg-color);
+  color: var(--tg-theme-text-color);
+}
+[data-game="crostic"] .cr-dialog-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+[data-game="crostic"] .cr-dialog h2 { margin: 0; font-size: 18px; }
+[data-game="crostic"] .cr-dialog .cr-icon-btn { background: var(--tg-theme-bg-color); color: var(--tg-theme-text-color); }
+[data-game="crostic"] .cr-rule { margin: 0 0 10px; font-size: 14px; line-height: 1.4; }
+[data-game="crostic"] .cr-rule:last-child { margin-bottom: 0; }
+[data-game="crostic"] .cr-section { margin: 12px 0 8px; font-size: 14px; }
+[data-game="crostic"] .cr-section:first-of-type { margin-top: 0; }
+[data-game="crostic"] .cr-skins { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 8px; }
+[data-game="crostic"] .cr-skin {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+[data-game="crostic"] .cr-swatch {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  width: 76px;
+  height: 52px;
+  border-radius: 12px;
+  background-color: var(--cr-sheet);
+  background-image: repeating-linear-gradient(to bottom, transparent 0 12px, var(--cr-rule) 12px 13px);
+  box-shadow: inset 0 0 0 1px var(--cr-line);
+  transition: transform 0.1s ease;
+}
+[data-game="crostic"] .cr-swatch i {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 22px;
+  border-radius: 5px;
+  color: var(--cr-on);
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 800;
+}
+[data-game="crostic"] .cr-swatch-1 { background: var(--cr-m1); }
+[data-game="crostic"] .cr-swatch-2 { background: var(--cr-m2); }
+[data-game="crostic"] .cr-swatch-3 { background: var(--cr-m3); }
+[data-game="crostic"] .cr-skin:active .cr-swatch { transform: scale(0.93); }
+[data-game="crostic"] .cr-skin[aria-checked="true"] .cr-swatch { outline: 3px solid var(--tg-theme-button-color); outline-offset: 2px; }
+[data-game="crostic"] .cr-totals { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 10px; margin: 0 0 4px; font-size: 14px; }
+[data-game="crostic"] .cr-totals dt { color: var(--tg-theme-hint-color); }
+[data-game="crostic"] .cr-totals dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* невысокий экран — клавиши ниже, странице больше места */
+@media (max-height: 640px) {
+  [data-game="crostic"] .cr-key { height: 40px; }
+  [data-game="crostic"] .cr-bar { min-height: 36px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-game="crostic"] .cr-same b, [data-game="crostic"] .cr-flash b, [data-game="crostic"] .cr-key-miss { animation: none; }
+  [data-game="crostic"] * { transition-duration: 0s !important; }
+}

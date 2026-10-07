@@ -10,7 +10,7 @@ export const categories = [
     title: 'Слова',
     hint: 'Буквы, поиск и угадывание',
     color: '--cat-words',
-    games: ['words', 'boggle', 'wordle', 'erudit', 'word-circle', 'subwords'],
+    games: ['words', 'boggle', 'wordle', 'erudit', 'word-circle', 'subwords', 'crostic'],
   },
   {
     id: 'puzzles',

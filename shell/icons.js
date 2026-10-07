@@ -27,6 +27,10 @@ export const GAME_ICONS = {
   // слоги: куча кружков, один выбран (с обводкой)
   subwords: svg('<circle cx="8" cy="9" r="4.6"/><circle cx="16.2" cy="8" r="3.3"/><circle cx="14.6" cy="16" r="4.6"/>'
     + '<circle cx="14.6" cy="16" r="1.5" fill="currentColor" stroke="none"/><circle cx="6.6" cy="17.6" r="2.2"/>'),
+  // кростик: три клетки с номерами под ними, средняя открыта
+  crostic: svg('<rect x="2.5" y="5" width="5.6" height="8" rx="1.5"/><rect x="9.2" y="5" width="5.6" height="8" rx="1.5"/>'
+    + '<rect x="15.9" y="5" width="5.6" height="8" rx="1.5"/><path d="M10.9 10.6 12 7.4l1.1 3.2M11.3 9.6h1.4" stroke-width="1.3"/>'
+    + '<path d="M4.6 17.5h1.4M11.3 17.5h1.4M18 17.5h1.4" opacity="0.6"/>'),
 
   // Головоломки
   sudoku: svg('<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/>'

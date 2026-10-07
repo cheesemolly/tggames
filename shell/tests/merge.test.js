@@ -327,7 +327,7 @@ async function cases() {
   const g = {};
   for (const id of ['flags', 'checkers', 'flappy-burger', 'bongo-cat', 'snake', 'memory', 'bubble-shooter', 'brick-blast',
     'loop', 'connect-dots', 'mahjong', '2048', 'boggle', 'block-blast', 'sudoku', 'tictactoe', 'wordle', 'chess', 'spider', 'klondike',
-    'minesweeper', 'fifteen', 'rubik', 'hanoi', 'repair', 'arkanoid', 'erudit', 'billiards', 'cities', 'word-circle', 'subwords']) {
+    'minesweeper', 'fifteen', 'rubik', 'hanoi', 'repair', 'arkanoid', 'erudit', 'billiards', 'cities', 'word-circle', 'subwords', 'crostic']) {
     g[id] = await mod(id);
   }
   const pinball = await mod('pinball', 'rules.js');
@@ -348,6 +348,8 @@ async function cases() {
     ['game:word-circle:stats', g['word-circle'].emptyStats(), g['word-circle'].isValidStats],
     ['game:word-circle:progress', g['word-circle'].emptyProgress(), g['word-circle'].isValidProgress],
     ['game:subwords:stats', g.subwords.emptyStats(), g.subwords.isValidStats],
+    ['game:crostic:stats', g.crostic.emptyStats(), g.crostic.isValidStats],
+    ['game:crostic:progress', g.crostic.emptyProgress(), g.crostic.isValidProgress],
     ['game:subwords:progress', { stars: { fruits: 2, pets: 1 }, time: { fruits: 41000, pets: 90000 }, timed: { fruits: 38 } }, g.subwords.isValidProgress],
     ['game:loop:stats', g.loop.emptyStats(), g.loop.isValidStats],
     ['game:connect-dots:stats', g['connect-dots'].emptyStats(), g['connect-dots'].isValidStats],

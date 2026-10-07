@@ -44,6 +44,8 @@ test('числа в подсказках — те же, что считает с
   assert.equal(LEVEL_PRICES.arkanoid(179), 149, 'со 180-го — по 150');
   has('word-circle', [LEVEL_PRICES['word-circle'](1), LEVEL_PRICES['word-circle'](170), 170]);
   assert.equal(LEVEL_PRICES['word-circle'](169), 99, 'со 170-го — по 100');
+  has('crostic', [LEVEL_PRICES.crostic(1), LEVEL_PRICES.crostic(330), 330]);
+  assert.equal(LEVEL_PRICES.crostic(329), 149, 'с 330-го — по 150');
   has('subwords', SUBWORDS_STAR_POINTS.slice(1));
   has('snake', [LEVEL_PRICES.snake(1), LEVEL_PRICES.snake(2), LEVEL_PRICES.snake(12), LEVEL_PRICES.snake(13) - LEVEL_PRICES.snake(1)]);
 });

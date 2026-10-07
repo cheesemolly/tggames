@@ -209,6 +209,7 @@ const GAMES = [
   { id: 'cities', title: 'Города', emoji: '🟢', about: 'игра в города против бота: город на последнюю букву предыдущего, маршрут на глобусе', beta: true },
   { id: 'word-circle', title: 'Круг слов', emoji: '🌄', about: 'буквы по кругу: проведи по ним, собери слова и заполни кроссворд — 600 уровней, монеты и подсказки', beta: true },
   { id: 'subwords', title: 'Слоги', emoji: '🎈', about: 'слова разрезаны на слоги-кружки: собери слова темы, 56 тем, классика и на время', beta: true },
+  { id: 'crostic', title: 'Кростик', emoji: '📝', about: 'спрятанная фраза и вопросы к ней: одинаковый номер — одинаковая буква; 600 уровней с пословицами, цитатами и фактами', beta: true },
 ];
 
 const fold = (text) => String(text ?? '').toLowerCase().replace(/ё/g, 'е').trim();
@@ -471,6 +472,12 @@ function wordCircleLevel(state) {
   return Number.isInteger(level) && level > 1 ? Math.min(level, MAX_LEVELS) : null;
 }
 
+/** Кростик: уровень, на котором игрок, — из прогресса игры (между устройствами берётся больший). */
+function crosticLevel(state) {
+  const level = state?.['game:crostic:progress']?.level;
+  return Number.isInteger(level) && level > 1 ? Math.min(level, MAX_LEVELS) : null;
+}
+
 const POINTS = count(['очко', 'очка', 'очков']);
 const WINS = count(['победа', 'победы', 'побед']);
 
@@ -493,6 +500,7 @@ const BOARDS = {
   billiards: { by: 'победы над ботом', score: shellStats('billiards', 'wins'), text: WINS },
   cities: { by: 'победы над ботом', score: shellStats('cities', 'wins'), text: WINS },
   'word-circle': { by: 'уровень', score: wordCircleLevel, text: levelText },
+  crostic: { by: 'уровень', score: crosticLevel, text: levelText },
   subwords: { by: 'звёзды', score: subwordsStars, text: count(['звезда', 'звезды', 'звёзд']) },
   'block-blast': { by: 'рекорд', score: shellStats('block-blast', 'best'), text: POINTS },
   sudoku: { by: 'решённые судоку', score: shellStats('sudoku', 'wins'), text: count(['судоку', 'судоку', 'судоку']) },
@@ -544,6 +552,7 @@ const BOARD_LIMITS = {
   billiards: 1e5,
   cities: 1e5,
   'word-circle': 1e4,
+  crostic: 1e4,
   subwords: 300,              // не больше трёх звёзд за тему, тем не больше ста
 };
 // побед не может быть больше сыгранных партий
@@ -724,6 +733,8 @@ const LEVEL_PRICES = {
   arkanoid: (k) => 60 + Math.min(Math.floor(k / 2), 90),   // уровень — несколько минут: 60, со 180-го — по 150
   // круг слов: первые уровни — три слова за полминуты, дальше кроссворд растёт: 15, со 170-го — по 100
   'word-circle': (k) => 15 + Math.min(Math.floor(k / 2), 85),
+  // кростик: первые уровни — три вопроса на минуту, дальше фраза и вопросов больше: 40, с 330-го — по 150
+  crostic: (k) => 40 + Math.min(Math.floor(k / 3), 110),
   // змейка: уровни 1–12 — 100…1200 (как предложил владелец), каждый следующий круг карт — ещё +300
   snake: (k) => 100 * (((k - 1) % 12) + 1) + 300 * Math.floor((k - 1) / 12),
 };
@@ -810,6 +821,7 @@ const BOARDS_V2 = {
   cities: wins('cities', 'очки за победы над ботом (сильнее — дороже)'),
   subwords: { by: 'очки за звёзды и рекорды «На время»', score: subwordsPoints, text: POINTS },
   'word-circle': levels('word-circle', 'очки за пройденные уровни (дальше — дороже)', (s) => Math.max(0, (wordCircleLevel(s) ?? 1) - 1)),
+  crostic: levels('crostic', 'очки за пройденные уровни (дальше — дороже)', (s) => Math.max(0, (crosticLevel(s) ?? 1) - 1)),
   tictactoe: wins('tictactoe', 'очки за победы над ботом (гомоку и сильный бот — дороже)'),
   flags: { by: 'очки за партии (ввод и 20 флагов — дороже) + рекорд марафона', score: flagsPoints, text: POINTS },
 };
@@ -1140,6 +1152,10 @@ const RULES = [
   ['game:word-circle:progress', { type: 'fields', fields: { level: 'max', coins: { spend: 100 } } }],
   ['game:word-circle:current', { type: 'level', at: 'level' }],
   ['game:word-circle:stats', { type: 'fields', fields: { levels: 'count', words: 'count', bonus: 'count', hints: 'count' } }],
+  // кростик: уровень — максимум, монеты — расходуемое (подсказки), начатый уровень — у кого уровень больше
+  ['game:crostic:progress', { type: 'fields', fields: { level: 'max', coins: { spend: 60 } } }],
+  ['game:crostic:current', { type: 'level', at: 'level' }],
+  ['game:crostic:stats', { type: 'fields', fields: { levels: 'count', perfect: 'count', mistakes: 'count', hints: 'count', fails: 'count' } }],
   // слоги: звёзды и рекорды по темам — лучшее, время темы — меньшее
   ['game:subwords:progress', { type: 'fields', fields: { 'stars.*': 'max', 'time.*': 'min', 'timed.*': 'max' } }],
   ['game:subwords:stats', { type: 'fields', fields: { words: 'count', levels: 'count', runs: 'count', hints: 'count' } }],

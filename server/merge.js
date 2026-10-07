@@ -114,6 +114,10 @@ export const RULES = [
   ['game:word-circle:progress', { type: 'fields', fields: { level: 'max', coins: { spend: 100 } } }],
   ['game:word-circle:current', { type: 'level', at: 'level' }],
   ['game:word-circle:stats', { type: 'fields', fields: { levels: 'count', words: 'count', bonus: 'count', hints: 'count' } }],
+  // кростик: уровень — максимум, монеты — расходуемое (подсказки), начатый уровень — у кого уровень больше
+  ['game:crostic:progress', { type: 'fields', fields: { level: 'max', coins: { spend: 60 } } }],
+  ['game:crostic:current', { type: 'level', at: 'level' }],
+  ['game:crostic:stats', { type: 'fields', fields: { levels: 'count', perfect: 'count', mistakes: 'count', hints: 'count', fails: 'count' } }],
   // слоги: звёзды и рекорды по темам — лучшее, время темы — меньшее
   ['game:subwords:progress', { type: 'fields', fields: { 'stars.*': 'max', 'time.*': 'min', 'timed.*': 'max' } }],
   ['game:subwords:stats', { type: 'fields', fields: { words: 'count', levels: 'count', runs: 'count', hints: 'count' } }],
