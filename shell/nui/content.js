@@ -9,6 +9,15 @@ import { digits, plural, placeOn } from './logic.js';
 
 export const STORIES = [
   {
+    id: 'cities-new',
+    label: 'Города',
+    games: ['cities'],
+    slides: [
+      { kicker: 'Новая игра', title: 'Города', text: 'Игра в города против бота: каждый следующий город — на последнюю букву предыдущего. Глобус поворачивается к названному городу и рисует маршрут. В базе 23 тысячи городов.', play: 'cities' },
+      { kicker: 'Совет', title: 'Лови бота на редкой букве', text: 'Бот знает не все города. На Й, Я, Ц и Ф их мало — называй города, которые кончаются на такую букву, и он быстрее останется без ответа.', play: 'cities' },
+    ],
+  },
+  {
     id: 'billiards-new',
     label: 'Бильярд',
     games: ['billiards'],
@@ -231,6 +240,7 @@ export function pickStories({ visible, rated = false, seen = [], week = null }) 
 
 /** Что показать баннером «Новая игра»: первая видимая игроку из списка (новые — выше). */
 export const NEW_GAMES = [
+  { id: 'cities', text: 'Против бота, с маршрутом на глобусе' },
   { id: 'billiards', text: 'Пул с настоящей физикой: бот или вдвоём' },
   { id: 'erudit', text: 'Скрэббл на русском против бота' },
   { id: 'arkanoid', text: '300 уровней, 10 глав, 15 бонусов' },

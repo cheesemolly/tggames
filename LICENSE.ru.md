@@ -46,6 +46,12 @@ Copyright (c) 2026 cheesemolly (https://github.com/cheesemolly). Все прав
 - `games/erudit/words/ru.json` — список существительных из Harrix/Russian-Nouns
   (https://github.com/Harrix/Russian-Nouns), лицензия MIT; список частых слов — по «Новому частотному
   словарю русской лексики» О. Н. Ляшевской и С. А. Шарова (2009);
+- `games/cities/data/cities.json` — координаты, страны и население городов из GeoNames
+  (https://www.geonames.org), лицензия Creative Commons Attribution 4.0; русские названия городов и стран
+  и число разделов Википедии о городе — из Wikidata (https://www.wikidata.org), CC0 1.0. Данные отобраны,
+  объединены и переупорядочены;
+- `games/cities/land.js` — суша для глобуса получена из Natural Earth
+  (https://www.naturalearthdata.com), общественное достояние;
 - `games/wordle/words/*.json` — списки слов, собранные из общедоступных источников; принадлежат
   их владельцам;
 - `games/chess/engine.js` — значения таблиц полей взяты из «Simplified Evaluation Function»

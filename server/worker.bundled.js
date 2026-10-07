@@ -206,6 +206,7 @@ const GAMES = [
   { id: 'pinball', title: 'Пинбол', emoji: '🚀', about: 'как в Windows XP: миссии, звания, гиперпространство' },
   { id: 'erudit', title: 'Эрудит', emoji: '🔴', about: 'скрэббл на русском против бота: поле 15×15, четыре уровня' },
   { id: 'billiards', title: 'Бильярд', emoji: '🎱', about: 'пул-«восьмёрка» с настоящей физикой: против бота или вдвоём на одном телефоне' },
+  { id: 'cities', title: 'Города', emoji: '🟢', about: 'игра в города против бота: город на последнюю букву предыдущего, маршрут на глобусе', beta: true },
 ];
 
 const fold = (text) => String(text ?? '').toLowerCase().replace(/ё/g, 'е').trim();
@@ -463,6 +464,7 @@ const BOARDS = {
   boggle: { by: 'найденные слова, включая бонусные', score: boggleWords, text: count(['слово', 'слова', 'слов']) },
   erudit: { by: 'победы над ботом', score: shellStats('erudit', 'wins'), text: WINS },
   billiards: { by: 'победы над ботом', score: shellStats('billiards', 'wins'), text: WINS },
+  cities: { by: 'победы над ботом', score: shellStats('cities', 'wins'), text: WINS },
   'block-blast': { by: 'рекорд', score: shellStats('block-blast', 'best'), text: POINTS },
   sudoku: { by: 'решённые судоку', score: shellStats('sudoku', 'wins'), text: count(['судоку', 'судоку', 'судоку']) },
   'killer-sudoku': { by: 'решённые судоку', score: shellStats('killer-sudoku', 'wins'), text: count(['судоку', 'судоку', 'судоку']) },
@@ -511,9 +513,10 @@ const BOARD_LIMITS = {
   arkanoid: 300,              // уровней в игре 300
   erudit: 1e5,
   billiards: 1e5,
+  cities: 1e5,
 };
 // побед не может быть больше сыгранных партий
-const WINS_FROM = { checkers: 'checkers', mahjong: 'mahjong', sudoku: 'sudoku', wordle: 'wordle', tictactoe: 'tictactoe', chess: 'chess', spider: 'spider', klondike: 'klondike', 'killer-sudoku': 'killer-sudoku', go: 'go', minesweeper: 'minesweeper', fifteen: 'fifteen', rubik: 'rubik', hanoi: 'hanoi', erudit: 'erudit', billiards: 'billiards' };
+const WINS_FROM = { checkers: 'checkers', mahjong: 'mahjong', sudoku: 'sudoku', wordle: 'wordle', tictactoe: 'tictactoe', chess: 'chess', spider: 'spider', klondike: 'klondike', 'killer-sudoku': 'killer-sudoku', go: 'go', minesweeper: 'minesweeper', fifteen: 'fifteen', rubik: 'rubik', hanoi: 'hanoi', erudit: 'erudit', billiards: 'billiards', cities: 'cities' };
 
 function plausible(id, value, state) {
   if (value > (BOARD_LIMITS[id] ?? MAX_SCORE)) return false;
@@ -589,6 +592,8 @@ const WIN_POINTS = {
   erudit: { legacy: 60, by: { easy: 60, medium: 150, hard: 350, master: 700 } },
   // бильярд: партия минут на пять; «вдвоём» в статистику оболочки не пишется
   billiards: { legacy: 25, by: { easy: 25, medium: 60, hard: 150, master: 350 } },
+  // города: лёгкого бота обыгрывают минут за пять, сильных — только зная редкие города
+  cities: { legacy: 40, by: { easy: 40, medium: 100, hard: 250, master: 600 } },
 };
 
 const nat = (v) => (Number.isInteger(v) && v > 0 ? v : 0);
@@ -769,6 +774,7 @@ const BOARDS_V2 = {
   checkers: wins('checkers', 'очки за победы над ботом (сильнее — дороже)'),
   erudit: wins('erudit', 'очки за победы над ботом (сильнее — дороже)'),
   billiards: wins('billiards', 'очки за победы над ботом (сильнее — дороже)'),
+  cities: wins('cities', 'очки за победы над ботом (сильнее — дороже)'),
   tictactoe: wins('tictactoe', 'очки за победы над ботом (гомоку и сильный бот — дороже)'),
   flags: { by: 'очки за партии (ввод и 20 флагов — дороже) + рекорд марафона', score: flagsPoints, text: POINTS },
 };
@@ -1095,6 +1101,10 @@ const RULES = [
   ['game:boggle:stats', { type: 'fields', fields: { '*.played': 'count', '*.best': 'max', '*.bonus': 'count' } }],
   ['game:erudit:stats', { type: 'fields', fields: { ...COUNT4('*.'), '*.best': 'max', '*.bestMove': 'max' } }],
   ['game:billiards:stats', { type: 'fields', fields: { '*.played': 'count', '*.wins': 'count', '*.losses': 'count', bestRun: 'max' } }],
+  ['game:cities:stats', { type: 'fields', fields: {
+    '*.played': 'count', '*.wins': 'count', '*.losses': 'count', '*.best': 'max',
+    'total.cities': 'count', 'total.km': 'count', 'total.far': 'max',
+  } }],
   ['game:block-blast:stats', { type: 'fields', fields: {
     played: 'count', best: 'max', totalScore: 'count', maxCombo: 'max', lines: 'count',
   } }],

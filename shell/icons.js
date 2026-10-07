@@ -114,6 +114,11 @@ export const GAME_ICONS = {
 
   // Викторина
   flags: svg('<path d="M6 3.5v17"/><path d="M6 5h11l-2.6 4L17 13H6z" fill="currentColor" fill-opacity="0.18"/>'),
+  // города: метка на карте и пунктир маршрута к следующей точке
+  cities: svg('<path d="M9.5 20.5S4 15.2 4 10.3a5.5 5.5 0 0 1 11 0c0 4.9-5.5 10.2-5.5 10.2Z"/>'
+    + '<circle cx="9.5" cy="10.2" r="1.9" fill="currentColor" stroke="none"/>'
+    + '<path d="M14.5 20.5h1.2a4.3 4.3 0 0 0 4.3-4.3v-.7" stroke-dasharray="1.6 2.4"/>'
+    + '<circle cx="20" cy="12.2" r="1.3" fill="currentColor" stroke="none"/>'),
 };
 
 export const CATEGORY_ICONS = {

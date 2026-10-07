@@ -110,6 +110,10 @@ export const RULES = [
   ['game:boggle:stats', { type: 'fields', fields: { '*.played': 'count', '*.best': 'max', '*.bonus': 'count' } }],
   ['game:erudit:stats', { type: 'fields', fields: { ...COUNT4('*.'), '*.best': 'max', '*.bestMove': 'max' } }],
   ['game:billiards:stats', { type: 'fields', fields: { '*.played': 'count', '*.wins': 'count', '*.losses': 'count', bestRun: 'max' } }],
+  ['game:cities:stats', { type: 'fields', fields: {
+    '*.played': 'count', '*.wins': 'count', '*.losses': 'count', '*.best': 'max',
+    'total.cities': 'count', 'total.km': 'count', 'total.far': 'max',
+  } }],
   ['game:block-blast:stats', { type: 'fields', fields: {
     played: 'count', best: 'max', totalScore: 'count', maxCombo: 'max', lines: 'count',
   } }],

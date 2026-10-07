@@ -249,4 +249,12 @@ export const games = [
     css: new URL('../games/billiards/game.css', import.meta.url),
     menu: { best: false },                               // «Сыграно · Побед» — партии с ботом
   },
+  {
+    id: 'cities',
+    title: 'Города',
+    load: () => import('../games/cities/index.js'),
+    css: new URL('../games/cities/game.css', import.meta.url),
+    // «Сыграно · Побед · Рекорд: 24» — рекорд (городов за партию) говорит сама игра; у начатой — «Городов: 7»
+    menu: { best: false, progress: 'append', saveLine: (s) => (Number.isInteger(s.cities) ? `Городов: ${s.cities}` : null) },
+  },
 ];

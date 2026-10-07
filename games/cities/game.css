@@ -1,0 +1,587 @@
+/*
+ * Города. Сверху — «сцена» с глобусом (Canvas) и подписями поверх него, под ней — карточка последнего города
+ * с буквой следующего хода, поле ввода и своя клавиатура.
+ * Скин «telegram» (по умолчанию): сцена и шар — из цветов темы, маршрут игрока — цвет кнопок, маршрут бота —
+ * розовый (игровой цвет, задан для обеих тем; не спорит ни с синими, ни с жёлтыми кнопками темы). Остальные скины — свои палитры (--ct-*), одинаковые в обеих темах:
+ * --ct-g-* читает глобус (шар, суша, ореол, маршруты), остальное красит сцену и акцентные кнопки.
+ */
+
+[data-game="cities"] {
+  --ct-warn: #c0392b;
+  /* сообщение («Нужен город на «К»») — над карточкой города, рядом с полем ввода, а не вверху экрана */
+  --toast-top: calc(100% - 372px);
+}
+:root[data-theme="dark"] [data-game="cities"] { --ct-warn: #ff8a7a; }
+
+[data-game="cities"], [data-game="cities"] [data-skin="telegram"] {
+  --ct-stage-a: color-mix(in srgb, var(--tg-theme-button-color) 14%, var(--tg-theme-secondary-bg-color));
+  --ct-stage-b: var(--tg-theme-secondary-bg-color);
+  --ct-stars: none;
+  --ct-ink: var(--tg-theme-text-color);
+  --ct-chip: color-mix(in srgb, var(--tg-theme-bg-color) 80%, transparent);
+  --ct-accent: var(--tg-theme-button-color);
+  --ct-accent-text: var(--tg-theme-button-text-color);
+  --ct-bot: #e0457b;
+  --ct-bot-text: #fff;
+  --ct-g-light: color-mix(in srgb, var(--tg-theme-button-color) 6%, var(--tg-theme-bg-color));
+  --ct-g-base: color-mix(in srgb, var(--tg-theme-button-color) 16%, var(--tg-theme-bg-color));
+  --ct-g-edge: color-mix(in srgb, var(--tg-theme-button-color) 32%, var(--tg-theme-bg-color));
+  --ct-g-land: color-mix(in srgb, var(--tg-theme-text-color) 50%, var(--tg-theme-secondary-bg-color));
+  --ct-g-halo: var(--tg-theme-button-color);
+  --ct-g-me: var(--tg-theme-button-color);
+  --ct-g-bot: #e0457b;
+  --ct-g-core: #fff;
+}
+:root[data-theme="dark"] [data-game="cities"]:not([data-skin]),
+:root[data-theme="dark"] [data-game="cities"][data-skin="telegram"],
+:root[data-theme="dark"] [data-game="cities"] [data-skin="telegram"] {
+  --ct-bot: #ff7aa8;
+  --ct-bot-text: #33081c;
+  --ct-g-bot: #ff7aa8;
+}
+/* Океан — синий шар, светлая суша, жёлтый и розовый маршруты */
+[data-game="cities"][data-skin="ocean"], [data-game="cities"] [data-skin="ocean"] {
+  --ct-stage-a: #10507c; --ct-stage-b: #072a44; --ct-stars: none; --ct-ink: #eaf6ff; --ct-chip: rgb(5 30 50 / 0.62);
+  --ct-accent: #ffd24a; --ct-accent-text: #1d1600; --ct-bot: #ff8fbf; --ct-bot-text: #33081c;
+  --ct-g-light: #3f9fe3; --ct-g-base: #1668ad; --ct-g-edge: #0b3f73; --ct-g-land: #d9f6ee; --ct-g-halo: #6fd0ff;
+  --ct-g-me: #ffd24a; --ct-g-bot: #ff8fbf; --ct-g-core: #fff;
+}
+/* Космос — ночной шар среди звёзд */
+[data-game="cities"][data-skin="space"], [data-game="cities"] [data-skin="space"] {
+  --ct-stage-a: #131838; --ct-stage-b: #04050d; --ct-ink: #e8ecff; --ct-chip: rgb(8 10 28 / 0.62);
+  --ct-stars: radial-gradient(1.2px 1.2px at 12% 18%, #fff 50%, transparent 51%), radial-gradient(1px 1px at 28% 72%, #cfd8ff 50%, transparent 51%), radial-gradient(1.4px 1.4px at 44% 9%, #fff 50%, transparent 51%), radial-gradient(1px 1px at 63% 84%, #fff 50%, transparent 51%), radial-gradient(1.2px 1.2px at 81% 22%, #dfe5ff 50%, transparent 51%), radial-gradient(1px 1px at 92% 61%, #fff 50%, transparent 51%), radial-gradient(1px 1px at 7% 58%, #fff 50%, transparent 51%), radial-gradient(1.3px 1.3px at 72% 6%, #cfd8ff 50%, transparent 51%), radial-gradient(1px 1px at 36% 91%, #fff 50%, transparent 51%), radial-gradient(1px 1px at 95% 90%, #dfe5ff 50%, transparent 51%);
+  --ct-accent: #5ef2c9; --ct-accent-text: #04241b; --ct-bot: #ff8a5c; --ct-bot-text: #2b0d00;
+  --ct-g-light: #323b6e; --ct-g-base: #151b3a; --ct-g-edge: #080b1c; --ct-g-land: #9db8ff; --ct-g-halo: #7f97ff;
+  --ct-g-me: #5ef2c9; --ct-g-bot: #ff8a5c; --ct-g-core: #fff;
+}
+/* Старая карта — пергамент, коричневая суша, красные и синие чернила */
+[data-game="cities"][data-skin="atlas"], [data-game="cities"] [data-skin="atlas"] {
+  --ct-stage-a: #f7edd2; --ct-stage-b: #e0cb99; --ct-stars: none; --ct-ink: #4a361a; --ct-chip: rgb(255 248 228 / 0.72);
+  --ct-accent: #a8321c; --ct-accent-text: #fff; --ct-bot: #1f4e8c; --ct-bot-text: #fff;
+  --ct-g-light: #fcf3da; --ct-g-base: #ecd9a8; --ct-g-edge: #cdaf74; --ct-g-land: #8a6a3c; --ct-g-halo: #b08d52;
+  --ct-g-me: #a8321c; --ct-g-bot: #1f4e8c; --ct-g-core: #fff8e7;
+}
+[data-game="cities"][data-skin="neon"], [data-game="cities"] [data-skin="neon"] {
+  --ct-stage-a: #2c0e4e; --ct-stage-b: #0d0418; --ct-stars: none; --ct-ink: #f3e9ff; --ct-chip: rgb(20 6 40 / 0.62);
+  --ct-accent: #b6ff3d; --ct-accent-text: #132106; --ct-bot: #29d7ff; --ct-bot-text: #00212b;
+  --ct-g-light: #4a1a82; --ct-g-base: #220c44; --ct-g-edge: #0f0522; --ct-g-land: #ff5fe0; --ct-g-halo: #c05cff;
+  --ct-g-me: #b6ff3d; --ct-g-bot: #29d7ff; --ct-g-core: #fff;
+}
+[data-game="cities"][data-skin="forest"], [data-game="cities"] [data-skin="forest"] {
+  --ct-stage-a: #215039; --ct-stage-b: #0c2118; --ct-stars: none; --ct-ink: #e9f7e6; --ct-chip: rgb(8 30 20 / 0.62);
+  --ct-accent: #ffc94a; --ct-accent-text: #2a1a00; --ct-bot: #ff9a7a; --ct-bot-text: #2e0d02;
+  --ct-g-light: #3f8460; --ct-g-base: #1f5139; --ct-g-edge: #0e2e20; --ct-g-land: #c9ebaa; --ct-g-halo: #86dba6;
+  --ct-g-me: #ffc94a; --ct-g-bot: #ff9a7a; --ct-g-core: #fff;
+}
+
+/* ---------- раскладка ---------- */
+
+.game-root[data-game="cities"] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+[data-game="cities"] .btn { background: var(--ct-accent); color: var(--ct-accent-text); }
+[data-game="cities"] .btn-secondary { background: var(--tg-theme-bg-color); color: var(--tg-theme-text-color); }
+[data-game="cities"] .ct { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 6px; }
+[data-game="cities"] .ct-header { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 4px; }
+[data-game="cities"] .ct-heading { min-width: 0; }
+[data-game="cities"] .ct-title { font-size: 20px; font-weight: 700; line-height: 1.2; }
+[data-game="cities"] .ct-sub { min-height: 18px; font-size: 13px; color: var(--tg-theme-hint-color); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+[data-game="cities"] .ct-actions { flex: none; display: flex; gap: 6px; }
+[data-game="cities"] .ct-icon-btn {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: var(--tg-theme-secondary-bg-color);
+  color: var(--tg-theme-text-color);
+  font: inherit;
+  cursor: pointer;
+  transition: transform 0.1s ease, opacity 0.2s ease;
+}
+[data-game="cities"] .ct-icon-btn:active { transform: scale(0.92); }
+[data-game="cities"] .ct-icon-btn svg { width: 20px; height: 20px; }
+[data-game="cities"] .ct-muted { opacity: 0.55; }
+
+/* ---------- сцена с глобусом ---------- */
+
+[data-game="cities"] .ct-stage {
+  position: relative;
+  flex: 1;
+  min-height: 96px;
+  border-radius: 18px;
+  overflow: hidden;
+  isolation: isolate;
+  background: var(--ct-stars), radial-gradient(120% 100% at 50% 0%, var(--ct-stage-a), var(--ct-stage-b));
+  color: var(--ct-ink);
+  transition: color 0.3s ease;
+}
+[data-game="cities"] .ct-canvas { position: absolute; inset: 0; z-index: 0; display: block; touch-action: none; cursor: grab; }
+[data-game="cities"] .ct-canvas:active { cursor: grabbing; }
+
+[data-game="cities"] .ct-chip {
+  position: absolute;
+  top: 8px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 10px 0 8px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--ct-chip);
+  color: var(--ct-ink);
+  font: inherit;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  transition: opacity 0.25s ease, translate 0.25s ease, color 0.2s ease;
+}
+[data-game="cities"] .ct-chip[hidden] { display: flex; opacity: 0; translate: 0 -6px; pointer-events: none; }
+[data-game="cities"] .ct-chip b { display: inline-block; font-weight: 700; }
+[data-game="cities"] .ct-chip i { font-style: normal; opacity: 0.55; }
+[data-game="cities"] .ct-chip [hidden] { display: none; }
+[data-game="cities"] .ct-chip-icon { display: grid; }
+[data-game="cities"] .ct-chip-icon svg { width: 16px; height: 16px; }
+[data-game="cities"] .ct-chip-km { left: 8px; cursor: pointer; }
+[data-game="cities"] .ct-chip-km:active { opacity: 0.7; }
+[data-game="cities"] .ct-chip-time { right: 8px; }
+[data-game="cities"] .ct-chip-hurry { color: var(--ct-warn); }
+
+/* последний город на глобусе: расходящееся кольцо и подпись под точкой */
+[data-game="cities"] .ct-pin {
+  position: absolute;
+  z-index: 1;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  --ct-pin-color: var(--ct-g-me);
+}
+[data-game="cities"] .ct-pin[data-by="bot"] { --ct-pin-color: var(--ct-g-bot); }
+[data-game="cities"] .ct-pin-on { opacity: 1; }
+[data-game="cities"] .ct-pin-ring {
+  position: absolute;
+  left: -14px;
+  top: -14px;
+  width: 28px;
+  height: 28px;
+  border: 2px solid var(--ct-pin-color);
+  border-radius: 50%;
+  opacity: 0;
+  animation: ct-ping 1.8s ease-out infinite;
+}
+@keyframes ct-ping {
+  0% { opacity: 0.9; scale: 0.3; }
+  80%, 100% { opacity: 0; scale: 1.25; }
+}
+[data-game="cities"] .ct-pin-label {
+  position: absolute;
+  left: 0;
+  top: 11px;
+  translate: -50% 0;
+  max-width: 180px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--ct-chip);
+  color: var(--ct-ink);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+/* строка последних городов по нижнему краю сцены — открывает весь маршрут */
+[data-game="cities"] .ct-trail {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border: 0;
+  background: linear-gradient(to top, var(--ct-chip), transparent);
+  color: var(--ct-ink);
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  cursor: pointer;
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 22%);
+  mask-image: linear-gradient(to right, transparent, #000 22%);
+  transition: opacity 0.25s ease;
+}
+[data-game="cities"] .ct-trail[hidden] { display: flex; opacity: 0; pointer-events: none; }
+[data-game="cities"] .ct-trail i { flex: none; font-style: normal; opacity: 0.5; }
+[data-game="cities"] .ct-crumb { flex: none; display: inline-flex; align-items: center; gap: 4px; font-weight: 600; }
+[data-game="cities"] .ct-crumb::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--ct-g-me); }
+[data-game="cities"] .ct-crumb.ct-by-1::before { background: var(--ct-g-bot); }
+
+/* ---------- карточка города ---------- */
+
+[data-game="cities"] .ct-card {
+  flex: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 72px;
+  padding: 8px 10px 8px 14px;
+  border-radius: 16px;
+  background: var(--tg-theme-secondary-bg-color);
+}
+[data-game="cities"] .ct-card-body { min-width: 0; display: grid; gap: 1px; }
+[data-game="cities"] .ct-who {
+  justify-self: start;
+  min-height: 16px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--ct-accent);
+  color: var(--ct-accent-text);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 16px;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+[data-game="cities"] .ct-who:empty { visibility: hidden; }
+[data-game="cities"] .ct-who[data-by="bot"] { background: var(--ct-bot); color: var(--ct-bot-text); }
+[data-game="cities"] .ct-name {
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+[data-game="cities"] .ct-name-xl { font-size: 26px; }
+[data-game="cities"] .ct-name-l { font-size: 22px; }
+[data-game="cities"] .ct-name-m { font-size: 18px; }
+[data-game="cities"] .ct-name-s { font-size: 15px; }
+[data-game="cities"] .ct-hot {
+  display: inline-block;
+  margin: 0 1px;
+  padding: 0 0.16em;
+  border-radius: 0.24em;
+  background: var(--ct-accent);
+  color: var(--ct-accent-text);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+[data-game="cities"] .ct-skip { opacity: 0.38; }
+[data-game="cities"] .ct-meta {
+  min-height: 17px;
+  font-size: 13px;
+  line-height: 1.3;
+  color: var(--tg-theme-hint-color);
+  overflow-wrap: anywhere;
+}
+
+/* буква следующего хода; вокруг — кольцо таймера */
+[data-game="cities"] .ct-badge {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  transition: opacity 0.25s ease, scale 0.25s ease;
+}
+[data-game="cities"] .ct-badge > b {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: var(--ct-accent);
+  color: var(--ct-accent-text);
+  font-size: 25px;
+  font-weight: 800;
+  line-height: 1;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+[data-game="cities"] .ct-badge:not(.ct-badge-mine) { opacity: 0.45; scale: 0.92; }
+[data-game="cities"] .ct-badge-off { opacity: 0.45; }
+[data-game="cities"] .ct-ring { position: absolute; inset: 0; width: 100%; height: 100%; rotate: -90deg; opacity: 0; transition: opacity 0.25s ease; }
+[data-game="cities"] .ct-badge-timed .ct-ring { opacity: 1; }
+[data-game="cities"] .ct-ring circle { fill: none; stroke-width: 2.4; }
+[data-game="cities"] .ct-ring-track { stroke: color-mix(in srgb, var(--tg-theme-hint-color) 28%, transparent); }
+[data-game="cities"] .ct-ring-left {
+  stroke: var(--ct-accent);
+  stroke-linecap: round;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  transition: stroke-dashoffset 0.2s linear, stroke 0.3s ease;
+}
+[data-game="cities"] .ct-badge-hurry .ct-ring-left { stroke: var(--ct-warn); }
+[data-game="cities"] .ct-badge-hurry > b { animation: ct-hurry 1s ease-in-out infinite; }
+@keyframes ct-hurry { 50% { scale: 0.9; } }
+
+/* ---------- поле ввода ---------- */
+
+[data-game="cities"] .ct-entry { flex: none; display: grid; grid-template-columns: minmax(0, 1fr) 46px; gap: 6px; }
+[data-game="cities"] .ct-field {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  height: 46px;
+  padding: 0 14px;
+  border-radius: 14px;
+  background: var(--tg-theme-secondary-bg-color);
+  box-shadow: inset 0 0 0 2px transparent;
+  font-size: 18px;
+  font-weight: 700;
+  white-space: pre;
+  overflow: hidden;
+  transition: box-shadow 0.25s ease;
+}
+[data-game="cities"] .ct-field-on { box-shadow: inset 0 0 0 2px var(--ct-accent); }
+/* длинное название не помещается — виден его конец (то, что набирается) */
+[data-game="cities"] .ct-text { flex: 0 1 auto; display: flex; justify-content: flex-end; min-width: 0; overflow: hidden; }
+[data-game="cities"] .ct-caret { flex: none; width: 2px; height: 22px; margin: 0 1px; border-radius: 1px; background: var(--ct-accent); opacity: 0; }
+[data-game="cities"] .ct-field-on .ct-caret { animation: ct-caret 1.1s steps(1) infinite; }
+@keyframes ct-caret { 0%, 55% { opacity: 1; } 56%, 100% { opacity: 0; } }
+[data-game="cities"] .ct-placeholder { flex: 1; min-width: 0; font-size: 15px; font-weight: 500; color: var(--tg-theme-hint-color); overflow: hidden; text-overflow: ellipsis; }
+[data-game="cities"] .ct-thinking::after { content: '…'; display: inline-block; width: 1.2em; vertical-align: bottom; overflow: hidden; animation: ct-dots 1s steps(4) infinite; }
+@keyframes ct-dots { from { width: 0; } to { width: 1.2em; } }
+[data-game="cities"] .ct-send {
+  display: grid;
+  place-items: center;
+  height: 46px;
+  padding: 0;
+  border: 0;
+  border-radius: 14px;
+  background: var(--ct-accent);
+  color: var(--ct-accent-text);
+  cursor: pointer;
+  transition: transform 0.1s ease, opacity 0.2s ease, background-color 0.3s ease, color 0.3s ease;
+}
+[data-game="cities"] .ct-send:disabled { opacity: 0.35; cursor: default; }
+[data-game="cities"] .ct-send:not(:disabled):active { transform: scale(0.92); }
+[data-game="cities"] .ct-send svg { width: 24px; height: 24px; stroke-width: 2.4; }
+
+/* ---------- клавиатура ---------- */
+
+[data-game="cities"] .ct-kb { flex: none; display: grid; gap: 5px; touch-action: manipulation; }
+[data-game="cities"] .ct-kb-row { display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); gap: 4px; }
+[data-game="cities"] .ct-key {
+  grid-column: span 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  height: 42px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--tg-theme-hint-color) 22%, var(--tg-theme-secondary-bg-color));
+  color: var(--tg-theme-text-color);
+  font: inherit;
+  font-size: 17px;
+  font-weight: 600;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: transform 0.08s ease, background-color 0.15s ease, opacity 0.2s ease;
+}
+[data-game="cities"] .ct-key:not(:disabled):active { transform: scale(0.9); background: color-mix(in srgb, var(--tg-theme-hint-color) 45%, var(--tg-theme-secondary-bg-color)); }
+[data-game="cities"] .ct-key:disabled { opacity: 0.4; cursor: default; }
+[data-game="cities"] .ct-kb-row-2 .ct-key:first-child { grid-column: 2 / span 2; }
+[data-game="cities"] .ct-kb-row-3 .ct-key:first-child { grid-column: 3 / span 2; }
+[data-game="cities"] .ct-key-wide { grid-column: span 4; }
+[data-game="cities"] .ct-key svg { width: 20px; height: 20px; }
+[data-game="cities"] .ct-key-tool { font-size: 13px; text-transform: none; background: var(--tg-theme-secondary-bg-color); }
+[data-game="cities"] .ct-key-icon { display: grid; }
+[data-game="cities"] .ct-key-icon svg { width: 18px; height: 18px; }
+[data-game="cities"] .ct-key-hint { grid-column: span 5; }
+[data-game="cities"] .ct-key-hint b { font-variant-numeric: tabular-nums; }
+[data-game="cities"] .ct-key-dash { grid-column: span 3; }
+[data-game="cities"] .ct-key-space { grid-column: span 9; font-size: 13px; font-weight: 500; text-transform: none; color: var(--tg-theme-hint-color); }
+[data-game="cities"] .ct-key-give { grid-column: span 7; }
+
+/* на низких экранах клавиши ниже — глобусу нужно место */
+@media (max-height: 620px) {
+  [data-game="cities"] { --toast-top: calc(100% - 348px); }
+  [data-game="cities"] .ct-key { height: 38px; }
+  [data-game="cities"] .ct-card { min-height: 64px; }
+}
+@media (max-height: 540px) {
+  [data-game="cities"] { --toast-top: calc(100% - 318px); }
+  [data-game="cities"] .ct-key { height: 34px; font-size: 16px; }
+  [data-game="cities"] .ct-field, [data-game="cities"] .ct-send { height: 40px; }
+  [data-game="cities"] .ct-name-xl { font-size: 22px; }
+  [data-game="cities"] .ct-badge { width: 50px; height: 50px; }
+  [data-game="cities"] .ct-badge > b { width: 40px; height: 40px; font-size: 22px; }
+}
+
+/* ---------- окна ---------- */
+
+[data-game="cities"] .ct-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--tg-theme-bg-color) 82%, transparent);
+}
+[data-game="cities"] .ct-sheet {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 380px;
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--tg-theme-secondary-bg-color);
+}
+[data-game="cities"] .ct-sheet-head { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+[data-game="cities"] .ct-sheet h2 { margin: 0; font-size: 18px; }
+[data-game="cities"] .ct-sheet .ct-icon-btn { background: var(--tg-theme-bg-color); }
+[data-game="cities"] .ct-note { margin: 4px 0 0; font-size: 13px; color: var(--tg-theme-hint-color); }
+[data-game="cities"] .ct-rule { margin: 0 0 10px; font-size: 14px; line-height: 1.4; }
+[data-game="cities"] .ct-rule:last-child { margin-bottom: 0; }
+[data-game="cities"] .ct-sheet-actions { display: flex; gap: 8px; margin-top: 14px; }
+[data-game="cities"] .ct-sheet-actions .btn { flex: 1; }
+[data-game="cities"] .ct-section { margin: 6px 0 8px; font-size: 14px; }
+[data-game="cities"] .ct-levels { display: grid; gap: 6px; margin-bottom: 8px; }
+[data-game="cities"] .ct-timers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+[data-game="cities"] .ct-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--tg-theme-bg-color);
+  color: var(--tg-theme-text-color);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+  transition: box-shadow 0.2s ease, transform 0.1s ease;
+}
+[data-game="cities"] .ct-option span { font-size: 12px; color: var(--tg-theme-hint-color); text-align: right; }
+[data-game="cities"] .ct-option[aria-checked="true"] { box-shadow: inset 0 0 0 2px var(--ct-accent); }
+[data-game="cities"] .ct-option:active { transform: scale(0.98); }
+[data-game="cities"] .ct-option-small { justify-content: center; padding: 10px 2px; font-size: 12.5px; text-align: center; white-space: nowrap; }
+[data-game="cities"] .ct-option-small b { font-weight: 600; }
+[data-game="cities"] .ct-start { width: 100%; margin-top: 14px; }
+
+/* маршрут: все города по порядку */
+[data-game="cities"] .ct-route-sum { margin: 0 0 8px; }
+[data-game="cities"] .ct-route { flex: 1; min-height: 0; overflow-y: auto; display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+[data-game="cities"] .ct-stop {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 2px;
+  border-top: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 22%, transparent);
+  font-size: 14px;
+}
+[data-game="cities"] .ct-stop:first-child { border-top: 0; }
+[data-game="cities"] .ct-stop i {
+  display: grid;
+  place-items: center;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--ct-accent);
+  color: var(--ct-accent-text);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+}
+[data-game="cities"] .ct-stop.ct-by-1 i { background: var(--ct-bot); color: var(--ct-bot-text); }
+[data-game="cities"] .ct-stop div { min-width: 0; display: grid; }
+[data-game="cities"] .ct-stop b { overflow-wrap: anywhere; }
+[data-game="cities"] .ct-stop span { font-size: 12px; color: var(--tg-theme-hint-color); }
+[data-game="cities"] .ct-stop em { font-size: 12px; font-style: normal; color: var(--tg-theme-hint-color); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* скины: образец — маленький шар с сушей и дугой маршрута */
+[data-game="cities"] .ct-skins { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 8px; margin-bottom: 4px; }
+[data-game="cities"] .ct-skin {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--tg-theme-text-color);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+[data-game="cities"] .ct-swatch {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 60px;
+  height: 60px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: radial-gradient(120% 100% at 50% 0%, var(--ct-stage-a), var(--ct-stage-b));
+  transition: transform 0.2s ease;
+}
+[data-game="cities"] .ct-swatch i {
+  position: relative;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  overflow: hidden;
+  background:
+    radial-gradient(circle, var(--ct-g-land) 0 1.1px, transparent 1.6px) 1px 1px / 5px 5px,
+    radial-gradient(circle at 32% 28%, var(--ct-g-light), var(--ct-g-base) 55%, var(--ct-g-edge));
+  box-shadow: 0 0 10px color-mix(in srgb, var(--ct-g-halo) 60%, transparent);
+  -webkit-mask-image: radial-gradient(circle, #000 69%, transparent 71%);
+  mask-image: radial-gradient(circle, #000 69%, transparent 71%);
+}
+/* дуга маршрута поверх шара */
+[data-game="cities"] .ct-swatch::after {
+  content: '';
+  position: absolute;
+  left: 16px;
+  top: 18px;
+  width: 30px;
+  height: 22px;
+  border: 2px solid transparent;
+  border-top-color: var(--ct-g-me);
+  border-radius: 50%;
+  rotate: -18deg;
+}
+[data-game="cities"] .ct-skin:active .ct-swatch { transform: scale(0.92); }
+[data-game="cities"] .ct-skin[aria-checked="true"] .ct-swatch { outline: 3px solid var(--tg-theme-button-color); outline-offset: 3px; }
+
+[data-game="cities"] .ct-stats { width: 100%; border-collapse: collapse; font-size: 13px; }
+[data-game="cities"] .ct-stats th { font-size: 11px; font-weight: 600; color: var(--tg-theme-hint-color); padding: 4px 2px; }
+[data-game="cities"] .ct-stats td { padding: 6px 2px; text-align: center; border-top: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 25%, transparent); font-variant-numeric: tabular-nums; }
+[data-game="cities"] .ct-stats td:first-child { text-align: left; font-weight: 600; }
+[data-game="cities"] .ct-totals { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 10px; margin: 12px 0 0; font-size: 14px; }
+[data-game="cities"] .ct-totals dt { color: var(--tg-theme-hint-color); }
+[data-game="cities"] .ct-totals dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+@media (prefers-reduced-motion: reduce) {
+  [data-game="cities"] .ct-pin-ring, [data-game="cities"] .ct-field-on .ct-caret, [data-game="cities"] .ct-thinking::after,
+  [data-game="cities"] .ct-badge-hurry > b { animation: none; }
+  [data-game="cities"] .ct-field-on .ct-caret { opacity: 1; }
+  [data-game="cities"] * { transition-duration: 0s !important; }
+}
