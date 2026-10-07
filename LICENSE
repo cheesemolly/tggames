@@ -45,6 +45,10 @@ These are not owned by the copyright holder; their own licenses and notices appl
     filtered, merged and reordered.
   - games/cities/land.js — the land mask of the globe is derived from Natural Earth
     (https://www.naturalearthdata.com), public domain.
+  - games/word-circle/levels.json — the words of the levels are selected from the noun list of
+    Harrix/Russian-Nouns (https://github.com/Harrix/Russian-Nouns), MIT License; which words are common is taken
+    from "The Frequency Dictionary of Contemporary Russian" by O. N. Lyashevskaya and S. A. Sharov (2009,
+    http://dict.ruslang.ru/freq.php).
   - games/wordle/words/*.json — word lists compiled from publicly available sources; they belong to
     their respective owners.
   - games/chess/engine.js — the piece-square table values follow the "Simplified Evaluation

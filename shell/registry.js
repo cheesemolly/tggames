@@ -257,4 +257,11 @@ export const games = [
     // «Сыграно · Побед · Рекорд: 24» — рекорд (городов за партию) говорит сама игра; у начатой — «Городов: 7»
     menu: { best: false, progress: 'append', saveLine: (s) => (Number.isInteger(s.cities) ? `Городов: ${s.cities}` : null) },
   },
+  {
+    id: 'word-circle',
+    title: 'Круг слов',
+    load: () => import('../games/word-circle/index.js'),
+    css: new URL('../games/word-circle/game.css', import.meta.url),
+    menu: { progress: 'replace' },                       // «Уровень 14»
+  },
 ];

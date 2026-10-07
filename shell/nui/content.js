@@ -9,6 +9,15 @@ import { digits, plural, placeOn } from './logic.js';
 
 export const STORIES = [
   {
+    id: 'word-circle-new',
+    label: 'Круг слов',
+    games: ['word-circle'],
+    slides: [
+      { kicker: 'Новая игра', title: 'Круг слов', text: 'Буквы стоят по кругу: проведи по ним пальцем, собери слово — и оно встанет в кроссворд. 600 уровней, монеты, подсказки и новый пейзаж каждые двадцать уровней.', play: 'word-circle' },
+      { kicker: 'Совет', title: 'Ищи бонусные слова', text: 'Настоящее слово, которого нет в кроссворде, тоже считается: за него дают монету. А монеты — это подсказки, когда застрянешь.', play: 'word-circle' },
+    ],
+  },
+  {
     id: 'cities-new',
     label: 'Города',
     games: ['cities'],
@@ -240,6 +249,7 @@ export function pickStories({ visible, rated = false, seen = [], week = null }) 
 
 /** Что показать баннером «Новая игра»: первая видимая игроку из списка (новые — выше). */
 export const NEW_GAMES = [
+  { id: 'word-circle', text: 'Буквы по кругу, слова — в кроссворд' },
   { id: 'cities', text: 'Против бота, с маршрутом на глобусе' },
   { id: 'billiards', text: 'Пул с настоящей физикой: бот или вдвоём' },
   { id: 'erudit', text: 'Скрэббл на русском против бота' },

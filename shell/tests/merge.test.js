@@ -327,7 +327,7 @@ async function cases() {
   const g = {};
   for (const id of ['flags', 'checkers', 'flappy-burger', 'bongo-cat', 'snake', 'memory', 'bubble-shooter', 'brick-blast',
     'loop', 'connect-dots', 'mahjong', '2048', 'boggle', 'block-blast', 'sudoku', 'tictactoe', 'wordle', 'chess', 'spider', 'klondike',
-    'minesweeper', 'fifteen', 'rubik', 'hanoi', 'repair', 'arkanoid', 'erudit', 'billiards', 'cities']) {
+    'minesweeper', 'fifteen', 'rubik', 'hanoi', 'repair', 'arkanoid', 'erudit', 'billiards', 'cities', 'word-circle']) {
     g[id] = await mod(id);
   }
   const pinball = await mod('pinball', 'rules.js');
@@ -345,6 +345,8 @@ async function cases() {
     ['game:erudit:stats', g.erudit.emptyStats(), g.erudit.isValidStats],
     ['game:billiards:stats', g.billiards.emptyStats(), g.billiards.isValidStats],
     ['game:cities:stats', g.cities.emptyStats(), g.cities.isValidStats],
+    ['game:word-circle:stats', g['word-circle'].emptyStats(), g['word-circle'].isValidStats],
+    ['game:word-circle:progress', g['word-circle'].emptyProgress(), g['word-circle'].isValidProgress],
     ['game:loop:stats', g.loop.emptyStats(), g.loop.isValidStats],
     ['game:connect-dots:stats', g['connect-dots'].emptyStats(), g['connect-dots'].isValidStats],
     ['game:mahjong:stats', buckets(g.mahjong, ['kid', 'butterfly', 'turtle']), everyBucket(g.mahjong)],

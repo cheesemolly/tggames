@@ -207,6 +207,7 @@ const GAMES = [
   { id: 'erudit', title: 'Эрудит', emoji: '🔴', about: 'скрэббл на русском против бота: поле 15×15, четыре уровня' },
   { id: 'billiards', title: 'Бильярд', emoji: '🎱', about: 'пул-«восьмёрка» с настоящей физикой: против бота или вдвоём на одном телефоне' },
   { id: 'cities', title: 'Города', emoji: '🟢', about: 'игра в города против бота: город на последнюю букву предыдущего, маршрут на глобусе', beta: true },
+  { id: 'word-circle', title: 'Круг слов', emoji: '🌄', about: 'буквы по кругу: проведи по ним, собери слова и заполни кроссворд — 600 уровней, монеты и подсказки', beta: true, best: (n) => `уровень ${n}` },
 ];
 
 const fold = (text) => String(text ?? '').toLowerCase().replace(/ё/g, 'е').trim();
@@ -444,6 +445,12 @@ function nonogramSolved(state) {
   return list.slice(0, 100).reduce((sum, v) => sum + (Number(v) > 0 ? 1 : 0), 0);
 }
 
+/** Круг слов: уровень, на котором игрок, — из прогресса игры (между устройствами берётся больший). */
+function wordCircleLevel(state) {
+  const level = state?.['game:word-circle:progress']?.level;
+  return Number.isInteger(level) && level > 1 ? Math.min(level, MAX_LEVELS) : null;
+}
+
 const POINTS = count(['очко', 'очка', 'очков']);
 const WINS = count(['победа', 'победы', 'побед']);
 
@@ -465,6 +472,7 @@ const BOARDS = {
   erudit: { by: 'победы над ботом', score: shellStats('erudit', 'wins'), text: WINS },
   billiards: { by: 'победы над ботом', score: shellStats('billiards', 'wins'), text: WINS },
   cities: { by: 'победы над ботом', score: shellStats('cities', 'wins'), text: WINS },
+  'word-circle': { by: 'уровень', score: wordCircleLevel, text: levelText },
   'block-blast': { by: 'рекорд', score: shellStats('block-blast', 'best'), text: POINTS },
   sudoku: { by: 'решённые судоку', score: shellStats('sudoku', 'wins'), text: count(['судоку', 'судоку', 'судоку']) },
   'killer-sudoku': { by: 'решённые судоку', score: shellStats('killer-sudoku', 'wins'), text: count(['судоку', 'судоку', 'судоку']) },
@@ -514,6 +522,7 @@ const BOARD_LIMITS = {
   erudit: 1e5,
   billiards: 1e5,
   cities: 1e5,
+  'word-circle': 1e4,
 };
 // побед не может быть больше сыгранных партий
 const WINS_FROM = { checkers: 'checkers', mahjong: 'mahjong', sudoku: 'sudoku', wordle: 'wordle', tictactoe: 'tictactoe', chess: 'chess', spider: 'spider', klondike: 'klondike', 'killer-sudoku': 'killer-sudoku', go: 'go', minesweeper: 'minesweeper', fifteen: 'fifteen', rubik: 'rubik', hanoi: 'hanoi', erudit: 'erudit', billiards: 'billiards', cities: 'cities' };
@@ -691,6 +700,8 @@ const LEVEL_PRICES = {
   'bubble-shooter': (k) => 40 + Math.min(Math.floor(k / 2), 60),
   'brick-blast': (k) => 40 + Math.min(Math.floor(k / 2), 60),
   arkanoid: (k) => 60 + Math.min(Math.floor(k / 2), 90),   // уровень — несколько минут: 60, со 180-го — по 150
+  // круг слов: первые уровни — три слова за полминуты, дальше кроссворд растёт: 15, со 170-го — по 100
+  'word-circle': (k) => 15 + Math.min(Math.floor(k / 2), 85),
   // змейка: уровни 1–12 — 100…1200 (как предложил владелец), каждый следующий круг карт — ещё +300
   snake: (k) => 100 * (((k - 1) % 12) + 1) + 300 * Math.floor((k - 1) / 12),
 };
@@ -775,6 +786,7 @@ const BOARDS_V2 = {
   erudit: wins('erudit', 'очки за победы над ботом (сильнее — дороже)'),
   billiards: wins('billiards', 'очки за победы над ботом (сильнее — дороже)'),
   cities: wins('cities', 'очки за победы над ботом (сильнее — дороже)'),
+  'word-circle': levels('word-circle', 'очки за пройденные уровни (дальше — дороже)', (s) => Math.max(0, (wordCircleLevel(s) ?? 1) - 1)),
   tictactoe: wins('tictactoe', 'очки за победы над ботом (гомоку и сильный бот — дороже)'),
   flags: { by: 'очки за партии (ввод и 20 флагов — дороже) + рекорд марафона', score: flagsPoints, text: POINTS },
 };
@@ -1101,6 +1113,10 @@ const RULES = [
   ['game:boggle:stats', { type: 'fields', fields: { '*.played': 'count', '*.best': 'max', '*.bonus': 'count' } }],
   ['game:erudit:stats', { type: 'fields', fields: { ...COUNT4('*.'), '*.best': 'max', '*.bestMove': 'max' } }],
   ['game:billiards:stats', { type: 'fields', fields: { '*.played': 'count', '*.wins': 'count', '*.losses': 'count', bestRun: 'max' } }],
+  // круг слов: уровень — максимум, монеты — расходуемое (подсказки), начатый уровень — у кого уровень больше
+  ['game:word-circle:progress', { type: 'fields', fields: { level: 'max', coins: { spend: 100 } } }],
+  ['game:word-circle:current', { type: 'level', at: 'level' }],
+  ['game:word-circle:stats', { type: 'fields', fields: { levels: 'count', words: 'count', bonus: 'count', hints: 'count' } }],
   ['game:cities:stats', { type: 'fields', fields: {
     '*.played': 'count', '*.wins': 'count', '*.losses': 'count', '*.best': 'max',
     'total.cities': 'count', 'total.km': 'count', 'total.far': 'max',

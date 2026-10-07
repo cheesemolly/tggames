@@ -1,0 +1,521 @@
+/*
+ * Круг слов. Фон — пейзаж главы во весь экран (два слоя — для наплыва при смене), поверх — «стеклянные» кнопки,
+ * кроссворд, строка собираемого слова и круг букв.
+ * Скин плиток «telegram» (по умолчанию) — из цветов темы: пустые клетки и круг — полупрозрачный фон темы, открытые
+ * буквы и выбранные в круге — цвет кнопок. Остальные скины — свои палитры (--wc-*), одинаковые в обеих темах.
+ * Пейзажи — игровая графика (scenery.js), от темы не зависят; «Без пейзажа» — просто фон темы.
+ */
+
+[data-game="word-circle"] {
+  --wc-warn: #e5484d;
+  --wheel: min(62vw, 36vh, 264px);
+  /* сообщения — на месте строки слова над кругом, а не поверх кроссворда */
+  --toast-top: calc(100% - var(--wheel) - 62px);
+}
+
+[data-game="word-circle"], [data-game="word-circle"] [data-skin="telegram"] {
+  --wc-cell: color-mix(in srgb, var(--tg-theme-bg-color) 70%, transparent);
+  --wc-cell-edge: color-mix(in srgb, var(--tg-theme-text-color) 26%, transparent);
+  --wc-tile: var(--tg-theme-button-color);
+  --wc-tile-ink: var(--tg-theme-button-text-color);
+  --wc-wheel: color-mix(in srgb, var(--tg-theme-bg-color) 76%, transparent);
+  --wc-wheel-ink: var(--tg-theme-text-color);
+  --wc-glass: color-mix(in srgb, var(--tg-theme-bg-color) 72%, transparent);
+  --wc-glass-ink: var(--tg-theme-text-color);
+}
+/* Лазурь — белые клетки и голубые буквы */
+[data-game="word-circle"][data-skin="classic"], [data-game="word-circle"] [data-skin="classic"] {
+  --wc-cell: rgb(255 255 255 / 0.9); --wc-cell-edge: rgb(255 255 255 / 0.55); --wc-tile: #16acd4; --wc-tile-ink: #fff;
+  --wc-wheel: rgb(255 255 255 / 0.84); --wc-wheel-ink: #1c2433; --wc-glass: rgb(14 22 40 / 0.56); --wc-glass-ink: #fff;
+}
+[data-game="word-circle"][data-skin="grass"], [data-game="word-circle"] [data-skin="grass"] {
+  --wc-cell: rgb(255 255 255 / 0.9); --wc-cell-edge: rgb(255 255 255 / 0.55); --wc-tile: #2fae45; --wc-tile-ink: #fff;
+  --wc-wheel: rgb(255 255 255 / 0.84); --wc-wheel-ink: #1d2a1f; --wc-glass: rgb(12 30 18 / 0.56); --wc-glass-ink: #fff;
+}
+[data-game="word-circle"][data-skin="sunset"], [data-game="word-circle"] [data-skin="sunset"] {
+  --wc-cell: rgb(255 246 230 / 0.92); --wc-cell-edge: rgb(255 246 230 / 0.55); --wc-tile: #ff7a3d; --wc-tile-ink: #fff;
+  --wc-wheel: rgb(255 246 230 / 0.86); --wc-wheel-ink: #3a2314; --wc-glass: rgb(48 22 10 / 0.56); --wc-glass-ink: #fff;
+}
+[data-game="word-circle"][data-skin="lilac"], [data-game="word-circle"] [data-skin="lilac"] {
+  --wc-cell: rgb(255 255 255 / 0.9); --wc-cell-edge: rgb(255 255 255 / 0.55); --wc-tile: #8a63f0; --wc-tile-ink: #fff;
+  --wc-wheel: rgb(255 255 255 / 0.84); --wc-wheel-ink: #24193f; --wc-glass: rgb(26 16 52 / 0.56); --wc-glass-ink: #fff;
+}
+[data-game="word-circle"][data-skin="night"], [data-game="word-circle"] [data-skin="night"] {
+  --wc-cell: rgb(10 14 34 / 0.7); --wc-cell-edge: rgb(255 255 255 / 0.24); --wc-tile: #f2c94c; --wc-tile-ink: #1b1b1b;
+  --wc-wheel: rgb(10 14 34 / 0.74); --wc-wheel-ink: #fff; --wc-glass: rgb(10 14 34 / 0.62); --wc-glass-ink: #fff;
+}
+
+/* ---------- раскладка ---------- */
+
+.game-root[data-game="word-circle"] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+[data-game="word-circle"] .btn { background: var(--wc-tile); color: var(--wc-tile-ink); }
+[data-game="word-circle"] .wc {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  isolation: isolate;
+  background: var(--tg-theme-secondary-bg-color);
+}
+[data-game="word-circle"] .wc-scene {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-size: cover;
+  background-position: center;
+  opacity: 0;
+  transition: opacity 0.9s ease;
+}
+[data-game="word-circle"] .wc-scene-on { opacity: 1; }
+/* лёгкое затемнение сверху и снизу — чтобы кнопки и круг читались на любом пейзаже */
+[data-game="word-circle"] .wc-shade {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: linear-gradient(to bottom, rgb(0 0 0 / 0.2), transparent 14%, transparent 52%, rgb(0 0 0 / 0.24));
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+}
+[data-game="word-circle"] .wc-plain .wc-shade { opacity: 0; }
+[data-game="word-circle"] .wc-body {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px calc(14px + env(safe-area-inset-bottom));
+}
+
+/* ---------- шапка ---------- */
+
+[data-game="word-circle"] .wc-header { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+[data-game="word-circle"] .wc-actions { display: flex; align-items: center; gap: 6px; }
+[data-game="word-circle"] .wc-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: var(--wc-glass);
+  color: var(--wc-glass-ink);
+  font-size: 14px;
+  white-space: nowrap;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+[data-game="word-circle"] .wc-pill b { font-weight: 700; font-variant-numeric: tabular-nums; }
+[data-game="word-circle"] .wc-coins { padding: 0 11px 0 7px; }
+[data-game="word-circle"] .wc-coin { display: inline-grid; width: 20px; height: 20px; flex: none; }
+[data-game="word-circle"] .wc-coin svg { width: 100%; height: 100%; display: block; }
+[data-game="word-circle"] .wc-icon-btn {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--wc-glass);
+  color: var(--wc-glass-ink);
+  font: inherit;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: transform 0.1s ease, opacity 0.2s ease, background-color 0.3s ease, color 0.3s ease;
+}
+[data-game="word-circle"] .wc-icon-btn:active { transform: scale(0.9); }
+[data-game="word-circle"] .wc-icon-btn svg { width: 19px; height: 19px; }
+[data-game="word-circle"] .wc-muted { opacity: 0.6; }
+
+/* ---------- кроссворд ---------- */
+
+[data-game="word-circle"] .wc-board-wrap { flex: 1; min-height: 0; display: grid; place-items: center; container-type: size; }
+[data-game="word-circle"] .wc-board {
+  --cell: min(calc(100cqw / var(--cols, 5)), calc(100cqh / var(--rows, 5)), 50px);
+  display: grid;
+  grid-template-columns: repeat(var(--cols, 5), var(--cell));
+  grid-template-rows: repeat(var(--rows, 5), var(--cell));
+}
+[data-game="word-circle"] .wc-cell {
+  display: grid;
+  place-items: center;
+  margin: calc(var(--cell) * 0.055);
+  border-radius: 24%;
+  background: var(--wc-cell);
+  box-shadow: inset 0 0 0 1.5px var(--wc-cell-edge), 0 2px 6px rgb(0 0 0 / 0.16);
+  color: transparent;
+  font-size: calc(var(--cell) * 0.56);
+  font-weight: 800;
+  line-height: 1;
+  text-transform: uppercase;
+  transition: background-color 0.25s ease, color 0.25s ease, box-shadow 0.25s ease;
+}
+[data-game="word-circle"] .wc-cell.wc-on {
+  background: var(--wc-tile);
+  color: var(--wc-tile-ink);
+  box-shadow: inset 0 calc(var(--cell) * -0.07) 0 rgb(0 0 0 / 0.16), 0 3px 8px rgb(0 0 0 / 0.24);
+}
+/* подсказка «в клетку»: закрытые клетки зовут нажать */
+[data-game="word-circle"] .wc-picking .wc-cell:not(.wc-on) {
+  box-shadow: inset 0 0 0 2.5px var(--wc-tile), 0 2px 6px rgb(0 0 0 / 0.16);
+  cursor: pointer;
+  animation: wc-pulse 1s ease-in-out infinite;
+}
+@keyframes wc-pulse { 50% { scale: 0.88; } }
+
+/* ---------- собираемое слово ---------- */
+
+[data-game="word-circle"] .wc-preview-row { flex: none; display: grid; place-items: center; height: 42px; }
+[data-game="word-circle"] .wc-preview {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 3px 12px;
+  border-radius: 12px;
+  background: var(--wc-tile);
+  color: var(--wc-tile-ink);
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  box-shadow: 0 3px 10px rgb(0 0 0 / 0.25);
+  transition: opacity 0.2s ease, background-color 0.2s ease, color 0.2s ease;
+}
+[data-game="word-circle"] .wc-preview[hidden] { display: flex; opacity: 0; pointer-events: none; }
+[data-game="word-circle"] .wc-preview b { display: inline-block; min-width: 0.72em; text-align: center; }
+[data-game="word-circle"] .wc-preview i { font-style: normal; }
+[data-game="word-circle"] .wc-preview.wc-dim {
+  background: var(--wc-glass);
+  color: var(--wc-glass-ink);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+[data-game="word-circle"] .wc-preview.wc-bad { background: var(--wc-warn); color: #fff; }
+[data-game="word-circle"] .wc-preview.wc-good { opacity: 0.6; }
+
+/* ---------- круг букв и кнопки ---------- */
+
+[data-game="word-circle"] .wc-dock {
+  position: relative;
+  flex: none;
+  display: grid;
+  grid-template-columns: 50px minmax(0, 1fr) 50px;
+  align-items: start;
+  height: var(--wheel);
+}
+[data-game="word-circle"] .wc-wheel {
+  position: relative;
+  justify-self: center;
+  width: var(--wheel);
+  height: var(--wheel);
+  border-radius: 50%;
+  background: var(--wc-wheel);
+  box-shadow: inset 0 0 0 1.5px rgb(255 255 255 / 0.2), 0 8px 26px rgb(0 0 0 / 0.26);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  container-type: inline-size;
+  touch-action: none;
+  cursor: pointer;
+  transition: background-color 0.3s ease, opacity 0.3s ease;
+}
+[data-game="word-circle"] .wc-done .wc-wheel { opacity: 0.35; }
+[data-game="word-circle"] .wc-line { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+[data-game="word-circle"] .wc-line polyline { stroke: var(--wc-tile); stroke-width: 5.5; stroke-linecap: round; stroke-linejoin: round; opacity: 0.92; }
+[data-game="word-circle"] .wc-letter {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: var(--size, 24%);
+  height: var(--size, 24%);
+  border-radius: 50%;
+  color: var(--wc-wheel-ink);
+  font-size: var(--font, 15cqw);
+  font-weight: 800;
+  line-height: 1;
+  text-transform: uppercase;
+  translate: -50% -50%;
+  pointer-events: none;
+  transition: left 0.38s cubic-bezier(0.3, 1.2, 0.4, 1), top 0.38s cubic-bezier(0.3, 1.2, 0.4, 1), background-color 0.12s ease, color 0.12s ease, scale 0.12s ease, box-shadow 0.12s ease;
+}
+[data-game="word-circle"] .wc-letter.wc-picked {
+  background: var(--wc-tile);
+  color: var(--wc-tile-ink);
+  scale: 1.08;
+  box-shadow: 0 3px 10px rgb(0 0 0 / 0.3);
+}
+
+[data-game="word-circle"] .wc-tools { display: flex; flex-direction: column; align-items: center; gap: 15px; padding-top: 2px; }
+[data-game="word-circle"] .wc-tool {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--wc-glass);
+  color: var(--wc-glass-ink);
+  font: inherit;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1.5px rgb(255 255 255 / 0.2), 0 3px 10px rgb(0 0 0 / 0.2);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: transform 0.1s ease, opacity 0.25s ease, background-color 0.25s ease, color 0.25s ease;
+}
+[data-game="word-circle"] .wc-tool:active { transform: scale(0.9); }
+[data-game="word-circle"] .wc-tool > svg { width: 22px; height: 22px; transition: opacity 0.25s ease; }
+[data-game="word-circle"] .wc-cost {
+  position: absolute;
+  left: 50%;
+  bottom: -8px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 17px;
+  padding: 0 4px 0 6px;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.62);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  translate: -50% 0;
+  transition: opacity 0.25s ease;
+}
+[data-game="word-circle"] .wc-cost .wc-coin { width: 11px; height: 11px; }
+[data-game="word-circle"] .wc-tool-poor > svg { opacity: 0.5; }
+[data-game="word-circle"] .wc-tool-poor .wc-cost { opacity: 0.7; }
+[data-game="word-circle"] .wc-tool-off { opacity: 0.4; }
+[data-game="word-circle"] .wc-tool-active { background: var(--wc-tile); color: var(--wc-tile-ink); }
+[data-game="word-circle"] .wc-star { color: #f5b400; }
+[data-game="word-circle"] .wc-star em {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  display: grid;
+  place-items: center;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--wc-tile);
+  color: var(--wc-tile-ink);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+  transition: opacity 0.2s ease, scale 0.2s ease;
+}
+[data-game="word-circle"] .wc-star em[hidden] { display: grid; opacity: 0; scale: 0.4; }
+
+/* уровень пройден: окно поверх круга */
+[data-game="word-circle"] .wc-win {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 10px 14px;
+  border-radius: 26px;
+  background: color-mix(in srgb, var(--wc-glass) 82%, #000);
+  color: var(--wc-glass-ink);
+  text-align: center;
+  box-shadow: inset 0 0 0 1.5px rgb(255 255 255 / 0.2), 0 8px 26px rgb(0 0 0 / 0.3);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+[data-game="word-circle"] .wc-win-title { font-size: 26px; font-weight: 800; line-height: 1.15; }
+[data-game="word-circle"] .wc-win-sub { font-size: 14px; opacity: 0.85; }
+[data-game="word-circle"] .wc-win-gain { display: flex; align-items: center; gap: 6px; margin: 6px 0 10px; font-size: 22px; font-weight: 800; }
+[data-game="word-circle"] .wc-win-gain .wc-coin { width: 24px; height: 24px; }
+[data-game="word-circle"] .wc-next { width: min(240px, 100%); }
+
+/* ---------- то, что летает ---------- */
+
+[data-game="word-circle"] .wc-layer { position: absolute; inset: 0; z-index: 5; overflow: hidden; pointer-events: none; }
+[data-game="word-circle"] .wc-fly {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  border-radius: 24%;
+  background: var(--wc-tile);
+  color: var(--wc-tile-ink);
+  font-weight: 800;
+  line-height: 1;
+  text-transform: uppercase;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.3);
+}
+[data-game="word-circle"] .wc-fly-coin { position: absolute; width: 22px; height: 22px; }
+[data-game="word-circle"] .wc-float { position: absolute; color: #fff; font-size: 14px; font-weight: 800; text-shadow: 0 1px 4px rgb(0 0 0 / 0.7); white-space: nowrap; }
+[data-game="word-circle"] .wc-fly-chip {
+  position: absolute;
+  padding: 4px 10px;
+  border-radius: 10px;
+  background: var(--wc-tile);
+  color: var(--wc-tile-ink);
+  font-size: 18px;
+  font-weight: 800;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+[data-game="word-circle"] .wc-spark { position: absolute; width: 9px; height: 9px; border-radius: 50%; }
+
+/* на низких экранах всё, кроме кроссворда, плотнее */
+@media (max-height: 600px) {
+  [data-game="word-circle"] { --wheel: min(60vw, 35vh, 220px); }
+  [data-game="word-circle"] .wc-body { gap: 4px; padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
+  [data-game="word-circle"] .wc-preview-row { height: 36px; }
+  [data-game="word-circle"] .wc-preview { min-height: 32px; font-size: 19px; }
+  [data-game="word-circle"] .wc-tool { width: 42px; height: 42px; }
+  [data-game="word-circle"] .wc-tools { gap: 13px; }
+  [data-game="word-circle"] .wc-win-title { font-size: 22px; }
+  [data-game="word-circle"] .wc-win-gain { margin: 3px 0 6px; font-size: 19px; }
+  [data-game="word-circle"] .wc-win .btn { padding: 10px 16px; }
+}
+
+/* ---------- окна ---------- */
+
+[data-game="word-circle"] .wc-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  background: color-mix(in srgb, var(--tg-theme-bg-color) 72%, transparent);
+}
+[data-game="word-circle"] .wc-sheet {
+  width: 100%;
+  max-width: 380px;
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--tg-theme-secondary-bg-color);
+  color: var(--tg-theme-text-color);
+}
+[data-game="word-circle"] .wc-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+[data-game="word-circle"] .wc-sheet h2 { margin: 0; font-size: 18px; }
+[data-game="word-circle"] .wc-sheet .wc-icon-btn { background: var(--tg-theme-bg-color); color: var(--tg-theme-text-color); backdrop-filter: none; -webkit-backdrop-filter: none; }
+[data-game="word-circle"] .wc-note { margin: 0 0 10px; font-size: 13px; color: var(--tg-theme-hint-color); }
+[data-game="word-circle"] .wc-rule { margin: 0 0 10px; font-size: 14px; line-height: 1.4; }
+[data-game="word-circle"] .wc-rule:last-child { margin-bottom: 0; }
+[data-game="word-circle"] .wc-section { margin: 12px 0 8px; font-size: 14px; }
+[data-game="word-circle"] .wc-section:first-of-type { margin-top: 0; }
+[data-game="word-circle"] .wc-words { display: flex; flex-wrap: wrap; gap: 6px; }
+[data-game="word-circle"] .wc-words span {
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: var(--tg-theme-bg-color);
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* скины плиток и пейзажи */
+[data-game="word-circle"] .wc-skins { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 8px; }
+[data-game="word-circle"] .wc-scenes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px 8px; }
+[data-game="word-circle"] .wc-skin {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--tg-theme-text-color);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+[data-game="word-circle"] .wc-swatch {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  width: 76px;
+  max-width: 100%;
+  height: 46px;
+  border-radius: 12px;
+  background: linear-gradient(160deg, #b9dd8c, #4f9a5c 55%, #1f5a3a);
+  transition: transform 0.2s ease;
+}
+[data-game="word-circle"] .wc-swatch i {
+  display: grid;
+  place-items: center;
+  width: 19px;
+  height: 19px;
+  border-radius: 24%;
+  background: var(--wc-cell);
+  box-shadow: inset 0 0 0 1.5px var(--wc-cell-edge);
+  color: var(--wc-tile-ink);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1;
+  text-transform: uppercase;
+}
+[data-game="word-circle"] .wc-swatch i.wc-on { background: var(--wc-tile); box-shadow: inset 0 -2px 0 rgb(0 0 0 / 0.16); }
+[data-game="word-circle"] .wc-swatch i.wc-swatch-pick { border-radius: 50%; background: var(--wc-wheel); box-shadow: none; color: var(--wc-wheel-ink); }
+[data-game="word-circle"] .wc-scene-thumb {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  border-radius: 12px;
+  background-color: var(--tg-theme-bg-color);
+  background-size: cover;
+  background-position: center 60%;
+  transition: transform 0.2s ease;
+}
+[data-game="word-circle"] .wc-scene-thumb i {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: conic-gradient(from 45deg, #4f9a5c 0 25%, #35bfd0 0 50%, #f0a25a 0 75%, #7d77b8 0);
+  color: #fff;
+  font-size: 18px;
+  font-style: normal;
+  font-weight: 800;
+  text-shadow: 0 1px 4px rgb(0 0 0 / 0.5);
+}
+[data-game="word-circle"] .wc-scene-thumb-none { box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--tg-theme-hint-color) 45%, transparent); }
+[data-game="word-circle"] .wc-skin:active .wc-swatch, [data-game="word-circle"] .wc-skin:active .wc-scene-thumb { transform: scale(0.93); }
+[data-game="word-circle"] .wc-skin[aria-checked="true"] .wc-swatch,
+[data-game="word-circle"] .wc-skin[aria-checked="true"] .wc-scene-thumb { outline: 3px solid var(--tg-theme-button-color); outline-offset: 2px; }
+
+[data-game="word-circle"] .wc-totals { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 10px; margin: 0 0 4px; font-size: 14px; }
+[data-game="word-circle"] .wc-totals dt { color: var(--tg-theme-hint-color); }
+[data-game="word-circle"] .wc-totals dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+@media (prefers-reduced-motion: reduce) {
+  [data-game="word-circle"] .wc-picking .wc-cell:not(.wc-on) { animation: none; }
+  [data-game="word-circle"] * { transition-duration: 0s !important; }
+}

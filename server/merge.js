@@ -110,6 +110,10 @@ export const RULES = [
   ['game:boggle:stats', { type: 'fields', fields: { '*.played': 'count', '*.best': 'max', '*.bonus': 'count' } }],
   ['game:erudit:stats', { type: 'fields', fields: { ...COUNT4('*.'), '*.best': 'max', '*.bestMove': 'max' } }],
   ['game:billiards:stats', { type: 'fields', fields: { '*.played': 'count', '*.wins': 'count', '*.losses': 'count', bestRun: 'max' } }],
+  // круг слов: уровень — максимум, монеты — расходуемое (подсказки), начатый уровень — у кого уровень больше
+  ['game:word-circle:progress', { type: 'fields', fields: { level: 'max', coins: { spend: 100 } } }],
+  ['game:word-circle:current', { type: 'level', at: 'level' }],
+  ['game:word-circle:stats', { type: 'fields', fields: { levels: 'count', words: 'count', bonus: 'count', hints: 'count' } }],
   ['game:cities:stats', { type: 'fields', fields: {
     '*.played': 'count', '*.wins': 'count', '*.losses': 'count', '*.best': 'max',
     'total.cities': 'count', 'total.km': 'count', 'total.far': 'max',

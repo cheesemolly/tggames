@@ -19,6 +19,11 @@ export const GAME_ICONS = {
   // эрудит: фишка с буквой «Э» и точкой очков в углу
   erudit: svg('<rect x="3" y="3" width="18" height="18" rx="3.5"/><path d="M8.6 8.2a4.6 4.6 0 1 1 0 7.6"/><path d="M10.8 12h5.6"/>'
     + '<circle cx="17.4" cy="17.4" r="1" fill="currentColor" stroke="none"/>'),
+  // круг слов: круг с буквами-точками и линией, которой их соединяют
+  'word-circle': svg('<circle cx="12" cy="12" r="9"/><path d="M7.6 9.4 12 16.2l4.4-6.8" stroke-width="1.9"/>'
+    + '<circle cx="7.6" cy="9.4" r="1.5" fill="currentColor" stroke="none"/>'
+    + '<circle cx="12" cy="16.2" r="1.5" fill="currentColor" stroke="none"/>'
+    + '<circle cx="16.4" cy="9.4" r="1.5" fill="currentColor" stroke="none"/>'),
 
   // Головоломки
   sudoku: svg('<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/>'
