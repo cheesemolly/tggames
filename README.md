@@ -67,8 +67,8 @@
   </tr>
   <tr>
     <td align="center"><img src="media/readme/repair.gif" width="220" alt="ремонт гаджетов"><br><b>ремонт гаджетов</b><br><sub>найди поломку, разбери и почини</sub></td>
-    <td></td>
-    <td></td>
+    <td align="center"><img src="media/readme/cities.gif" width="220" alt="города"><br><b>города</b> <sup>скоро</sup><br><sub>города против бота, маршрут на глобусе</sub></td>
+    <td align="center"><img src="media/readme/word-circle.gif" width="220" alt="круг слов"><br><b>круг слов</b> <sup>скоро</sup><br><sub>веди по буквам — слова встают в кроссворд</sub></td>
   </tr>
 </table>
 
