@@ -38,6 +38,9 @@ const BOT_AVOID = ('жид жидовка жидомор кацап кацапк
  * Словарь из списка слов (строчные а…я) и списка частых. Возвращает дерево и проверки:
  * isWord(слово), isCommon(слово), size — число слов.
  */
+/** Список слов вместе с добавкой современных слов (её может не быть — тогда список как есть). */
+export const joinWords = (main, extra) => (Array.isArray(extra) && extra.length ? [...main, ...extra] : main);
+
 export function createDict(words, common = []) {
   const sorted = words.every((w, k) => k === 0 || words[k - 1] < w) ? words : [...new Set(words)].sort();
   const total = sorted.reduce((n, w) => n + w.length, 1);

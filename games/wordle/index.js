@@ -15,7 +15,7 @@ import { LANGUAGES, LANG_ORDER, defaultLang, toLetter } from './languages.js';
 import { TEXT } from './i18n.js';
 import {
   WORD_LEN, MAX_TRIES,
-  score, keyStatuses, checkGuess, getStatus, newBoard, getScore, isValidBoard,
+  score, keyStatuses, checkGuess, getStatus, newBoard, joinDict, getScore, isValidBoard,
   emptyStats, recordGame, isValidStats, shareText,
 } from './logic.js';
 import { pointsInfo } from '../../shared/points-info.js';
@@ -35,20 +35,24 @@ const STATS_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden=
   + '<rect x="17" y="3" width="4" height="18" rx="1"/></svg>';
 
 // Словари — кэш данных, а не состояние партии: переживает destroy(), чтобы не качать заново.
+// У языка может быть добавка современных слов (LANGUAGES[lang].modern: «селфи», «логин», «бренд») — в бете:
+// api.feature('modern-words'). Не загрузилась — играем с основным словарём.
 const dictCache = new Map();
+const loadJson = (url) => fetch(url).then((r) => {
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+});
 
 function loadDict(lang) {
-  if (!dictCache.has(lang)) {
-    const promise = fetch(LANGUAGES[lang].words)
-      .then((r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json();
-      })
-      .then(({ answers, allowed }) => ({ answers, allowed: new Set([...answers, ...allowed]) }));
-    promise.catch(() => dictCache.delete(lang));   // следующая попытка скачает заново
-    dictCache.set(lang, promise);
+  const extraUrl = api?.feature('modern-words') ? LANGUAGES[lang].modern : null;
+  const key = extraUrl ? `${lang}+` : lang;
+  if (!dictCache.has(key)) {
+    const promise = Promise.all([loadJson(LANGUAGES[lang].words), extraUrl ? loadJson(extraUrl).catch(() => null) : null])
+      .then(([main, extra]) => joinDict(main, extra));
+    promise.catch(() => dictCache.delete(key));   // следующая попытка скачает заново
+    dictCache.set(key, promise);
   }
-  return dictCache.get(lang);
+  return dictCache.get(key);
 }
 
 let api = null;

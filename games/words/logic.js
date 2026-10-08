@@ -5,6 +5,8 @@
 // Слова — нарицательные существительные в начальной форме, от 3 букв, ё = е; грубые и оскорбительные исключены.
 // Уровень пройден, когда найдено слов (обычных и редких) не меньше половины обычных; звёзды — 50% / 75% / 100%.
 // Открыты пройденные уровни и следующий за последним пройденным.
+// Современные слова («сайт», «блог», «чит») — добавка к редким словам уровней, отдельным файлом modern.json
+// (собирает tools/modern-words.mjs); в бете: api.feature('modern-words').
 
 export const LEVEL_COUNT = 100;
 export const MIN_LEN = 3;
@@ -25,6 +27,20 @@ export function canCompose(word, source) {
   const have = letterCount(source);
   for (const [ch, n] of letterCount(word)) if ((have.get(ch) ?? 0) < n) return false;
   return true;
+}
+
+/**
+ * Уровни с добавкой современных слов: extra[i] — ещё редкие слова уровня i («чит», «селфи», «постер»).
+ * Добавки может не быть — тогда уровни как есть. Обычные слова и пороги прохождения не меняются.
+ */
+export function withExtra(levels, extra) {
+  if (!Array.isArray(extra)) return levels;
+  return levels.map((level, i) => {
+    const more = Array.isArray(extra[i])
+      ? extra[i].filter((w) => typeof w === 'string' && w !== level.word && !level.common.includes(w) && !level.rare.includes(w))
+      : [];
+    return more.length ? { ...level, rare: [...level.rare, ...more] } : level;
+  });
 }
 
 /** Нужно найти слов для прохождения уровня. */

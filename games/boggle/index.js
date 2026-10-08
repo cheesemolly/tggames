@@ -12,7 +12,7 @@ import { createToast } from '../../shared/toast.js';
 import { createAudio } from '../../shared/sfx.js';
 import { createSounds } from './sounds.js';
 import {
-  SIZES, DEFAULT_SIZE, WORDS_BY_SIZE, createDictionary, generatePuzzle, snapLine, cellsWord,
+  SIZES, DEFAULT_SIZE, WORDS_BY_SIZE, createDictionary, joinWords, generatePuzzle, snapLine, cellsWord,
   checkSelection, applyWord, bonusPoints, isComplete, newGame, isValidState,
   emptyStats, recordGame, isValidStats,
 } from './logic.js';
@@ -66,20 +66,23 @@ const ICONS = {
   gear: svg('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/>'),
 };
 
-// Словарь — кэш данных, переживает destroy().
-let dictPromise = null;
-function loadDict() {
-  dictPromise ??= fetch(new URL('./words/ru.json', import.meta.url))
-    .then((r) => {
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      return r.json();
-    })
-    .then(({ words, common }) => createDictionary(words, common))
-    .catch((err) => {
-      dictPromise = null;
-      throw err;
-    });
-  return dictPromise;
+// Словарь — кэш данных, переживает destroy(). Современные слова (words/ru-modern.json: «сервер», «чат», «лайк») —
+// добавка отдельным файлом, в бете: api.feature('modern-words'). Не загрузилась — играем с основным словарём.
+const WORDS_URL = new URL('./words/ru.json', import.meta.url);
+const MODERN_URL = new URL('./words/ru-modern.json', import.meta.url);
+const dictPromises = new Map();     // с современными словами и без — разные словари
+const loadJson = (url) => fetch(url).then((r) => {
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+});
+function loadDict(modern = false) {
+  if (!dictPromises.has(modern)) {
+    const promise = Promise.all([loadJson(WORDS_URL), modern ? loadJson(MODERN_URL).catch(() => null) : null])
+      .then(([main, extra]) => createDictionary(joinWords(main.words, extra?.words), joinWords(main.common, extra?.common)));
+    promise.catch(() => dictPromises.delete(modern));     // следующая попытка скачает заново
+    dictPromises.set(modern, promise);
+  }
+  return dictPromises.get(modern);
 }
 
 let api = null;
@@ -430,7 +433,7 @@ function report() {
 async function startGame(saved = null, level = 1) {
   ui.current.textContent = T.loading;
   try {
-    dict = await loadDict();
+    dict = await loadDict(Boolean(api.feature('modern-words')));
   } catch (err) {
     console.error(err);
     toast.show(T.loadFailed, 2500);

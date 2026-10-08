@@ -56,6 +56,16 @@ export function getStatus(board) {
   return 'playing';
 }
 
+/**
+ * Словарь партии из файла языка { answers, allowed } и добавки современных слов (её может не быть):
+ * → { answers: [загадки], allowed: Set(всё, что можно ввести) }.
+ */
+export function joinDict(main, extra = null) {
+  const more = extra && Array.isArray(extra.answers) && Array.isArray(extra.allowed) ? extra : { answers: [], allowed: [] };
+  const answers = more.answers.length ? [...new Set([...main.answers, ...more.answers])] : main.answers;
+  return { answers, allowed: new Set([...answers, ...main.allowed, ...more.allowed]) };
+}
+
 export function newBoard(answers, rng = Math.random) {
   return { secret: answers[Math.floor(rng() * answers.length)], guesses: [] };
 }

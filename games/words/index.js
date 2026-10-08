@@ -11,7 +11,7 @@ import { createAudio } from '../../shared/sfx.js';
 import { createSounds } from './sounds.js';
 import {
   normalize, target, stars, passed, share, newProgress, levelState, unlockedMax, isUnlocked, submit, hint,
-  isValidProgress,
+  isValidProgress, withExtra,
 } from './logic.js';
 import { pointsInfo } from '../../shared/points-info.js';
 
@@ -68,6 +68,8 @@ let root = null;
 let ui = null;
 let toast = null;
 let levels = null;
+let levelsData = null;             // уровни из файла и добавка современных слов — кэш на страницу
+let modernData = null;
 let progress = newProgress();
 let settings = { skin: 'telegram', sound: true };
 // звук — один AudioContext на всю жизнь страницы (iOS ограничивает их число), заводится при первом звуке
@@ -462,12 +464,17 @@ export default {
     api = gameApi;
     host = container;
     toast = createToast();
-    const [savedProgress, savedSettings, data] = await Promise.all([
+    // современные слова — добавка к редким словам уровней (в бете); не загрузилась — играем без неё
+    const modern = Boolean(api.feature('modern-words'));
+    const [savedProgress, savedSettings, data, extra] = await Promise.all([
       api.storage.get('progress'), api.storage.get('settings'),
-      levels ?? fetch(new URL('./levels.json', import.meta.url)).then((r) => r.json()),
+      levelsData ?? fetch(new URL('./levels.json', import.meta.url)).then((r) => r.json()),
+      modern ? modernData ?? fetch(new URL('./modern.json', import.meta.url)).then((r) => (r.ok ? r.json() : null)).catch(() => null) : null,
     ]);
     if (!api) return;
-    levels = data;
+    levelsData = data;
+    if (extra) modernData = extra;
+    levels = withExtra(data, modern ? extra : null);
     progress = isValidProgress(savedProgress, levels) ? savedProgress : newProgress();
     settings = {
       skin: SKINS.includes(savedSettings?.skin) ? savedSettings.skin : 'telegram',

@@ -16,7 +16,7 @@ import {
   rowOf, colOf, valueOf, layout, checkMove, newGame, play, swap, pass, canSwap, ending, finalScores, outcomeOf,
   isValidState, emptyStats, migrateStats, recordGame,
 } from './logic.js';
-import { createDict, generateMoves, botMove } from './engine.js';
+import { createDict, joinWords, generateMoves, botMove } from './engine.js';
 
 const SKINS = ['telegram', 'classic', 'wood', 'felt', 'night', 'paper'];
 const T = {
@@ -120,7 +120,7 @@ let root = null;
 let ui = null;
 let toast = null;
 let dict = null;
-let dictPromise = null;            // словарь — один на страницу, переживает закрытие игры
+const dictPromises = new Map();    // словари (с современными словами и без) — на страницу, переживают закрытие игры
 let game = null;
 let stats = emptyStats();
 let setup = { level: 'easy' };
@@ -158,18 +158,22 @@ function later(fn, ms) {
   });
 }
 
-function loadDict() {
-  dictPromise ??= fetch(new URL('./words/ru.json', import.meta.url))
-    .then((res) => {
-      if (!res.ok) throw new Error(`словарь: ${res.status}`);
-      return res.json();
-    })
-    .then((data) => createDict(data.words, data.common))
-    .catch((err) => {
-      dictPromise = null;
-      throw err;
-    });
-  return dictPromise;
+// Современные слова (words/ru-modern.json: «сервер», «чат», «лайк») — добавка отдельным файлом, в бете:
+// api.feature('modern-words'). Не загрузилась — играем с основным словарём.
+const WORDS_URL = new URL('./words/ru.json', import.meta.url);
+const MODERN_URL = new URL('./words/ru-modern.json', import.meta.url);
+const loadJson = (url) => fetch(url).then((res) => {
+  if (!res.ok) throw new Error(`словарь: ${res.status}`);
+  return res.json();
+});
+function loadDict(modern = false) {
+  if (!dictPromises.has(modern)) {
+    const promise = Promise.all([loadJson(WORDS_URL), modern ? loadJson(MODERN_URL).catch(() => null) : null])
+      .then(([main, extra]) => createDict(joinWords(main.words, extra?.words), joinWords(main.common, extra?.common)));
+    promise.catch(() => dictPromises.delete(modern));     // следующая попытка скачает заново
+    dictPromises.set(modern, promise);
+  }
+  return dictPromises.get(modern);
 }
 
 const save = () => game && !over && api?.storage.set('current', game);
@@ -959,7 +963,7 @@ function debugHooks() {
 async function loadWords() {
   for (;;) {
     try {
-      const loaded = await loadDict();
+      const loaded = await loadDict(Boolean(api.feature('modern-words')));
       if (!api) return false;
       dict = loaded;
       return true;

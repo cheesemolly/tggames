@@ -38,6 +38,9 @@ export function createDictionary(words, common = []) {
   return { sorted, set: new Set(sorted), common: [...new Set(common.map(normalize))].sort() };
 }
 
+/** Список слов вместе с добавкой современных слов (её может не быть — тогда список как есть). */
+export const joinWords = (main, extra) => (Array.isArray(extra) && extra.length ? [...main, ...extra] : main);
+
 export function hasPrefix(dict, prefix) {
   const arr = dict.sorted;
   let lo = 0;

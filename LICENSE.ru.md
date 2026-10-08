@@ -55,8 +55,13 @@ Copyright (c) 2026 cheesemolly (https://github.com/cheesemolly). Все прав
 - `games/word-circle/levels.json` — слова уровней отобраны из списка существительных Harrix/Russian-Nouns
   (https://github.com/Harrix/Russian-Nouns), лицензия MIT; какие слова частые — по «Частотному словарю
   современного русского языка» О. Н. Ляшевской и С. А. Шарова (2009, http://dict.ruslang.ru/freq.php);
-- `games/wordle/words/*.json` — списки слов, собранные из общедоступных источников; принадлежат
-  их владельцам;
+- `games/wordle/words/en.json`, `ua.json`, `ru.json` — списки слов, собранные из общедоступных источников;
+  принадлежат их владельцам;
+- `games/boggle/words/ru-modern.json`, `games/erudit/words/ru-modern.json`, `games/wordle/words/ru-modern.json`,
+  `games/words/modern.json` — добавки современных слов, составленные для этого проекта
+  (`tools/modern-words.mjs`); каких частых существительных не хватает в исходных списках, сверялось по
+  «Частотному словарю современного русского языка» О. Н. Ляшевской и С. А. Шарова (2009,
+  http://dict.ruslang.ru/freq.php);
 - `games/chess/engine.js` — значения таблиц полей взяты из «Simplified Evaluation Function»
   Томаша Михневского, опубликованной в Chess Programming Wiki
   (https://www.chessprogramming.org/Simplified_Evaluation_Function);

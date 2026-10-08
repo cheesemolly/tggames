@@ -29,6 +29,7 @@ export const LANGUAGES = {
     rows: ['йцукенгшщзхъ', 'фывапролджэ', 'ячсмитьбю'],
     normalize: (s) => s.replace(/ё/g, 'е'),     // «ё» на клавиатуре и в словаре нет
     words: new URL('./words/ru.json', import.meta.url),
+    modern: new URL('./words/ru-modern.json', import.meta.url),     // добавка современных слов (в бете)
   },
 };
 
