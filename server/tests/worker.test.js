@@ -489,6 +489,44 @@ test('рассылка с альбомом: две картинки (подпи�
   }
 });
 
+test('рассылка с роликом: видео уходит видео, ролик без звука — гифкой, файл — подсказка вместо черновика', async () => {
+  const { say, press } = await botEnv();
+  const tg = captureTelegram();
+  try {
+    await say(ADMIN.id, { video: { file_id: 'vid' }, caption: '/broadcast новые игры' });
+    const preview = tg.calls.find((c) => c.method === 'sendVideo');
+    assert.equal(preview.payload.chat_id, ADMIN.id, 'сначала — владельцу');
+    assert.equal(preview.payload.video, 'vid');
+    assert.equal(preview.payload.caption, 'новые игры');
+    assert.ok(preview.payload.reply_markup, 'с кнопкой «Играть»');
+    const [send] = lastButtons(tg);
+    tg.calls.length = 0;
+    await press(ADMIN.id, send);
+    assert.equal(tg.calls.filter((c) => c.method === 'sendVideo' && c.payload.video === 'vid').length, 3, 'видео ушло всем троим');
+
+    // без звуковой дорожки Telegram делает из ролика гифку: animation, а рядом тот же файл в document
+    tg.calls.length = 0;
+    await say(ADMIN.id, { animation: { file_id: 'gif' }, document: { file_id: 'gif-doc', mime_type: 'video/mp4' }, caption: '/broadcast без звука' });
+    const anim = tg.calls.find((c) => c.method === 'sendAnimation');
+    assert.equal(anim.payload.animation, 'gif');
+    assert.equal(anim.payload.caption, 'без звука');
+    assert.ok(anim.payload.reply_markup, 'с кнопкой «Играть»');
+    const [sendGif] = lastButtons(tg);
+    tg.calls.length = 0;
+    await press(ADMIN.id, sendGif);
+    assert.equal(tg.calls.filter((c) => c.method === 'sendAnimation').length, 3, 'гифка ушла всем троим');
+
+    // файлом — игроки получили бы один текст: черновика нет, владельцу подсказка
+    tg.calls.length = 0;
+    await say(ADMIN.id, { document: { file_id: 'file', mime_type: 'video/mp4' }, caption: '/broadcast файлом' });
+    assert.equal(tg.calls.length, 1);
+    assert.match(tg.calls[0].payload.text, /не файлом/);
+    assert.equal(tg.calls[0].payload.reply_markup, undefined, 'кнопки «Разослать» нет');
+  } finally {
+    tg.restore();
+  }
+});
+
 test('/message @ник: одно фото с подписью — только этому игроку', async () => {
   const { say, press } = await botEnv();
   const tg = captureTelegram();

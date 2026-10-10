@@ -1349,6 +1349,11 @@ async function botWebhook(request, env, ctx) {
       await api(env, 'sendMessage', { chat_id: chatId, text: 'Эта команда только для владельца.' });
       return new Response('ok');
     }
+    // ролик или картинка «файлом»: игрокам пришёл бы только текст, а переслать файл как видео Telegram не даёт
+    if (!media.length && message.document) {
+      await api(env, 'sendMessage', { chat_id: chatId, text: 'Это пришло файлом — так не разослать. Прикрепи как фото или видео, не файлом.' });
+      return new Response('ok');
+    }
     await collectDraft(env, ctx, message, { command, rest, media, entities, restAt });
     return new Response('ok');
   }
@@ -1374,7 +1379,7 @@ const ADMIN_HELP = 'Команды: /start — открыть игры, /me — 
   + '/unsend — удалить у всех недавнюю рассылку или сообщение (Telegram даёт 48 часов);\n'
   + '/edit — изменить текст недавней рассылки у всех (там же, без нового уведомления);\n'
   + '/message @ник текст — одному игроку (можно id вместо ника).\n'
-  + 'Можно с фото или альбомом: прикрепи картинки и напиши команду в подписи. '
+  + 'Можно с фото, видео или альбомом: прикрепи их и напиши команду в подписи (ролик — как видео, не файлом). '
   + 'Сначала бот покажет, как это увидят, и отправит только по кнопке.';
 
 // ---------- черновики рассылки и личных сообщений ----------
@@ -1382,10 +1387,14 @@ const ADMIN_HELP = 'Команды: /start — открыть игры, /me — 
 // часть пишется в черновик (картинки — отдельными строками, без гонок при одновременной записи), а
 // предпросмотр показывает тот запрос, после которого за ALBUM_WAIT_MS ничего нового не пришло.
 
+const SEND_METHOD = { photo: 'sendPhoto', video: 'sendVideo', animation: 'sendAnimation' };
+
 /** Картинки/видео сообщения: [{ type, id }] (у фото берём самый большой размер). */
 function mediaOf(message) {
   if (message?.photo?.length) return [{ type: 'photo', id: message.photo[message.photo.length - 1].file_id }];
   if (message?.video) return [{ type: 'video', id: message.video.file_id }];
+  // ролик без звука Telegram присылает гифкой: animation (и тот же файл в document — он не нужен)
+  if (message?.animation) return [{ type: 'animation', id: message.animation.file_id }];
   return [];
 }
 
@@ -1542,7 +1551,7 @@ async function previewDraft(env, adminId, key, stamp) {
 }
 
 /**
- * Отправить черновик в чат. Текст — сообщением с кнопкой «Играть»; одна картинка — с подписью и кнопкой;
+ * Отправить черновик в чат. Текст — сообщением с кнопкой «Играть»; одна картинка, видео или гифка — с подписью и кнопкой;
  * альбом — группой (кнопку к альбому Telegram прикрепить не даёт, подпись — у первой картинки).
  */
 async function sendDraft(env, chatId, draft) {
@@ -1562,7 +1571,7 @@ async function sendDraft(env, chatId, draft) {
     res = await api(env, 'sendMessage', { chat_id: chatId, text, ...withText, ...quiet, reply_markup: playButton(env) });
   } else if (media.length === 1) {
     const [m] = media;
-    res = await api(env, m.type === 'video' ? 'sendVideo' : 'sendPhoto', {
+    res = await api(env, SEND_METHOD[m.type] ?? 'sendPhoto', {
       chat_id: chatId, [m.type]: m.id, ...withCaption, ...quiet, reply_markup: playButton(env),
     });
   } else {
