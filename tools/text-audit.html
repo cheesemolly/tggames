@@ -9,7 +9,7 @@ const W = +(Q.get('w') || 360);
 // ?ids=repair,hanoi — только эти игры; ?owner — как владелец (видна бета)
 const only = Q.get('ids')?.split(',').filter(Boolean);
 const owner = Q.has('owner') ? 'owner&' : '';
-const all = ['snake', 'memory', 'bongo-cat', 'bubble-shooter', 'words', 'flags', 'checkers', 'flappy-burger', 'brick-blast', 'loop', 'connect-dots', 'mahjong', '2048', 'boggle', 'block-blast', 'sudoku', 'wordle', 'tictactoe', 'chess', 'spider', 'klondike', 'match3', 'pinball', 'killer-sudoku', 'go', 'minesweeper', 'nonogram', 'fifteen', 'rubik', 'hanoi', 'repair', 'arkanoid', 'erudit', 'billiards'];
+const all = ['snake', 'memory', 'bongo-cat', 'bubble-shooter', 'words', 'flags', 'checkers', 'flappy-burger', 'brick-blast', 'loop', 'connect-dots', 'mahjong', '2048', 'boggle', 'block-blast', 'sudoku', 'wordle', 'tictactoe', 'chess', 'spider', 'klondike', 'match3', 'pinball', 'killer-sudoku', 'go', 'minesweeper', 'nonogram', 'fifteen', 'rubik', 'hanoi', 'repair', 'arkanoid', 'erudit', 'billiards', 'cities', 'word-circle', 'subwords', 'crostic', 'alchemy', 'logic-gates'];
 const ids = only?.length ? only : all;
 const out = document.getElementById('out');
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));

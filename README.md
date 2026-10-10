@@ -67,22 +67,22 @@
   </tr>
   <tr>
     <td align="center"><img src="media/readme/repair.gif" width="220" alt="ремонт гаджетов"><br><b>ремонт гаджетов</b><br><sub>найди поломку, разбери и почини</sub></td>
-    <td align="center"><img src="media/readme/cities.gif" width="220" alt="города"><br><b>города</b> <sup>скоро</sup><br><sub>города против бота, маршрут на глобусе</sub></td>
-    <td align="center"><img src="media/readme/word-circle.gif" width="220" alt="круг слов"><br><b>круг слов</b> <sup>скоро</sup><br><sub>веди по буквам — слова встают в кроссворд</sub></td>
+    <td align="center"><img src="media/readme/cities.gif" width="220" alt="города"><br><b>города</b><br><sub>города против бота, маршрут на глобусе</sub></td>
+    <td align="center"><img src="media/readme/word-circle.gif" width="220" alt="круг слов"><br><b>круг слов</b><br><sub>веди по буквам — слова встают в кроссворд</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="media/readme/subwords.gif" width="220" alt="слоги"><br><b>слоги</b> <sup>скоро</sup><br><sub>собери слова из слогов-кружков, 56 тем</sub></td>
-    <td align="center"><img src="media/readme/crostic.gif" width="220" alt="кростик"><br><b>кростик</b> <sup>скоро</sup><br><sub>вопросы открывают спрятанную фразу, 600 уровней</sub></td>
-    <td align="center"><img src="media/readme/alchemy.gif" width="220" alt="алхимия"><br><b>алхимия</b> <sup>скоро</sup><br><sub>вода + огонь = пар, 1100 элементов</sub></td>
+    <td align="center"><img src="media/readme/subwords.gif" width="220" alt="слоги"><br><b>слоги</b><br><sub>собери слова из слогов-кружков, 56 тем</sub></td>
+    <td align="center"><img src="media/readme/crostic.gif" width="220" alt="кростик"><br><b>кростик</b><br><sub>вопросы открывают спрятанную фразу, 600 уровней</sub></td>
+    <td align="center"><img src="media/readme/alchemy.gif" width="220" alt="алхимия"><br><b>алхимия</b><br><sub>вода + огонь = пар, 1100 элементов</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="media/readme/logic-gates.gif" width="220" alt="логические схемы"><br><b>логические схемы</b> <sup>скоро</sup><br><sub>расставь и, или, не — и лампа загорится</sub></td>
+    <td align="center"><img src="media/readme/logic-gates.gif" width="220" alt="логические схемы"><br><b>логические схемы</b><br><sub>расставь и, или, не — и лампа загорится</sub></td>
   </tr>
 </table>
 
 ## что есть
 
-- 34 игры: слова, головоломки, аркады, настольные, викторина и музыка
+- 40 игр: слова, головоломки, аркады, настольные, викторина и музыка
 - рейтинг по каждой игре, видно только имя
 - прогресс сохраняется за аккаунтом telegram, можно играть с любого устройства
 - звуки, скины, светлая и тёмная тема
