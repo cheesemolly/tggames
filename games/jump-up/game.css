@@ -1,0 +1,288 @@
+/*
+ * Прыгалка вверх. Игра — тетрадный лист на Canvas (render.js): клетка, красная линия полей, всё нарисовано ручкой
+ * и маркерами. Цвета листа и «канцелярии» — переменные --ju-* скина, холст читает их через пробный элемент.
+ * Скин «telegram» (по умолчанию): лист, ручка и кнопки — из цветов темы, маркеры — игровые, заданы для обеих тем.
+ * Остальные скины — свои палитры, одинаковые в обеих темах.
+ */
+
+[data-game="jump-up"], [data-game="jump-up"] [data-skin="telegram"] {
+  --ju-bg: var(--tg-theme-bg-color);
+  --ju-text: var(--tg-theme-text-color);
+  --ju-hint: var(--tg-theme-hint-color);
+  --ju-panel: var(--tg-theme-secondary-bg-color);
+  --ju-accent: var(--tg-theme-button-color);
+  --ju-accent-text: var(--tg-theme-button-text-color);
+  --ju-paper: var(--tg-theme-bg-color);
+  --ju-grid: color-mix(in srgb, var(--tg-theme-text-color) 9%, var(--tg-theme-bg-color));
+  --ju-ink: var(--tg-theme-text-color);
+  --ju-dark: color-mix(in srgb, var(--tg-theme-text-color) 86%, var(--tg-theme-bg-color));
+  --ju-pencil: var(--tg-theme-hint-color);
+  --ju-hero: var(--tg-theme-button-color);
+  --ju-doodle: color-mix(in srgb, var(--tg-theme-text-color) 24%, var(--tg-theme-bg-color));
+  --ju-white: color-mix(in srgb, var(--tg-theme-bg-color) 80%, #ffffff);
+  --ju-margin: #f0a3a0;
+  --ju-blot: #5b3a9e;
+  --ju-red: #e0453c;
+  --ju-red2: #9c231d;
+  --ju-green: #8fd66f;
+  --ju-green2: #4fa040;
+  --ju-blue: #74c6f2;
+  --ju-violet: #bda2f4;
+  --ju-yellow: #ffd94f;
+  --ju-pink: #ff9fb8;
+  --ju-wood: #ecc999;
+  --ju-metal: #b9bdc8;
+  --ju-hole: #25242c;
+  --ju-eye: #ffffff;
+  --ju-pupil: #17181f;
+}
+:root[data-theme="dark"] [data-game="jump-up"]:not([data-skin]),
+:root[data-theme="dark"] [data-game="jump-up"][data-skin="telegram"],
+:root[data-theme="dark"] [data-game="jump-up"] [data-skin="telegram"] {
+  --ju-margin: #8f4a50;
+  --ju-blot: #b79bff;
+  --ju-red: #ff6b62;
+  --ju-red2: #ffb0aa;
+  --ju-green: #58b85c;
+  --ju-green2: #7fd67a;
+  --ju-blue: #3f9fd6;
+  --ju-violet: #8f73d8;
+  --ju-yellow: #f2c230;
+  --ju-pink: #e87a9a;
+  --ju-wood: #cfa871;
+  --ju-metal: #8e93a0;
+  --ju-hole: #050507;
+  --ju-eye: #ffffff;
+  --ju-pupil: #17181f;
+}
+/* Тетрадь — белый лист в голубую клетку, синяя шариковая ручка, каракуля чёрной гелевой, клякса фиолетовыми чернилами */
+[data-game="jump-up"][data-skin="notebook"], [data-game="jump-up"] [data-skin="notebook"] {
+  --ju-bg: #fbfaf4; --ju-text: #25306e; --ju-hint: #7d86ad; --ju-panel: #edeada; --ju-accent: #2a3a9c; --ju-accent-text: #ffffff;
+  --ju-paper: #fbfaf4; --ju-grid: #cfe0f3; --ju-ink: #2a3a9c; --ju-dark: #232a4a; --ju-pencil: #7b7d86; --ju-hero: #20222e;
+  --ju-doodle: #9fb0dd; --ju-white: #ffffff; --ju-margin: #ee9a98; --ju-blot: #56308f; --ju-red: #d8362f; --ju-red2: #96201b;
+  --ju-green: #92d86c; --ju-green2: #4b9a3a; --ju-blue: #6fc6f2; --ju-violet: #ba9df4; --ju-yellow: #ffd84a; --ju-pink: #ff9db6;
+  --ju-wood: #ecc999; --ju-metal: #b9bdc8; --ju-hole: #2a2932; --ju-eye: #ffffff; --ju-pupil: #15161c;
+}
+/* Крафт — обёрточная бумага, чёрный линер и плотные маркеры */
+[data-game="jump-up"][data-skin="kraft"], [data-game="jump-up"] [data-skin="kraft"] {
+  --ju-bg: #c7a27c; --ju-text: #33241a; --ju-hint: #6f5843; --ju-panel: #b8926b; --ju-accent: #33241a; --ju-accent-text: #f6ead9;
+  --ju-paper: #c7a27c; --ju-grid: #b9936d; --ju-ink: #33241a; --ju-dark: #2a1c13; --ju-pencil: #72604e; --ju-hero: #fbf5e9;
+  --ju-doodle: #9c7c5b; --ju-white: #fbf5e9; --ju-margin: #a9573f; --ju-blot: #2a1c13; --ju-red: #b93127; --ju-red2: #6f1a14;
+  --ju-green: #86bf55; --ju-green2: #4d7f2c; --ju-blue: #63b4d6; --ju-violet: #a98fd6; --ju-yellow: #f4c93b; --ju-pink: #f08f9f;
+  --ju-wood: #e6c391; --ju-metal: #a8a39a; --ju-hole: #1d130c; --ju-eye: #33241a; --ju-pupil: #fbf5e9;
+}
+/* Доска — школьная, зелёная: белый и цветные мелки */
+[data-game="jump-up"][data-skin="chalk"], [data-game="jump-up"] [data-skin="chalk"] {
+  --ju-bg: #2d4b40; --ju-text: #f1efe4; --ju-hint: #9fb8ac; --ju-panel: #243d34; --ju-accent: #ffe27a; --ju-accent-text: #26382f;
+  --ju-paper: #2d4b40; --ju-grid: #365649; --ju-ink: #f1efe4; --ju-dark: #f1efe4; --ju-pencil: #9db3a9; --ju-hero: #ffe27a;
+  --ju-doodle: #6f8c80; --ju-white: #f1efe4; --ju-margin: #55776a; --ju-blot: #f1efe4; --ju-red: #ff8f8a; --ju-red2: #ffd0cc;
+  --ju-green: #63c389; --ju-green2: #8fe0aa; --ju-blue: #5fb0e6; --ju-violet: #a98be6; --ju-yellow: #f2cf55; --ju-pink: #f08fb0;
+  --ju-wood: #d6b78a; --ju-metal: #9aa8a2; --ju-hole: #12201b; --ju-eye: #1f352d; --ju-pupil: #ffffff;
+}
+/* Чертёж — синька: белые линии на синем, каракуля жёлтым маркером */
+[data-game="jump-up"][data-skin="blueprint"], [data-game="jump-up"] [data-skin="blueprint"] {
+  --ju-bg: #1f4c86; --ju-text: #eef5ff; --ju-hint: #a6c2e8; --ju-panel: #183d6e; --ju-accent: #ffd84d; --ju-accent-text: #173459;
+  --ju-paper: #1f4c86; --ju-grid: #2b5a97; --ju-ink: #eef5ff; --ju-dark: #eef5ff; --ju-pencil: #9bb8de; --ju-hero: #ffd84d;
+  --ju-doodle: #5c86bd; --ju-white: #f4f8ff; --ju-margin: #4f7db8; --ju-blot: #eef5ff; --ju-red: #ff9a8c; --ju-red2: #ffd3cc;
+  --ju-green: #3fbf92; --ju-green2: #7fe0bd; --ju-blue: #4fb8ea; --ju-violet: #9a8cf0; --ju-yellow: #f2c94c; --ju-pink: #f08fb5;
+  --ju-wood: #d9bb8e; --ju-metal: #9fb0c6; --ju-hole: #0d2444; --ju-eye: #173459; --ju-pupil: #ffffff;
+}
+/* Гелевые ручки — чёрный лист, неон и серебро */
+[data-game="jump-up"][data-skin="gel"], [data-game="jump-up"] [data-skin="gel"] {
+  --ju-bg: #16161c; --ju-text: #ececf6; --ju-hint: #8d8da3; --ju-panel: #22222c; --ju-accent: #b8ff3d; --ju-accent-text: #141a05;
+  --ju-paper: #16161c; --ju-grid: #22222b; --ju-ink: #e4e4f0; --ju-dark: #e4e4f0; --ju-pencil: #85859a; --ju-hero: #b8ff3d;
+  --ju-doodle: #4d4d63; --ju-white: #f4f4ff; --ju-margin: #5a2740; --ju-blot: #ff4fa5; --ju-red: #ff5a5a; --ju-red2: #ffb3b3;
+  --ju-green: #2fbf74; --ju-green2: #6ff0a8; --ju-blue: #30a9e6; --ju-violet: #8f73ee; --ju-yellow: #f2cb3a; --ju-pink: #f0649f;
+  --ju-wood: #cfa871; --ju-metal: #8e93a0; --ju-hole: #000000; --ju-eye: #16161c; --ju-pupil: #ffffff;
+}
+
+/* ---------- раскладка ---------- */
+
+.game-root[data-game="jump-up"] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  --toast-top: 96px;
+  --toast-bg: var(--ju-text);
+  --toast-fg: var(--ju-bg);
+}
+[data-game="jump-up"] .ju-probe { position: absolute; width: 0; height: 0; overflow: hidden; visibility: hidden; pointer-events: none; }
+[data-game="jump-up"] .btn { background: var(--ju-accent); color: var(--ju-accent-text); }
+[data-game="jump-up"] .btn-secondary { background: var(--ju-bg); color: var(--ju-text); }
+[data-game="jump-up"] .ju {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  isolation: isolate;
+  background: var(--ju-bg);
+  color: var(--ju-text);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* шапка */
+[data-game="jump-up"] .ju-header { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px 6px; }
+[data-game="jump-up"] .ju-heading { min-width: 0; }
+[data-game="jump-up"] .ju-title { font-size: 19px; font-weight: 700; line-height: 1.2; white-space: nowrap; }
+[data-game="jump-up"] .ju-sub { font-size: 13px; color: var(--ju-hint); font-variant-numeric: tabular-nums; }
+[data-game="jump-up"] .ju-actions { display: flex; gap: 6px; flex: none; }
+[data-game="jump-up"] .ju-icon-btn {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: var(--ju-panel);
+  color: var(--ju-text);
+  font: inherit;
+  cursor: pointer;
+  transition: scale 0.1s ease, opacity 0.2s ease, background-color 0.3s ease;
+}
+[data-game="jump-up"] .ju-icon-btn:active { scale: 0.92; }
+[data-game="jump-up"] .ju-icon-btn svg { width: 20px; height: 20px; }
+[data-game="jump-up"] .ju-icon-btn[hidden] { display: none; }
+[data-game="jump-up"] .ju-muted { opacity: 0.55; }
+@media (max-width: 350px) {
+  [data-game="jump-up"] .ju-title { font-size: 17px; }
+  [data-game="jump-up"] .ju-icon-btn { width: 32px; height: 32px; }
+  [data-game="jump-up"] .ju-actions { gap: 5px; }
+}
+
+/* лист: холст во всю ширину, на широком экране — по центру */
+[data-game="jump-up"] .ju-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: var(--ju-panel);
+  touch-action: none;
+  cursor: default;
+}
+[data-game="jump-up"] .ju-canvas { display: block; }
+/* подсказка — над каракулей: чуть выше, чем она подпрыгивает на старте (место задаёт игра — --ju-hint-bottom) */
+[data-game="jump-up"] .ju-hint {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: var(--ju-hint-bottom, 46%);
+  width: fit-content;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  border-radius: 14px;
+  background: var(--ju-text);
+  color: var(--ju-bg);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.25;
+  pointer-events: none;
+  transition: opacity 0.3s ease, translate 0.3s ease;
+}
+[data-game="jump-up"] .ju-hint-hand { display: grid; flex: none; animation: ju-swipe 1.5s ease-in-out infinite; }
+[data-game="jump-up"] .ju-hint-hand svg { width: 22px; height: 22px; }
+@keyframes ju-swipe { 0%, 100% { translate: -5px 0; } 50% { translate: 5px 0; } }
+[data-game="jump-up"] .ju-hint-hide { opacity: 0; translate: 0 10px; }
+[data-game="jump-up"] .ju-hint-hide .ju-hint-hand { animation-play-state: paused; }
+
+/* окна */
+[data-game="jump-up"] .ju-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  background: color-mix(in srgb, var(--ju-bg) 78%, transparent);
+}
+[data-game="jump-up"] .ju-modal[hidden] { display: none; }
+[data-game="jump-up"] .ju-card {
+  width: 100%;
+  max-width: 400px;
+  max-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--ju-panel);
+  color: var(--ju-text);
+}
+[data-game="jump-up"] .ju-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+[data-game="jump-up"] .ju-card h2 { margin: 0; font-size: 18px; }
+[data-game="jump-up"] .ju-card .ju-icon-btn { background: var(--ju-bg); }
+[data-game="jump-up"] .ju-section { margin: 14px 0 8px; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ju-hint); }
+[data-game="jump-up"] .ju-note { margin: 0 0 4px; font-size: 14px; line-height: 1.4; color: var(--ju-hint); }
+[data-game="jump-up"] .ju-pause { display: grid; gap: 10px; text-align: center; }
+[data-game="jump-up"] .ju-pause h2 { font-size: 20px; }
+[data-game="jump-up"] .ju-pause-height { margin: 0; font-size: 16px; font-weight: 600; }
+[data-game="jump-up"] .ju-pause .btn { width: 100%; }
+
+/* оформление */
+[data-game="jump-up"] .ju-skins { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+[data-game="jump-up"] .ju-skin {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  padding: 7px 4px 6px;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  background: var(--ju-bg);
+  color: var(--ju-text);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: border-color 0.2s ease, scale 0.1s ease;
+}
+[data-game="jump-up"] .ju-skin:active { scale: 0.96; }
+[data-game="jump-up"] .ju-skin[aria-checked="true"] { border-color: var(--ju-accent); }
+[data-game="jump-up"] .ju-swatch { display: block; width: 100%; max-width: 86px; border-radius: 8px; overflow: hidden; line-height: 0; box-shadow: 0 0 0 1px color-mix(in srgb, var(--ju-text) 14%, transparent); }
+[data-game="jump-up"] .ju-swatch svg { display: block; width: 100%; height: auto; }
+[data-game="jump-up"] .ju-sw-paper { fill: var(--ju-paper); }
+[data-game="jump-up"] .ju-sw-grid { fill: none; stroke: var(--ju-grid); stroke-width: 1; }
+[data-game="jump-up"] .ju-sw-margin { fill: none; stroke: var(--ju-margin); stroke-width: 1.2; }
+[data-game="jump-up"] .ju-sw-plat { fill: var(--ju-green); stroke: var(--ju-ink); stroke-width: 1.8; }
+[data-game="jump-up"] .ju-sw-hero { fill: var(--ju-hero); }
+[data-game="jump-up"] .ju-sw-eye { fill: var(--ju-eye); }
+[data-game="jump-up"] .ju-sw-blot { fill: var(--ju-blot); }
+[data-game="jump-up"] .ju-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 8px; }
+[data-game="jump-up"] .ju-option {
+  padding: 9px 6px;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  background: var(--ju-bg);
+  color: var(--ju-text);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: border-color 0.2s ease, scale 0.1s ease;
+}
+[data-game="jump-up"] .ju-option:active { scale: 0.97; }
+[data-game="jump-up"] .ju-option[aria-checked="true"] { border-color: var(--ju-accent); font-weight: 600; }
+[data-game="jump-up"] .ju-totals { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px 12px; margin: 0 0 4px; font-size: 14px; }
+[data-game="jump-up"] .ju-totals dt { color: var(--ju-hint); }
+[data-game="jump-up"] .ju-totals dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
+
+/* справка: рисунок и подпись */
+[data-game="jump-up"] .ju-help-row { display: grid; grid-template-columns: 56px minmax(0, 1fr); align-items: center; gap: 10px; margin-bottom: 6px; }
+[data-game="jump-up"] .ju-help-pic { display: grid; place-items: center; width: 56px; height: 50px; border-radius: 10px; background: var(--ju-paper); box-shadow: 0 0 0 1px color-mix(in srgb, var(--ju-text) 12%, transparent); }
+[data-game="jump-up"] .ju-help-row p { margin: 0; font-size: 14px; line-height: 1.35; }
+
+@media (prefers-reduced-motion: reduce) {
+  [data-game="jump-up"] *, [data-game="jump-up"] *::before, [data-game="jump-up"] *::after { transition-duration: 0s !important; }
+  [data-game="jump-up"] .ju-hint-hand { animation: none; }
+}

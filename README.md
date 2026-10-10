@@ -77,6 +77,7 @@
   </tr>
   <tr>
     <td align="center"><img src="media/readme/logic-gates.gif" width="220" alt="логические схемы"><br><b>логические схемы</b><br><sub>расставь и, или, не — и лампа загорится</sub></td>
+    <td align="center"><img src="media/readme/jump-up.gif" width="220" alt="прыгалка вверх"><br><b>прыгалка вверх</b> <sup>скоро</sup><br><sub>каракуля прыгает сама — веди её вверх по тетрадке</sub></td>
   </tr>
 </table>
 

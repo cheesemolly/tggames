@@ -1,0 +1,99 @@
+<!doctype html><meta charset="utf-8"><title>Прыгалка вверх — лист рисунков</title>
+<!-- Все рисунки «Прыгалки вверх» на одном листе: http://localhost:8000/tools/jump-up-sheet.html
+     ?skin=telegram|notebook|kraft|chalk|blueprint|gel (по умолчанию — тетрадь), ?zoom=3, ?part=things|doodles;
+     внизу листа вещей — они же в настоящем размере, как на телефоне -->
+<link rel="stylesheet" href="../styles/theme.css">
+<link rel="stylesheet" href="../games/jump-up/game.css">
+<body style="margin:0">
+<div id="host" class="game-root" data-game="jump-up" style="display:block;padding:0"><span class="ju-probe"></span><canvas id="c"></canvas></div>
+<script type="module">
+import * as A from '../games/jump-up/art.js';
+import { readPalette } from '../games/jump-up/render.js';
+
+const Q = new URLSearchParams(location.search);
+const zoom = Number(Q.get('zoom') || 3);
+const part = Q.get('part') || 'all';
+const host = document.getElementById('host');
+host.dataset.skin = Q.get('skin') || 'notebook';
+const pal = readPalette(host.querySelector('.ju-probe'));
+
+const canvas = document.getElementById('c');
+const cols = 1180;
+const rows = part === 'doodles' ? 1500 : part === 'things' ? 1560 : 3000;
+canvas.width = cols;
+canvas.height = rows;
+const ctx = canvas.getContext('2d');
+ctx.fillStyle = pal.paper;
+ctx.fillRect(0, 0, cols, rows);
+ctx.fillStyle = pal.grid;
+for (let x = 0; x < cols; x += 20 * zoom) ctx.fillRect(x, 0, 1, rows);
+for (let y = 0; y < rows; y += 20 * zoom) ctx.fillRect(0, y, cols, 1);
+
+let cx = 0;
+let cy = 30;
+let rowH = 0;
+function cell(w, h, paint, seed = 1, k = zoom) {
+  if (cx + w * k > cols - 10) {
+    cx = 0;
+    cy += rowH + 16;
+    rowH = 0;
+  }
+  ctx.save();
+  ctx.translate(cx + (w * k) / 2, cy + (h * k) / 2);
+  ctx.scale(k, k);
+  paint(A.createPen(ctx, pal, seed));
+  ctx.restore();
+  cx += w * k + 14;
+  rowH = Math.max(rowH, h * k);
+}
+const newRow = () => {
+  cx = 0;
+  cy += rowH + 26;
+  rowH = 0;
+};
+
+if (part !== 'doodles') {
+  for (const type of ['solid', 'move', 'vert', 'once', 'crumble']) for (const seed of [1, 2]) cell(84, 26, (g) => { g.ctx.translate(0, -6); A.PLATFORMS[type](g, seed); }, seed);
+  newRow();
+  cell(26, 34, (g) => { g.ctx.translate(0, 12); A.ITEMS.spring(g, 1); });
+  cell(26, 34, (g) => { g.ctx.translate(0, 14); A.ITEMS.spring(g, 1, true); });
+  cell(52, 30, (g) => { g.ctx.translate(0, 8); A.ITEMS.eraser(g, 1); });
+  cell(54, 34, (g) => A.ITEMS.plane(g, 1));
+  cell(22, 60, (g) => A.ITEMS.rocket(g, 1));
+  cell(34, 34, (g) => { g.ctx.translate(0, 12); A.ITEMS.star(g, 1); });
+  for (const seed of [1, 2, 3]) cell(48, 44, (g) => A.heroBody(g, seed), seed);
+  newRow();
+  for (const seed of [1, 2]) cell(66, 64, (g) => A.blot(g, seed), seed);
+  for (const seed of [1, 2]) cell(40, 52, (g) => A.two(g, seed), seed);
+  for (const seed of [1, 2]) cell(72, 66, (g) => A.hole(g, seed), seed);
+  cell(86, 80, (g) => A.swirl(g, 1));
+  newRow();
+  cell(150, 24, (g) => g.text('0123456789', -72, -9, 18));
+  cell(120, 24, (g) => g.text('2+2=4 x-!?', -58, -9, 18, { color: pal.red }));
+  newRow();
+  cell(370, 30, (g) => { g.ctx.translate(0, -4); A.ground(g, 360); });
+  newRow();
+  // в настоящем размере (как на телефоне): 1,08 пикселя на единицу
+  for (const type of ['solid', 'move', 'vert', 'once', 'crumble']) cell(84, 26, (g) => { g.ctx.translate(0, -6); A.PLATFORMS[type](g, 1); }, 1, 1.08);
+  cell(48, 44, (g) => A.heroBody(g, 1), 1, 1.08);
+  cell(66, 64, (g) => A.blot(g, 1), 1, 1.08);
+  cell(40, 52, (g) => A.two(g, 1), 1, 1.08);
+  cell(72, 66, (g) => A.hole(g, 1), 1, 1.08);
+  cell(26, 34, (g) => { g.ctx.translate(0, 12); A.ITEMS.spring(g, 1); }, 1, 1.08);
+  cell(52, 30, (g) => { g.ctx.translate(0, 8); A.ITEMS.eraser(g, 1); }, 1, 1.08);
+  cell(54, 34, (g) => A.ITEMS.plane(g, 1), 1, 1.08);
+  cell(22, 60, (g) => A.ITEMS.rocket(g, 1), 1, 1.08);
+  cell(34, 34, (g) => { g.ctx.translate(0, 12); A.ITEMS.star(g, 1); }, 1, 1.08);
+  cell(100, 24, (g) => g.text('1250', -40, -9, 18), 1, 1.08);
+  newRow();
+}
+if (part !== 'things') {
+  const k = Math.min(zoom, 2.2);
+  cell(74, 74, (g) => { g.ctx.translate(-35, -35); A.startArrow(g); }, 1, k);
+  for (const name of Object.keys(A.DOODLES)) {
+    cell(74, 74, (g) => { g.ctx.translate(-35, -35); A.DOODLES[name](g); }, 1, k);
+  }
+}
+document.title = 'готово';
+</script>
+</body>

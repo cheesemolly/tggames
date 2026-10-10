@@ -133,7 +133,7 @@ test('Флаги: партии по режиму и длине, марафон �
 test('новые меры: у каждой игры рейтинга без новой меры — прежняя; очки пишутся с префиксом', () => {
   for (const id of Object.keys(BOARDS_V2)) assert.ok(BOARDS[id], `${id}: есть в BOARDS`);
   const same = GAMES.filter((g) => BOARDS[g.id] && !BOARDS_V2[g.id]).map((g) => g.id).sort();
-  assert.deepEqual(same, ['2048', 'block-blast', 'bongo-cat', 'flappy-burger', 'pinball'], 'без изменений — как решил владелец');
+  assert.deepEqual(same, ['2048', 'block-blast', 'bongo-cat', 'flappy-burger', 'jump-up', 'pinball'], 'без изменений — как решил владелец');
   const pts = boardPoints(stats('chess', { played: 2, wins: 1 }, { 'level-7': { played: 1, wins: 1 } }));
   assert.deepEqual(pts, { [`${POINTS_PREFIX}chess`]: 600 });
   assert.equal(boardFor('chess', true).text(600), '600 очков');

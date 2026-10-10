@@ -292,4 +292,11 @@ export const games = [
     css: new URL('../games/logic-gates/game.css', import.meta.url),
     menu: { progress: 'replace' },                       // «Уровень 14 · ★ 30»
   },
+  {
+    id: 'jump-up',
+    title: 'Прыгалка вверх',
+    load: () => import('../games/jump-up/index.js'),
+    css: new URL('../games/jump-up/game.css', import.meta.url),
+    menu: { wins: false },                               // бесконечный подъём, победить нельзя
+  },
 ];
