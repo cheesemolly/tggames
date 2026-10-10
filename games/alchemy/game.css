@@ -293,6 +293,7 @@
   line-height: 1.18;
   text-align: center;
   overflow-wrap: anywhere;
+  -webkit-hyphens: auto;
   hyphens: auto;
 }
 [data-game="alchemy"] .al-sign { flex: none; display: grid; place-items: center; width: 20px; height: 60px; font-style: normal; color: var(--al-hint); }
@@ -427,6 +428,7 @@
   line-height: 1.15;
   text-align: center;
   overflow-wrap: anywhere;
+  -webkit-hyphens: auto;
   hyphens: auto;
 }
 [data-game="alchemy"] .al-name-s { font-size: 9px; letter-spacing: -0.01em; }
@@ -499,6 +501,7 @@
   box-shadow: inset 0 0 0 1px var(--al-line);
   user-select: text;
   -webkit-user-select: text;
+  -webkit-appearance: none;
   appearance: none;
 }
 [data-game="alchemy"] .al-search-input:focus { box-shadow: inset 0 0 0 2px var(--al-accent); }
