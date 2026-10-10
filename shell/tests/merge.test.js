@@ -327,7 +327,7 @@ async function cases() {
   const g = {};
   for (const id of ['flags', 'checkers', 'flappy-burger', 'bongo-cat', 'snake', 'memory', 'bubble-shooter', 'brick-blast',
     'loop', 'connect-dots', 'mahjong', '2048', 'boggle', 'block-blast', 'sudoku', 'tictactoe', 'wordle', 'chess', 'spider', 'klondike',
-    'minesweeper', 'fifteen', 'rubik', 'hanoi', 'repair', 'arkanoid', 'erudit', 'billiards', 'cities', 'word-circle', 'subwords', 'crostic', 'alchemy']) {
+    'minesweeper', 'fifteen', 'rubik', 'hanoi', 'repair', 'arkanoid', 'erudit', 'billiards', 'cities', 'word-circle', 'subwords', 'crostic', 'alchemy', 'logic-gates']) {
     g[id] = await mod(id);
   }
   const pinball = await mod('pinball', 'rules.js');
@@ -351,6 +351,8 @@ async function cases() {
     ['game:crostic:stats', g.crostic.emptyStats(), g.crostic.isValidStats],
     ['game:crostic:progress', g.crostic.emptyProgress(), g.crostic.isValidProgress],
     ['game:alchemy:stats', g.alchemy.emptyStats(), g.alchemy.isValidStats],
+    ['game:logic-gates:stats', g['logic-gates'].emptyStats(), g['logic-gates'].isValidStats],
+    ['game:logic-gates:progress', { stars: { 1: 3, 2: 1, 14: 2 } }, g['logic-gates'].isValidProgress],
     ['game:alchemy:progress', g.alchemy.emptyProgress(), g.alchemy.isValidProgress],
     ['game:subwords:progress', { stars: { fruits: 2, pets: 1 }, time: { fruits: 41000, pets: 90000 }, timed: { fruits: 38 } }, g.subwords.isValidProgress],
     ['game:loop:stats', g.loop.emptyStats(), g.loop.isValidStats],
@@ -426,6 +428,11 @@ function playOn(r, key, value) {
   }
   // звёзд за тему в «Слогах» не больше трёх
   if (key === 'game:subwords:progress') for (const id of Object.keys(v.stars)) v.stars[id] = Math.min(3, v.stars[id]);
+  // «Логические схемы»: пройден ещё уровень, звёзд за уровень тоже не больше трёх
+  if (key === 'game:logic-gates:progress') {
+    v.stars[int(r, 1, 40)] = int(r, 1, 3);
+    for (const id of Object.keys(v.stars)) v.stars[id] = Math.min(3, v.stars[id]);
+  }
   return v;
 }
 

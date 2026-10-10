@@ -72,6 +72,9 @@ export const GAME_ICONS = {
   'connect-dots': svg('<circle cx="5.5" cy="6" r="2.4" fill="currentColor" stroke="none"/>'
     + '<circle cx="18.5" cy="18" r="2.4" fill="currentColor" stroke="none"/>'
     + '<path d="M5.5 9v4.5a2.5 2.5 0 0 0 2.5 2.5h8"/>'),
+  // логические схемы: вентиль с двумя входами и лампа на его выходе
+  'logic-gates': svg('<rect x="4.5" y="10.2" width="15" height="7.4" rx="2.4"/><path d="M8.6 17.6v3.2M15.4 17.6v3.2M12 10.2V7.8"/>'
+    + '<circle cx="12" cy="5" r="2.7" fill="currentColor" stroke="none"/>'),
   mahjong: svg('<rect x="2.5" y="7" width="9" height="13.5" rx="2"/><rect x="12.5" y="3.5" width="9" height="13.5" rx="2"/>'
     + '<path d="M6 11.5h2.5M6 15h2.5M16 8h2.5M16 11.5h2.5" opacity="0.7"/>'),
   klondike: svg('<rect x="3" y="6.5" width="10.5" height="14.5" rx="2" transform="rotate(-9 8 14)"/><rect x="10" y="3.5" width="10.5" height="14.5" rx="2"/>'

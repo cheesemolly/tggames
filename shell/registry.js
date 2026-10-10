@@ -285,4 +285,11 @@ export const games = [
     css: new URL('../games/alchemy/game.css', import.meta.url),
     menu: { progress: 'replace' },                       // «Открыто: 123»
   },
+  {
+    id: 'logic-gates',
+    title: 'Логические схемы',
+    load: () => import('../games/logic-gates/index.js'),
+    css: new URL('../games/logic-gates/game.css', import.meta.url),
+    menu: { progress: 'replace' },                       // «Уровень 14 · ★ 30»
+  },
 ];

@@ -17,7 +17,7 @@ export const categories = [
     title: 'Головоломки',
     hint: 'Подумать не спеша',
     color: '--cat-puzzles',
-    games: ['match3', 'sudoku', 'killer-sudoku', 'nonogram', 'minesweeper', 'fifteen', 'rubik', 'hanoi', 'loop', 'connect-dots', 'mahjong', 'klondike', 'spider', '2048', 'memory'],
+    games: ['match3', 'sudoku', 'killer-sudoku', 'nonogram', 'minesweeper', 'fifteen', 'rubik', 'hanoi', 'loop', 'connect-dots', 'logic-gates', 'mahjong', 'klondike', 'spider', '2048', 'memory'],
   },
   {
     id: 'arcade',

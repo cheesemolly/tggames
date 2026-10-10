@@ -75,6 +75,9 @@
     <td align="center"><img src="media/readme/crostic.gif" width="220" alt="кростик"><br><b>кростик</b> <sup>скоро</sup><br><sub>вопросы открывают спрятанную фразу, 600 уровней</sub></td>
     <td align="center"><img src="media/readme/alchemy.gif" width="220" alt="алхимия"><br><b>алхимия</b> <sup>скоро</sup><br><sub>вода + огонь = пар, 1100 элементов</sub></td>
   </tr>
+  <tr>
+    <td align="center"><img src="media/readme/logic-gates.gif" width="220" alt="логические схемы"><br><b>логические схемы</b> <sup>скоро</sup><br><sub>расставь и, или, не — и лампа загорится</sub></td>
+  </tr>
 </table>
 
 ## что есть

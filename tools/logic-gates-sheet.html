@@ -1,0 +1,51 @@
+<!doctype html><meta charset="utf-8"><title>Логические схемы — лист уровней</title>
+<!-- Лист уровней «Логических схем»: все схемы рядом — чтобы глазами проверить раскладку проводов и подобрать уровни.
+     http://localhost:8000/tools/logic-gates-sheet.html?from=1&count=20&lit=1&skin=pcb&theme=dark&k=0.6
+     from, count — какие уровни; lit — показать решённой и под током (иначе пустые гнёзда); skin, theme — оформление;
+     k — масштаб; row — номер проверки (с нуля). -->
+<link rel="stylesheet" href="../styles/theme.css">
+<link rel="stylesheet" href="../games/logic-gates/game.css">
+<style>
+  body { margin: 0; font: 12px system-ui, sans-serif; }
+  #sheet { display: flex; flex-wrap: wrap; gap: 10px; padding: 10px; background-color: var(--lg-bg); background-image: var(--lg-pattern); background-size: var(--lg-cell) var(--lg-cell); color: var(--lg-ink); }
+  figure { margin: 0; display: grid; justify-items: center; gap: 4px; padding: 6px; border-radius: 10px; box-shadow: inset 0 0 0 1px var(--lg-line); }
+  figcaption { color: var(--lg-hint); max-width: 220px; overflow-wrap: anywhere; text-align: center; }
+  figcaption b { color: var(--lg-ink); }
+</style>
+<div id="sheet" data-game="logic-gates"></div>
+<script type="module">
+import { LEVELS } from '../games/logic-gates/levels.js';
+import { parseLevel, emptySetup, solve, evaluate } from '../games/logic-gates/logic.js';
+import { layout } from '../games/logic-gates/layout.js';
+import { mountBoard, paintSetup, paintRow, paintSignals } from '../games/logic-gates/view.js';
+
+const Q = new URLSearchParams(location.search);
+const from = Number(Q.get('from') || 1);
+const count = Number(Q.get('count') || LEVELS.length);
+const k = Number(Q.get('k') || 0.6);
+const rowAt = Number(Q.get('row') || 0);
+const sheet = document.getElementById('sheet');
+if (Q.get('theme')) document.documentElement.dataset.theme = Q.get('theme');
+if (Q.get('skin')) sheet.dataset.skin = Q.get('skin');
+const texts = Q.get('level') ? [Q.get('level')] : LEVELS.slice(from - 1, from - 1 + count);
+
+texts.forEach((text, i) => {
+  const level = parseLevel(text);
+  const lay = layout(level);
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('class', 'lg-board');
+  svg.setAttribute('width', lay.box.w * k);
+  svg.setAttribute('height', lay.box.h * k);
+  const refs = mountBoard(svg, level, lay);
+  const row = level.rows[Math.min(rowAt, level.rows.length - 1)];
+  const setup = Q.has('lit') ? solve(level, { limit: 1 })[0] : emptySetup(level);
+  paintSetup(refs, setup);
+  paintRow(refs, row);
+  if (Q.has('lit')) paintSignals(refs, evaluate(level, setup, row.src), row);
+  const cap = document.createElement('figcaption');
+  cap.innerHTML = `<b>${from + i}</b> · ${text.replaceAll('&', '&amp;')} · пересечений ${lay.crossings}`;
+  const fig = document.createElement('figure');
+  fig.append(svg, cap);
+  sheet.append(fig);
+});
+</script>

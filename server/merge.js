@@ -121,6 +121,9 @@ export const RULES = [
   // слоги: звёзды и рекорды по темам — лучшее, время темы — меньшее
   ['game:subwords:progress', { type: 'fields', fields: { 'stars.*': 'max', 'time.*': 'min', 'timed.*': 'max' } }],
   ['game:subwords:stats', { type: 'fields', fields: { words: 'count', levels: 'count', runs: 'count', hints: 'count' } }],
+  // логические схемы: звёзды по уровням — лучшее; начатый уровень (current) — от записанного позже
+  ['game:logic-gates:progress', { type: 'fields', fields: { 'stars.*': 'max' } }],
+  ['game:logic-gates:stats', { type: 'fields', fields: { solved: 'count', perfect: 'count', launches: 'count', hints: 'count' } }],
   // алхимия: открытые элементы и найденные пары — множества, задания — счётчик, подсказки — расходуемое
   ['game:alchemy:progress', { type: 'fields', fields: { found: 'union', recipes: 'union', quests: 'count', hints: { spend: 5 } } }],
   ['game:alchemy:stats', { type: 'fields', fields: { mixes: 'count', fails: 'count', hints: 'count' } }],

@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { POINTS_INFO, pointsInfo } from '../points-info.js';
 import {
   GAMES, BOARDS, BOARDS_V2, WIN_POINTS, WORD_POINTS, BOGGLE_FIELD_POINTS, MEMORY_POINTS, FLAG_POINTS, FLAG_MARATHON,
-  LEVEL_PRICES, match3LevelPoints, nonogramLevelPoints, SUBWORDS_STAR_POINTS,
+  LEVEL_PRICES, match3LevelPoints, nonogramLevelPoints, SUBWORDS_STAR_POINTS, LOGIC_GATES, logicGatesStarPoints,
 } from '../../server/lib.js';
 
 const text = (id) => POINTS_INFO[id].lines.join(' ');
@@ -47,6 +47,7 @@ test('числа в подсказках — те же, что считает с
   has('crostic', [LEVEL_PRICES.crostic(1), LEVEL_PRICES.crostic(330), 330]);
   assert.equal(LEVEL_PRICES.crostic(329), 149, 'с 330-го — по 150');
   has('subwords', SUBWORDS_STAR_POINTS.slice(1));
+  has('logic-gates', [logicGatesStarPoints(1), LOGIC_GATES.step, logicGatesStarPoints(LOGIC_GATES.levels)]);
   has('snake', [LEVEL_PRICES.snake(1), LEVEL_PRICES.snake(2), LEVEL_PRICES.snake(12), LEVEL_PRICES.snake(13) - LEVEL_PRICES.snake(1)]);
 });
 

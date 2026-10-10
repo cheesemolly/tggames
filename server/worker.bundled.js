@@ -211,6 +211,7 @@ const GAMES = [
   { id: 'subwords', title: 'Слоги', emoji: '🎈', about: 'слова разрезаны на слоги-кружки: собери слова темы, 56 тем, классика и на время', beta: true },
   { id: 'crostic', title: 'Кростик', emoji: '📝', about: 'спрятанная фраза и вопросы к ней: одинаковый номер — одинаковая буква; 600 уровней с пословицами, цитатами и фактами', beta: true },
   { id: 'alchemy', title: 'Алхимия', emoji: '🟡', about: 'смешивай элементы и открывай новые: вода + огонь = пар; больше 1100 элементов, задания и звания', rating: false, beta: true },
+  { id: 'logic-gates', title: 'Логические схемы', emoji: '🟡', about: 'расставь вентили И, ИЛИ и НЕ, чтобы зажглась лампа: 100 схем, звёзды — с какого включения получилось', beta: true },
 ];
 
 const fold = (text) => String(text ?? '').toLowerCase().replace(/ё/g, 'е').trim();
@@ -479,6 +480,27 @@ function crosticLevel(state) {
   return Number.isInteger(level) && level > 1 ? Math.min(level, MAX_LEVELS) : null;
 }
 
+/**
+ * Логические схемы: звёзды по уровням — из прогресса игры (stars: { номер уровня: 1…3 }). Очки — за каждую звезду:
+ * в первой главе 15, в каждой следующей на 10 больше (главы по 20 уровней; числа глав — как в игре, тест сверяет).
+ */
+const LOGIC_GATES = { levels: 100, chapter: 20, star: 15, step: 10 };
+const logicGatesStarPoints = (level) => LOGIC_GATES.star + LOGIC_GATES.step * Math.floor((level - 1) / LOGIC_GATES.chapter);
+function logicGatesEntries(state) {
+  const stars = state?.['game:logic-gates:progress']?.stars;
+  if (!stars || typeof stars !== 'object' || Array.isArray(stars)) return [];
+  return Object.entries(stars)
+    .filter(([key, v]) => String(Number(key)) === key && Number.isInteger(Number(key)) && Number(key) >= 1
+      && Number(key) <= LOGIC_GATES.levels && Number.isInteger(v) && v > 0)
+    .map(([key, v]) => [Number(key), Math.min(v, 3)]);
+}
+function logicGatesStars(state) {
+  return logicGatesEntries(state).reduce((sum, [, v]) => sum + v, 0) || null;
+}
+function logicGatesPoints(state) {
+  return logicGatesEntries(state).reduce((sum, [level, v]) => sum + v * logicGatesStarPoints(level), 0);
+}
+
 const POINTS = count(['очко', 'очка', 'очков']);
 const WINS = count(['победа', 'победы', 'побед']);
 
@@ -503,6 +525,7 @@ const BOARDS = {
   'word-circle': { by: 'уровень', score: wordCircleLevel, text: levelText },
   crostic: { by: 'уровень', score: crosticLevel, text: levelText },
   subwords: { by: 'звёзды', score: subwordsStars, text: count(['звезда', 'звезды', 'звёзд']) },
+  'logic-gates': { by: 'звёзды', score: logicGatesStars, text: count(['звезда', 'звезды', 'звёзд']) },
   'block-blast': { by: 'рекорд', score: shellStats('block-blast', 'best'), text: POINTS },
   sudoku: { by: 'решённые судоку', score: shellStats('sudoku', 'wins'), text: count(['судоку', 'судоку', 'судоку']) },
   'killer-sudoku': { by: 'решённые судоку', score: shellStats('killer-sudoku', 'wins'), text: count(['судоку', 'судоку', 'судоку']) },
@@ -555,6 +578,7 @@ const BOARD_LIMITS = {
   'word-circle': 1e4,
   crostic: 1e4,
   subwords: 300,              // не больше трёх звёзд за тему, тем не больше ста
+  'logic-gates': 300,         // три звезды за каждый из ста уровней
 };
 // побед не может быть больше сыгранных партий
 const WINS_FROM = { checkers: 'checkers', mahjong: 'mahjong', sudoku: 'sudoku', wordle: 'wordle', tictactoe: 'tictactoe', chess: 'chess', spider: 'spider', klondike: 'klondike', 'killer-sudoku': 'killer-sudoku', go: 'go', minesweeper: 'minesweeper', fifteen: 'fifteen', rubik: 'rubik', hanoi: 'hanoi', erudit: 'erudit', billiards: 'billiards', cities: 'cities' };
@@ -823,6 +847,7 @@ const BOARDS_V2 = {
   subwords: { by: 'очки за звёзды и рекорды «На время»', score: subwordsPoints, text: POINTS },
   'word-circle': levels('word-circle', 'очки за пройденные уровни (дальше — дороже)', (s) => Math.max(0, (wordCircleLevel(s) ?? 1) - 1)),
   crostic: levels('crostic', 'очки за пройденные уровни (дальше — дороже)', (s) => Math.max(0, (crosticLevel(s) ?? 1) - 1)),
+  'logic-gates': { by: 'очки за звёзды (дальше глава — дороже)', score: logicGatesPoints, text: POINTS },
   tictactoe: wins('tictactoe', 'очки за победы над ботом (гомоку и сильный бот — дороже)'),
   flags: { by: 'очки за партии (ввод и 20 флагов — дороже) + рекорд марафона', score: flagsPoints, text: POINTS },
 };
@@ -1160,6 +1185,9 @@ const RULES = [
   // слоги: звёзды и рекорды по темам — лучшее, время темы — меньшее
   ['game:subwords:progress', { type: 'fields', fields: { 'stars.*': 'max', 'time.*': 'min', 'timed.*': 'max' } }],
   ['game:subwords:stats', { type: 'fields', fields: { words: 'count', levels: 'count', runs: 'count', hints: 'count' } }],
+  // логические схемы: звёзды по уровням — лучшее; начатый уровень (current) — от записанного позже
+  ['game:logic-gates:progress', { type: 'fields', fields: { 'stars.*': 'max' } }],
+  ['game:logic-gates:stats', { type: 'fields', fields: { solved: 'count', perfect: 'count', launches: 'count', hints: 'count' } }],
   // алхимия: открытые элементы и найденные пары — множества, задания — счётчик, подсказки — расходуемое
   ['game:alchemy:progress', { type: 'fields', fields: { found: 'union', recipes: 'union', quests: 'count', hints: { spend: 5 } } }],
   ['game:alchemy:stats', { type: 'fields', fields: { mixes: 'count', fails: 'count', hints: 'count' } }],

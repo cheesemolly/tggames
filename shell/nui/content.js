@@ -9,6 +9,15 @@ import { digits, plural, placeOn } from './logic.js';
 
 export const STORIES = [
   {
+    id: 'logic-gates-new',
+    label: 'Схемы',
+    games: ['logic-gates'],
+    slides: [
+      { kicker: 'Новая игра', title: 'Логические схемы', text: 'Расставь вентили И, ИЛИ и НЕ так, чтобы ток дошёл до лампы. Щёлкаешь выключателем — и видно, как он бежит по проводам. Сто схем в пяти главах.', play: 'logic-gates' },
+      { kicker: 'Совет', title: 'Иди от лампы вниз', text: 'Посмотри, что нужно лампе, потом — что нужно вентилю под ней, и так до источников. За схему, собранную с первого включения, дают три звезды.', play: 'logic-gates' },
+    ],
+  },
+  {
     id: 'alchemy-new',
     label: 'Алхимия',
     games: ['alchemy'],
@@ -276,6 +285,7 @@ export function pickStories({ visible, rated = false, seen = [], week = null }) 
 
 /** Что показать баннером «Новая игра»: первая видимая игроку из списка (новые — выше). */
 export const NEW_GAMES = [
+  { id: 'logic-gates', text: 'И, ИЛИ, НЕ — и лампа горит' },
   { id: 'alchemy', text: 'Вода + огонь = пар: 1100 элементов' },
   { id: 'crostic', text: 'Вопросы открывают спрятанную фразу' },
   { id: 'subwords', text: 'Собери слова из слогов-кружков' },
