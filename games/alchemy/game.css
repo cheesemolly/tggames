@@ -1,0 +1,765 @@
+/*
+ * Алхимия. Сверху шапка (звание и счёт), карточка задания, котёл — две ячейки и итог, строка категорий и полка —
+ * сетка плиток с прокруткой. Плитка — кнопка: значок-эмодзи и название; цвет плитки — по категории (--m, один из
+ * шести цветов скина).
+ * Скин «telegram» (по умолчанию): фон, панели, текст и кнопки — из цветов темы; цвета плиток — игровые, заданы для
+ * обеих тем. Остальные скины — свои палитры (--al-*), одинаковые в обеих темах.
+ */
+
+[data-game="alchemy"] {
+  --al-warn: #e5484d;
+  --al-ok: #2fa66a;
+  --al-gold: #f5b400;
+  --toast-top: 64px;
+}
+
+[data-game="alchemy"], [data-game="alchemy"] [data-skin="telegram"] {
+  --al-bg: var(--tg-theme-bg-color);
+  --al-panel: var(--tg-theme-secondary-bg-color);
+  --al-tile: var(--tg-theme-secondary-bg-color);
+  --al-ink: var(--tg-theme-text-color);
+  --al-hint: var(--tg-theme-hint-color);
+  --al-line: color-mix(in srgb, var(--tg-theme-text-color) 14%, transparent);
+  --al-accent: var(--tg-theme-button-color);
+  --al-accent-text: var(--tg-theme-button-text-color);
+  --al-m1: #f08fb0;
+  --al-m2: #7fb5f2;
+  --al-m3: #f5b55e;
+  --al-m4: #e6d04e;
+  --al-m5: #8fd083;
+  --al-m6: #b79cf0;
+  --al-tint: 30%;
+}
+:root[data-theme="dark"] [data-game="alchemy"]:not([data-skin]),
+:root[data-theme="dark"] [data-game="alchemy"][data-skin="telegram"],
+:root[data-theme="dark"] [data-game="alchemy"] [data-skin="telegram"] {
+  --al-m1: #e87aa2;
+  --al-m2: #6ea6ea;
+  --al-m3: #eda84c;
+  --al-m4: #d9c240;
+  --al-m5: #7cc470;
+  --al-m6: #a68be6;
+  --al-tint: 26%;
+}
+/* Пергамент — старая книга рецептов: тёплая бумага, коричневые чернила */
+[data-game="alchemy"][data-skin="parchment"], [data-game="alchemy"] [data-skin="parchment"] {
+  --al-bg: #e6d7b8; --al-panel: #f3e8cf; --al-tile: #fbf3df; --al-ink: #3f2d1c; --al-hint: #8a7355; --al-line: rgb(63 45 28 / 0.2);
+  --al-accent: #a6491c; --al-accent-text: #fff;
+  --al-m1: #d9896a; --al-m2: #8fb39c; --al-m3: #e3b55a; --al-m4: #cdbd72; --al-m5: #a6bd77; --al-m6: #b59abb; --al-tint: 38%;
+}
+/* Лаборатория — тёмное стекло и зелёное свечение колб */
+[data-game="alchemy"][data-skin="lab"], [data-game="alchemy"] [data-skin="lab"] {
+  --al-bg: #0e2726; --al-panel: #163836; --al-tile: #1c4543; --al-ink: #e9f5f1; --al-hint: #8fb8ae; --al-line: rgb(255 255 255 / 0.13);
+  --al-accent: #5ef2c4; --al-accent-text: #06231c;
+  --al-m1: #ff8fb3; --al-m2: #6ec6ff; --al-m3: #ffb961; --al-m4: #ffe66b; --al-m5: #7ee79c; --al-m6: #b99cff; --al-tint: 24%;
+}
+[data-game="alchemy"][data-skin="night"], [data-game="alchemy"] [data-skin="night"] {
+  --al-bg: #0d1226; --al-panel: #161d3a; --al-tile: #1c2448; --al-ink: #e8ecff; --al-hint: #8d97c4; --al-line: rgb(255 255 255 / 0.11);
+  --al-accent: #ffcf5a; --al-accent-text: #2a1d00;
+  --al-m1: #ff7ab8; --al-m2: #5fb8ff; --al-m3: #ffb057; --al-m4: #ffe45c; --al-m5: #6ee79a; --al-m6: #b18cff; --al-tint: 24%;
+}
+[data-game="alchemy"][data-skin="moss"], [data-game="alchemy"] [data-skin="moss"] {
+  --al-bg: #dbe6cd; --al-panel: #ecf3e1; --al-tile: #f7fbef; --al-ink: #24361f; --al-hint: #6e8562; --al-line: rgb(36 54 31 / 0.17);
+  --al-accent: #3f8f4f; --al-accent-text: #fff;
+  --al-m1: #e79aa8; --al-m2: #8fbfd9; --al-m3: #e6bc6c; --al-m4: #d6cf73; --al-m5: #9ccc8a; --al-m6: #b9a6d8; --al-tint: 38%;
+}
+[data-game="alchemy"][data-skin="candy"], [data-game="alchemy"] [data-skin="candy"] {
+  --al-bg: #fff0f5; --al-panel: #ffffff; --al-tile: #fff7fa; --al-ink: #4a2540; --al-hint: #a6849a; --al-line: rgb(74 37 64 / 0.13);
+  --al-accent: #ff5d8f; --al-accent-text: #fff;
+  --al-m1: #ff8fb3; --al-m2: #7cc6ff; --al-m3: #ffb347; --al-m4: #ffe066; --al-m5: #8fe3a1; --al-m6: #c59cff; --al-tint: 40%;
+}
+
+/* ---------- раскладка ---------- */
+
+.game-root[data-game="alchemy"] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+[data-game="alchemy"] [hidden] { display: none !important; }
+[data-game="alchemy"] .btn { background: var(--al-accent); color: var(--al-accent-text); }
+[data-game="alchemy"] .al {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  isolation: isolate;
+  background: var(--al-bg);
+  color: var(--al-ink);
+  transition: background-color 0.4s ease, color 0.3s ease;
+}
+[data-game="alchemy"] .al-emoji {
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+  font-style: normal;
+  font-weight: 400;
+  line-height: 1;
+}
+
+/* шапка */
+[data-game="alchemy"] .al-header { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px 6px; }
+[data-game="alchemy"] .al-heading {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 3px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+[data-game="alchemy"] .al-rank { font-size: 16px; font-weight: 800; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+[data-game="alchemy"] .al-count {
+  display: inline-block;
+  justify-self: start;
+  font-size: 12px;
+  line-height: 1.1;
+  color: var(--al-hint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  transform-origin: left center;
+}
+[data-game="alchemy"] .al-bar { height: 4px; max-width: 150px; border-radius: 99px; background: var(--al-line); overflow: hidden; }
+[data-game="alchemy"] .al-bar i { display: block; height: 100%; border-radius: inherit; background: var(--al-accent); transition: width 0.5s ease; }
+[data-game="alchemy"] .al-actions { flex: none; display: flex; align-items: center; gap: 6px; }
+[data-game="alchemy"] .al-icon-btn, [data-game="alchemy"] .al-tool-btn, [data-game="alchemy"] .al-reroll-btn {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: var(--al-panel);
+  color: var(--al-ink);
+  font-size: 15px;
+  cursor: pointer;
+  transition: transform 0.1s ease, opacity 0.2s ease, background-color 0.3s ease;
+}
+[data-game="alchemy"] .al-icon-btn:active, [data-game="alchemy"] .al-tool-btn:active, [data-game="alchemy"] .al-reroll-btn:active { transform: scale(0.92); }
+[data-game="alchemy"] .al-muted { opacity: 0.6; }
+
+/* задание */
+[data-game="alchemy"] .al-quest {
+  flex: none;
+  margin: 2px 10px 0;
+  padding: 8px 8px 8px 10px;
+  border-radius: 16px;
+  background: var(--al-panel);
+  box-shadow: inset 0 0 0 1px var(--al-line);
+  transition: box-shadow 0.25s ease, background-color 0.4s ease;
+}
+[data-game="alchemy"] .al-quest-main { display: flex; align-items: center; gap: 6px; }
+[data-game="alchemy"] .al-quest-body { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; }
+[data-game="alchemy"] .al-quest-emoji {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--al-accent) 16%, var(--al-bg));
+  font-size: 26px;
+}
+[data-game="alchemy"] .al-quest-text { flex: 1; min-width: 0; display: grid; gap: 2px; }
+[data-game="alchemy"] .al-quest-top { display: flex; align-items: center; gap: 6px; }
+[data-game="alchemy"] .al-tag { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--al-hint); white-space: nowrap; }
+[data-game="alchemy"] .al-reward {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  padding: 1px 4px 1px 6px;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--al-gold) 26%, transparent);
+  font-size: 11px;
+  line-height: 1.2;
+}
+[data-game="alchemy"] .al-reward-bulb { display: grid; }
+[data-game="alchemy"] .al-reward-bulb svg { width: 12px; height: 12px; }
+[data-game="alchemy"] .al-quest-title { font-size: 16px; line-height: 1.2; overflow-wrap: anywhere; transition: color 0.2s ease; }
+[data-game="alchemy"] .al-quest-make { font-weight: 500; color: var(--al-hint); }
+[data-game="alchemy"] .al-hint-btn {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 36px;
+  padding: 0 11px 0 8px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--al-accent);
+  color: var(--al-accent-text);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: transform 0.1s ease, opacity 0.25s ease;
+}
+[data-game="alchemy"] .al-hint-btn:active { transform: scale(0.94); }
+[data-game="alchemy"] .al-hint-btn.al-dim { opacity: 0.45; }
+[data-game="alchemy"] .al-reroll-btn { width: 36px; height: 36px; border-radius: 12px; background: var(--al-bg); }
+[data-game="alchemy"] .al-quest-over .al-hint-btn, [data-game="alchemy"] .al-quest-over .al-reroll-btn { display: none; }
+[data-game="alchemy"] .al-quest-hint { max-height: 0; overflow: hidden; opacity: 0; transition: max-height 0.3s ease, opacity 0.3s ease, margin 0.3s ease; }
+[data-game="alchemy"] .al-quest-hint.al-open { max-height: 80px; margin-top: 8px; opacity: 1; }
+[data-game="alchemy"] .al-recipe {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--al-accent) 13%, transparent);
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+[data-game="alchemy"] .al-chip { display: inline-flex; align-items: center; gap: 5px; min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
+[data-game="alchemy"] .al-chip .al-emoji { flex: none; font-size: 17px; }
+[data-game="alchemy"] .al-chip-q { color: var(--al-hint); font-weight: 500; }
+[data-game="alchemy"] .al-quest-note { display: block; font-size: 13px; line-height: 1.3; color: var(--al-hint); }
+[data-game="alchemy"] .al-quest-done { box-shadow: inset 0 0 0 2px var(--al-ok); }
+[data-game="alchemy"] .al-quest-done .al-quest-title { color: var(--al-ok); }
+
+/* котёл */
+[data-game="alchemy"] .al-table {
+  flex: none;
+  margin: 8px 10px 0;
+  padding: 12px 6px 8px;
+  border-radius: 18px;
+  background: radial-gradient(120% 130% at 50% 0%, color-mix(in srgb, var(--al-accent) 17%, var(--al-panel)), var(--al-panel) 72%);
+  box-shadow: inset 0 0 0 1px var(--al-line);
+}
+[data-game="alchemy"] .al-mix { display: flex; align-items: flex-start; justify-content: center; gap: 2px; }
+[data-game="alchemy"] .al-slot-wrap { position: relative; flex: 0 1 80px; min-width: 0; display: grid; }
+[data-game="alchemy"] .al-slot {
+  flex: 0 1 80px;
+  min-width: 0;
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+[data-game="alchemy"] .al-slot-wrap .al-slot { flex: none; width: 100%; }
+[data-game="alchemy"] .al-slot:disabled { cursor: default; }
+[data-game="alchemy"] .al-orb {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 60px;
+  height: 60px;
+  border: 2px dashed var(--al-line);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--al-bg) 65%, transparent);
+  transition: border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
+}
+[data-game="alchemy"] .al-orb .al-emoji { font-size: 32px; }
+[data-game="alchemy"] .al-slot.al-full .al-orb {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--m) 75%, var(--al-ink));
+  background: color-mix(in srgb, var(--m) 34%, var(--al-bg));
+}
+[data-game="alchemy"] .al-slot:not(:disabled):active .al-orb { scale: 0.94; }
+[data-game="alchemy"] .al-slot-name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  width: 100%;
+  min-height: 26px;
+  font-size: 11px;
+  line-height: 1.18;
+  text-align: center;
+  overflow-wrap: anywhere;
+  hyphens: auto;
+}
+[data-game="alchemy"] .al-sign { flex: none; display: grid; place-items: center; width: 20px; height: 60px; font-style: normal; color: var(--al-hint); }
+[data-game="alchemy"] .al-res .al-orb { width: 66px; height: 66px; margin-top: -3px; border-style: solid; }
+[data-game="alchemy"] .al-res-new .al-orb {
+  border-color: var(--al-gold);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--al-gold) 35%, transparent), 0 0 22px color-mix(in srgb, var(--al-gold) 55%, transparent);
+  animation: al-glow 1.6s ease-in-out infinite;
+}
+[data-game="alchemy"] .al-res-known .al-orb { opacity: 0.75; }
+[data-game="alchemy"] .al-res-sealed .al-orb { border-style: dashed; border-color: var(--al-hint); background: color-mix(in srgb, var(--al-bg) 65%, transparent); }
+[data-game="alchemy"] .al-lock { display: grid; font-style: normal; color: var(--al-hint); }
+[data-game="alchemy"] .al-new-tag {
+  position: absolute;
+  top: -7px;
+  right: -14px;
+  padding: 2px 6px;
+  border-radius: 99px;
+  background: var(--al-gold);
+  color: #3b2a00;
+  font-size: 9px;
+  font-weight: 800;
+  font-style: normal;
+  letter-spacing: 0.04em;
+  line-height: 1.3;
+  text-transform: uppercase;
+  rotate: 8deg;
+}
+@keyframes al-glow { 50% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--al-gold) 20%, transparent), 0 0 10px color-mix(in srgb, var(--al-gold) 30%, transparent); } }
+[data-game="alchemy"] .al-pin {
+  position: absolute;
+  top: -5px;
+  left: calc(50% - 38px);
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--al-bg);
+  color: var(--al-hint);
+  box-shadow: 0 0 0 1px var(--al-line);
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+[data-game="alchemy"] .al-pin[aria-pressed="true"] { background: var(--al-accent); color: var(--al-accent-text); box-shadow: none; }
+[data-game="alchemy"] .al-status {
+  min-height: 17px;
+  margin: 4px 4px 0;
+  font-size: 13px;
+  line-height: 1.3;
+  text-align: center;
+  color: var(--al-hint);
+  overflow-wrap: anywhere;
+  transition: color 0.2s ease;
+}
+[data-game="alchemy"] .al-status-new { color: var(--al-ink); font-weight: 700; }
+[data-game="alchemy"] .al-status-recipe { color: var(--al-ink); }
+
+/* категории и полка */
+[data-game="alchemy"] .al-tools { flex: none; display: flex; align-items: center; gap: 6px; padding: 8px 10px 3px; }
+[data-game="alchemy"] .al-tabs {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+[data-game="alchemy"] .al-tabs::-webkit-scrollbar { display: none; }
+[data-game="alchemy"] .al-tab {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 34px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 99px;
+  background: var(--al-panel);
+  color: var(--al-ink);
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+[data-game="alchemy"] .al-tab i { font-style: normal; font-size: 11px; color: var(--al-hint); font-variant-numeric: tabular-nums; }
+[data-game="alchemy"] .al-tab-on { background: var(--al-accent); color: var(--al-accent-text); }
+[data-game="alchemy"] .al-tab-on i { color: inherit; opacity: 0.8; }
+[data-game="alchemy"] .al-shelf {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(68px, 1fr));
+  grid-auto-rows: min-content;
+  align-content: start;
+  gap: 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 5px 10px calc(12px + env(safe-area-inset-bottom));
+}
+[data-game="alchemy"] .al-tile {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 3px;
+  min-width: 0;
+  min-height: 64px;
+  padding: 7px 2px 5px;
+  border: 0;
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--m) var(--al-tint), var(--al-tile));
+  color: var(--al-ink);
+  font: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: opacity 0.25s ease, box-shadow 0.15s ease, scale 0.1s ease, background-color 0.4s ease;
+}
+[data-game="alchemy"] .al-tile:active { scale: 0.93; }
+[data-game="alchemy"] .al-tile > .al-emoji { font-size: 27px; filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.18)); }
+[data-game="alchemy"] .al-name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  max-width: 100%;
+  font-size: 10.5px;
+  line-height: 1.15;
+  text-align: center;
+  overflow-wrap: anywhere;
+  hyphens: auto;
+}
+[data-game="alchemy"] .al-name-s { font-size: 9px; letter-spacing: -0.01em; }
+[data-game="alchemy"] .al-tile.al-in { box-shadow: inset 0 0 0 2.5px var(--al-accent); }
+[data-game="alchemy"] .al-tile.al-spent { opacity: 0.5; }
+[data-game="alchemy"] .al-tile.al-spent::after, [data-game="alchemy"] .al-tile.al-fresh::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--al-gold);
+  box-shadow: 0 0 0 2px var(--al-bg);
+}
+[data-game="alchemy"] .al-tile.al-spent::after {
+  content: "✓";
+  display: grid;
+  place-items: center;
+  width: 13px;
+  height: 13px;
+  background: var(--al-ink);
+  color: var(--al-bg);
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: none;
+}
+[data-game="alchemy"] .al-tile.al-tried { opacity: 0.38; }
+[data-game="alchemy"] .al-badge {
+  position: absolute;
+  top: -3px;
+  left: -3px;
+  display: grid;
+  place-items: center;
+  width: 21px;
+  height: 21px;
+  border-radius: 50%;
+  background: var(--al-bg);
+  box-shadow: 0 0 0 1.5px var(--al-accent);
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1;
+}
+[data-game="alchemy"] .al-empty { grid-column: 1 / -1; margin: 18px 0; font-size: 14px; text-align: center; color: var(--al-hint); }
+
+/* слой перелётов и эффектов */
+[data-game="alchemy"] .al-layer, [data-game="alchemy"] .al-fx { position: absolute; inset: 0; z-index: 4; pointer-events: none; }
+[data-game="alchemy"] .al-fx { width: 100%; height: 100%; }
+[data-game="alchemy"] .al-flyer { position: absolute; font-size: 30px; translate: -50% -50%; filter: drop-shadow(0 4px 6px rgb(0 0 0 / 0.25)); }
+
+/* поиск */
+[data-game="alchemy"] .al-search { position: absolute; inset: 0; z-index: 5; display: flex; flex-direction: column; background: var(--al-bg); }
+[data-game="alchemy"] .al-search-head { flex: none; display: flex; align-items: center; gap: 8px; padding: 8px 10px; }
+[data-game="alchemy"] .al-search-input {
+  flex: 1;
+  width: 0;
+  min-width: 0;
+  height: 40px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--al-panel);
+  color: var(--al-ink);
+  font: inherit;
+  font-size: 16px;
+  outline: none;
+  box-shadow: inset 0 0 0 1px var(--al-line);
+  user-select: text;
+  -webkit-user-select: text;
+  appearance: none;
+}
+[data-game="alchemy"] .al-search-input:focus { box-shadow: inset 0 0 0 2px var(--al-accent); }
+[data-game="alchemy"] .al-search-input::placeholder { color: var(--al-hint); }
+[data-game="alchemy"] .al-search-input::-webkit-search-cancel-button { display: none; }
+[data-game="alchemy"] .al-search .al-icon-btn { width: 40px; height: 40px; border-radius: 12px; }
+
+/* коллекция */
+[data-game="alchemy"] .al-sheet { position: absolute; inset: 0; z-index: 5; display: flex; flex-direction: column; background: var(--al-bg); }
+[data-game="alchemy"] .al-sheet-head { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 10px 8px 14px; }
+[data-game="alchemy"] .al-sheet-head h2 { margin: 0; font-size: 20px; }
+[data-game="alchemy"] .al-sheet-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 2px 10px calc(14px + env(safe-area-inset-bottom));
+}
+[data-game="alchemy"] .al-sum {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 4px;
+  padding: 14px;
+  border-radius: 16px;
+  background: radial-gradient(120% 130% at 0% 0%, color-mix(in srgb, var(--al-accent) 20%, var(--al-panel)), var(--al-panel) 70%);
+  box-shadow: inset 0 0 0 1px var(--al-line);
+}
+[data-game="alchemy"] .al-sum-rank { font-size: 22px; line-height: 1.15; }
+[data-game="alchemy"] .al-sum-next { font-size: 13px; color: var(--al-hint); }
+[data-game="alchemy"] .al-sum-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; font-size: 14px; }
+[data-game="alchemy"] .al-sum-row span { min-width: 0; color: var(--al-hint); }
+[data-game="alchemy"] .al-sum-row b { flex: none; font-variant-numeric: tabular-nums; }
+[data-game="alchemy"] .al-cat {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 18px;
+  align-items: center;
+  gap: 6px 8px;
+  width: 100%;
+  padding: 11px 10px 10px 12px;
+  border: 0;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--m) calc(var(--al-tint) * 0.6), var(--al-panel));
+  color: var(--al-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+[data-game="alchemy"] .al-cat-title { font-size: 15px; font-weight: 700; }
+[data-game="alchemy"] .al-cat-count { font-size: 13px; color: var(--al-hint); font-variant-numeric: tabular-nums; text-align: right; }
+[data-game="alchemy"] .al-cat-arrow { display: grid; place-items: center; font-style: normal; color: var(--al-hint); transition: rotate 0.2s ease; }
+[data-game="alchemy"] .al-cat-arrow svg { width: 16px; height: 16px; }
+[data-game="alchemy"] .al-cat-open .al-cat-arrow { rotate: 90deg; }
+[data-game="alchemy"] .al-cat-bar { grid-column: 1 / -1; height: 4px; border-radius: 99px; background: var(--al-line); overflow: hidden; }
+[data-game="alchemy"] .al-cat-bar i { display: block; height: 100%; border-radius: inherit; background: color-mix(in srgb, var(--m) 70%, var(--al-ink)); }
+[data-game="alchemy"] .al-cat-sealed { cursor: default; background: var(--al-panel); }
+[data-game="alchemy"] .al-cat-sealed .al-cat-title { color: var(--al-hint); }
+[data-game="alchemy"] .al-cat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(68px, 1fr)); gap: 6px; padding: 2px 0 6px; }
+[data-game="alchemy"] .al-cat-more { grid-column: 1 / -1; margin: 4px 2px 0; font-size: 13px; color: var(--al-hint); }
+
+/* загрузка */
+[data-game="alchemy"] .al-load {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: var(--al-bg);
+  color: var(--al-hint);
+  text-align: center;
+}
+[data-game="alchemy"] .al-load p { margin: 0; }
+
+/* ---------- окна ---------- */
+
+[data-game="alchemy"] .al-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  background: color-mix(in srgb, var(--tg-theme-bg-color) 72%, transparent);
+}
+[data-game="alchemy"] .al-dialog {
+  width: 100%;
+  max-width: 380px;
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--tg-theme-secondary-bg-color);
+  color: var(--tg-theme-text-color);
+}
+[data-game="alchemy"] .al-dialog-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+[data-game="alchemy"] .al-dialog h2 { margin: 0; font-size: 18px; }
+[data-game="alchemy"] .al-dialog .al-icon-btn { background: var(--tg-theme-bg-color); color: var(--tg-theme-text-color); }
+[data-game="alchemy"] .al-dialog .btn { margin-top: 14px; background: var(--tg-theme-button-color); color: var(--tg-theme-button-text-color); }
+[data-game="alchemy"] .al-rule { margin: 0 0 10px; font-size: 14px; line-height: 1.4; }
+[data-game="alchemy"] .al-rule:last-child { margin-bottom: 0; }
+[data-game="alchemy"] .al-section { margin: 14px 0 8px; font-size: 14px; }
+[data-game="alchemy"] .al-section:first-of-type { margin-top: 0; }
+[data-game="alchemy"] .al-skins { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 8px; }
+[data-game="alchemy"] .al-skin {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+[data-game="alchemy"] .al-swatch {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  width: 80px;
+  height: 52px;
+  border-radius: 12px;
+  background: var(--al-bg);
+  box-shadow: inset 0 0 0 1px var(--al-line);
+  transition: transform 0.1s ease;
+}
+[data-game="alchemy"] .al-swatch i { display: grid; place-items: center; width: 22px; height: 26px; border-radius: 7px; font-size: 13px; }
+[data-game="alchemy"] .al-swatch-1 { background: color-mix(in srgb, var(--al-m2) var(--al-tint), var(--al-tile)); }
+[data-game="alchemy"] .al-swatch-2 { background: color-mix(in srgb, var(--al-m1) var(--al-tint), var(--al-tile)); }
+[data-game="alchemy"] .al-swatch-3 { background: color-mix(in srgb, var(--al-m5) var(--al-tint), var(--al-tile)); }
+[data-game="alchemy"] .al-skin:active .al-swatch { transform: scale(0.93); }
+[data-game="alchemy"] .al-skin[aria-checked="true"] .al-swatch { outline: 3px solid var(--tg-theme-button-color); outline-offset: 2px; }
+[data-game="alchemy"] .al-segs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+[data-game="alchemy"] .al-seg {
+  min-width: 0;
+  padding: 10px 6px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--tg-theme-bg-color);
+  color: var(--tg-theme-text-color);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+[data-game="alchemy"] .al-seg[aria-checked="true"] { background: var(--tg-theme-button-color); color: var(--tg-theme-button-text-color); }
+[data-game="alchemy"] .al-switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--tg-theme-bg-color);
+  color: var(--tg-theme-text-color);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+[data-game="alchemy"] .al-switch i {
+  flex: none;
+  position: relative;
+  width: 38px;
+  height: 22px;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--tg-theme-text-color) 22%, transparent);
+  transition: background-color 0.2s ease;
+}
+[data-game="alchemy"] .al-switch i::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  transition: translate 0.2s ease;
+}
+[data-game="alchemy"] .al-switch[aria-checked="true"] i { background: var(--tg-theme-button-color); }
+[data-game="alchemy"] .al-switch[aria-checked="true"] i::after { translate: 16px 0; }
+[data-game="alchemy"] .al-totals { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 10px; margin: 0 0 4px; font-size: 14px; }
+[data-game="alchemy"] .al-totals dt { color: var(--tg-theme-hint-color); }
+[data-game="alchemy"] .al-totals dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* карточка элемента */
+[data-game="alchemy"] .al-card-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+[data-game="alchemy"] .al-card-head > div { flex: 1; min-width: 0; display: grid; gap: 2px; }
+[data-game="alchemy"] .al-card-head h2 { font-size: 20px; line-height: 1.15; overflow-wrap: anywhere; }
+[data-game="alchemy"] .al-card-emoji {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 62px;
+  height: 62px;
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--m) 38%, var(--tg-theme-bg-color));
+  font-size: 38px;
+}
+[data-game="alchemy"] .al-card-cat { font-size: 13px; color: var(--tg-theme-hint-color); }
+[data-game="alchemy"] .al-card-note { margin: 0 0 4px; font-size: 13px; line-height: 1.35; color: var(--tg-theme-hint-color); }
+[data-game="alchemy"] .al-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin-bottom: 6px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--tg-theme-bg-color);
+  font-size: 14px;
+}
+[data-game="alchemy"] .al-row b { color: var(--tg-theme-hint-color); }
+[data-game="alchemy"] .al-chips { display: flex; flex-wrap: wrap; gap: 6px; max-height: 148px; overflow-y: auto; overscroll-behavior: contain; }
+[data-game="alchemy"] .al-chips .al-chip { padding: 5px 9px 5px 7px; border-radius: 99px; background: var(--tg-theme-bg-color); font-size: 13px; }
+
+/* звание и дар */
+[data-game="alchemy"] .al-dialog-mile { display: grid; justify-items: center; gap: 14px; padding: 22px 16px 16px; text-align: center; }
+[data-game="alchemy"] .al-dialog-mile .btn { margin-top: 0; }
+[data-game="alchemy"] .al-mile { display: grid; justify-items: center; gap: 4px; }
+[data-game="alchemy"] .al-mile-tag { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--tg-theme-hint-color); }
+[data-game="alchemy"] .al-mile-title { font-size: 26px; line-height: 1.15; }
+[data-game="alchemy"] .al-mile-bonus { padding: 3px 10px; border-radius: 99px; background: color-mix(in srgb, var(--al-gold) 26%, transparent); font-size: 14px; font-weight: 700; }
+[data-game="alchemy"] .al-mile-emoji { display: grid; place-items: center; width: 84px; height: 84px; border-radius: 50%; background: color-mix(in srgb, var(--al-gold) 22%, var(--tg-theme-bg-color)); font-size: 48px; box-shadow: 0 0 26px color-mix(in srgb, var(--al-gold) 50%, transparent); }
+[data-game="alchemy"] .al-mile-note { margin: 4px 0 0; font-size: 14px; line-height: 1.4; color: var(--tg-theme-hint-color); }
+
+/* высокий экран — котёл крупнее */
+@media (min-height: 720px) {
+  [data-game="alchemy"] .al-orb { width: 68px; height: 68px; }
+  [data-game="alchemy"] .al-orb .al-emoji { font-size: 36px; }
+  [data-game="alchemy"] .al-res .al-orb { width: 76px; height: 76px; margin-top: -4px; }
+  [data-game="alchemy"] .al-sign { height: 68px; }
+  [data-game="alchemy"] .al-slot-wrap, [data-game="alchemy"] .al-slot { flex-basis: 92px; }
+  [data-game="alchemy"] .al-pin { left: calc(50% - 42px); }
+}
+
+/* невысокий экран — котёл ниже, полке больше места */
+@media (max-height: 620px) {
+  [data-game="alchemy"] .al-table { margin-top: 6px; padding-top: 9px; }
+  [data-game="alchemy"] .al-orb { width: 52px; height: 52px; }
+  [data-game="alchemy"] .al-orb .al-emoji { font-size: 28px; }
+  [data-game="alchemy"] .al-res .al-orb { width: 58px; height: 58px; }
+  [data-game="alchemy"] .al-sign { height: 52px; }
+  [data-game="alchemy"] .al-pin { left: calc(50% - 35px); }
+  [data-game="alchemy"] .al-quest-emoji { width: 38px; height: 38px; font-size: 23px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-game="alchemy"] .al-res-new .al-orb { animation: none; }
+  [data-game="alchemy"] * { transition-duration: 0s !important; }
+}

@@ -1060,7 +1060,7 @@ test('серия в профиле: число дней подряд из дне
   assert.equal(streak([5, 4, 3]), 0, 'три дня назад — погасла');
   assert.equal(streak([0, 0, 1]), 2, 'повторы не считаются дважды');
   assert.equal(lib.visitStreak(['2025-12-30', '2025-12-31', '2026-01-01'], Date.UTC(2026, 0, 1, 5)), 3, 'через границу года');
-  assert.equal(lib.visitStreak([key(0), 'мусор', 7, null]), 1, 'мусор отбрасывается');
+  assert.equal(lib.visitStreak([key(0), 'мусор', 7, null], now), 1, 'мусор отбрасывается');
   for (const bad of [null, undefined, 'x', {}, []]) assert.equal(lib.visitStreak(bad), 0);
 
   const wasBeta = [...lib.SERVER_BETA];

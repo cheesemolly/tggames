@@ -46,7 +46,7 @@ export const categories = [
     title: 'Песочница',
     hint: 'Без спешки и соревнований',
     color: '--cat-chill',
-    games: ['repair'],
+    games: ['repair', 'alchemy'],
   },
   {
     id: 'music',

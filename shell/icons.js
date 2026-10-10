@@ -64,6 +64,10 @@ export const GAME_ICONS = {
   // ремонт телефона: телефон и гаечный ключ поверх
   repair: svg('<rect x="4" y="2.5" width="11" height="19" rx="2.4"/><path d="M8 18.5h3"/>'
     + '<path d="M20.6 9.4a3.4 3.4 0 0 1-4.3 4.3l-4.6 4.6a1.4 1.4 0 0 1-2-2l4.6-4.6a3.4 3.4 0 0 1 4.3-4.3l-2 2 .3 1.7 1.7.3Z" fill="currentColor" stroke-width="1.2"/>'),
+  // алхимия: колба с жидкостью и пузырьками
+  alchemy: svg('<path d="M9.2 3h5.6"/><path d="M10 3v6.3L4.9 18a2 2 0 0 0 1.7 3h10.8a2 2 0 0 0 1.7-3L14 9.3V3"/>'
+    + '<path d="M7.3 15h9.4" opacity="0.6"/><circle cx="10.3" cy="18" r="1" fill="currentColor" stroke="none"/>'
+    + '<circle cx="13.7" cy="17.3" r="0.7" fill="currentColor" stroke="none"/>'),
   loop: svg('<path d="M5 19v-6.5A4.5 4.5 0 0 1 9.5 8H19"/><circle cx="5" cy="19" r="2.2"/><circle cx="19" cy="8" r="2.2"/>'),
   'connect-dots': svg('<circle cx="5.5" cy="6" r="2.4" fill="currentColor" stroke="none"/>'
     + '<circle cx="18.5" cy="18" r="2.4" fill="currentColor" stroke="none"/>'

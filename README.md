@@ -73,6 +73,7 @@
   <tr>
     <td align="center"><img src="media/readme/subwords.gif" width="220" alt="слоги"><br><b>слоги</b> <sup>скоро</sup><br><sub>собери слова из слогов-кружков, 56 тем</sub></td>
     <td align="center"><img src="media/readme/crostic.gif" width="220" alt="кростик"><br><b>кростик</b> <sup>скоро</sup><br><sub>вопросы открывают спрятанную фразу, 600 уровней</sub></td>
+    <td align="center"><img src="media/readme/alchemy.gif" width="220" alt="алхимия"><br><b>алхимия</b> <sup>скоро</sup><br><sub>вода + огонь = пар, 1100 элементов</sub></td>
   </tr>
 </table>
 

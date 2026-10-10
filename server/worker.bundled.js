@@ -210,6 +210,7 @@ const GAMES = [
   { id: 'word-circle', title: 'Круг слов', emoji: '🌄', about: 'буквы по кругу: проведи по ним, собери слова и заполни кроссворд — 600 уровней, монеты и подсказки', beta: true },
   { id: 'subwords', title: 'Слоги', emoji: '🎈', about: 'слова разрезаны на слоги-кружки: собери слова темы, 56 тем, классика и на время', beta: true },
   { id: 'crostic', title: 'Кростик', emoji: '📝', about: 'спрятанная фраза и вопросы к ней: одинаковый номер — одинаковая буква; 600 уровней с пословицами, цитатами и фактами', beta: true },
+  { id: 'alchemy', title: 'Алхимия', emoji: '🟡', about: 'смешивай элементы и открывай новые: вода + огонь = пар; больше 1100 элементов, задания и звания', rating: false, beta: true },
 ];
 
 const fold = (text) => String(text ?? '').toLowerCase().replace(/ё/g, 'е').trim();
@@ -1159,6 +1160,9 @@ const RULES = [
   // слоги: звёзды и рекорды по темам — лучшее, время темы — меньшее
   ['game:subwords:progress', { type: 'fields', fields: { 'stars.*': 'max', 'time.*': 'min', 'timed.*': 'max' } }],
   ['game:subwords:stats', { type: 'fields', fields: { words: 'count', levels: 'count', runs: 'count', hints: 'count' } }],
+  // алхимия: открытые элементы и найденные пары — множества, задания — счётчик, подсказки — расходуемое
+  ['game:alchemy:progress', { type: 'fields', fields: { found: 'union', recipes: 'union', quests: 'count', hints: { spend: 5 } } }],
+  ['game:alchemy:stats', { type: 'fields', fields: { mixes: 'count', fails: 'count', hints: 'count' } }],
   ['game:cities:stats', { type: 'fields', fields: {
     '*.played': 'count', '*.wins': 'count', '*.losses': 'count', '*.best': 'max',
     'total.cities': 'count', 'total.km': 'count', 'total.far': 'max',

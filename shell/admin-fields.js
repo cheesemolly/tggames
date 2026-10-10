@@ -9,6 +9,7 @@
 
 export const GAME_FIELDS = [
   { game: 'words', key: 'progress', path: ['hints'], label: 'Подсказки', min: 0, max: 9999 },
+  { game: 'alchemy', key: 'progress', path: ['hints'], label: 'Подсказки', min: 0, max: 9999 },
 
   { game: 'memory', key: 'boosters', path: ['peek'], label: 'Помощник «Подглядеть»', min: 0, max: 99 },
   { game: 'memory', key: 'boosters', path: ['magnet'], label: 'Помощник «Магнит»', min: 0, max: 99 },

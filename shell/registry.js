@@ -278,4 +278,11 @@ export const games = [
     css: new URL('../games/crostic/game.css', import.meta.url),
     menu: { progress: 'replace' },                       // «Уровень 14»
   },
+  {
+    id: 'alchemy',
+    title: 'Алхимия',
+    load: () => import('../games/alchemy/index.js'),
+    css: new URL('../games/alchemy/game.css', import.meta.url),
+    menu: { progress: 'replace' },                       // «Открыто: 123»
+  },
 ];
