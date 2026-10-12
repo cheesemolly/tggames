@@ -19,7 +19,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { KNOWN_EXTRA, BONUS_EXTRA, RUDE, AVOID } from './word-circle-words.mjs';
-import { parseLevel, levelProblems, MAX_COLS, MAX_ROWS, MIN_WORD } from '../games/word-circle/logic.js';
+import { parseLevel, levelProblems, hookedCross, MAX_COLS, MAX_ROWS, MIN_WORD } from '../games/word-circle/logic.js';
 
 export const TOTAL = 600;
 const MAX_LETTERS = 7;
@@ -160,7 +160,9 @@ export function layout(words, rng, tries = 60, limits = {}) {
   for (let t = 0; t < tries; t++) {
     const rest = words.slice(1).map((w) => ({ w, k: w.length + rng() * 3 })).sort((a, b) => b.k - a.k).map((o) => o.w);
     const res = layoutOnce([words[0], ...rest], rng, limits);
-    const value = res.placed.length * 100 - res.rows * 3 - res.cols * 1.5;
+    // крест с загнутыми концами не годится, сколько бы слов ни встало
+    const cells = res.placed.flatMap((p) => [...p.word].map((_, k) => ({ x: p.x + (p.dir ? 0 : k), y: p.y + (p.dir ? k : 0) })));
+    const value = (hookedCross(cells) ? -1e6 : 0) + res.placed.length * 100 - res.rows * 3 - res.cols * 1.5;
     if (!best || value > best.value) best = { ...res, value };
   }
   return best;

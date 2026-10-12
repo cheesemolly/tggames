@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, statSync } from 'node:fs';
-import { parseLevel, levelProblems, canForm, MAX_COLS, MAX_ROWS, CHAPTER } from '../logic.js';
+import { parseLevel, levelProblems, canForm, hookedCross, levelText, LEVEL_FIXES, MAX_COLS, MAX_ROWS, CHAPTER } from '../logic.js';
 import { layout, layoutOnce, rngOf, shapeOf, TOTAL } from '../../../tools/word-circle-levels.mjs';
 import { KNOWN_EXTRA, BONUS_EXTRA, RUDE, AVOID } from '../../../tools/word-circle-words.mjs';
 
@@ -26,6 +26,32 @@ test('каждый уровень — правильный кроссворд (�
     assert.deepEqual(levelProblems(lv), [], `уровень ${i + 1}: ${data.levels[i]}`);
     assert.ok(lv.cols <= MAX_COLS && lv.rows <= MAX_ROWS, `уровень ${i + 1}: ${lv.cols}×${lv.rows}`);
   });
+});
+
+test('ни один кроссворд не складывается в крест с загнутыми концами; заменённые раскладки — те же слова', () => {
+  // так выглядел 105-й уровень
+  assert.ok(hookedCross(parseLevel('амскуп|кампус,1,3,0;сумка,3,1,1;спам,3,1,0;пуск,1,0,1;мука,0,5,0;спа,6,3,1|').cells));
+  assert.ok(!hookedCross(parseLevel('ткро|корт,0,0,0;кот,0,0,1;рот,2,0,1|').cells));
+  const flagged = [];
+  data.levels.forEach((text, i) => {
+    const n = i + 1;
+    if (hookedCross(parseLevel(text).cells)) flagged.push(n);
+    const fixed = parseLevel(levelText(data.levels, n, true));
+    assert.ok(!hookedCross(fixed.cells), `уровень ${n}`);
+    if (!LEVEL_FIXES[n]) return;
+    const old = levels[i];
+    assert.deepEqual(levelProblems(fixed), [], `уровень ${n}: ${LEVEL_FIXES[n]}`);
+    assert.ok(fixed.cols <= MAX_COLS && fixed.rows <= MAX_ROWS);
+    // те же буквы, слова в том же порядке и бонусные — начатый уровень остаётся годным
+    assert.deepEqual(fixed.letters, old.letters, `уровень ${n}`);
+    assert.deepEqual(fixed.words.map((w) => w.word), old.words.map((w) => w.word), `уровень ${n}`);
+    assert.deepEqual([...fixed.bonus], [...old.bonus], `уровень ${n}`);
+    assert.equal(fixed.cells.length, old.cells.length, `уровень ${n}`);
+    assert.equal(fixed.words[0].dir, 0);
+  });
+  assert.deepEqual(flagged, Object.keys(LEVEL_FIXES).map(Number), 'заменены ровно те уровни, что похожи на крест');
+  assert.equal(levelText(data.levels, 105), data.levels[104], 'без беты — раскладка из файла');
+  assert.equal(levelText(data.levels, 105 + TOTAL, true), LEVEL_FIXES[105], 'и на втором круге');
 });
 
 test('первое слово уровня — из всех букв круга, а буквы в круге его не выдают', () => {

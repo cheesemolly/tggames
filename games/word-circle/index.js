@@ -704,7 +704,7 @@ function onBoardTap(e) {
 /** Начать уровень n: с сохранённого состояния или с чистого. fresh — уровень сменился на глазах у игрока. */
 function startLevel(number, saved = null, fresh = false) {
   n = number;
-  level = parseLevel(levelText(levels, n));
+  level = parseLevel(levelText(levels, n, api.feature('word-circle-shapes')));
   state = isValidState(saved, level, n) ? saved : newState(n, level);
   done = false;
   picking = false;
