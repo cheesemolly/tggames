@@ -18,6 +18,8 @@
   --ch-hint: rgba(40, 150, 255, 0.35);
   --ch-arrow: rgba(24, 132, 255, 0.85);
   --ch-check: rgba(235, 30, 30, 0.95);
+  --ch-pre: rgba(140, 70, 235, 0.6);
+  --ch-pre-dot: rgba(100, 45, 190, 0.6);
   --toast-top: 120px;
 }
 [data-game="chess"], [data-game="chess"] [data-skin="telegram"] {
@@ -56,6 +58,7 @@
 [data-game="chess"][data-skin="night"], [data-game="chess"] [data-skin="night"] {
   --ch-light: #8e97ab; --ch-dark: #4a5268; --ch-coord-on-light: #3d4458; --ch-coord-on-dark: #b9c0d0;
   --ch-last: rgba(140, 170, 255, 0.4); --ch-dot: rgba(10, 16, 40, 0.45); --ch-sel: rgba(120, 150, 255, 0.45);
+  --ch-pre: rgba(0, 170, 160, 0.55); --ch-pre-dot: rgba(70, 225, 210, 0.6);
 }
 :root[data-theme="dark"] [data-game="chess"][data-skin="night"], :root[data-theme="dark"] [data-game="chess"] [data-skin="night"] {
   --ch-light: #8e97ab; --ch-dark: #4a5268; --ch-coord-on-light: #3d4458; --ch-coord-on-dark: #b9c0d0;
@@ -63,6 +66,7 @@
 [data-game="chess"][data-skin="candy"], [data-game="chess"] [data-skin="candy"] {
   --ch-light: #ffe6f0; --ch-dark: #f39cc2; --ch-coord-on-light: #e4789f; --ch-coord-on-dark: #fff2f7;
   --ch-last: rgba(160, 90, 255, 0.3); --ch-dot: rgba(150, 30, 90, 0.35); --ch-sel: rgba(160, 90, 255, 0.35);
+  --ch-pre: rgba(0, 160, 150, 0.55); --ch-pre-dot: rgba(0, 125, 120, 0.55);
 }
 :root[data-theme="dark"] [data-game="chess"][data-skin="candy"], :root[data-theme="dark"] [data-game="chess"] [data-skin="candy"] {
   --ch-light: #ffe6f0; --ch-dark: #f39cc2; --ch-coord-on-light: #e4789f; --ch-coord-on-dark: #fff2f7;
@@ -137,6 +141,9 @@
 @keyframes ch-blink { 50% { opacity: 0.4; } }
 /* партия с другом: подпись-подсказка не мигает; плашку можно нажать, пока ждём друга (показать ссылку) */
 [data-game="chess"] .ch-status-still { animation: none; }
+/* «ход заранее» у игрока — проявляется, когда ход задан */
+[data-game="chess"] .ch-status-pre:not(:empty) { animation: ch-pre 0.18s ease-out; }
+@keyframes ch-pre { from { opacity: 0; } }
 [data-game="chess"] .ch-player-link { cursor: pointer; }
 [data-game="chess"] .ch-player-link .ch-status { color: var(--tg-theme-link-color); }
 /* кнопка «проверить» лежит поверх правого края плашки и места в ней не занимает: у игры с ботом раскладка прежняя */
@@ -188,6 +195,11 @@
 [data-game="chess"] .ch-target::after { content: ''; position: absolute; inset: 36%; border-radius: 50%; background: var(--ch-dot); animation: ch-dot 0.16s ease-out; }
 [data-game="chess"] .ch-capture::after { inset: 3%; background: none; box-shadow: inset 0 0 0 max(3px, 0.9cqw) var(--ch-dot); }
 @keyframes ch-dot { from { transform: scale(0.3); opacity: 0; } }
+/* ход заранее (премув): свой цвет у полей заданного хода, у фигуры, выбранной в ход соперника, и у её точек */
+[data-game="chess"] .ch-premove { background: var(--ch-pre); }
+[data-game="chess"] .ch-selected.ch-pre { background: var(--ch-pre); }
+[data-game="chess"] .ch-target.ch-pre::after { background: var(--ch-pre-dot); }
+[data-game="chess"] .ch-capture.ch-pre::after { background: none; box-shadow: inset 0 0 0 max(3px, 0.9cqw) var(--ch-pre-dot); }
 
 [data-game="chess"] .ch-coord { position: absolute; font-size: max(9px, 2.4cqw); font-weight: 700; line-height: 1; }
 [data-game="chess"] .ch-coord-file { bottom: 2px; left: calc((var(--c) + 1) * 12.5% - 3px); transform: translateX(-100%); }
@@ -415,5 +427,6 @@
 @media (prefers-reduced-motion: reduce) {
   [data-game="chess"] .ch-piece { transition: none; }
   [data-game="chess"] .ch-status, [data-game="chess"] .ch-mated, [data-game="chess"] .ch-dots i { animation: none; }
+  [data-game="chess"] .ch-status-pre:not(:empty) { animation: none; }
   [data-game="chess"] .ch-refresh, [data-game="chess"] .ch-tab-icon { transition: none; }
 }

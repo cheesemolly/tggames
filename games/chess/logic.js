@@ -1,7 +1,11 @@
-// Партия без экрана: проверка сохранения, статистика по уровням, съеденные фигуры, запись ходов по-русски и
-// партия с другом по сети (проверка присланных ходов, итог). Отдельно от index.js — чтобы проверять в тестах без браузера.
+// Партия без экрана: проверка сохранения, статистика по уровням, съеденные фигуры, запись ходов по-русски,
+// партия с другом по сети (проверка присланных ходов, итог) и ход заранее (премув). Отдельно от index.js — чтобы
+// проверять в тестах без браузера.
 
-import { WHITE, BLACK, PAWN, KNIGHT, BISHOP, ROOK, QUEEN, START_FEN, typeOf, colorOf, fromFen, make, moveFromUci, outcome } from './rules.js';
+import {
+  WHITE, BLACK, PAWN, KNIGHT, BISHOP, ROOK, QUEEN, START_FEN, typeOf, colorOf, fromOf, toOf,
+  fromFen, make, unmake, legalMoves, findMove, moveFromUci, outcome,
+} from './rules.js';
 import { LEVELS } from './engine.js';
 import { RU_LETTER } from './pieces.js';
 
@@ -72,6 +76,33 @@ export function recordGame(stats, level, result) {
   else row.draws += 1;
   return stats;
 }
+
+// ---------- ход заранее — премув (в бете 'chess-premove') ----------
+
+/**
+ * Какие ходы можно задать заранее. pos — позиция перед ходом соперника (после вызова она прежняя). Ход годится, если
+ * станет законным хотя бы после одного ответа соперника: обычный ход, взятие фигуры, которая побьёт мою или встанет
+ * под бой, взятие на проходе, ход по линии, которую соперник освободит. Чего не случится ни при каком ответе, тут нет.
+ * → Map: клетка «откуда» → Set клеток «куда».
+ */
+export function premoveTargets(pos) {
+  const out = new Map();
+  for (const reply of legalMoves(pos)) {
+    make(pos, reply);
+    for (const m of legalMoves(pos)) {
+      if (!out.has(fromOf(m))) out.set(fromOf(m), new Set());
+      out.get(fromOf(m)).add(toOf(m));
+    }
+    unmake(pos);
+  }
+  return out;
+}
+
+/**
+ * Ход, заданный заранее ({ from, to }), после ответа соперника: законный ход или null — так пойти уже нельзя.
+ * Пешка превращается в ферзя: выбирать фигуру заранее не спрашиваем.
+ */
+export const premoveMove = (pos, pre, moves = legalMoves(pos)) => (pre ? findMove(pos, pre.from, pre.to, QUEEN, moves) : null);
 
 // ---------- партия с другом по сети (api.online; в бете 'chess-online') ----------
 

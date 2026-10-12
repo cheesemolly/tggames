@@ -11,6 +11,11 @@
 // ссылку на неё отправляют другу. Доска та же, но ходы уходят на сервер и приходят с него (опросом, пока ждём хода);
 // сервер правил не знает — присланные ходы проверяются здесь. Возврата хода и подсказок нет. Итог — своё окно и своя
 // строка статистики (в рейтинг не идёт). Партия с ботом на это время откладывается, её сохранение не трогается.
+//
+// Ход заранее — премув (в бете 'chess-premove'): пока ходит соперник (бот думает, друг ещё не походил), свой ход
+// можно задать заранее — так же, касанием или перетаскиванием. Поля хода подсвечиваются, и он играется сам сразу
+// после хода соперника, если по правилам ещё возможен; нет — просто снимается. Любое нажатие на доску его отменяет.
+// Задаётся один ход; пешка превращается в ферзя. Выключается в настройках.
 
 import { el } from '../../shared/dom.js';
 import { animate, showLayer, hideLayer, reducedMotion, shake } from '../../shared/motion.js';
@@ -20,13 +25,14 @@ import { createSounds } from './sounds.js';
 import {
   WHITE, BLACK, PAWN, KNIGHT, BISHOP, ROOK, QUEEN, FLAG, START_FEN,
   typeOf, colorOf, fileOf, rankOf, fromOf, toOf, promoOf, flagsOf, sqName, sqFrom,
-  fromFen, make, legalMoves, inCheck, outcome, san, uci, moveFromUci,
+  fromFen, make, legalMoves, inCheck, outcome, san, uci, moveFromUci, key,
 } from './rules.js';
 import { LEVELS, chooseMove, bestMove } from './engine.js';
 import { pieceSvg } from './pieces.js';
 import {
   HINTS_PER_GAME, emptyStats, isValidStats, isValidGame, capturedOf, ruSan, recordGame,
   onlineColor, rivalName, checkLine, onlineResult, onlineStats, recordOnline, isValidOnline,
+  premoveTargets, premoveMove,
 } from './logic.js';
 import { pointsInfo } from '../../shared/points-info.js';
 
@@ -108,6 +114,8 @@ const T = {
   boardTheme: 'Доска',
   pieceStyle: 'Фигуры',
   coords: 'Координаты на доске',
+  premoves: 'Ходы заранее (премувы)',
+  premoveSet: 'ход заранее',
   styles: { classic: 'С контуром', flat: 'Плоские' },
   wins: 'Побед',
   draws: 'Ничьих',
@@ -143,6 +151,8 @@ const ICONS = {
 };
 
 const COLORS = ['white', 'black', 'random'];
+const PREMOVE_MS = 220;         // ход заранее играется чуть погодя: сначала видно, как походил соперник
+const NO_SQUARES = new Set();
 
 let api = null;
 let host = null;
@@ -156,6 +166,8 @@ let sans = [];                 // запись ходов (SAN)
 let selected = -1;
 let drag = null;
 let promoPicker = null;         // открытый выбор фигуры при превращении
+let premove = null;             // ход заранее { from, to }: сыграется сам после хода соперника
+let preTargets = null;          // какие ходы можно задать заранее в этой позиции: { key, map } — считается при нажатии
 let busy = false;
 let over = null;
 let flipped = false;
@@ -164,7 +176,7 @@ let modalActive = false;
 let modalToken = 0;
 let modalName = '';             // какое окно открыто ('invite' закрывается само, когда друг пришёл)
 let soundOn = true;
-let settings = { theme: 'telegram', pieces: 'classic', coords: true };
+let settings = { theme: 'telegram', pieces: 'classic', coords: true, premoves: true };
 let setup = { level: 3, color: 'white', friend: 'random' };
 let stats = {};
 let net = null;                 // партия с другом по сети: { session, name, done, sending }; null — играем с ботом
@@ -172,6 +184,7 @@ let stored = null;              // запись 'online' в хранилище �
 let botGame = null;             // партия с ботом, отложенная на время игры с другом
 let worker = null;
 let requestId = 0;
+let manualBot = false;          // проверка (?chdebug): бот ходит только по команде window.__ch.reply()
 const els = new Map();          // клетка → элемент фигуры
 const timers = new Set();
 const audio = createAudio(createSounds);
@@ -226,6 +239,60 @@ function save() {
 const levelOf = (id) => LEVELS.find((l) => l.id === id) ?? LEVELS[2];
 const myTurn = () => !over && pos.turn === game.player && (!net || net.session.room.status === 'play');
 const bottomWhite = () => (game.player === WHITE) !== flipped;
+const isMine = (sq) => pos.board[sq] !== 0 && colorOf(pos.board[sq]) === game.player;
+
+// ---------- ход заранее (премув) ----------
+
+/** Сейчас ход соперника — и свой ход можно задать заранее (бета 'chess-premove'; выключается в настройках). */
+const canPremove = () => settings.premoves && Boolean(api?.feature('chess-premove'))
+  && !over && pos.turn !== game.player && (!net || net.session.room.status === 'play');
+
+/** Куда фигура с клетки sq сможет пойти после ответа соперника (на позицию считается один раз). */
+function premoveSquares(sq) {
+  const k = key(pos);
+  if (preTargets?.key !== k) preTargets = { key: k, map: premoveTargets(pos) };
+  return preTargets.map.get(sq) ?? NO_SQUARES;
+}
+
+function setPremove(from, to) {
+  premove = { from, to };
+  selected = -1;
+  sfx('select');
+  api.platform.haptic.selection();
+  paintMarks();
+  paintPlayers();
+  // поля проявляются один раз — здесь, а не в CSS: подсветки перерисовываются и при ходе соперника
+  for (const node of ui.marks.querySelectorAll('.ch-premove')) animate(node, [{ opacity: 0 }, { opacity: 1 }], { duration: 180, easing: 'ease-out' });
+}
+
+/** Снять ход, заданный заранее, и его подсветку. */
+function cancelPremove() {
+  if (!premove) return;
+  premove = null;
+  paintMarks();
+  paintPlayers();
+}
+
+/**
+ * Соперник походил: ход, заданный заранее, играется сам, если он ещё по правилам; иначе снимается. Играется чуть
+ * погодя — чтобы было видно ход соперника; нажатие на доску за это время его отменяет.
+ */
+function firePremove() {
+  if (!premove) return;
+  const pre = premove;
+  if (!myTurn() || !premoveMove(pos, pre, legal)) {
+    cancelPremove();
+    return;
+  }
+  later(() => {
+    if (premove !== pre || !game) return;
+    const m = myTurn() ? premoveMove(pos, pre, legal) : null;
+    if (m) {
+      premove = null;
+      playerMove(m);
+    } else cancelPremove();
+  }, reducedMotion() ? 0 : PREMOVE_MS);
+}
 
 // ---------- доска ----------
 
@@ -303,6 +370,7 @@ function animateMove(m) {
   const victimSq = flags & FLAG.ep ? to + (mover === WHITE ? -16 : 16) : to;
   const victim = els.get(victimSq);
   if (victim && victim !== node) {
+    if (drag?.node === victim) endDrag();                     // побили фигуру, которую несли (ход заранее)
     els.delete(victimSq);
     victim.classList.add('ch-taken');
     later(() => victim.remove(), reducedMotion() ? 0 : 240);
@@ -345,8 +413,16 @@ function paintMarks() {
     mark(fromOf(hintMove), 'ch-hint');
     mark(toOf(hintMove), 'ch-hint');
   }
+  if (premove) {
+    mark(premove.from, 'ch-premove');
+    mark(premove.to, 'ch-premove');
+  }
   if (inCheck(pos)) mark(pos.kings[pos.turn ? 1 : 0], over?.result === 'checkmate' ? 'ch-check ch-mated' : 'ch-check');
-  if (selected >= 0) {
+  if (selected >= 0 && canPremove()) {
+    // фигура выбрана в ход соперника — это ход заранее: свой цвет и поля, куда она сможет пойти после его ответа
+    mark(selected, 'ch-selected ch-pre');
+    for (const to of premoveSquares(selected)) mark(to, pos.board[to] ? 'ch-target ch-capture ch-pre' : 'ch-target ch-pre');
+  } else if (selected >= 0) {
     mark(selected, 'ch-selected');
     const seen = new Set();
     for (const m of legal) {
@@ -427,6 +503,7 @@ function paintPlayers() {
   ui.them.root.classList.toggle('ch-player-link', Boolean(net) && !net.done && !playing);
   ui.them.root.classList.toggle('ch-turn', !over && playing && pos.turn !== game.player);
   ui.me.root.classList.toggle('ch-turn', !over && playing && pos.turn === game.player);
+  ui.me.status.textContent = premove ? T.premoveSet : '';
   ui.hintBtn.querySelector('.ch-count').textContent = String(game.hints);
   ui.hintBtn.classList.toggle('ch-tool-off', Boolean(game.online));     // с другом подсказок нет — и счётчика тоже
   ui.hintBtn.disabled = !game.hints || Boolean(over) || !myTurn() || busy;
@@ -468,15 +545,22 @@ function paintAll() {
 // ---------- ввод ----------
 
 function onPointerDown(e) {
-  if (!game || busy || over || modalActive || promoPicker || (e.pointerType === 'mouse' && e.button !== 0)) return;
+  if (!game || over || modalActive || promoPicker || (e.pointerType === 'mouse' && e.button !== 0)) return;
+  const pre = canPremove();       // ход соперника: нажатия задают ход заранее
+  if (busy && !pre) return;
   const sq = sqAt(e.clientX, e.clientY);
   if (sq < 0) return;
   e.preventDefault();
   audio.get();
-  if (!myTurn()) return;
+  if (!pre && !myTurn()) return;
+  cancelPremove();                // любое нажатие на доску снимает ход, заданный заранее
   const p = pos.board[sq];
-  // фигура уже выбрана и нажали на поле, куда она ходит, — ходим
-  if (selected >= 0 && legal.some((m) => fromOf(m) === selected && toOf(m) === sq)) {
+  // фигура уже выбрана и нажали на поле, куда она ходит, — ходим (в ход соперника — запоминаем ход заранее)
+  if (selected >= 0 && pre && premoveSquares(selected).has(sq)) {
+    setPremove(selected, sq);
+    return;
+  }
+  if (selected >= 0 && !pre && legal.some((m) => fromOf(m) === selected && toOf(m) === sq)) {
     tryMove(selected, sq);
     return;
   }
@@ -531,8 +615,11 @@ function onPointerUp(e) {
   if (!d.moving) return;
   const lift = e.pointerType === 'touch' ? (ui.board.getBoundingClientRect().width / 8) * 0.45 : 0;
   const sq = sqAt(e.clientX, e.clientY - lift);
-  if (sq < 0 || sq === d.sq) return;
-  if (legal.some((m) => fromOf(m) === d.sq && toOf(m) === sq)) tryMove(d.sq, sq);
+  if (sq < 0 || sq === d.sq || over) return;
+  // пока фигуру несли, соперник мог походить — тогда это уже обычный ход, а не ход заранее
+  const pre = canPremove();
+  if (pre && premoveSquares(d.sq).has(sq)) setPremove(d.sq, sq);
+  else if (!pre && legal.some((m) => fromOf(m) === d.sq && toOf(m) === sq)) tryMove(d.sq, sq);
   else {
     sfx('illegal');
     shake(ui.board, { distance: 4, duration: 260 });
@@ -595,6 +682,7 @@ function applyMove(m, byBot) {
   const text = san(pos, m, legal);
   const capture = flagsOf(m) & FLAG.capture;
   make(pos, m);
+  if (selected >= 0 && !isMine(selected)) selected = -1;      // фигуру, выбранную в ход соперника, он мог побить
   game.moves.push(uci(m));
   sans.push(text);
   legal = legalMoves(pos);
@@ -676,6 +764,7 @@ async function botTurn() {
   if (!game || game.online) return;
   busy = true;
   paintPlayers();
+  if (manualBot) return;
   const token = requestId + 1;
   const started = performance.now();
   const u = await askEngine(game.level);
@@ -684,11 +773,19 @@ async function botTurn() {
   const wait = Math.max(0, 400 + Math.random() * 400 - (performance.now() - started));
   later(() => {
     if (!game || over || token !== requestId) return;
-    busy = false;
-    const m = moveFromUci(pos, u, legal);
-    if (m) applyMove(m, true);
-    else paintPlayers();
+    botMove(u);
   }, reducedMotion() ? 0 : wait);
+}
+
+/** Ход бота (UCI) на доске; следом играется ход игрока, заданный заранее. → сделан ли ход. */
+function botMove(u) {
+  busy = false;
+  const m = moveFromUci(pos, u, legal);
+  if (m) {
+    applyMove(m, true);
+    firePremove();
+  } else paintPlayers();
+  return Boolean(m);
 }
 
 // ---------- инструменты ----------
@@ -705,6 +802,7 @@ function onUndo() {
   game.moves.splice(-2, 2);
   selected = -1;
   hintMove = 0;
+  premove = null;
   rebuild();
   renderPieces();
   save();
@@ -718,6 +816,7 @@ async function onHint() {
     return;
   }
   if (over || !myTurn() || busy) return;
+  cancelPremove();                // попросил подсказку — значит, думает сам: ход заранее не играется
   busy = true;
   paintPlayers();
   const token = requestId + 1;
@@ -754,6 +853,7 @@ function onResign() {
 }
 
 function resign() {
+  cancelPremove();
   if (net) {
     resignOnline();
     return;
@@ -768,6 +868,7 @@ function resign() {
 function finish() {
   selected = -1;
   hintMove = 0;
+  premove = null;
   paintAll();
   api.storage.remove('current');
   const result = over.winner === undefined ? 'draw' : over.winner === game.player ? 'win' : 'lose';
@@ -936,6 +1037,7 @@ function startGame() {
   flipped = false;
   selected = -1;
   hintMove = 0;
+  premove = null;
   rebuild();
   buildSquares();
   renderPieces();
@@ -983,6 +1085,16 @@ function showSettings() {
     api.storage.set('settings', settings);
     paintCoords();
   });
+  const premoves = el('input', { type: 'checkbox', checked: settings.premoves });
+  premoves.addEventListener('change', () => {
+    settings.premoves = premoves.checked;
+    api.storage.set('settings', settings);
+    // выключили посреди хода соперника — заданный ход и выбор фигуры снимаются
+    premove = null;
+    if (!myTurn()) selected = -1;
+    paintMarks();
+    paintPlayers();
+  });
   const sample = (style) => {
     const node = el('span', { class: 'ch-style-sample' });
     node.innerHTML = pieceSvg(KNIGHT, false, style) + pieceSvg(KNIGHT, true, style);
@@ -1012,6 +1124,7 @@ function showSettings() {
         paintPlayers();
       })),
     el('label', { class: 'ch-toggle' }, coords, el('span', {}, T.coords)),
+    api.feature('chess-premove') ? el('label', { class: 'ch-toggle' }, premoves, el('span', {}, T.premoves)) : null,
     pointsInfo(api, 'chess'),
   ));
 }
@@ -1030,7 +1143,8 @@ function toolButton(icon, label, onclick, extra = null) {
 
 function playerBar(isBot) {
   const name = el('span', { class: 'ch-name' }, isBot ? T.bot : T.you);
-  const status = el('span', { class: 'ch-status' });
+  // у соперника подпись — «думает…» (мигает), у игрока — «ход заранее» (не мигает)
+  const status = el('span', { class: isBot ? 'ch-status' : 'ch-status ch-status-still ch-status-pre' });
   const caps = el('div', { class: 'ch-caps' });
   const avatar = el('span', { class: `ch-avatar${isBot ? ' ch-avatar-bot' : ''}` });
   if (isBot) avatar.innerHTML = ICONS.bot;
@@ -1086,6 +1200,7 @@ function enterRoom(room) {
   flipped = false;
   selected = -1;
   hintMove = 0;
+  premove = null;
   over = null;
   rebuild();
   over = line.over;
@@ -1110,14 +1225,17 @@ function syncRoom(room, was = null) {
   net.name = rivalName(room) ?? net.name;
   const local = game.moves;
   const agrees = room.moves.length >= local.length && local.every((u, i) => u === room.moves[i]);
+  let moved = false;
   if (agrees && room.moves.length === local.length + 1 && !over) {
-    selected = -1;
+    if (!canPremove()) selected = -1;                                        // фигура, выбранная для хода заранее, остаётся выбранной
     hintMove = 0;
     applyMove(moveFromUci(pos, room.moves[local.length], legal), true);    // ход соперника — с анимацией и звуком
+    moved = true;
   } else if (!agrees || room.moves.length !== local.length) {
     game.moves = room.moves.slice();                                         // разошлись с сервером — доска по его ходам
     selected = -1;
     hintMove = 0;
+    premove = null;
     closePromo();
     endDrag();
     rebuild();
@@ -1132,7 +1250,10 @@ function syncRoom(room, was = null) {
   }
   paintAll();
   if (room.status === 'over' || over) finishOnline();
-  else remember(room);
+  else {
+    remember(room);
+    if (moved) firePremove();
+  }
 }
 
 function onRoomGone() {
@@ -1183,6 +1304,7 @@ function finishOnline() {
   }
   selected = -1;
   hintMove = 0;
+  premove = null;
   closePromo();
   paintAll();
   forget();
@@ -1230,6 +1352,7 @@ function backToBot() {
   flipped = false;
   selected = -1;
   hintMove = 0;
+  premove = null;
   closePromo();
   rebuild();
   buildSquares();
@@ -1369,6 +1492,7 @@ export default {
       theme: THEMES.some((t) => t.id === savedSettings?.theme) ? savedSettings.theme : 'telegram',
       pieces: ['classic', 'flat'].includes(savedSettings?.pieces) ? savedSettings.pieces : 'classic',
       coords: savedSettings?.coords !== false,
+      premoves: savedSettings?.premoves !== false,
     };
     const knownSetup = savedSetup && LEVELS.some((l) => l.id === savedSetup.level) && COLORS.includes(savedSetup.color);
     if (knownSetup) setup = { level: savedSetup.level, color: savedSetup.color, friend: COLORS.includes(savedSetup.friend) ? savedSetup.friend : 'random' };
@@ -1472,7 +1596,17 @@ export default {
         },
         select: (name) => { selected = sqFrom(name); paintMarks(); },
         start: (next) => { setup = { ...setup, ...next }; closeModal(); startGame(); },
-        load: (g) => { requestId++; game = g; over = null; busy = false; rebuild(); buildSquares(); renderPieces(); paintAll(); },
+        load: (g) => { requestId++; game = g; over = null; busy = false; selected = -1; premove = null; rebuild(); buildSquares(); renderPieces(); paintAll(); },
+        // ход заранее: заданный ход, выбранная клетка, куда фигура может пойти заранее, чей ход
+        get premove() { return premove ? sqName(premove.from) + sqName(premove.to) : null; },
+        get selected() { return selected >= 0 ? sqName(selected) : null; },
+        get turn() { return !game || over ? null : pos.turn === game.player ? 'me' : 'them'; },
+        targets: (name) => (canPremove() ? [...premoveSquares(sqFrom(name))].map(sqName).sort() : null),
+        // бот по команде (для проверки хода заранее): manual() — сам больше не отвечает, reply(ход) — ответил;
+        // think() — «думает» в позиции, поставленной через load
+        manual: (on = true) => { manualBot = on; },
+        think: () => { requestId++; busy = true; paintPlayers(); },
+        reply: (u) => (game && !over && !myTurn() ? botMove(u) : false),
         promo: (from, to) => tryMove(sqFrom(from), sqFrom(to)),
         hint: () => onHint(),
         name: sqName,
@@ -1525,7 +1659,9 @@ export default {
     selected = -1;
     drag = null;
     promoPicker = null;
+    premove = preTargets = null;
     busy = false;
+    manualBot = false;
     modalActive = false;
     flipped = false;
     hintMove = 0;
