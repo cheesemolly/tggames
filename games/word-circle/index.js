@@ -152,6 +152,19 @@ const canPlay = () => Boolean(level && state && !done && !modalActive);
 const started = () => Boolean(state && (state.found.length || state.open.length || state.bonus.length));
 const saveState = () => state && !done && api?.storage.set('current', state);
 const saveProgress = () => api?.storage.set('progress', progress);
+
+/**
+ * Уровень пройден — начатое состояние больше не нужно. Стирать ключ нельзя: при слиянии прогресса у него побеждает
+ * больший уровень (server/merge.js), а стёртое — «ниже любого». Сервер возвращал пройденный уровень обратно, оболочка
+ * принимала это за прогресс с другого устройства и перезапускала игру посреди следующего уровня — ведение по буквам
+ * сбивалось. Вместо стирания — чистое состояние того же уровня (бета sync-quiet): оно записано позже и побеждает,
+ * а при входе не подходит — уровень в прогрессе уже следующий.
+ */
+function dropState() {
+  if (api.feature('sync-quiet')) api.storage.set('current', newState(n, level));
+  else api.storage.remove('current');
+}
+
 const letterAt = (slot) => level.letters[state.order[slot]];
 const wordOf = (slots) => slots.map(letterAt).join('');
 
@@ -729,7 +742,7 @@ function complete() {
   stats.levels += 1;
   saveProgress();
   api.storage.set('stats', stats);
-  api.storage.remove('current');
+  dropState();
   api.progress(T.level(progress.level));
   root.classList.add('wc-done');
   renderTools();

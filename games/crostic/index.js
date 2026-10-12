@@ -157,6 +157,18 @@ function saveState() {
   if (state.open.length > level.start.length || state.mistakes || state.hints) api?.storage.set('current', state);
 }
 
+/**
+ * Уровень закончен (пройден или проигран) — начатое состояние больше не нужно. Стирать ключ нельзя: при слиянии
+ * прогресса у него побеждает больший уровень (server/merge.js), а стёртое — «ниже любого». Сервер возвращал начатое
+ * обратно, оболочка принимала это за прогресс с другого устройства и перезапускала игру: окно с итогом пропадало,
+ * а проигранный уровень продолжался с прежнего места. Вместо стирания — чистое состояние того же уровня
+ * (бета sync-quiet): оно записано позже и побеждает.
+ */
+function dropState() {
+  if (level && api.feature('sync-quiet')) api.storage.set('current', newState(n, level));
+  else api.storage.remove('current');
+}
+
 // ---------- страница уровня ----------
 
 const POP_IN = [{ opacity: 0, scale: 0.3 }, { opacity: 1, scale: 1.25, offset: 0.6 }, { opacity: 1, scale: 1 }];
@@ -468,7 +480,7 @@ function completeLevel() {
   if (stars === 3) stats.perfect += 1;
   saveProgress();
   saveStats();
-  api.storage.remove('current');
+  dropState();
   reportProgress();
   // фраза открыта — по ней пробегает волна, потом итог
   const phraseCells = cells.filter((c) => groups[c.g].zone === 'phrase');
@@ -514,7 +526,7 @@ function failLevel() {
   finished = true;
   stats.fails += 1;
   saveStats();
-  api.storage.remove('current');
+  dropState();
   later(() => {
     if (!ui) return;
     sfx('fail');
@@ -666,7 +678,7 @@ function debugHooks() {
     goto(num) {
       progress.level = Math.max(1, Math.floor(num));
       saveProgress();
-      api.storage.remove('current');
+      dropState();
       reportProgress();
       startLevel(progress.level);
     },

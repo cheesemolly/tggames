@@ -381,3 +381,114 @@ test('Wordle: партия на EN с одного устройства и на 
   assert.deepEqual(a.local('game:wordle:boards'), want);
   assert.deepEqual(b.local('game:wordle:boards'), want);
 });
+
+// ---------- начатый уровень «Круга слов» и «Кростика» (бета sync-quiet) ----------
+//
+// Начатый уровень (current) у них сливается по большему уровню, а стёртое при таком слиянии — «ниже любого». Пройдя
+// уровень, игра стирала начатое; сервер возвращал его обратно, оболочка принимала это за прогресс с другого устройства
+// и перезапускала игру через несколько секунд после начала следующего уровня (владелец, 2026-10-12: «когда я уже веду
+// по буквам и появляется эта надпись, ведение сбивается»). Теперь игра кладёт на место начатого чистое состояние
+// того же уровня: оно записано позже и побеждает.
+
+const wcState = (level, found = []) => ({ v: 1, level, found, open: [], bonus: [], order: [0, 1, 2, 3, 4] });
+
+/** Телефон играет 16-й уровень «Круга слов»: начатое уже на сервере, найдено последнее слово. */
+async function wordCirclePhone() {
+  const srv = await server();
+  const phone = device(srv, 'phone-device-02');
+  await phone.run((sync) => sync.pull());
+  const game = openGame(phone, 'word-circle');
+  await phone.run(async (sync) => {
+    await game.start();
+    game.state = wcState(16, [0]);
+    await game.save();
+    await sync.push();                                     // начатый уровень уехал на сервер
+    game.state = wcState(16, [0, 1]);                      // последнее слово
+    await game.save();
+    await createStorage('game:word-circle').set('progress', { level: 17, coins: 128 });
+  });
+  return { srv, phone, game };
+}
+
+test('уровень пройден, начатое стёрто (как было): сервер возвращает его, открытая игра перезапускается', async () => {
+  const { srv, phone, game } = await wordCirclePhone();
+  await phone.run(async (sync) => {
+    await game.storage.remove('current');
+    await sync.push();
+  });
+  assert.equal(phone.restarts, 1, 'игру перезапустило собственное стирание — другого устройства не было');
+  assert.deepEqual(game.state, wcState(16, [0]), 'на устройство вернулось то, что лежало на сервере');
+  assert.deepEqual((await srv.state())['game:word-circle:current'], wcState(16, [0]));
+});
+
+test('уровень пройден, вместо стирания — чистое состояние того же уровня: сервер его принимает, игра не перезапускается', async () => {
+  const { srv, phone, game } = await wordCirclePhone();
+  await phone.run(async (sync) => {
+    game.state = wcState(16);
+    await game.save();
+    await sync.push();
+  });
+  assert.equal(phone.restarts, 0);
+  assert.deepEqual((await srv.state())['game:word-circle:current'], wcState(16));
+  assert.equal((await srv.state())['game:word-circle:progress'].level, 17);
+  // первое слово следующего уровня — уровень больше, побеждает
+  await phone.run(async (sync) => {
+    game.state = wcState(17, [2]);
+    await game.save();
+    await sync.push();
+  });
+  assert.equal(phone.restarts, 0);
+  assert.deepEqual((await srv.state())['game:word-circle:current'], wcState(17, [2]));
+});
+
+test('«Кростик», уровень проигран: чистое состояние того же уровня побеждает начатое — попытки не возвращаются', async () => {
+  const srv = await server();
+  const phone = device(srv, 'phone-device-02');
+  await phone.run((sync) => sync.pull());
+  const game = openGame(phone, 'crostic');
+  await phone.run(async (sync) => {
+    await game.start();
+    game.state = { v: 1, level: 5, open: 'ьтиш', mistakes: 2, hints: 0 };
+    await game.save();
+    await sync.push();                                     // две ошибки — на сервере
+    game.state = { v: 1, level: 5, open: 'ь', mistakes: 0, hints: 0 };   // пятая ошибка: уровень заново
+    await game.save();
+    await sync.push();
+  });
+  assert.equal(phone.restarts, 0);
+  assert.deepEqual((await srv.state())['game:crostic:current'], { v: 1, level: 5, open: 'ь', mistakes: 0, hints: 0 });
+  assert.equal(phone.local('game:crostic:current').mistakes, 0, 'и на устройстве уровень начат заново');
+});
+
+test('ПК уже на следующем уровне, телефон проходит прошлый: чистое состояние пройденного начатое на ПК не затирает', async () => {
+  const srv = await server();
+  const pc = device(srv, 'pc-device-0001');
+  const phone = device(srv, 'phone-device-02');
+  pc.put('game:word-circle:current', wcState(16, [0]));
+  await pc.run((sync) => sync.pull());
+  await phone.run((sync) => sync.pull());
+  const onPhone = openGame(phone, 'word-circle');
+  await phone.run(() => onPhone.start());
+  assert.deepEqual(onPhone.state, wcState(16, [0]));
+
+  // ПК прошёл 16-й (чистое состояние пройденного) и нашёл слово на 17-м
+  const onPc = openGame(pc, 'word-circle');
+  await pc.run(async (sync) => {
+    await onPc.start();
+    onPc.state = wcState(16);
+    await onPc.save();
+    onPc.state = wcState(17, [2]);
+    await onPc.save();
+    await sync.push();
+  });
+  // телефон, не зная об этом, тоже проходит 16-й
+  await phone.run(async (sync) => {
+    onPhone.state = wcState(16);
+    await onPhone.save();
+    await sync.push();
+  });
+  assert.deepEqual((await srv.state())['game:word-circle:current'], wcState(17, [2]), 'на сервере — начатый 17-й с ПК');
+  assert.equal(phone.restarts, 1, 'телефон перезапущен: это настоящий прогресс с другого устройства');
+  assert.deepEqual(onPhone.state, wcState(17, [2]));
+  assert.equal(pc.restarts, 0);
+});

@@ -313,7 +313,8 @@ async function adoptFresh(apply, keys = null) {
   await apply();
   if (hit && session === game) await game.reload();
   else if (['menu', 'folder', 'games', 'profile', 'top'].includes(currentRoute().name)) redraw();
-  if (!keys || hit) toast.show('Прогресс обновлён с другого устройства', 2600);
+  // надпись больше не показывается (бета sync-quiet; владелец: «в играх очень мешает») — она ложилась на шапку игры
+  if ((!keys || hit) && !feature('sync-quiet')) toast.show('Прогресс обновлён с другого устройства', 2600);
 }
 
 // Вернулись в приложение — перечитать прогресс (бета sync-refresh; sync.refresh сам проверяет флаг и не

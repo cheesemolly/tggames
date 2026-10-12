@@ -4,6 +4,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import {
   RULES, ruleFor, kindAt, mergeEntry, sameEntry, absorb, legacyEntry, loadDoc, saveDoc, applyPush, applyAdmin,
@@ -504,6 +505,44 @@ test('Филворд: партия с большим уровнем побежд
   assert.equal(doc.k[key].v.level, 30, 'старая партия с другого устройства уровень не откатывает');
   doc = applyPush(doc, { device: A, seq: 1, keys: { [key]: { v: { level: 30, size: 5, found: [] }, e: 1000 } } }, 3000).doc;
   assert.equal(doc.k[key].v.size, 5, 'сменил размер на том же уровне — новое поле');
+});
+
+// ---------- начатый уровень нельзя стирать ----------
+
+test('начатый уровень: стирание проигрывает значению с уровнем, чистое состояние того же уровня — побеждает', () => {
+  const key = 'game:word-circle:current';
+  const started = { v: 1, level: 16, found: [0], open: [], bonus: [], order: [0, 1, 2] };
+  const fresh = { v: 1, level: 16, found: [], open: [], bonus: [], order: [0, 1, 2] };
+  let doc = loadDoc({ [key]: started }, null, 1000);
+  const erased = applyPush(doc, { device: A, seq: 1, keys: { [key]: { del: 1, e: 1000 } } }, 2000);
+  assert.deepEqual(erased.doc.k[key].v, started, 'стёртое — «ниже любого уровня»: на сервере остаётся начатое');
+  assert.deepEqual(erased.changed, []);
+  doc = applyPush(doc, { device: A, seq: 1, keys: { [key]: { v: fresh, e: 1000 } } }, 2000).doc;
+  assert.deepEqual(doc.k[key].v, fresh, 'чистое состояние того же уровня записано позже — побеждает');
+  doc = applyPush(doc, { device: B, seq: 1, keys: { [key]: { v: { ...started, level: 17 }, e: 1000 } } }, 3000).doc;
+  doc = applyPush(doc, { device: A, seq: 2, keys: { [key]: { v: fresh, e: 1000 } } }, 4000).doc;
+  assert.equal(doc.k[key].v.level, 17, 'начатый следующий уровень с другого устройства чистым состоянием прошлого не затирается');
+});
+
+// Поэтому ключ, который сливается по большему уровню или по полям, игра не стирает: стирание такого ключа слияние не
+// принимает, сервер вернул бы прежнее значение, а оболочка, приняв его за прогресс с другого устройства, перезапустила
+// бы игру (так было в «Круге слов» и «Кростике» после каждого пройденного уровня). Вместо стирания — чистое состояние
+// того же уровня (dropState в игре). Стирание остаётся только старым путём (ветка else) — у игроков, пока бета
+// sync-quiet не выпущена.
+test('ключи, которые сливаются по уровню или по полям, игры не стирают', () => {
+  let levels = 0;
+  for (const [pattern, rule] of RULES) {
+    const m = pattern.match(/^game:([^:]+):([^:*]+)$/);
+    if (!m || (rule.type !== 'level' && rule.type !== 'fields')) continue;
+    const [, id, name] = m;
+    const source = readFileSync(new URL(`../../games/${id}/index.js`, import.meta.url), 'utf8');
+    for (const line of source.split('\n')) {
+      if (!line.includes(`storage.remove('${name}')`)) continue;
+      assert.match(line, /^\s*else /, `${id}: «${line.trim()}» — стирание ключа «${name}» слияние не примет (правило ${rule.type})`);
+    }
+    if (rule.type === 'level') levels += 1;
+  }
+  assert.ok(levels >= 5, 'правила «больший уровень» на месте');
 });
 
 // ---------- Wordle: партии по языкам ----------
