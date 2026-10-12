@@ -185,6 +185,34 @@ function birds(g, w, h, seed, color) {
   }
 }
 
+// ---------- город в цветах темы ----------
+
+/** Площадка во дворе: фонари с двумя лампами и сетчатый забор вдоль земли. */
+function courtyard(g, p, w, h) {
+  for (const x of [58, 236]) {
+    halo(g, x, h - 80, 30, p.lit, 0.42);
+    g.fillStyle = p.deco;
+    g.fillRect(x - 0.8, h - 80, 1.6, 80);
+    g.fillRect(x - 7, h - 81, 14, 1.6);
+    circle(g, x - 6, h - 78.6, 2, p.lit);
+    circle(g, x + 6, h - 78.6, 2, p.lit);
+  }
+  g.strokeStyle = fade(p.deco, 0.55);
+  g.lineWidth = 0.6;
+  g.beginPath();
+  for (let x = -20; x < w + 20; x += 7) {
+    g.moveTo(x, h - 4);
+    g.lineTo(x + 20, h - 24);
+    g.moveTo(x, h - 24);
+    g.lineTo(x + 20, h - 4);
+  }
+  g.stroke();
+  g.fillStyle = p.deco;
+  g.fillRect(0, h - 25, w, 1.5);
+  for (let x = 12; x < w; x += 46) g.fillRect(x, h - 25, 1.6, 25);
+  g.fillRect(0, h - 4, w, 4);
+}
+
 // ---------- двор на закате ----------
 
 function yardNear(g, p, w, h) {
@@ -908,8 +936,7 @@ export const SCENES = {
           win: { w: 4, h: 5.4, gx: 10, gy: 13, share: 0.1, colors: [p.lit, p.lit2] },
         });
         for (const [x, s] of [[14, 52], [84, 64], [150, 48], [206, 70], [270, 56]]) tree(g, x, h, s, p.deco3);
-        g.fillStyle = p.deco3;
-        g.fillRect(0, h - 5, w, 5);
+        courtyard(g, p, w, h);
       } },
       CLOUDS(0.3, 460, 3600, 250, [150, 230], 4),
     ],
