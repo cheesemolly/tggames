@@ -328,7 +328,7 @@ async function cases() {
   const g = {};
   for (const id of ['flags', 'checkers', 'flappy-burger', 'bongo-cat', 'snake', 'memory', 'bubble-shooter', 'brick-blast',
     'loop', 'connect-dots', 'mahjong', '2048', 'boggle', 'block-blast', 'sudoku', 'tictactoe', 'wordle', 'chess', 'spider', 'klondike',
-    'minesweeper', 'fifteen', 'rubik', 'hanoi', 'repair', 'arkanoid', 'erudit', 'billiards', 'cities', 'word-circle', 'subwords', 'crostic', 'alchemy', 'logic-gates', 'jump-up']) {
+    'minesweeper', 'fifteen', 'rubik', 'hanoi', 'repair', 'arkanoid', 'erudit', 'billiards', 'cities', 'word-circle', 'subwords', 'crostic', 'alchemy', 'logic-gates', 'jump-up', 'basketball']) {
     g[id] = await mod(id);
   }
   const pinball = await mod('pinball', 'rules.js');
@@ -338,6 +338,7 @@ async function cases() {
     ['game:checkers:stats', g.checkers.emptyStats(), g.checkers.isValidStats],
     ['game:flappy-burger:stats', g['flappy-burger'].emptyStats(), g['flappy-burger'].isValidStats],
     ['game:jump-up:stats', g['jump-up'].emptyStats(), g['jump-up'].isValidStats],
+    ['game:basketball:stats', g.basketball.emptyStats(), g.basketball.isValidStats],
     ['game:bongo-cat:stats', g['bongo-cat'].emptyStats(), g['bongo-cat'].isValidStats],
     ['game:snake:stats', { ...g.snake.emptyStats() }, g.snake.isValidStats],
     ['game:memory:stats', g.memory.emptyStats(), g.memory.isValidStats],

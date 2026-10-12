@@ -213,6 +213,7 @@ const GAMES = [
   { id: 'alchemy', title: 'Алхимия', emoji: '🟡', about: 'смешивай элементы и открывай новые: вода + огонь = пар; больше 1100 элементов, задания и звания', rating: false },
   { id: 'logic-gates', title: 'Логические схемы', emoji: '🟡', about: 'расставь вентили И, ИЛИ и НЕ, чтобы зажглась лампа: 100 схем, звёзды — с какого включения получилось' },
   { id: 'jump-up', title: 'Прыгалка вверх', emoji: '🟡', about: 'каракуля сама прыгает по платформам — веди её вверх: пружинки, бумажный самолётик, кляксы и двойки', beta: true },
+  { id: 'basketball', title: 'Баскетбол', emoji: '🟢', about: 'тяни мяч назад, как рогатку, и бросай из корзины в корзину: чистые попадания подряд зажигают мяч', beta: true },
 ];
 
 const fold = (text) => String(text ?? '').toLowerCase().replace(/ё/g, 'е').trim();
@@ -548,6 +549,7 @@ const BOARDS = {
   pinball: { by: 'рекорд', score: shellStats('pinball', 'best'), text: POINTS },
   // Прыгалка вверх: рекорд высоты — сколько клеток листа набрано за одну игру
   'jump-up': { by: 'рекорд высоты', score: shellStats('jump-up', 'best'), text: count(['клетка', 'клетки', 'клеток']) },
+  basketball: { by: 'рекорд', score: shellStats('basketball', 'best'), text: POINTS },
 };
 
 const MAX_SCORE = 1e9;   // больше — явно испорченные данные
@@ -583,6 +585,7 @@ const BOARD_LIMITS = {
   subwords: 300,              // не больше трёх звёзд за тему, тем не больше ста
   'logic-gates': 300,         // три звезды за каждый из ста уровней
   'jump-up': 1e5,             // клеток по высоте: это часы подъёма без единой ошибки
+  basketball: 1e5,            // за бросок — не больше 20 очков: это тысячи корзин без промаха
 };
 // побед не может быть больше сыгранных партий
 const WINS_FROM = { checkers: 'checkers', mahjong: 'mahjong', sudoku: 'sudoku', wordle: 'wordle', tictactoe: 'tictactoe', chess: 'chess', spider: 'spider', klondike: 'klondike', 'killer-sudoku': 'killer-sudoku', go: 'go', minesweeper: 'minesweeper', fifteen: 'fifteen', rubik: 'rubik', hanoi: 'hanoi', erudit: 'erudit', billiards: 'billiards', cities: 'cities' };
@@ -1135,6 +1138,9 @@ const RULES = [
   ['game:flappy-burger:stats', { type: 'fields', fields: { games: 'count', best: 'max', total: 'count', streets: 'count' } }],
   ['game:jump-up:stats', { type: 'fields', fields: {
     games: 'count', best: 'max', cells: 'count', jumps: 'count', springs: 'count', stomps: 'count', flights: 'count',
+  } }],
+  ['game:basketball:stats', { type: 'fields', fields: {
+    games: 'count', best: 'max', baskets: 'count', clean: 'count', banks: 'count', streak: 'max', fires: 'count',
   } }],
   ['game:bongo-cat:stats', { type: 'fields', fields: { hits: 'count', meows: 'count', songs: 'count', 'by.*': 'count' } }],
   ['game:snake:stats', { type: 'fields', fields: {

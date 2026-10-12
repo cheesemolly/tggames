@@ -116,6 +116,10 @@ export const GAME_ICONS = {
   'jump-up': svg('<path d="M3.5 20h7.5" stroke-width="2.6"/><path d="M13 13.4h7.5" stroke-width="2.6"/>'
     + '<path d="M7.2 17.2c.2-6.4 3.2-10.6 6.6-11.4" stroke-dasharray="1.4 2.6" opacity="0.6"/>'
     + '<circle cx="17" cy="7" r="3.1" fill="currentColor" stroke="none"/>'),
+  // баскетбол: мяч над кольцом с сеткой
+  basketball: svg('<circle cx="12" cy="5.6" r="3.4" fill="currentColor" stroke="none"/>'
+    + '<ellipse cx="12" cy="12.4" rx="7.8" ry="2.3" stroke-width="2"/>'
+    + '<path d="M5.4 14.2 8.2 21h7.6l2.8-6.8"/><path d="M9.6 14.9 10.6 21M14.4 14.9 13.4 21M6.9 17.6h10.2" opacity="0.5"/>'),
   arkanoid: svg('<rect x="2.6" y="3.4" width="5.2" height="3.4" rx="1"/><rect x="9.4" y="3.4" width="5.2" height="3.4" rx="1"/>'
     + '<rect x="16.2" y="3.4" width="5.2" height="3.4" rx="1"/><rect x="6" y="8.4" width="5.2" height="3.4" rx="1" opacity="0.5"/>'
     + '<rect x="12.8" y="8.4" width="5.2" height="3.4" rx="1" opacity="0.5"/>'

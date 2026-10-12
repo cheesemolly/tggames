@@ -1,0 +1,331 @@
+/*
+ * Баскетбол. Игра — сцена на Canvas (render.js): небо и слои с глубиной, корзины, мяч-шар, пунктир прицела,
+ * огонь серии. Все цвета — переменные --bk-* скина, холст читает их через пробный элемент.
+ * Цвета сцены: sky0…sky4 — небо от земли вверх; far, mid, near — дальний, средний и ближний планы; lit, lit2 —
+ * огни; orb, orb2 — светило и его сияние; cloud, cloud2 — облака (на арене — зрители); star; deco… — своё у сцены.
+ * Скин «telegram» (по умолчанию): сцена, сетка и кнопки — из цветов темы, кольцо — цвета кнопки; мяч и огонь —
+ * игровые цвета, заданы для обеих тем. Остальные скины — свои площадки, одинаковые в обеих темах.
+ */
+
+[data-game="basketball"], [data-game="basketball"] [data-skin="telegram"] {
+  --bk-bg: var(--tg-theme-bg-color);
+  --bk-text: var(--tg-theme-text-color);
+  --bk-hint: var(--tg-theme-hint-color);
+  --bk-panel: var(--tg-theme-secondary-bg-color);
+  --bk-accent: var(--tg-theme-button-color);
+  --bk-accent-text: var(--tg-theme-button-text-color);
+  --bk-sky0: color-mix(in srgb, var(--tg-theme-button-color) 24%, var(--tg-theme-bg-color));
+  --bk-sky1: color-mix(in srgb, var(--tg-theme-button-color) 13%, var(--tg-theme-bg-color));
+  --bk-sky2: color-mix(in srgb, var(--tg-theme-button-color) 5%, var(--tg-theme-bg-color));
+  --bk-sky3: var(--tg-theme-bg-color);
+  --bk-sky4: color-mix(in srgb, var(--tg-theme-text-color) 4%, var(--tg-theme-bg-color));
+  --bk-far: color-mix(in srgb, var(--tg-theme-text-color) 10%, var(--tg-theme-bg-color));
+  --bk-mid: color-mix(in srgb, var(--tg-theme-text-color) 17%, var(--tg-theme-bg-color));
+  --bk-near: color-mix(in srgb, var(--tg-theme-text-color) 26%, var(--tg-theme-bg-color));
+  --bk-lit: var(--tg-theme-button-color);
+  --bk-lit2: color-mix(in srgb, var(--tg-theme-button-color) 55%, var(--tg-theme-bg-color));
+  --bk-orb: color-mix(in srgb, var(--tg-theme-button-color) 62%, var(--tg-theme-bg-color));
+  --bk-orb2: var(--tg-theme-button-color);
+  --bk-cloud: color-mix(in srgb, var(--tg-theme-text-color) 13%, var(--tg-theme-bg-color));
+  --bk-cloud2: color-mix(in srgb, var(--tg-theme-text-color) 6%, var(--tg-theme-bg-color));
+  --bk-star: color-mix(in srgb, var(--tg-theme-text-color) 60%, var(--tg-theme-bg-color));
+  --bk-deco: color-mix(in srgb, var(--tg-theme-text-color) 40%, var(--tg-theme-bg-color));
+  --bk-deco2: color-mix(in srgb, var(--tg-theme-button-color) 40%, var(--tg-theme-bg-color));
+  --bk-deco3: color-mix(in srgb, var(--tg-theme-text-color) 31%, var(--tg-theme-bg-color));
+  --bk-ghost: var(--tg-theme-text-color);
+  --bk-rail: var(--tg-theme-text-color);
+  --bk-rim: var(--tg-theme-button-color);
+  --bk-rim2: color-mix(in srgb, var(--tg-theme-button-color) 52%, var(--tg-theme-text-color));
+  --bk-net: color-mix(in srgb, var(--tg-theme-text-color) 86%, var(--tg-theme-bg-color));
+  --bk-net2: color-mix(in srgb, var(--tg-theme-text-color) 40%, var(--tg-theme-bg-color));
+  --bk-aim: var(--tg-theme-text-color);
+  --bk-ink: var(--tg-theme-text-color);
+  --bk-ink2: var(--tg-theme-bg-color);
+  --bk-ball: #f08a2c;
+  --bk-ball2: #3b1a08;
+  --bk-ball3: #ffffff;
+  --bk-ball4: #2f6fd6;
+  --bk-gloss: #ffffff;
+  --bk-fire1: #e23b1f;
+  --bk-fire2: #ff8a1f;
+  --bk-fire3: #ffd84a;
+  --bk-hot1: #2747e6;
+  --bk-hot2: #3fb4ff;
+  --bk-hot3: #e8fbff;
+  --bk-smoke: #9a9ca6;
+  --bk-spark: #f2a51e;
+}
+:root[data-theme="dark"] [data-game="basketball"]:not([data-skin]),
+:root[data-theme="dark"] [data-game="basketball"][data-skin="telegram"],
+:root[data-theme="dark"] [data-game="basketball"] [data-skin="telegram"] {
+  --bk-ball: #f59636;
+  --bk-ball2: #2e1405;
+  --bk-ball3: #ffffff;
+  --bk-ball4: #4d8df0;
+  --bk-gloss: #ffffff;
+  --bk-fire1: #f0452a;
+  --bk-fire2: #ff9a2e;
+  --bk-fire3: #ffe26a;
+  --bk-hot1: #3d5cff;
+  --bk-hot2: #52c2ff;
+  --bk-hot3: #f0fdff;
+  --bk-smoke: #8d909e;
+  --bk-spark: #ffcf4a;
+}
+/* Двор — закат над панельными домами: провода с птицами, фонарь, кирпичный забор; трёхцветный уличный мяч */
+[data-game="basketball"][data-skin="yard"], [data-game="basketball"] [data-skin="yard"] {
+  --bk-bg: #2c1d47; --bk-text: #fff1e6; --bk-hint: #cfa9c4; --bk-panel: #43295f; --bk-accent: #ff8a4a; --bk-accent-text: #2b1220;
+  --bk-sky0: #ffc77d; --bk-sky1: #ff9a6c; --bk-sky2: #e2688d; --bk-sky3: #6f4897; --bk-sky4: #1b1d4f;
+  --bk-far: #cf7391; --bk-mid: #83487f; --bk-near: #45305e; --bk-lit: #ffe08a; --bk-lit2: #ff9b5e;
+  --bk-orb: #fff3c4; --bk-orb2: #ffd27a; --bk-cloud: #ffe3d2; --bk-cloud2: #ee9aa6; --bk-star: #fff6dc;
+  --bk-deco: #291c40; --bk-deco2: #ff6f61; --bk-deco3: #6a3c66;
+  --bk-ghost: #ffffff; --bk-rail: #ffffff; --bk-rim: #ff6f3d; --bk-rim2: #6e2416; --bk-net: #ffffff; --bk-net2: #c7a2b8;
+  --bk-aim: #ffffff; --bk-ink: #ffffff; --bk-ink2: #331c40;
+  --bk-ball: #e8433a; --bk-ball2: #1e1830; --bk-ball3: #f6f0e6; --bk-ball4: #2f62c9; --bk-gloss: #ffffff;
+  --bk-fire1: #ff4a26; --bk-fire2: #ffa02e; --bk-fire3: #fff07a; --bk-hot1: #3b5bff; --bk-hot2: #52c2ff; --bk-hot3: #f0fdff;
+  --bk-smoke: #d6c2cc; --bk-spark: #ffe27a;
+}
+/* Арена — паркет, трибуны со вспышками камер, куб с табло, прожекторы под крышей; классический мяч */
+[data-game="basketball"][data-skin="arena"], [data-game="basketball"] [data-skin="arena"] {
+  --bk-bg: #14152a; --bk-text: #f3efe6; --bk-hint: #9d98b8; --bk-panel: #21223f; --bk-accent: #ff5a3a; --bk-accent-text: #ffffff;
+  --bk-sky0: #5a3823; --bk-sky1: #3a2a35; --bk-sky2: #22203b; --bk-sky3: #15162c; --bk-sky4: #0b0c1c;
+  --bk-far: #4a4770; --bk-mid: #353257; --bk-near: #181730; --bk-lit: #fff2c0; --bk-lit2: #ffc45e;
+  --bk-orb: #ffffff; --bk-orb2: #8fc8ff; --bk-cloud: #cfc3dd; --bk-cloud2: #746a96; --bk-star: #ffffff;
+  --bk-deco: #c8321f; --bk-deco2: #2a6fd0; --bk-deco3: #d9a05b;
+  --bk-ghost: #ffffff; --bk-rail: #ffffff; --bk-rim: #ff5a3a; --bk-rim2: #6e1a10; --bk-net: #ffffff; --bk-net2: #8a84a8;
+  --bk-aim: #ffffff; --bk-ink: #ffffff; --bk-ink2: #121226;
+  --bk-ball: #f08a2c; --bk-ball2: #2e1405; --bk-ball3: #ffffff; --bk-ball4: #2f6fd6; --bk-gloss: #ffffff;
+  --bk-fire1: #f0452a; --bk-fire2: #ff9a2e; --bk-fire3: #ffe26a; --bk-hot1: #3d5cff; --bk-hot2: #52c2ff; --bk-hot3: #f0fdff;
+  --bk-smoke: #9794ad; --bk-spark: #ffd45a;
+}
+/* Ночь — неоновый город: вывески, огни в окнах, луна; неоновые кольцо и мяч */
+[data-game="basketball"][data-skin="night"], [data-game="basketball"] [data-skin="night"] {
+  --bk-bg: #0f1230; --bk-text: #eef1ff; --bk-hint: #8f98c4; --bk-panel: #1b1f47; --bk-accent: #ff3d9a; --bk-accent-text: #ffffff;
+  --bk-sky0: #4d2070; --bk-sky1: #2d1b5e; --bk-sky2: #181845; --bk-sky3: #0d1030; --bk-sky4: #06081c;
+  --bk-far: #34337e; --bk-mid: #1f1d56; --bk-near: #121136; --bk-lit: #5fe3ff; --bk-lit2: #ff5fae;
+  --bk-orb: #f3ecff; --bk-orb2: #b79cff; --bk-cloud: #33276e; --bk-cloud2: #7a3a9a; --bk-star: #e6ecff;
+  --bk-deco: #ffd76a; --bk-deco2: #ff3d9a; --bk-deco3: #7b5cff;
+  --bk-ghost: #ffffff; --bk-rail: #ffffff; --bk-rim: #ff3d9a; --bk-rim2: #6b1a42; --bk-net: #7deaff; --bk-net2: #2f7190;
+  --bk-aim: #ffffff; --bk-ink: #ffffff; --bk-ink2: #0c0e26;
+  --bk-ball: #c6ff3d; --bk-ball2: #1f3a08; --bk-ball3: #f4ffd0; --bk-ball4: #7fb81e; --bk-gloss: #ffffff;
+  --bk-fire1: #ff4a2e; --bk-fire2: #ff9a2e; --bk-fire3: #fff07a; --bk-hot1: #4a5cff; --bk-hot2: #5fd0ff; --bk-hot3: #f4feff;
+  --bk-smoke: #7f88ad; --bk-spark: #fff07a;
+}
+/* Пляж — море с дорожкой солнца, пальмы, воздушные шары и змей; надувной мяч */
+[data-game="basketball"][data-skin="beach"], [data-game="basketball"] [data-skin="beach"] {
+  --bk-bg: #1c6fc9; --bk-text: #ffffff; --bk-hint: #cfe6ff; --bk-panel: #2a82de; --bk-accent: #ffd34d; --bk-accent-text: #4a3200;
+  --bk-sky0: #d9f6ff; --bk-sky1: #8fdcff; --bk-sky2: #47b0f7; --bk-sky3: #1f6fd6; --bk-sky4: #0b2a6b;
+  --bk-far: #84c3e6; --bk-mid: #2aa7c9; --bk-near: #f2d79b; --bk-lit: #fff7d6; --bk-lit2: #ffd34d;
+  --bk-orb: #fffbe6; --bk-orb2: #fff0a8; --bk-cloud: #ffffff; --bk-cloud2: #d2ecff; --bk-star: #ffffff;
+  --bk-deco: #1f7a4d; --bk-deco2: #7a4a26; --bk-deco3: #ff5a4a;
+  --bk-ghost: #ffffff; --bk-rail: #ffffff; --bk-rim: #ff4f45; --bk-rim2: #8a1f1b; --bk-net: #ffffff; --bk-net2: #7fb4d6;
+  --bk-aim: #ffffff; --bk-ink: #ffffff; --bk-ink2: #0f3a66;
+  --bk-ball: #f2463f; --bk-ball2: #2a8fe0; --bk-ball3: #ffffff; --bk-ball4: #ffd23c; --bk-gloss: #ffffff;
+  --bk-fire1: #e2371a; --bk-fire2: #ff861f; --bk-fire3: #ffe45c; --bk-hot1: #2545dc; --bk-hot2: #7fe0ff; --bk-hot3: #ffffff;
+  --bk-smoke: #eef6ff; --bk-spark: #fff2a0;
+}
+/* Космос — с Луны мимо Земли, планет и туманностей; вместо мяча — луна */
+[data-game="basketball"][data-skin="space"], [data-game="basketball"] [data-skin="space"] {
+  --bk-bg: #0d0f1f; --bk-text: #e9ecff; --bk-hint: #8088b8; --bk-panel: #181b33; --bk-accent: #8f9bff; --bk-accent-text: #0d0f1f;
+  --bk-sky0: #2a1a5e; --bk-sky1: #17123f; --bk-sky2: #0c0c2a; --bk-sky3: #070818; --bk-sky4: #04050d;
+  --bk-far: #3c3f63; --bk-mid: #666b8c; --bk-near: #2a2d44; --bk-lit: #ffd27a; --bk-lit2: #ff9a6a;
+  --bk-orb: #4f9fee; --bk-orb2: #8fd0ff; --bk-cloud: #b36bff; --bk-cloud2: #3fd6c8; --bk-star: #ffffff;
+  --bk-deco: #4fbf7a; --bk-deco2: #e7dcc0; --bk-deco3: #c98a5a;
+  --bk-ghost: #ffffff; --bk-rail: #ffffff; --bk-rim: #e7ecff; --bk-rim2: #5a6090; --bk-net: #aab4ff; --bk-net2: #4a5088;
+  --bk-aim: #ffffff; --bk-ink: #ffffff; --bk-ink2: #0a0b18;
+  --bk-ball: #d9dce6; --bk-ball2: #6f7488; --bk-ball3: #9da2b6; --bk-ball4: #f4f6fb; --bk-gloss: #ffffff;
+  --bk-fire1: #ff4a2e; --bk-fire2: #ff9a2e; --bk-fire3: #fff07a; --bk-hot1: #4a5cff; --bk-hot2: #5fd0ff; --bk-hot3: #f4feff;
+  --bk-smoke: #737a9c; --bk-spark: #ffe98a;
+}
+
+/* ---------- раскладка ---------- */
+
+.game-root[data-game="basketball"] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  --toast-top: 96px;
+  --toast-bg: var(--bk-text);
+  --toast-fg: var(--bk-bg);
+}
+[data-game="basketball"] .bk-probe { position: absolute; width: 0; height: 0; overflow: hidden; visibility: hidden; pointer-events: none; }
+[data-game="basketball"] .btn { background: var(--bk-accent); color: var(--bk-accent-text); }
+[data-game="basketball"] .btn-secondary { background: var(--bk-bg); color: var(--bk-text); }
+[data-game="basketball"] .bk {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  isolation: isolate;
+  background: var(--bk-bg);
+  color: var(--bk-text);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* шапка */
+[data-game="basketball"] .bk-header { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px 6px; }
+[data-game="basketball"] .bk-heading { min-width: 0; }
+[data-game="basketball"] .bk-title { font-size: 19px; font-weight: 700; line-height: 1.2; white-space: nowrap; }
+[data-game="basketball"] .bk-sub { font-size: 13px; color: var(--bk-hint); font-variant-numeric: tabular-nums; }
+[data-game="basketball"] .bk-actions { display: flex; gap: 6px; flex: none; }
+[data-game="basketball"] .bk-icon-btn {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: var(--bk-panel);
+  color: var(--bk-text);
+  font: inherit;
+  cursor: pointer;
+  transition: scale 0.1s ease, opacity 0.2s ease, background-color 0.3s ease;
+}
+[data-game="basketball"] .bk-icon-btn:active { scale: 0.92; }
+[data-game="basketball"] .bk-icon-btn svg { width: 20px; height: 20px; }
+[data-game="basketball"] .bk-muted { opacity: 0.55; }
+
+/* стена: холст во всю ширину, на широком экране — по центру */
+[data-game="basketball"] .bk-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: var(--bk-panel);
+  touch-action: none;
+  cursor: grab;
+}
+[data-game="basketball"] .bk-stage:active { cursor: grabbing; }
+[data-game="basketball"] .bk-canvas { display: block; }
+/* подсказка — под табло, над корзинами: ни мяч, ни сцену внизу не закрывает */
+[data-game="basketball"] .bk-hint {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  top: 34%;
+  width: fit-content;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  border-radius: 14px;
+  background: var(--bk-text);
+  color: var(--bk-bg);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.25;
+  pointer-events: none;
+  transition: opacity 0.3s ease, translate 0.3s ease;
+}
+[data-game="basketball"] .bk-hint-hand { display: grid; flex: none; animation: bk-pull 1.5s ease-in-out infinite; }
+[data-game="basketball"] .bk-hint-hand svg { width: 22px; height: 22px; }
+@keyframes bk-pull { 0%, 18%, 100% { translate: 0 -4px; } 60%, 80% { translate: -3px 5px; } }
+[data-game="basketball"] .bk-hint-hide { opacity: 0; translate: 0 10px; }
+[data-game="basketball"] .bk-hint-hide .bk-hint-hand { animation-play-state: paused; }
+
+/* окна */
+[data-game="basketball"] .bk-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  background: color-mix(in srgb, var(--bk-bg) 78%, transparent);
+}
+[data-game="basketball"] .bk-modal[hidden] { display: none; }
+[data-game="basketball"] .bk-card {
+  width: 100%;
+  max-width: 400px;
+  max-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--bk-panel);
+  color: var(--bk-text);
+}
+[data-game="basketball"] .bk-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+[data-game="basketball"] .bk-card h2 { margin: 0; font-size: 18px; }
+[data-game="basketball"] .bk-card .bk-icon-btn { background: var(--bk-bg); }
+[data-game="basketball"] .bk-section { margin: 14px 0 8px; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--bk-hint); }
+[data-game="basketball"] .bk-note { margin: 0 0 10px; font-size: 14px; line-height: 1.4; color: var(--bk-hint); }
+[data-game="basketball"] .bk-pause { display: grid; gap: 10px; text-align: center; }
+[data-game="basketball"] .bk-pause h2 { font-size: 20px; }
+[data-game="basketball"] .bk-pause-score { margin: 0; font-size: 16px; font-weight: 600; }
+[data-game="basketball"] .bk-pause .btn { width: 100%; }
+
+/* площадки */
+[data-game="basketball"] .bk-skins { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+[data-game="basketball"] .bk-skin {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  padding: 7px 4px 6px;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  background: var(--bk-bg);
+  color: var(--bk-text);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: border-color 0.2s ease, scale 0.1s ease;
+}
+[data-game="basketball"] .bk-skin:active { scale: 0.96; }
+[data-game="basketball"] .bk-skin[aria-checked="true"] { border-color: var(--bk-accent); }
+[data-game="basketball"] .bk-swatch {
+  display: block;
+  width: 100%;
+  max-width: 86px;
+  border-radius: 8px;
+  overflow: hidden;
+  line-height: 0;
+  background: linear-gradient(to top, var(--bk-sky0), var(--bk-sky1) 30%, var(--bk-sky2) 62%, var(--bk-sky3));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--bk-text) 14%, transparent);
+}
+[data-game="basketball"] .bk-swatch svg { display: block; width: 100%; height: auto; }
+[data-game="basketball"] .bk-sw-orb { fill: var(--bk-orb); }
+[data-game="basketball"] .bk-sw-far { fill: var(--bk-mid); }
+[data-game="basketball"] .bk-sw-near { fill: var(--bk-near); }
+[data-game="basketball"] .bk-sw-net { fill: none; stroke: var(--bk-net); stroke-width: 1.3; stroke-linejoin: round; }
+[data-game="basketball"] .bk-sw-rim { fill: none; stroke: var(--bk-rim); stroke-width: 3.2; }
+[data-game="basketball"] .bk-sw-ball { fill: var(--bk-ball); stroke: var(--bk-ball2); stroke-width: 1.2; }
+[data-game="basketball"] .bk-sw-seam { fill: none; stroke: var(--bk-ball2); stroke-width: 1.1; }
+[data-game="basketball"] .bk-totals { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px 12px; margin: 0 0 4px; font-size: 14px; }
+[data-game="basketball"] .bk-totals dt { color: var(--bk-hint); }
+[data-game="basketball"] .bk-totals dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
+
+/* правила: картинка и подпись */
+[data-game="basketball"] .bk-help-row { display: grid; grid-template-columns: 56px minmax(0, 1fr); align-items: center; gap: 10px; margin-bottom: 8px; }
+[data-game="basketball"] .bk-help-pic { display: grid; place-items: center; width: 56px; height: 52px; border-radius: 10px; background: var(--bk-sky3); box-shadow: 0 0 0 1px color-mix(in srgb, var(--bk-text) 12%, transparent); }
+[data-game="basketball"] .bk-help-row p { margin: 0; font-size: 14px; line-height: 1.35; }
+[data-game="basketball"] .bk-pic-rim { fill: none; stroke: var(--bk-rim); stroke-width: 2.6; }
+[data-game="basketball"] .bk-pic-net { fill: none; stroke: var(--bk-net); stroke-width: 1.2; stroke-linejoin: round; }
+[data-game="basketball"] .bk-pic-ball { fill: var(--bk-ball); stroke: var(--bk-ball2); stroke-width: 1.3; }
+[data-game="basketball"] .bk-pic-fire { fill: var(--bk-fire2); stroke: var(--bk-fire1); stroke-width: 1.6; stroke-linejoin: round; }
+[data-game="basketball"] .bk-pic-wall { fill: none; stroke: var(--bk-net2); stroke-width: 3; stroke-linecap: round; }
+[data-game="basketball"] .bk-pic-line { fill: none; stroke: var(--bk-aim); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 0.1 3.4; }
+
+@media (max-width: 350px) {
+  [data-game="basketball"] .bk-title { font-size: 17px; }
+  [data-game="basketball"] .bk-icon-btn { width: 32px; height: 32px; }
+  [data-game="basketball"] .bk-actions { gap: 5px; }
+  [data-game="basketball"] .bk-hint { font-size: 14px; padding: 8px 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-game="basketball"] *, [data-game="basketball"] *::before, [data-game="basketball"] *::after { transition-duration: 0s !important; }
+  [data-game="basketball"] .bk-hint-hand { animation: none; }
+}

@@ -68,6 +68,9 @@ export const RULES = [
   ['game:jump-up:stats', { type: 'fields', fields: {
     games: 'count', best: 'max', cells: 'count', jumps: 'count', springs: 'count', stomps: 'count', flights: 'count',
   } }],
+  ['game:basketball:stats', { type: 'fields', fields: {
+    games: 'count', best: 'max', baskets: 'count', clean: 'count', banks: 'count', streak: 'max', fires: 'count',
+  } }],
   ['game:bongo-cat:stats', { type: 'fields', fields: { hits: 'count', meows: 'count', songs: 'count', 'by.*': 'count' } }],
   ['game:snake:stats', { type: 'fields', fields: {
     games: 'count', 'best.*': 'max', bestLength: 'max', apples: 'count', levelsCleared: 'count', bestLevel: 'max',

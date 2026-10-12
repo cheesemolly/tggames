@@ -299,4 +299,11 @@ export const games = [
     css: new URL('../games/jump-up/game.css', import.meta.url),
     menu: { wins: false },                               // бесконечный подъём, победить нельзя
   },
+  {
+    id: 'basketball',
+    title: 'Баскетбол',
+    load: () => import('../games/basketball/index.js'),
+    css: new URL('../games/basketball/game.css', import.meta.url),
+    menu: { wins: false },                               // бросаешь до первого промаха, победить нельзя
+  },
 ];

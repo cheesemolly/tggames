@@ -9,6 +9,15 @@ import { digits, plural, placeOn } from './logic.js';
 
 export const STORIES = [
   {
+    id: 'basketball-new',
+    label: 'Баскетбол',
+    games: ['basketball'],
+    slides: [
+      { kicker: 'Новая игра', title: 'Баскетбол', text: 'Мяч лежит в корзине: тянешь его назад, как рогатку, и отпускаешь — он летит в следующую. Корзины ездят и наклоняются, один промах — и игра окончена.', play: 'basketball' },
+      { kicker: 'Совет', title: 'Бросай чисто', text: 'Попал, не задев кольцо, — два очка, а за каждое следующее чистое подряд на очко больше. Три чистых подряд — мяч загорается. А бросок с отскоком от стены удваивает очки.', play: 'basketball' },
+    ],
+  },
+  {
     id: 'jump-up-new',
     label: 'Прыгалка',
     games: ['jump-up'],
@@ -294,6 +303,7 @@ export function pickStories({ visible, rated = false, seen = [], week = null }) 
 
 /** Что показать баннером «Новая игра»: первая видимая игроку из списка (новые — выше). */
 export const NEW_GAMES = [
+  { id: 'basketball', text: 'Тяни мяч, как рогатку, — и в корзину' },
   { id: 'jump-up', text: 'Каракуля прыгает сама — веди её вверх' },
   { id: 'logic-gates', text: 'И, ИЛИ, НЕ — и лампа горит' },
   { id: 'alchemy', text: 'Вода + огонь = пар: 1100 элементов' },
