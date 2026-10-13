@@ -25,35 +25,12 @@ export const RIG_INFO = {
 
 const FOX = {
   coat: '#f0862b', light: '#ffb057', dark: '#c4601a', cream: '#fff1dc', creamShade: '#e8cfae',
-  sock: '#4a2a1c', ear: '#f6a98a', nose: '#2a1a16', eye: '#221613',
+  sock: '#4a2a1c', sockLight: '#7a4a32', sockDark: '#2f1a14', sockFar: '#3a2018', sockFarLight: '#56301f', sockFarDark: '#24120e',
+  ear: '#f6a98a', nose: '#2a1a16', eye: '#221613', toe: '#9a6a4c', blush: '#ff8f8a',
 };
-const coat = tone(FOX.coat, { light: FOX.light, dark: FOX.dark, lw: 1.5 });
-// дальняя сторона (ухо и лапы за телом) — в тени: тоном темнее, обводка та же
-const coatFar = tone(mix(FOX.coat, FOX.dark, 0.8), { light: FOX.coat, dark: darken(FOX.dark, 0.35), line: coat.line, rim: 0.25 });
-const cream = tone(FOX.cream, { light: '#ffffff', dark: FOX.creamShade, line: coat.line });
-const sock = tone(FOX.sock, { light: '#7a4a32', dark: '#2f1a14' });
-const sockFar = tone('#3a2018', { light: '#56301f', dark: '#24120e', line: sock.line, rim: 0.2 });
 
 // ---------- лиса: части ----------
 // Числа — в осях сустава каждой части. Где какая часть крепится — в FOX_AT ниже.
-
-// тело: фасолина, круп слева, грудь справа; светлое брюхо, свет на бедре, тень под головой
-definePart('mob.fox.body', [-13.5, -8, 12.5, 8], (g) => {
-  blob(g, [[-10.4, -3.2], [-5.6, -6.1], [1.6, -6.3], [7.2, -5], [10.2, -1.2], [9.4, 3.2], [5, 5.8], [-2.4, 6.1], [-8.2, 5.4], [-11.6, 1.6]], coat, {
-    over(c, patch) {
-      patch([[-8, 5], [-2, 4.2], [5, 3.7], [13, 0.6], [13, 9], [-11, 9]], cream);
-      glow(c, -5.4, -1.6, 5.6, FOX.light, 0.5);                 // свет на бедре
-      glow(c, 9.4, -2.4, 7.6, darken(FOX.dark, 0.25), 0.6);     // тень от головы на плечах
-    },
-  });
-});
-
-// грудка: кремовый пушистый «слюнявчик»; сустав — под подбородком
-definePart('mob.fox.chest', [-5, -3, 6.2, 8.6], (g) => {
-  const pts = [[-2.6, -1.5], [2.8, -1.8], [4.8, 1.6], [4.4, 4.6], [2.6, 7.2, 1], [1.4, 5.6], [-0.8, 7.4, 1], [-1.6, 5.2], [-3.6, 5.4, 1], [-3.8, 1.8]];
-  blob(g, pts, { ...cream, lw: 1, line: mix(FOX.creamShade, coat.line, 0.5) });
-  fadeEdge(g, 0, -2.2, 0, 0.8);
-});
 
 // голова в три четверти: сустав — шея, середина головы — в HEAD_C от него
 const HEAD_C = [2, -5];
@@ -61,59 +38,9 @@ const HEAD = [
   [-7.6, -3], [-5.6, -6.4], [-1, -7.9], [3.8, -7.3], [7.2, -4.6], [8.4, -1.2], [10, 0.6], [12.8, 1.6], [14, 3.3], [12.6, 5.2],
   [9, 6.3], [4.5, 7], [0.5, 7.6], [-3.2, 8.6, 1], [-4, 6.6], [-7.6, 7.8, 1], [-7.4, 5.2], [-10.8, 4.8, 1], [-8.8, 1.6],
 ];
-definePart('mob.fox.head', [-10, -14, 18, 6.6], (g, v) => {
-  g.translate(HEAD_C[0], HEAD_C[1]);
-  if (v === 1) {
-    // пасть открыта: нижняя челюсть, за ней тёмный рот с языком
-    blob(g, [[5, 4.2], [11, 4.6], [12, 7], [9.6, 9.4], [6, 9.2], [4.2, 6.8]], { ...cream, lw: 1.2 }, {
-      over(c) {
-        c.fillStyle = '#7a2230';
-        c.beginPath();
-        pathBlob(c, [[5, 3.6], [12.4, 3.8], [11.4, 6.8], [6.4, 7.4]]);
-        c.fill();
-        c.fillStyle = '#ff8a8a';
-        c.beginPath();
-        c.ellipse(9.2, 7.5, 2.4, 1.3, 0.1, 0, TAU);
-        c.fill();
-      },
-    });
-  }
-  blob(g, HEAD, coat, {
-    over(c, patch) {
-      // кремовая маска: щека, бока морды и подбородок
-      patch([[-12, 1], [-7.5, 0.6], [-3.5, 2], [-0.5, 3], [2.8, 2.4], [5.6, 0.8], [8.2, 1.2], [10.6, 2.5], [13, 3.4], [16, 4], [15, 10], [-12, 11]], cream);
-      blush(c, -3.6, 4.6, 3, '#ff8f8a', 0.4);
-      if (v === 0) stroke(c, [[12.6, 5], [10.6, 5.7], [8.8, 5.2], [8.2, 4.3]], alpha(FOX.nose, 0.8), 0.9);
-      else {
-        c.fillStyle = '#ffffff';
-        c.beginPath();
-        c.moveTo(10.6, 5.4);
-        c.lineTo(11.5, 7.4);
-        c.lineTo(12.3, 5.4);
-        c.fill();
-      }
-    },
-  });
-  nose(g, 13.5, 2.9, 1.5, FOX.nose);
-}, 2);
 
 // глаз: 0 открыт, 1 решительный прищур, 2 закрыт (моргнула), 3 зажмурен от удовольствия, 4 крестик, 5 «>» от боли, 6 испуг
-const FOX_EYES = [{ kind: 'round', glint: '#a85a1e' }, { kind: 'narrow', lid: 0.3, slant: 0.22, brow: FOX.eye }, { kind: 'closed' }, { kind: 'happy' }, { kind: 'cross' }, { kind: 'squint' }, { kind: 'wide' }];
-definePart('mob.fox.eye', [-3.4, -3.4, 3.4, 3.4], (g, v) => eye(g, 0, 0, 2.8, { ...FOX_EYES[v], color: FOX.eye }), FOX_EYES.length, 0.5);
-
-// ухо: 0 — ближнее (видно розовое нутро), 1 — дальнее, в тени; сустав — середина основания
-definePart('mob.fox.ear', [-5, -11, 5, 3.2], (g, v) => {
-  const pts = [[-3.6, 1.4], [-3.4, -3.2], [-1.9, -7.7], [-0.8, -9.8, 1], [0.9, -7.2], [2.5, -3.6], [3.7, 1.4], [0, 2.6]];
-  blob(g, pts, { ...(v ? coatFar : coat), lw: 1.3 }, {
-    over(c, patch) {
-      patch([[-1.5, 2], [-1.9, -3], [-0.7, -6.4], [1.1, -3.2], [1.9, 2]], tone(v ? darken(FOX.ear, 0.25) : FOX.ear, { dark: darken(FOX.ear, 0.4) }));
-      patch([[-5, -5.9], [-2.2, -5.1, 1], [-1, -6.1, 1], [0.4, -4.9, 1], [1.6, -5.9, 1], [4, -5.3], [4, -13], [-5, -13]], v ? sockFar : sock);
-    },
-    stroke: (c) => pathBlobSpan(c, pts, 0, 6),
-    shade: (c) => pathBlob(c, [[-3.6, 9, 1], ...pts.slice(1, 6), [3.7, 9, 1]]),
-  });
-  fadeEdge(g, 0, 2.4, 0, 0.4);
-}, 2);
+const FOX_EYES = [{ kind: 'round', glint: '#a85a1e' }, { kind: 'narrow', lid: 0.3, slant: 0.22, brow: '#221613' }, { kind: 'closed' }, { kind: 'happy' }, { kind: 'cross' }, { kind: 'squint' }, { kind: 'wide' }];
 
 // хвост — три куска от тела к кончику, каждый смотрит влево (назад) и растёт из сустава в нуле;
 // стыки — круги одного радиуса, поэтому при изгибе шва не видно
@@ -121,50 +48,143 @@ const TAIL_R = [3.4, 5.2, 6.2];                 // радиусы в суста�
 const TAIL_L = [6.4, 7.4];                      // длины первых двух кусков
 // свет кладётся по рамке всего хвоста (а не каждого куска): иначе на стыках видна ступенька
 const tailBox = (from) => [from - 28, -7, from + 4, 7];
-function tailPiece(g, r0, len, r1, from) {
+function tailPiece(g, r0, len, r1, from, look) {
   // круг сустава — нижний край — круг следующего сустава — верхний край
   const pts = [
     [0, -r0], [r0 * 0.71, -r0 * 0.71], [r0, 0], [r0 * 0.71, r0 * 0.71], [0, r0],
     [-len, r1], [-len - r1 * 0.71, r1 * 0.71], [-len - r1, 0], [-len - r1 * 0.71, -r1 * 0.71], [-len, -r1],
   ];
-  blob(g, pts, coat, {
+  blob(g, pts, look, {
     box: tailBox(from),
     stroke: (c) => pathBlobSpan(c, pts, 4, 0),
     shade: (c) => pathBlob(c, [[20, -r0, 1], [20, r0, 1], ...pts.slice(4)]),
   });
 }
-definePart('mob.fox.tail1', [-13, -6.4, 4.6, 6.4], (g) => tailPiece(g, TAIL_R[0], TAIL_L[0], TAIL_R[1], 0));
-definePart('mob.fox.tail2', [-15, -7.4, 6.2, 7.4], (g) => tailPiece(g, TAIL_R[1], TAIL_L[1], TAIL_R[2], TAIL_L[0]));
-definePart('mob.fox.tail3', [-15.4, -7.4, 7.2, 7.6], (g) => {
-  const r = TAIL_R[2];
-  const pts = [[0, -r], [r * 0.71, -r * 0.71], [r, 0], [r * 0.71, r * 0.71], [0, r], [-4.4, 6], [-8, 5.6, 1], [-8.2, 3.4], [-14, -0.4, 1], [-9.2, -3.8], [-4.4, -5.9]];
-  blob(g, pts, coat, {
-    over(c, patch) {
-      // кремовый кончик, граница — зубцами, как шерсть
-      patch([[-2.4, -9, 1], [-4.2, -3.8], [-1.9, -1.7, 1], [-4.4, 0.6], [-2.1, 2.8, 1], [-4.2, 5], [-2.8, 9, 1], [-17, 9], [-17, -9]], cream);
-    },
-    box: tailBox(TAIL_L[0] + TAIL_L[1]),
-    stroke: (c) => pathBlobSpan(c, pts, 4, 0),
-    shade: (c) => pathBlob(c, [[20, -r, 1], [20, r, 1], ...pts.slice(4)]),
-  });
-});
 
-// лапа с тёмным носком: 0 — ближняя (вверху растворяется в теле), 1 — дальняя, в тени; сустав — бедро
 const LEG = 10.4;                               // от сустава до земли (с обводкой)
-definePart('mob.fox.leg', [-3.8, -3.2, 6, 10.6], (g, v) => {
-  const pts = [[-2.6, 0], [0, -2.6], [2.6, 0], [2.7, 5.4], [4.6, 7.8], [3.4, 9.8], [-1.5, 9.8], [-2.6, 7.6], [-2.4, 4]];
-  blob(g, pts, { ...(v ? coatFar : coat), lw: 1.2 }, {
-    over(c, patch) {
-      patch([[-5, 6.4], [-1.3, 5.7, 1], [0.2, 6.7, 1], [1.7, 5.8, 1], [6, 6.5], [7, 12], [-5, 12]], v ? sockFar : sock);
-      // пальцы
-      stroke(c, [[2.3, 8.3], [2.1, 9.5]], alpha('#9a6a4c', v ? 0.5 : 0.9), 0.5);
-      stroke(c, [[3.6, 8.2], [3.5, 9.3]], alpha('#9a6a4c', v ? 0.5 : 0.9), 0.5);
-    },
-    stroke: (c) => pathBlobSpan(c, pts, v ? 2 : 3, v ? 0 : 8),      // у ближней обводка начинается у края тела
-    shade: (c) => pathBlob(c, [[-2.6, -12, 1], [2.6, -12, 1], ...pts.slice(2)]),
+
+/**
+ * Части лисы в красках C под ключами `${key}.…` — возвращает эти ключи для drawFox. Так же, только в других
+ * красках, собран её двойник — чёрный лис (art-mobs3.js). paintEye(g, v) — свой рисунок глаза (варианты — как в
+ * FOX_EYES): на тёмной шкуре тёмный глаз не виден.
+ */
+export function defineFoxParts(key, C, paintEye = null) {
+  const coat = tone(C.coat, { light: C.light, dark: C.dark, lw: 1.5 });
+  // дальняя сторона (ухо и лапы за телом) — в тени: тоном темнее, обводка та же
+  const coatFar = tone(mix(C.coat, C.dark, 0.8), { light: C.coat, dark: darken(C.dark, 0.35), line: coat.line, rim: 0.25 });
+  const cream = tone(C.cream, { light: C.creamLight ?? '#ffffff', dark: C.creamShade, line: coat.line });
+  const sock = tone(C.sock, { light: C.sockLight, dark: C.sockDark });
+  const sockFar = tone(C.sockFar, { light: C.sockFarLight, dark: C.sockFarDark, line: sock.line, rim: 0.2 });
+
+  // тело: фасолина, круп слева, грудь справа; светлое брюхо, свет на бедре, тень под головой
+  definePart(`${key}.body`, [-13.5, -8, 12.5, 8], (g) => {
+    blob(g, [[-10.4, -3.2], [-5.6, -6.1], [1.6, -6.3], [7.2, -5], [10.2, -1.2], [9.4, 3.2], [5, 5.8], [-2.4, 6.1], [-8.2, 5.4], [-11.6, 1.6]], coat, {
+      over(c, patch) {
+        patch([[-8, 5], [-2, 4.2], [5, 3.7], [13, 0.6], [13, 9], [-11, 9]], cream);
+        glow(c, -5.4, -1.6, 5.6, C.light, 0.5);                 // свет на бедре
+        glow(c, 9.4, -2.4, 7.6, darken(C.dark, 0.25), 0.6);     // тень от головы на плечах
+      },
+    });
   });
-  if (!v) fadeEdge(g, 0, 1.8, 0, 4.4);          // дальняя и так за телом
-}, 2);
+
+  // грудка: кремовый пушистый «слюнявчик»; сустав — под подбородком
+  definePart(`${key}.chest`, [-5, -3, 6.2, 8.6], (g) => {
+    const pts = [[-2.6, -1.5], [2.8, -1.8], [4.8, 1.6], [4.4, 4.6], [2.6, 7.2, 1], [1.4, 5.6], [-0.8, 7.4, 1], [-1.6, 5.2], [-3.6, 5.4, 1], [-3.8, 1.8]];
+    blob(g, pts, { ...cream, lw: 1, line: mix(C.creamShade, coat.line, 0.5) });
+    fadeEdge(g, 0, -2.2, 0, 0.8);
+  });
+
+  definePart(`${key}.head`, [-10, -14, 18, 6.6], (g, v) => {
+    g.translate(HEAD_C[0], HEAD_C[1]);
+    if (v === 1) {
+      // пасть открыта: нижняя челюсть, за ней тёмный рот с языком
+      blob(g, [[5, 4.2], [11, 4.6], [12, 7], [9.6, 9.4], [6, 9.2], [4.2, 6.8]], { ...cream, lw: 1.2 }, {
+        over(c) {
+          c.fillStyle = '#7a2230';
+          c.beginPath();
+          pathBlob(c, [[5, 3.6], [12.4, 3.8], [11.4, 6.8], [6.4, 7.4]]);
+          c.fill();
+          c.fillStyle = '#ff8a8a';
+          c.beginPath();
+          c.ellipse(9.2, 7.5, 2.4, 1.3, 0.1, 0, TAU);
+          c.fill();
+        },
+      });
+    }
+    blob(g, HEAD, coat, {
+      over(c, patch) {
+        // кремовая маска: щека, бока морды и подбородок
+        patch([[-12, 1], [-7.5, 0.6], [-3.5, 2], [-0.5, 3], [2.8, 2.4], [5.6, 0.8], [8.2, 1.2], [10.6, 2.5], [13, 3.4], [16, 4], [15, 10], [-12, 11]], cream);
+        if (C.blush) blush(c, -3.6, 4.6, 3, C.blush, 0.4);
+        if (v === 0) stroke(c, [[12.6, 5], [10.6, 5.7], [8.8, 5.2], [8.2, 4.3]], alpha(C.nose, 0.8), 0.9);
+        else {
+          c.fillStyle = '#ffffff';
+          c.beginPath();
+          c.moveTo(10.6, 5.4);
+          c.lineTo(11.5, 7.4);
+          c.lineTo(12.3, 5.4);
+          c.fill();
+        }
+      },
+    });
+    nose(g, 13.5, 2.9, 1.5, C.nose);
+  }, 2);
+
+  definePart(`${key}.eye`, [-3.4, -3.4, 3.4, 3.4], paintEye ?? ((g, v) => eye(g, 0, 0, 2.8, { ...FOX_EYES[v], color: C.eye })), FOX_EYES.length, 0.5);
+
+  // ухо: 0 — ближнее (видно розовое нутро), 1 — дальнее, в тени; сустав — середина основания
+  definePart(`${key}.ear`, [-5, -11, 5, 3.2], (g, v) => {
+    const pts = [[-3.6, 1.4], [-3.4, -3.2], [-1.9, -7.7], [-0.8, -9.8, 1], [0.9, -7.2], [2.5, -3.6], [3.7, 1.4], [0, 2.6]];
+    blob(g, pts, { ...(v ? coatFar : coat), lw: 1.3 }, {
+      over(c, patch) {
+        patch([[-1.5, 2], [-1.9, -3], [-0.7, -6.4], [1.1, -3.2], [1.9, 2]], tone(v ? darken(C.ear, 0.25) : C.ear, { dark: darken(C.ear, 0.4) }));
+        patch([[-5, -5.9], [-2.2, -5.1, 1], [-1, -6.1, 1], [0.4, -4.9, 1], [1.6, -5.9, 1], [4, -5.3], [4, -13], [-5, -13]], v ? sockFar : sock);
+      },
+      stroke: (c) => pathBlobSpan(c, pts, 0, 6),
+      shade: (c) => pathBlob(c, [[-3.6, 9, 1], ...pts.slice(1, 6), [3.7, 9, 1]]),
+    });
+    fadeEdge(g, 0, 2.4, 0, 0.4);
+  }, 2);
+
+  definePart(`${key}.tail1`, [-13, -6.4, 4.6, 6.4], (g) => tailPiece(g, TAIL_R[0], TAIL_L[0], TAIL_R[1], 0, coat));
+  definePart(`${key}.tail2`, [-15, -7.4, 6.2, 7.4], (g) => tailPiece(g, TAIL_R[1], TAIL_L[1], TAIL_R[2], TAIL_L[0], coat));
+  definePart(`${key}.tail3`, [-15.4, -7.4, 7.2, 7.6], (g) => {
+    const r = TAIL_R[2];
+    const pts = [[0, -r], [r * 0.71, -r * 0.71], [r, 0], [r * 0.71, r * 0.71], [0, r], [-4.4, 6], [-8, 5.6, 1], [-8.2, 3.4], [-14, -0.4, 1], [-9.2, -3.8], [-4.4, -5.9]];
+    blob(g, pts, coat, {
+      over(c, patch) {
+        // кремовый кончик, граница — зубцами, как шерсть
+        patch([[-2.4, -9, 1], [-4.2, -3.8], [-1.9, -1.7, 1], [-4.4, 0.6], [-2.1, 2.8, 1], [-4.2, 5], [-2.8, 9, 1], [-17, 9], [-17, -9]], cream);
+      },
+      box: tailBox(TAIL_L[0] + TAIL_L[1]),
+      stroke: (c) => pathBlobSpan(c, pts, 4, 0),
+      shade: (c) => pathBlob(c, [[20, -r, 1], [20, r, 1], ...pts.slice(4)]),
+    });
+  });
+
+  // лапа с тёмным носком: 0 — ближняя (вверху растворяется в теле), 1 — дальняя, в тени; сустав — бедро
+  definePart(`${key}.leg`, [-3.8, -3.2, 6, 10.6], (g, v) => {
+    const pts = [[-2.6, 0], [0, -2.6], [2.6, 0], [2.7, 5.4], [4.6, 7.8], [3.4, 9.8], [-1.5, 9.8], [-2.6, 7.6], [-2.4, 4]];
+    blob(g, pts, { ...(v ? coatFar : coat), lw: 1.2 }, {
+      over(c, patch) {
+        patch([[-5, 6.4], [-1.3, 5.7, 1], [0.2, 6.7, 1], [1.7, 5.8, 1], [6, 6.5], [7, 12], [-5, 12]], v ? sockFar : sock);
+        // пальцы
+        stroke(c, [[2.3, 8.3], [2.1, 9.5]], alpha(C.toe, v ? 0.5 : 0.9), 0.5);
+        stroke(c, [[3.6, 8.2], [3.5, 9.3]], alpha(C.toe, v ? 0.5 : 0.9), 0.5);
+      },
+      stroke: (c) => pathBlobSpan(c, pts, v ? 2 : 3, v ? 0 : 8),      // у ближней обводка начинается у края тела
+      shade: (c) => pathBlob(c, [[-2.6, -12, 1], [2.6, -12, 1], ...pts.slice(2)]),
+    });
+    if (!v) fadeEdge(g, 0, 1.8, 0, 4.4);          // дальняя и так за телом
+  }, 2);
+
+  return {
+    body: `${key}.body`, chest: `${key}.chest`, head: `${key}.head`, eye: `${key}.eye`, ear: `${key}.ear`,
+    tail1: `${key}.tail1`, tail2: `${key}.tail2`, tail3: `${key}.tail3`, leg: `${key}.leg`,
+  };
+}
+
+const FOX_K = defineFoxParts('mob.fox', FOX);
 
 // ---------- лиса: поза ----------
 
@@ -449,15 +469,16 @@ let hcy = 0;
 const headX = (at) => nx + (hcx + at[0]) * nc - (hcy + at[1]) * ns;
 const headY = (at) => ny + (hcx + at[0]) * ns + (hcy + at[1]) * nc;
 
-function leg(kit, ctx, p, i, at, far) {
+function leg(kit, ctx, p, i, at, far, key) {
   const rot = p[L1 + i];
   const hy = atY(at);
   // стоит на земле — лапа сама дотягивается до неё (или поджимается, если тело присело)
   const reach = clamp(-hy / (LEG * Math.max(0.35, Math.cos(rot))), 0.5, 1.3);
-  kit.part(ctx, 'mob.fox.leg', atX(at), hy, rot, 1, p[K1 + i] * lerp(1, reach, p[GR]), 1, far);
+  kit.part(ctx, key, atX(at), hy, rot, 1, p[K1 + i] * lerp(1, reach, p[GR]), 1, far);
 }
 
-function drawFox(kit, ctx, p, eyes, mouth) {
+/** Нарисовать лису в позе p; K — ключи её частей (у двойника — свои, из defineFoxParts). */
+export function drawFox(kit, ctx, p, eyes, mouth, K = FOX_K) {
   ox = FOX_AT.body[0] + p[BX];
   oy = FOX_AT.body[1] + p[BY];
   oc = Math.cos(p[BR]);
@@ -469,20 +490,20 @@ function drawFox(kit, ctx, p, eyes, mouth) {
   let tx = atX(FOX_AT.tail);
   let ty = atY(FOX_AT.tail);
   const ts = p[TS];
-  kit.part(ctx, 'mob.fox.tail1', tx, ty, p[T1], 1, ts);
+  kit.part(ctx, K.tail1, tx, ty, p[T1], 1, ts);
   tx -= Math.cos(p[T1]) * TAIL_L[0];
   ty -= Math.sin(p[T1]) * TAIL_L[0];
-  kit.part(ctx, 'mob.fox.tail2', tx, ty, p[T2], 1, ts);
+  kit.part(ctx, K.tail2, tx, ty, p[T2], 1, ts);
   tx -= Math.cos(p[T2]) * TAIL_L[1];
   ty -= Math.sin(p[T2]) * TAIL_L[1];
-  kit.part(ctx, 'mob.fox.tail3', tx, ty, p[T3], 1, ts);
+  kit.part(ctx, K.tail3, tx, ty, p[T3], 1, ts);
 
-  leg(kit, ctx, p, 3, FOX_AT.legFH, 1);
-  leg(kit, ctx, p, 1, FOX_AT.legFF, 1);
-  kit.part(ctx, 'mob.fox.body', ox, oy, p[BR], osx, osy);
-  leg(kit, ctx, p, 2, FOX_AT.legNH, 0);
-  leg(kit, ctx, p, 0, FOX_AT.legNF, 0);
-  kit.part(ctx, 'mob.fox.chest', atX(FOX_AT.chest), atY(FOX_AT.chest), p[BR] * 0.5 + p[CR]);
+  leg(kit, ctx, p, 3, FOX_AT.legFH, 1, K.leg);
+  leg(kit, ctx, p, 1, FOX_AT.legFF, 1, K.leg);
+  kit.part(ctx, K.body, ox, oy, p[BR], osx, osy);
+  leg(kit, ctx, p, 2, FOX_AT.legNH, 0, K.leg);
+  leg(kit, ctx, p, 0, FOX_AT.legNF, 0, K.leg);
+  kit.part(ctx, K.chest, atX(FOX_AT.chest), atY(FOX_AT.chest), p[BR] * 0.5 + p[CR]);
 
   // голова: шея на теле, дальше — в осях головы
   const hr = p[HR];
@@ -492,12 +513,21 @@ function drawFox(kit, ctx, p, eyes, mouth) {
   ny = atY(FOX_AT.neck) + p[HY];
   nc = Math.cos(hr);
   ns = Math.sin(hr);
-  kit.part(ctx, 'mob.fox.ear', headX(FOX_AT.earF), headY(FOX_AT.earF), hr + 0.2 + p[E2], 0.92, 0.95 * p[ES], 1, 1);
-  kit.part(ctx, 'mob.fox.head', nx, ny, hr, 1, 1, 1, mouth);
-  kit.part(ctx, 'mob.fox.eye', headX(FOX_AT.eyeF), headY(FOX_AT.eyeF), hr, 0.72, 0.9, 1, eyes);
-  kit.part(ctx, 'mob.fox.eye', headX(FOX_AT.eyeN), headY(FOX_AT.eyeN), hr, 1, 1, 1, eyes);
-  kit.part(ctx, 'mob.fox.ear', headX(FOX_AT.earN), headY(FOX_AT.earN), hr - 0.22 + p[E1], 1, p[ES], 1, 0);
+  kit.part(ctx, K.ear, headX(FOX_AT.earF), headY(FOX_AT.earF), hr + 0.2 + p[E2], 0.92, 0.95 * p[ES], 1, 1);
+  kit.part(ctx, K.head, nx, ny, hr, 1, 1, 1, mouth);
+  kit.part(ctx, K.eye, headX(FOX_AT.eyeF), headY(FOX_AT.eyeF), hr, 0.72, 0.9, 1, eyes);
+  kit.part(ctx, K.eye, headX(FOX_AT.eyeN), headY(FOX_AT.eyeN), hr, 1, 1, 1, eyes);
+  kit.part(ctx, K.ear, headX(FOX_AT.earN), headY(FOX_AT.earN), hr - 0.22 + p[E1], 1, p[ES], 1, 0);
 }
+
+/**
+ * Позы лисы — для её двойника: те же функции заполняют позу p (Float32Array длиной SIZE), drawFox её рисует.
+ * Числа — места в позе, которые двойник правит сам (тело: сдвиг, наклон, высота; голова: наклон).
+ */
+export const FOX_POSE = {
+  SIZE, BX, BY, BR, BSY, HX, HY, HR,
+  idle: poseIdle, move: poseMove, aim: poseAim, dash: poseDash, land: poseLand, down: poseDown, hurt: addHurt, bite: addBite, blend, blinks,
+};
 
 defineRig('fox', {
   draw(kit, ctx, a) {

@@ -31,11 +31,12 @@ export const RIG_INFO = {};
 const COMMON = ['spawn', 'idle', 'move', 'windup', 'attack', 'recover', 'stun', 'hurt'];
 const BOSS = [...COMMON, 'tired', 'dead'];
 
-const MOUTH = '#6a1f2e';        // нутро пасти
-const TONGUE = '#ff8f94';
-const TOOTH = '#fffdf4';
+export const MOUTH = '#6a1f2e';        // нутро пасти
+export const TONGUE = '#ff8f94';
+export const TOOTH = '#fffdf4';
 
 // ---------- вся фигура разом ----------
+// (Скелет четвероногих и приёмы для морд отсюда берёт и art-mobs3.js — поэтому они на экспорт.)
 // Части ставятся через put(): он сдвигает, растягивает и гасит всю фигуру целиком — так сделаны появление из метки,
 // прыжки и приплюснутость от удара, и ни одной позе не нужно знать о них.
 
@@ -57,31 +58,31 @@ function begin(kit, ctx) {
   GA = 1;
 }
 
-function put(key, x, y, rot = 0, sx = 1, sy = 1, variant = 0, al = 1) {
+export function put(key, x, y, rot = 0, sx = 1, sy = 1, variant = 0, al = 1) {
   KIT.part(CTX, key, GX + x * GSX, GY + y * GSY, rot, sx * GSX, sy * GSY, clamp01(al * GA), variant);
 }
 
 /** Появление из метки на земле: фигура вырастает от точки привязки и проявляется. */
 function rise(k) {
   const s = backOut(k);
-  GSX = lerp(0.4, 1, s);
-  GSY = lerp(0.25, 1, s);
+  GSX *= lerp(0.4, 1, s);
+  GSY *= lerp(0.25, 1, s);
   GA = smooth(k / 0.35);
 }
 
 /** Короткий взмах раз в period секунд (ухо дёрнулось, моргнул): 0 … 1 … 0 за len секунд. */
-function flick(t, period, shift, len = 0.2) {
+export function flick(t, period, shift, len = 0.2) {
   const u = (((t + shift) % period) + period) % period;
   return u < len ? Math.sin((u / len) * Math.PI) : 0;
 }
 
 /** Доля 0…1 круга длиной period секунд. */
-const loop = (t, period, shift = 0) => ((((t + shift) / period) % 1) + 1) % 1;
+export const loop = (t, period, shift = 0) => ((((t + shift) / period) % 1) + 1) % 1;
 
 // ---------- общее для морд ----------
 
 /** Ряд зубов: n треугольников от (x0, y) до (x1, y), остриями на h (плюс — вниз). */
-function teeth(g, x0, x1, y, n, h, color = TOOTH) {
+export function teeth(g, x0, x1, y, n, h, color = TOOTH) {
   const w = (x1 - x0) / n;
   g.fillStyle = color;
   g.beginPath();
@@ -95,7 +96,7 @@ function teeth(g, x0, x1, y, n, h, color = TOOTH) {
 }
 
 /** Клык: основание шириной 2w с серединой в (x, y), остриё — на h (плюс — вниз), чуть загнут вперёд. */
-function fang(g, x, y, w, h, line = 'rgba(70,44,56,0.7)') {
+export function fang(g, x, y, w, h, line = 'rgba(70,44,56,0.7)') {
   g.fillStyle = TOOTH;
   g.strokeStyle = line;
   g.lineWidth = 0.45;
@@ -114,7 +115,7 @@ function fang(g, x, y, w, h, line = 'rgba(70,44,56,0.7)') {
  * цветным пятном. lid — насколько прикрыт (0…0.9), slant — наклон века к носу, shine — мягкое свечение вокруг
  * (у тех, кто живёт в темноте).
  */
-function fierceEye(g, x, y, r, iris, o = {}) {
+export function fierceEye(g, x, y, r, iris, o = {}) {
   const cut = Math.asin(clamp(1 - (o.lid ?? 0.36) * 2, -1, 1));
   const rim = o.rim ?? '#2a1c26';
   if (o.shine) glow(g, x, y, r * 2.7, iris, o.shine);
@@ -158,7 +159,7 @@ function fierceEye(g, x, y, r, iris, o = {}) {
  * Ухо в контуре головы: основание от (x0, y0) до (x1, y1) по ходу контура, высота h, наклон lean (минус — прижато
  * назад). Возвращает перевод из осей уха (u — вдоль основания, −0,5…0,5; v — вверх, 0…1) в оси головы.
  */
-function earAxes(x0, y0, x1, y1, h, lean) {
+export function earAxes(x0, y0, x1, y1, h, lean) {
   const mx = (x0 + x1) / 2;
   const my = (y0 + y1) / 2;
   const dx = x1 - x0;
@@ -174,12 +175,12 @@ function earAxes(x0, y0, x1, y1, h, lean) {
     return sharp ? [mx + px * c - py * s, my + px * s + py * c, 1] : [mx + px * c - py * s, my + px * s + py * c];
   };
 }
-const earSharp = (E) => [E(-0.4, 0.42), E(-0.16, 0.84), E(0.03, 1, 1), E(0.22, 0.68), E(0.42, 0.28)];
-const earRound = (E) => [E(-0.47, 0.5), E(-0.3, 0.94), E(0.04, 1.08), E(0.34, 0.88), E(0.47, 0.42)];
-const earInside = (E) => [E(-0.22, 0.04), E(-0.2, 0.42), E(0.02, 0.74), E(0.2, 0.4), E(0.25, 0.04)];
+export const earSharp = (E) => [E(-0.4, 0.42), E(-0.16, 0.84), E(0.03, 1, 1), E(0.22, 0.68), E(0.42, 0.28)];
+export const earRound = (E) => [E(-0.47, 0.5), E(-0.3, 0.94), E(0.04, 1.08), E(0.34, 0.88), E(0.47, 0.42)];
+export const earInside = (E) => [E(-0.22, 0.04), E(-0.2, 0.42), E(0.02, 0.74), E(0.2, 0.4), E(0.25, 0.04)];
 
 /** Дальнее ухо — отдельная форма за головой. */
-function farEar(g, x0, y0, x1, y1, h, lean, look, nodes = earSharp) {
+export function farEar(g, x0, y0, x1, y1, h, lean, look, nodes = earSharp) {
   const E = earAxes(x0, y0, x1, y1, h, lean);
   blob(g, [[x0, y0], ...nodes(E), [x1, y1], [(x0 + x1) / 2, (y0 + y1) / 2 + 2.4]], look);
 }
@@ -188,7 +189,7 @@ function farEar(g, x0, y0, x1, y1, h, lean, look, nodes = earSharp) {
  * Раскрытая пасть: тёмное нутро клином от сустава (hx, hy), язык и нижняя челюсть длиной L и толщиной th,
  * откинутая на угол open. Рисуется до головы — та закрывает её верх.
  */
-function jawOpen(g, hx, hy, L, th, open, look, o = {}) {
+export function jawOpen(g, hx, hy, L, th, open, look, o = {}) {
   const c = Math.cos(open);
   const s = Math.sin(open);
   g.fillStyle = MOUTH;
@@ -213,7 +214,7 @@ function jawOpen(g, hx, hy, L, th, open, look, o = {}) {
 }
 
 /** Рот на морде (под обрезкой головой): 0 — закрыт, 1 — оскал со стиснутыми зубами, 3 — приоткрыт (оглушён, больно). */
-function lips(c, kind, x0, x1, y, line) {
+export function lips(c, kind, x0, x1, y, line) {
   if (kind === 0) {
     stroke(c, [[x1 - 0.3, y - 0.3], [(x0 + x1) / 2 + 1, y + 0.7], [x0 + 1.2, y + 0.5], [x0, y - 0.6]], alpha(line, 0.85), 0.9);
   } else if (kind === 1) {
@@ -232,7 +233,7 @@ function lips(c, kind, x0, x1, y, line) {
 }
 
 /** Пятна на шкуре (под обрезкой формой): list — [[x, y, rx, ry, поворот], …]. */
-function spots(c, list, color) {
+export function spots(c, list, color) {
   c.fillStyle = color;
   for (const [x, y, rx, ry = rx, rot = 0] of list) {
     c.beginPath();
@@ -242,13 +243,13 @@ function spots(c, list, color) {
 }
 
 // выражения морды — номер варианта картинки головы: спокойна, оскал, пасть раскрыта, оглушён, больно
-const CALM = 0;
-const SNARL = 1;
-const BITE = 2;
-const DIZZY = 3;
-const HURT = 4;
+export const CALM = 0;
+export const SNARL = 1;
+export const BITE = 2;
+export const DIZZY = 3;
+export const HURT = 4;
 // ухо (наклон), рот (0 закрыт, 1 оскал, 2 раскрыт, 3 приоткрыт), глаз
-const FACES = [
+export const FACES = [
   { ear: 0.08, mouth: 0, eye: 'fierce', lid: 0.36 },
   { ear: -0.7, mouth: 1, eye: 'fierce', lid: 0.46 },
   { ear: -0.8, mouth: 2, eye: 'fierce', lid: 0.42 },
@@ -257,7 +258,7 @@ const FACES = [
 ];
 
 /** Краски шкуры: основная, дальняя сторона (в тени), светлый низ, тёмный верх. */
-function furTones(C, lw = 1.5) {
+export function furTones(C, lw = 1.5) {
   const coat = tone(C.coat, { light: C.light, dark: C.dark, line: outline(C.coat, C.ink ?? 0.68), lw });
   return {
     coat,
@@ -272,20 +273,20 @@ function furTones(C, lw = 1.5) {
 // голову (у головы — варианты с выражениями морды). Семь частей в кадре.
 
 // поза — числа по местам: их можно смешивать
-const BX = 0;      // тело: сдвиг
-const BY = 1;
-const BR = 2;      //   наклон (плюс — носом вниз)
-const BSX = 3;     //   растяжение вдоль и поперёк
-const BSY = 4;
-const HX = 5;      // голова: сдвиг от шеи
-const HY = 6;
-const HR = 7;      //   наклон
-const TR = 8;      // хвост: угол от тела (плюс — кверху) и пышность
-const TS = 9;
-const L1 = 10;     // лапы: ближняя передняя, дальняя передняя, ближняя задняя, дальняя задняя (минус — вперёд)
-const K1 = 14;     //   длина каждой (1 — как есть)
-const G1 = 18;     //   стоит ли на земле: 1 — дотягивается до неё сама, 0 — на весу
-const ARM = 22;    // ближняя передняя лапа занесена для удара (0…1): растёт от плеча повыше и рисуется поверх головы
+export const BX = 0;      // тело: сдвиг
+export const BY = 1;
+export const BR = 2;      //   наклон (плюс — носом вниз)
+export const BSX = 3;     //   растяжение вдоль и поперёк
+export const BSY = 4;
+export const HX = 5;      // голова: сдвиг от шеи
+export const HY = 6;
+export const HR = 7;      //   наклон
+export const TR = 8;      // хвост: угол от тела (плюс — кверху) и пышность
+export const TS = 9;
+export const L1 = 10;     // лапы: ближняя передняя, дальняя передняя, ближняя задняя, дальняя задняя (минус — вперёд)
+export const K1 = 14;     //   длина каждой (1 — как есть)
+export const G1 = 18;     //   стоит ли на земле: 1 — дотягивается до неё сама, 0 — на весу
+export const ARM = 22;    // ближняя передняя лапа занесена для удара (0…1): растёт от плеча повыше и рисуется поверх головы
 const SIZE = 23;
 
 const P = new Float32Array(SIZE);
@@ -312,8 +313,8 @@ let oc = 1;
 let os = 0;
 let osx = 1;
 let osy = 1;
-const atX = (at) => ox + at[0] * osx * oc - at[1] * osy * os;
-const atY = (at) => oy + at[0] * osx * os + at[1] * osy * oc;
+export const atX = (at) => ox + at[0] * osx * oc - at[1] * osy * os;
+export const atY = (at) => oy + at[0] * osx * os + at[1] * osy * oc;
 
 const ARM_AT = [0, 0];
 
@@ -354,7 +355,7 @@ function drawBeast(M, p, face) {
 }
 
 // стоит и дышит: хвост покачивается, голова чуть водит
-function beastIdle(p, t, M) {
+export function beastIdle(p, t, M) {
   rest(p);
   const S = M.style;
   const breath = Math.sin(t * S.breath);
@@ -447,7 +448,7 @@ function addHurt(p, k) {
 }
 
 // бросок: вытянут в струну — передние лапы вперёд, задние назад; нос вверх на взлёте и вниз к приземлению
-function beastLeap(p, k, t, M, far) {
+export function beastLeap(p, k, t, M, far) {
   rest(p);
   const s = (0.5 + 0.5 * smooth(k / 0.15)) * (1 - 0.45 * smooth((k - 0.75) / 0.25));
   p[BSX] = 1 + 0.24 * s * far;
@@ -471,7 +472,7 @@ function beastLeap(p, k, t, M, far) {
 }
 
 // позы, общие для всех четвероногих; возвращает выражение морды
-function beastCommon(p, act, t, k, a, M) {
+export function beastCommon(p, act, t, k, a, M) {
   switch (act) {
     case 'move':
       beastMove(p, t, Math.max(clamp01(num(a.speed, 1)), 0.35), M);
@@ -493,10 +494,15 @@ function beastCommon(p, act, t, k, a, M) {
 }
 
 /** Фигура четвероногого: pose(p, act, t, k, a) заполняет позу и возвращает вариант головы; after — что дорисовать. */
-function beastRig(id, M, pose, after = null) {
+export function beastRig(id, M, pose, after = null) {
   defineRig(id, {
     draw(kit, ctx, a) {
       begin(kit, ctx);
+      if (M.size) {
+        // зверь нарисован крупнее, чем стоит в игре (спутники лисы): вся фигура — в M.size от рисунка
+        GSX = M.size;
+        GSY = M.size;
+      }
       const t = num(a.t);
       const k = clamp01(num(a.k));
       let act = a.act;
@@ -512,7 +518,7 @@ function beastRig(id, M, pose, after = null) {
 }
 
 /** Лапа: pts — контур от сустава (узлы 0…2 — круг сустава, как у лисы). Вариант 0 — ближняя, 1 — дальняя, в тени. */
-function legPart(key, box, pts, T, o = {}) {
+export function legPart(key, box, pts, T, o = {}) {
   definePart(key, box, (g, v) => {
     blob(g, pts, { ...(v ? T.far : T.coat), lw: o.lw ?? 1.25 }, {
       over: o.over ? (c, patch) => o.over(c, patch, v) : null,
@@ -525,7 +531,7 @@ function legPart(key, box, pts, T, o = {}) {
 }
 
 /** Хвост одним куском: смотрит влево (назад) и растёт из сустава в нуле; узлы 0…4 — круг сустава. */
-function tailPart(key, box, pts, look, over = null) {
+export function tailPart(key, box, pts, look, over = null) {
   definePart(key, box, (g) => {
     const r = pts[4][1];
     blob(g, pts, look, {
@@ -535,7 +541,7 @@ function tailPart(key, box, pts, look, over = null) {
     });
   });
 }
-const tailJoint = (r) => [[0, -r], [r * 0.71, -r * 0.71], [r, 0], [r * 0.71, r * 0.71], [0, r]];
+export const tailJoint = (r) => [[0, -r], [r * 0.71, -r * 0.71], [r, 0], [r * 0.71, r * 0.71], [0, r]];
 
 // ---------- волк ----------
 // Серый, с тёмной спиной и светлой мордой, голову несёт низко; жёлтые глаза — его яркое пятно.
