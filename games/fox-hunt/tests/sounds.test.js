@@ -910,7 +910,7 @@ const HERE = new URL('..', import.meta.url);
  */
 function namesIn(js) {
   const names = [];
-  for (const m of js.matchAll(/\b(?:sfx|play)\(/g)) {
+  for (const m of js.matchAll(/\b(?:sfx|play|say)\(/g)) {
     // разбираем аргументы вызова: до закрывающей скобки, запятые — только верхнего уровня
     const args = [''];
     let depth = 0;

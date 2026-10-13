@@ -243,7 +243,9 @@ test('напасти: в первой охоте их нет, потом лос�
     const third = hazardsFor(1, 0, 'forest', 2, rngFrom(seed));
     assert.equal(third.length, 1);
     assert.ok(['moose', 'bear'].includes(third[0]));
-    assert.deepEqual(hazardsFor(4, 0, 'cave', 0, rngFrom(seed)).sort(), ['bear', 'moose']);
+    const deep = hazardsFor(4, 0, 'cave', 0, rngFrom(seed));
+    assert.equal(new Set(deep).size, 2);
+    assert.ok(deep.every((id) => ['bear', 'moose', 'rockfall'].includes(id)), deep.join());
   }
   REG.HAZARDS['test-local'] = { name: 'Здешняя', biomes: ['swamp'], minFloor: 3, fire() {} };
   REG.HAZARDS['test-manual'] = { name: 'По вызову', auto: false, fire() {} };

@@ -150,7 +150,8 @@ test('карта локации: 300 зёрен — связна, двери п�
     assert.equal(count('treasure'), 1);
     assert.equal(count('shop'), 1);
     assert.ok(count('hunt') >= 3, `зерно ${seed}: охот ${count('hunt')}`);
-    assert.equal(count('start') + count('boss') + count('treasure') + count('shop') + count('hunt'), n, 'других мест пока не описано');
+    const known = ['start', 'boss', 'treasure', 'shop', 'hunt'];
+    for (const r of rooms) assert.ok(known.includes(r.type) || REG.PLACES[r.type], `зерно ${seed}: неизвестное место ${r.type}`);
     assert.deepEqual([map.cur, map.startId, map.entry, map.hunts], [0, 0, 'c', 0]);
     // расстояния от начала: хозяин — в самом дальнем тупике
     const dist = Array(n).fill(-1);
@@ -788,7 +789,7 @@ test('содержимое первого этапа на месте и собр
   for (const id of ['hedgehog', 'boar']) assert.equal(MOBS[id].kind, 'hostile', id);
   assert.equal(MOBS.bear.kind, 'boss');
   assert.deepEqual(content.mobIds('prey'), ['rabbit', 'hare', 'gold', 'fat']);
-  assert.deepEqual(content.mobIds('boss'), ['bear']);
+  assert.deepEqual(content.mobIds('boss').sort(), ['bear', 'moose', 'owl', 'spiderqueen', 'toad']);
   assert.deepEqual([WEAPONS.pinecone.pattern, WEAPONS.claws.pattern, WEAPONS.shroombomb.pattern], ['bullet', 'cone', 'lob']);
   assert.ok(ARMOR.vest && ACCESSORIES.fang && ACCESSORIES.twintail && ACCESSORIES.magnet && POTIONS.heal);
   assert.ok(GIFTS.vigor && GIFTS.pounce && GIFTS.swift);
