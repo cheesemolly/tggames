@@ -478,7 +478,9 @@ export function createRenderer({ canvas, probe }) {
       art.rig(ctx, th.rig, px(th.x), py(th.y), th.face < 0 ? -1 : 1, a);
     } else {
       const key = `thing.${th.kind}`;
-      if (hasSprite(key)) art.put(ctx, key, px(th.x), py(th.y), th.v);
+      // то, что летает (бабочка задания): поднято на свою высоту и смотрит, куда летит
+      if (hasSprite(key) && (th.z > 0 || th.face < 0)) art.putX(ctx, key, px(th.x), py(th.y - num(th.z)), 0, th.face < 0 ? -1 : 1, 1, 1, th.v);
+      else if (hasSprite(key)) art.put(ctx, key, px(th.x), py(th.y), th.v);
       else {
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.fillStyle = '#7a5a3a';
@@ -859,6 +861,7 @@ export function createRenderer({ canvas, probe }) {
     for (let i = 0; i < room.things.length; i++) {
       const th = room.things[i];
       if (th.solid && !th.broken && visible(th.x, th.y, 60)) shadow(th.x, th.y, th.r * 1.2, 0.8);
+      else if (th.z > 0 && visible(th.x, th.y, 60)) shadow(th.x, th.y, th.r * 0.9, 0.5);
     }
     for (let i = 0; i < room.shots.length; i++) {
       const s = room.shots[i];

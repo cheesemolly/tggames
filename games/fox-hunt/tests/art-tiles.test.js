@@ -499,6 +499,8 @@ test('имена, на которые рассчитывают рендер и �
   const want = {
     'prop.forest.door': 2, 'prop.forest.door.e': 2, 'prop.forest.door.s': 2, 'prop.forest.door.w': 2, 'tile.forest.deep': 1,
     'thing.chest': 2, 'thing.pedestal': 1, 'thing.portal': 1, 'thing.stump': 2, 'thing.target': 1, 'thing.sign': 1,
+    // вещи заданий: гриб ведьмина круга (три разных) и бабочка (крылья раскрыты и подняты)
+    'thing.toadstool': 3, 'thing.butterfly': 2,
   };
   for (const [key, variants] of Object.entries(want)) {
     assert.ok(A.hasSprite(key), `нет картинки «${key}»`);
@@ -523,7 +525,7 @@ test('имена, на которые рассчитывают рендер и �
 test('картинки мира рисуются во всех вариантах, не вылезая из своей рамки', () => {
   const art = A.createArt(2, fakeCanvas);
   let n = 0;
-  for (const key of A.spriteKeys().filter((k) => /^(prop\.forest|thing\.(chest|pedestal|portal|stump|target|sign)$)/.test(k))) {
+  for (const key of A.spriteKeys().filter((k) => /^(prop\.forest|thing\.(chest|pedestal|portal|stump|target|sign|toadstool|butterfly)$)/.test(k))) {
     const def = A.spriteDef(key);
     for (let v = 0; v < def.variants; v++) {
       const s = art.sprite(key, v);
@@ -536,7 +538,7 @@ test('картинки мира рисуются во всех варианта�
       n += 1;
     }
   }
-  assert.ok(n >= 45, `картинок ${n}`);
+  assert.ok(n >= 50, `картинок ${n}`);
 });
 
 test('таблица мест: у каждого есть всё нужное, деревья и камни — из своих картинок; незнакомое место рисуется как лес', () => {

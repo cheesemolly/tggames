@@ -400,6 +400,35 @@ function leaf(g, x, y, len, wide, a, color) {
   g.fill();
 }
 
+/** Много листьев одного цвета одним проходом: list — подряд x, y, длина, ширина, угол. */
+function leaves(g, list, color) {
+  if (!list.length) return;
+  g.fillStyle = color;
+  g.beginPath();
+  for (let i = 0; i < list.length; i += 5) {
+    const x = list[i];
+    const y = list[i + 1];
+    const len = list[i + 2];
+    const wide = list[i + 3];
+    const co = Math.cos(list[i + 4]);
+    const si = Math.sin(list[i + 4]);
+    g.moveTo(x, y);
+    g.quadraticCurveTo(x + co * len * 0.5 - si * wide, y + si * len * 0.5 + co * wide, x + co * len, y + si * len);
+    g.quadraticCurveTo(x + co * len * 0.5 + si * wide, y + si * len * 0.5 - co * wide, x, y);
+  }
+  g.fill();
+}
+
+/**
+ * Вид места с переставленными тонами листвы: лесной рисунок дерева или двери красится другими красками.
+ * Для мест из других файлов: у леса своих добавочных тонов нет.
+ */
+function tinted(look, map) {
+  const tone = { ...look.tone };
+  for (const [slot, name] of Object.entries(map)) tone[slot] = look.tone[name];
+  return { ...look, tone };
+}
+
 // ---------- разбор комнаты ----------
 
 const SIDES = ['n', 'e', 's', 'w'];
@@ -2130,7 +2159,7 @@ function paintDoorSide(g, look, v, flip) {
   g.restore();
 }
 
-// ---------- вещи: сундук, камень торговца, портал, пень задания, мишень, указатель ----------
+// ---------- вещи: сундук, камень торговца, портал, пень задания, мишень, указатель, гриб круга, бабочка ----------
 // Общие для всех мест, поэтому краски — леса: дерево, камень, мох. Тени на земле — забота рендера.
 
 const WOOD = '#b07a44';
@@ -2535,7 +2564,114 @@ function paintSign(g) {
   tuft(g, 19.5, 31.4, 4.4, P, rngOf(532));
 }
 
+/** Гриб с объёмом: пузатая ножка и шляпка-купол в светлую крапинку. (x, base) — где ножка входит в землю. */
+function ringCap(g, x, base, r, tall, color, seed) {
+  const stem = '#f6eedd';
+  const cy = base - tall;
+  solid(g, (c) => {
+    c.moveTo(x - r * 0.3, cy + 1);
+    c.quadraticCurveTo(x - r * 0.52, base - 1, x - r * 0.46, base);
+    c.quadraticCurveTo(x, base + 1.6, x + r * 0.46, base);
+    c.quadraticCurveTo(x + r * 0.52, base - 1, x + r * 0.3, cy + 1);
+    c.closePath();
+  }, x, base - tall / 2, r * 0.5, tall / 2, stem, { line: dim(stem, 0.55), lw: 1.2, light: 0.3, dark: 0.5 });
+  const rnd = rngOf(seed);
+  const dots = [];
+  for (let i = 0; i < 5; i++) dots.push(x + (rnd() - 0.5) * r * 1.5, cy - r * (0.15 + rnd() * 0.6), 0.5 + rnd() * 0.45);
+  solid(g, (c) => {
+    c.moveTo(x - r, cy + 0.6);
+    c.bezierCurveTo(x - r, cy - r * 1.25, x + r, cy - r * 1.25, x + r, cy + 0.6);
+    c.quadraticCurveTo(x, cy + 2.6, x - r, cy + 0.6);
+    c.closePath();
+  }, x, cy - r * 0.4, r, r * 0.55, color, {
+    line: dim(color, 0.6), lw: 1.3, light: 0.55, dark: 0.5,
+    inside: (c) => {
+      for (let i = 0; i < dots.length; i += 3) disc(c, dots[i], dots[i + 1], dots[i + 2], '#fff6e6');
+    },
+  });
+}
+
+/** Гриб ведьмина круга: красный мухомор, высокий лиловый и пара рыжих. */
+function paintRingCap(g, v) {
+  if (v === 0) ringCap(g, 8, 16, 5.6, 7.5, FOREST.toadstool, 541);
+  else if (v === 1) ringCap(g, 8, 16, 5, 9, '#a877e0', 542);
+  else {
+    ringCap(g, 5.2, 15.6, 3.6, 5.4, '#e39a3c', 543);
+    ringCap(g, 10.4, 16.2, 4.4, 8, '#e39a3c', 544);
+  }
+}
+
+/**
+ * Бабочка задания, вид сверху, летит вправо (влево её отражает рендер): вариант 0 — крылья раскрыты, 1 — подняты
+ * и сверху видны узкими. Рендер меняет варианты — выходит взмах. Крылья синие с лиловым, в тёмной кайме, с
+ * белыми точками и рыжим глазком: такую видно на любой земле, и её не спутать ни с маной, ни с сердцем.
+ */
+function paintButterfly(g, v) {
+  const cx = 12;
+  const cy = 10;
+  const k = v ? 0.38 : 1;
+  const ink = '#232a66';
+  const fore = v ? '#3f93e8' : '#4aa8ff';
+  const hind = v ? '#7a5fe0' : '#8a6cf0';
+  for (const s of [-1, 1]) {
+    const Y = (d) => cy + s * d * k;
+    // заднее крыло — с глазком
+    solid(g, (c) => {
+      c.moveTo(cx + 0.5, cy + s * 0.5);
+      c.quadraticCurveTo(cx - 1, Y(5), cx - 3.2, Y(6.6));
+      c.quadraticCurveTo(cx - 7.6, Y(7), cx - 7, Y(3.2));
+      c.quadraticCurveTo(cx - 5.5, Y(0.8), cx - 1.5, cy + s * 0.5);
+      c.closePath();
+    }, cx - 3.5, Y(3.6), 4, 3.4 * k, hind, {
+      line: ink, lw: 1.2, light: 0.5, dark: 0.35,
+      inside: (c) => {
+        oval(c, cx - 4.6, Y(4.4), 1.4, 1.4 * k, '#ffb03a');
+        oval(c, cx - 4.8, Y(4.2), 0.55, 0.55 * k, '#ffffff');
+      },
+    });
+    // переднее — крупнее, с точками у края
+    solid(g, (c) => {
+      c.moveTo(cx + 1.5, cy + s * 0.6);
+      c.quadraticCurveTo(cx + 6.6, Y(3), cx + 5.4, Y(8.6));
+      c.quadraticCurveTo(cx + 1.5, Y(9.6), cx - 2.2, Y(5.8));
+      c.quadraticCurveTo(cx - 1.6, Y(2.4), cx - 0.5, cy + s * 0.6);
+      c.closePath();
+    }, cx + 2, Y(4.8), 4.4, 4.4 * k, fore, {
+      line: ink, lw: 1.2, light: 0.55, dark: 0.35,
+      inside: (c) => {
+        // тёмная кайма по наружному краю
+        c.strokeStyle = fade(ink, 0.6);
+        c.lineWidth = 2.6;
+        c.beginPath();
+        c.moveTo(cx + 6, Y(4));
+        c.quadraticCurveTo(cx + 6.2, Y(9.6), cx - 2.2, Y(6.2));
+        c.stroke();
+        oval(c, cx + 3.9, Y(7.4), 0.7, 0.7 * k, '#ffffff');
+        oval(c, cx + 1.4, Y(7.8), 0.6, 0.6 * k, '#ffffff');
+        oval(c, cx + 2.4, Y(3.6), 1.5, 1.2 * k, fade('#bfe6ff', 0.75));
+      },
+    });
+  }
+  // тельце, голова и усики
+  limb(g, [cx - 4.4, cy, cx + 3.2, cy], 1.9, '#4a3a5e', '#1c1630', 0.8);
+  disc(g, cx + 4.2, cy, 1.5, '#1c1630');
+  disc(g, cx + 4.2, cy, 1, '#4a3a5e');
+  g.strokeStyle = '#1c1630';
+  g.lineWidth = 0.7;
+  g.lineCap = 'round';
+  g.beginPath();
+  for (const s of [-1, 1]) {
+    g.moveTo(cx + 4.9, cy + s * 0.5);
+    g.quadraticCurveTo(cx + 7, cy + s * 0.8, cx + 8.2, cy + s * 2.6);
+  }
+  g.stroke();
+  disc(g, cx + 8.2, cy - 2.6, 0.5, '#1c1630');
+  disc(g, cx + 8.2, cy + 2.6, 0.5, '#1c1630');
+}
+
 defineSprite('thing.chest', { w: 36, h: 34, ox: 18, oy: 30, variants: 2, pad: 2, paint: paintChest });
+defineSprite('thing.toadstool', { w: 16, h: 18, ox: 8, oy: 16, variants: 3, pad: 2, paint: paintRingCap });
+defineSprite('thing.butterfly', { w: 24, h: 20, ox: 12, oy: 18, variants: 2, pad: 2, paint: paintButterfly });
 defineSprite('thing.pedestal', { w: 34, h: 20, ox: 17, oy: 15, pad: 2, paint: paintPedestal });
 defineSprite('thing.portal', { w: 72, h: 94, ox: 36, oy: 88, pad: 2, paint: paintPortal });
 defineSprite('thing.stump', { w: 38, h: 36, ox: 19, oy: 31, variants: 2, pad: 2, paint: paintTaskStump });
@@ -2737,7 +2873,7 @@ export function propsOf(room) {
 export {
   TAU, DEEP, INK, SHADOW, WARM, parsed, rgb, mix, fade, dim, lift, hashInt, h01, rngOf, pick, weighted, spot, disc,
   oval, closedCurve, blobPoints, blob, volume, solid, circlesPath, puff, puffFlat, jitterCircles, curve, limb, leaf,
-  SIDES, WALKABLE, scan, contours, organic, regionPath, paintGround, tuft, flower, pebble, toadstool, paintDecals,
+  leaves, tinted, SIDES, WALKABLE, scan, contours, organic, regionPath, paintGround, tuft, flower, pebble, toadstool, paintDecals,
   dab, paintPaths, paintTallGrass, lilyPad, reeds, paintPond, paintThorns, paintBurrows, pawPrint, paintDens,
   standing, paintBases, paintLight, canopyTones, clump, fern, DEEP_LAYERS, paintDeep, paintWalls, hasOwn, lookOf,
   trunk, paintOak, paintBirch, paintFir, paintSapling, rock, paintRock, paintCrag, cutFace, paintStump, logBody,

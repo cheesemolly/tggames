@@ -50,7 +50,7 @@ const DUR = Math.max(0.05, numQ('dur', 0.8));
 const AIM = (numQ('aim', -25) * Math.PI) / 180;
 
 // земля мест (основной тон) и две нейтральные подложки
-const GROUND = { forest: '#7cc45a', swamp: '#6f9a6a', taiga: '#e6eef6', cave: '#5a5868', autumn: '#c98a3c', dark: '#22242b', light: '#f1ede4' };
+const GROUND = { forest: '#7cc45a', swamp: '#6f9a6a', taiga: '#cddaea', cave: '#5a5868', autumn: '#c98a3c', dark: '#22242b', light: '#f1ede4' };
 const bg = GROUND[Q.get('bg')] ?? GROUND.forest;
 const darkBg = ['dark', 'cave'].includes(Q.get('bg'));
 const INK = darkBg ? 'rgba(255,255,255,0.78)' : 'rgba(20,24,40,0.78)';

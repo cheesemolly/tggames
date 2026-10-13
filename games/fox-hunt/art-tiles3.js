@@ -19,8 +19,8 @@
 import { T, TILE } from './tiles.js';
 import {
   addBiome, TAU, INK, SHADOW, mix, fade, dim, lift, hashInt, h01, rngOf, pick, spot, disc, oval, solid, puff,
-  jitterCircles, curve, limb, leaf, contours, regionPath, paintGround, tuft, pebble, paintThorns, reeds, standing,
-  trunk, paintOak, paintBirch, rock, paintStump, logBody, sparkle, paintDoorNorth, paintDoorSouth, paintDoorSide,
+  jitterCircles, curve, limb, leaf, leaves, tinted, contours, regionPath, paintGround, tuft, pebble, paintThorns, reeds,
+  standing, trunk, paintOak, paintBirch, rock, paintStump, logBody, sparkle, paintDoorNorth, paintDoorSouth, paintDoorSide,
 } from './art-tiles.js';
 
 // ---------- общее ----------
@@ -47,32 +47,6 @@ function jag(ax, ay, bx, by, rnd, n, amp) {
   for (let k = 1; k < n; k++) p.push(ax + ((bx - ax) * k) / n + (rnd() - 0.5) * 2 * amp, ay + ((by - ay) * k) / n + (rnd() - 0.5) * 2 * amp);
   p.push(bx, by);
   return p;
-}
-
-/** Много листьев одного цвета одним проходом: list — подряд x, y, длина, ширина, угол. */
-function leaves(g, list, color) {
-  if (!list.length) return;
-  g.fillStyle = color;
-  g.beginPath();
-  for (let i = 0; i < list.length; i += 5) {
-    const x = list[i];
-    const y = list[i + 1];
-    const len = list[i + 2];
-    const wide = list[i + 3];
-    const co = Math.cos(list[i + 4]);
-    const si = Math.sin(list[i + 4]);
-    g.moveTo(x, y);
-    g.quadraticCurveTo(x + co * len * 0.5 - si * wide, y + si * len * 0.5 + co * wide, x + co * len, y + si * len);
-    g.quadraticCurveTo(x + co * len * 0.5 + si * wide, y + si * len * 0.5 - co * wide, x, y);
-  }
-  g.fill();
-}
-
-/** Вид места с переставленными тонами листвы: лесной рисунок дерева или двери красится другими красками. */
-function tinted(look, map) {
-  const tone = { ...look.tone };
-  for (const [slot, name] of Object.entries(map)) tone[slot] = look.tone[name];
-  return { ...look, tone };
 }
 
 // =====================================================================================================

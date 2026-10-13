@@ -123,3 +123,44 @@ test('рендер: каждому зверю из реестра есть ри�
   r.frame(G, 0.016, { alpha: 1, calm: false, input: null });
   assert.deepEqual(bad.slice(0, 5), []);
 });
+
+test('рендер: летающая вещь (бабочка задания) поднята на свою высоту, смотрит, куда летит, и бросает тень', async () => {
+  const { addThing } = await import('../world.js');
+  const canvas = fakeCanvas();
+  const log = [];
+  canvas.getContext().setTransform = (...a) => log.push(a.map((v) => Math.round(v * 1000) / 1000 || 0));
+  const r = createRenderer({ canvas, probe: null });
+  r.resize(640, 360);
+  const G = newRun(5);
+  r.enterRoom(G);
+  drain(G);
+  const th = addThing(G, { kind: 'butterfly', x: G.room.center.x + 40, y: G.room.center.y, r: 6, solid: false });
+  // время стоит (dt = 0): от кадра к кадру меняется только бабочка
+  const shot = () => {
+    log.length = 0;
+    r.frame(G, 0, { alpha: 1, calm: true, input: null });
+    return log.map((a) => a.join(' '));
+  };
+  r.frame(G, 0.016, { alpha: 1, calm: true, input: null });
+  const ground = shot();
+  assert.deepEqual(shot(), ground, 'кадр без хода времени должен повторяться');
+  th.z = 10;
+  th.face = -1;
+  const low = shot();
+  th.z = 22;
+  const high = shot();
+  const fresh = (now, was) => now.filter((c) => !was.includes(c)).map((c) => c.split(' ').map(Number));
+  const first = fresh(low, ground);
+  const flipped = first.filter((m) => m[0] < 0);
+  assert.equal(flipped.length, 1, 'бабочка, летящая влево, не отражена');
+  const [a, b, c, d, x, y] = flipped[0];
+  assert.ok(a === -d && b === 0 && c === 0 && d > 0, 'отражение без поворота и растяжения');
+  // тень — на земле под ней: появилась вместе с высотой и от высоты не зависит
+  const shade = first.filter((m) => m[0] > 0 && Math.abs(m[4] - x) < 0.01);
+  assert.equal(shade.length, 1, 'у летящей бабочки нет тени');
+  assert.ok(shade[0][5] > y + 9 * d, 'тень не ниже бабочки');
+  const second = fresh(high, low);
+  assert.equal(second.length, 1, 'с высотой должна сдвинуться только сама бабочка');
+  assert.ok(Math.abs(second[0][5] - (y - 12 * d)) < 0.01 && second[0][4] === x, 'бабочка поднята не на свою высоту');
+  r.destroy();
+});
