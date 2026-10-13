@@ -182,3 +182,18 @@ for (const id of IDS) {
     });
   }
 }
+
+test('рысь: нападает и на лису вплотную', () => {
+  const G = arena({ seed: 6, floor: 5 });
+  G.god = true;
+  const m = spawnMob(G, 'lynx', G.room.center.x + 40, G.room.center.y, { warm: 0 });
+  m.hp = m.maxHp = 1e6;
+  let leaps = 0;
+  for (let i = 0; i < 20 * 60; i++) {
+    put(G, m.x - 25, m.y);
+    step(G, makeInput());
+    G.events.length = 0;
+    if (m.state === 'pounce') leaps += 1;
+  }
+  assert.ok(leaps > 0, 'ни одного прыжка за 20 с');
+});

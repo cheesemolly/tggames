@@ -299,7 +299,7 @@ export const MOBS2 = {
       }
       if (m.state === 'stalk') {
         const d = ai.keepRange(m, G, 128, 178, 116);
-        if (m.cd <= 0 && d > 70 && d < 200 && !ai.foxDown(G) && ai.los(m, G)) ai.go(m, 'crouch');
+        if (m.cd <= 0 && d < 200 && !ai.foxDown(G) && ai.los(m, G)) ai.go(m, 'crouch');
       } else if (m.state === 'crouch') {
         const warn = warnOf(m, 0.6);
         if (m.t === 0) {
