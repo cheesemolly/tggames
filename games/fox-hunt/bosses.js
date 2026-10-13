@@ -205,6 +205,9 @@ export const BOSSES = {
             D.a = ai.angle(m, G);
             D.again = D.ph >= 3 ? 1 : 0;
             ai.go(m, 'aim');
+          } else if (d > 160 && !ai.los(m, G)) {
+            // лиса далеко и за деревьями — подходит ближе, лапой с другого конца комнаты не бьёт
+            break;
           } else {
             D.n = D.ph;
             ai.go(m, 'slam');
