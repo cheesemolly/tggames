@@ -71,6 +71,12 @@ export const RULES = [
   ['game:basketball:stats', { type: 'fields', fields: {
     games: 'count', best: 'max', baskets: 'count', clean: 'count', banks: 'count', streak: 'max', fires: 'count',
   } }],
+  // лисья охота: рекорд очков и самая дальняя локация — лучшее, остальное — счётчики; встреченные предметы — множество
+  ['game:fox-hunt:stats', { type: 'fields', fields: {
+    games: 'count', best: 'max', deep: 'max', rabbits: 'count', foes: 'count', bosses: 'count', rooms: 'count',
+    tasks: 'count', coins: 'count', donated: 'count',
+  } }],
+  ['game:fox-hunt:seen', { type: 'fields', fields: { '': 'union' } }],
   ['game:bongo-cat:stats', { type: 'fields', fields: { hits: 'count', meows: 'count', songs: 'count', 'by.*': 'count' } }],
   ['game:snake:stats', { type: 'fields', fields: {
     games: 'count', 'best.*': 'max', bestLength: 'max', apples: 'count', levelsCleared: 'count', bestLevel: 'max',

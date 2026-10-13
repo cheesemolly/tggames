@@ -17,11 +17,22 @@
 //   setChrome(color | null)    — цвет шапки и фона Telegram вокруг мини-приложения (null — цвета темы)
 //   setHaptics(on)             — общий выключатель вибрации (игры зовут haptic как раньше)
 //   openLink(url), openTelegramLink(url) — ссылка наружу / в Telegram (бот, канал)
-//   onActivated(cb) — мини-приложение снова на экране (Telegram 'activated', Bot API 8.0; вне Telegram — нет:
-//                     там хватает visibilitychange). Для перечитывания прогресса (бета 'sync-refresh').
+//   onActivated(cb) → отписка — мини-приложение снова на экране (Telegram 'activated', Bot API 8.0; вне Telegram —
+//                     нет: там хватает visibilitychange). Для перечитывания прогресса (бета 'sync-refresh').
 //   deviceStorage: get(key) → Promise<строка | null>, set(key, value) → Promise<boolean> — хранилище ЭТОГО устройства
 //                  (Telegram DeviceStorage, Bot API 9.0; с другими устройствами не синхронизируется, в отличие от
 //                  CloudStorage). Номер устройства для счётчиков по устройствам (бета 'sync-merge'). Нет — null/false.
+// Для альбомных игр (shell/landscape.js) и защиты от случайного выхода (shell/game-host.js):
+//   orientation: supported, isLocked, lock(), unlock() — закрепить ориентацию (Bot API 8.0). lock() закрепляет ТЕКУЩУЮ:
+//                  повернуть экран Telegram не умеет, поэтому звать его можно, только когда телефон уже лежит на боку
+//   insets() → { top, right, bottom, left } — в px, от краёв окна: вырез и полоски устройства + кнопки Telegram
+//                  в полном экране (у кнопок клиенты шлют только top). Вне полного экрана и вне Telegram — нули
+//   onInsets(cb) → отписка — отступы, размер окна или полный экран изменились. Клиент шлёт это и без изменений,
+//                  и раньше, чем значения устоятся, — сравнивать самим
+//   confirmClose(on) — переспрашивать перед закрытием мини-приложения (Bot API 6.2). Сворачивание и системное
+//                  «назад» подтверждение не ловит
+//   onDeactivated(cb) → отписка — мини-приложение свернули (Telegram 'deactivated', Bot API 8.0); на старых клиентах
+//                  и вне Telegram — только visibilitychange
 
 import { el, loadCss } from '../shared/dom.js';
 import { isMobilePlatform } from './device.js';
@@ -95,6 +106,15 @@ function createTelegramPlatform(tg) {
   tg.onEvent?.('fullscreenChanged', syncFullscreen);
   tg.onEvent?.('fullscreenFailed', syncFullscreen);
 
+  /** Снять обработчик событий Telegram (обработчики переживают игру — модуль один на страницу). */
+  const off = (types, cb) => {
+    try {
+      types.forEach((type) => tg.offEvent?.(type, cb));
+    } catch {
+      // старый клиент — снимать нечего
+    }
+  };
+
   return {
     isTelegram: true,
     user: tg.initDataUnsafe?.user ?? null,
@@ -133,10 +153,73 @@ function createTelegramPlatform(tg) {
       } catch {
         // старый клиент — остаётся visibilitychange
       }
+      return () => off(['activated'], cb);
+    },
+    /** Мини-приложение свернули (Bot API 8.0; на старых клиентах — только visibilitychange). Возвращает отписку. */
+    onDeactivated(cb) {
+      try {
+        tg.onEvent?.('deactivated', cb);
+      } catch {
+        // старый клиент — остаётся visibilitychange
+      }
+      return () => off(['deactivated'], cb);
     },
     deviceStorage: {
       get: (key) => deviceCall((ds, done) => ds.getItem(key, (err, value) => done(err ? null : value ?? null)), null),
       set: (key, value) => deviceCall((ds, done) => ds.setItem(key, value, (err, ok) => done(!err && ok !== false)), false),
+    },
+
+    // Ориентация (Bot API 8.0): lock() закрепляет ТЕКУЩУЮ — повернуть экран Telegram не умеет. Стоя закрепился бы
+    // портрет, поэтому альбомная игра зовёт его, только когда телефон уже лежит на боку (shell/landscape.js).
+    orientation: {
+      get supported() { return typeof tg.lockOrientation === 'function' && Boolean(tg.isVersionAtLeast?.('8.0')); },
+      get isLocked() { return Boolean(tg.isOrientationLocked); },
+      lock() {
+        try {
+          if (tg.isVersionAtLeast?.('8.0')) tg.lockOrientation?.();
+        } catch (err) {
+          console.warn('не удалось закрепить ориентацию', err);
+        }
+      },
+      unlock() {
+        try {
+          if (tg.isVersionAtLeast?.('8.0')) tg.unlockOrientation?.();
+        } catch (err) {
+          console.warn('не удалось отпустить ориентацию', err);
+        }
+      },
+    },
+
+    // Отступы в px от краёв окна: устройство (вырез, полоска жестов) + кнопки Telegram в полном экране — у кнопок
+    // клиенты шлют только top. На клиентах старее Bot API 8.0 этих полей нет — нули.
+    insets() {
+      const sum = (side) => (Number(tg.safeAreaInset?.[side]) || 0) + (Number(tg.contentSafeAreaInset?.[side]) || 0);
+      return { top: sum('top'), right: sum('right'), bottom: sum('bottom'), left: sum('left') };
+    },
+    /** Отступы, размер окна или полный экран изменились; возвращает отписку. Клиент шлёт и без изменений — сравнивать самим. */
+    onInsets(cb) {
+      // fullscreenFailed — тоже: по отказу «уже в полном экране» признак на <html> включается (syncFullscreen)
+      const types = ['safeAreaChanged', 'contentSafeAreaChanged', 'fullscreenChanged', 'fullscreenFailed', 'viewportChanged'];
+      try {
+        types.forEach((type) => tg.onEvent?.(type, cb));
+      } catch (err) {
+        console.warn('не удалось подписаться на отступы', err);
+      }
+      return () => off(types, cb);
+    },
+
+    /**
+     * Переспрашивать перед закрытием мини-приложения (Bot API 6.2) — чтобы альбомную игру не закрыли случайным
+     * касанием. Сворачивание и системное «назад» это не ловит: от них партию спасает сохранение.
+     */
+    confirmClose(on) {
+      try {
+        if (!tg.isVersionAtLeast?.('6.2')) return;
+        if (on) tg.enableClosingConfirmation?.();
+        else tg.disableClosingConfirmation?.();
+      } catch (err) {
+        console.warn('не удалось сменить подтверждение закрытия', err);
+      }
     },
 
     /**
@@ -298,8 +381,18 @@ function createBrowserPlatform() {
     setHaptics: (on) => log('setHaptics', on),
     openLink: (url) => window.open(url, '_blank', 'noopener'),
     openTelegramLink: (url) => window.open(url, '_blank', 'noopener'),
-    onActivated: () => {},
+    onActivated: () => () => {},
+    onDeactivated: () => () => {},
     deviceStorage: { get: async () => null, set: async () => false },
+    orientation: {
+      supported: false,
+      isLocked: false,
+      lock: () => log('orientation.lock()'),
+      unlock: () => log('orientation.unlock()'),
+    },
+    insets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
+    onInsets: () => () => {},
+    confirmClose: (on) => log('confirmClose', on),
     lockSwipes: () => log('lockSwipes()'),
     fullscreen: {
       supported: false,

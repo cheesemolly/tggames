@@ -214,6 +214,7 @@ const GAMES = [
   { id: 'logic-gates', title: 'Логические схемы', emoji: '🟡', about: 'расставь вентили И, ИЛИ и НЕ, чтобы зажглась лампа: 100 схем, звёзды — с какого включения получилось' },
   { id: 'jump-up', title: 'Прыгалка вверх', emoji: '🟡', about: 'каракуля сама прыгает по платформам — веди её вверх: пружинки, бумажный самолётик, кляксы и двойки', beta: true },
   { id: 'basketball', title: 'Баскетбол', emoji: '🟢', about: 'тяни мяч назад, как рогатку, и бросай из корзины в корзину: чистые попадания подряд зажигают мяч', beta: true },
+  { id: 'fox-hunt', title: 'Лисья охота', emoji: '🦊', about: 'лиса рывком ловит кроликов в лесных комнатах и уходит от лося и медведя: оружие, предметы, магазины, боссы', beta: true },
 ];
 
 const fold = (text) => String(text ?? '').toLowerCase().replace(/ё/g, 'е').trim();
@@ -550,6 +551,8 @@ const BOARDS = {
   // Прыгалка вверх: рекорд высоты — сколько клеток листа набрано за одну игру
   'jump-up': { by: 'рекорд высоты', score: shellStats('jump-up', 'best'), text: count(['клетка', 'клетки', 'клеток']) },
   basketball: { by: 'рекорд', score: shellStats('basketball', 'best'), text: POINTS },
+  // Лисья охота: рекорд очков за одну охоту (кролик — очко, враги и боссы — больше)
+  'fox-hunt': { by: 'рекорд', score: shellStats('fox-hunt', 'best'), text: POINTS },
 };
 
 const MAX_SCORE = 1e9;   // больше — явно испорченные данные
@@ -586,6 +589,7 @@ const BOARD_LIMITS = {
   'logic-gates': 300,         // три звезды за каждый из ста уровней
   'jump-up': 1e5,             // клеток по высоте: это часы подъёма без единой ошибки
   basketball: 1e5,            // за бросок — не больше 20 очков: это тысячи корзин без промаха
+  'fox-hunt': 1e5,            // кролик — очко, босс — десятки: это сотни локаций на трёх жизнях
 };
 // побед не может быть больше сыгранных партий
 const WINS_FROM = { checkers: 'checkers', mahjong: 'mahjong', sudoku: 'sudoku', wordle: 'wordle', tictactoe: 'tictactoe', chess: 'chess', spider: 'spider', klondike: 'klondike', 'killer-sudoku': 'killer-sudoku', go: 'go', minesweeper: 'minesweeper', fifteen: 'fifteen', rubik: 'rubik', hanoi: 'hanoi', erudit: 'erudit', billiards: 'billiards', cities: 'cities' };
@@ -1149,6 +1153,12 @@ const RULES = [
   ['game:basketball:stats', { type: 'fields', fields: {
     games: 'count', best: 'max', baskets: 'count', clean: 'count', banks: 'count', streak: 'max', fires: 'count',
   } }],
+  // лисья охота: рекорд очков и самая дальняя локация — лучшее, остальное — счётчики; встреченные предметы — множество
+  ['game:fox-hunt:stats', { type: 'fields', fields: {
+    games: 'count', best: 'max', deep: 'max', rabbits: 'count', foes: 'count', bosses: 'count', rooms: 'count',
+    tasks: 'count', coins: 'count', donated: 'count',
+  } }],
+  ['game:fox-hunt:seen', { type: 'fields', fields: { '': 'union' } }],
   ['game:bongo-cat:stats', { type: 'fields', fields: { hits: 'count', meows: 'count', songs: 'count', 'by.*': 'count' } }],
   ['game:snake:stats', { type: 'fields', fields: {
     games: 'count', 'best.*': 'max', bestLength: 'max', apples: 'count', levelsCleared: 'count', bestLevel: 'max',

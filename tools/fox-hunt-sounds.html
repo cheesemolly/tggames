@@ -1,0 +1,122 @@
+<!doctype html><meta charset="utf-8"><title>Лисья охота — звуки и музыка</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Послушать звуки и музыку «Лисьей охоты» без самой игры: http://localhost:8000/tools/fox-hunt-sounds.html
+     Кнопка — звук; список берётся из games/fox-hunt/sounds.js, поэтому новые звуки появляются здесь сами
+     (без подписи — в «Остальном»). Музыка — по местам; «Тишина» её останавливает. -->
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; padding: 20px 20px 60px; background: #141a17; color: #e8efe9; font: 15px/1.45 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+  h1 { margin: 0 0 4px; font-size: 22px; }
+  h2 { margin: 26px 0 10px; font-size: 16px; color: #9fd08a; }
+  p { margin: 0 0 6px; color: #9aa8a0; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; }
+  button { padding: 9px 12px; border: 1px solid #2f3d36; border-radius: 10px; background: #1e2823; color: inherit; font: inherit; cursor: pointer; text-align: left; transition: background-color 0.15s ease, border-color 0.15s ease; }
+  button:hover { background: #26332c; }
+  button:active { background: #31423a; }
+  button small { display: block; color: #8b998f; font-size: 12px; }
+  button.on { border-color: #9fd08a; background: #24352a; }
+  button.wide { font-weight: 600; }
+  #err { color: #ff9a8f; white-space: pre-wrap; }
+</style>
+<body>
+<h1>Лисья охота — звуки и музыка</h1>
+<p>Нажми кнопку — прозвучит звук. Под названием — где он звучит в игре.</p>
+<p id="err"></p>
+
+<h2>Музыка</h2>
+<div class="row" id="music"></div>
+
+<h2>Несколько подряд</h2>
+<div class="row" id="combo"></div>
+
+<div id="groups"></div>
+
+<script type="module">
+import { createAudio } from '../shared/sfx.js';
+
+const err = document.getElementById('err');
+const el = (tag, props = {}, ...kids) => {
+  const node = Object.assign(document.createElement(tag), props);
+  node.append(...kids);
+  return node;
+};
+
+// где звук звучит в игре
+const NOTES = {
+  tap: 'нажатие кнопки', open: 'открылось окно', close: 'закрылось окно', equip: 'надел предмет', deny: 'нельзя',
+  buy: 'купил', coin: 'монета', pick: 'подобрал предмет', heart: 'сердце', mana: 'мана', potion: 'выпил зелье',
+  chest: 'открыл сундук', banner: 'надпись на экране', gift: 'дар леса',
+  dash: 'рывок', land: 'приземление', hurt: 'лису ударили', shield: 'удар принял щит', die: 'потеряна жизнь',
+  respawn: 'возрождение у норы', nomana: 'мана кончилась',
+  catch: 'поймал кролика', escape: 'кролик убежал', hit: 'попал по врагу', crit: 'сильный удар', kill: 'враг побеждён',
+  bush: 'сломал куст', stump: 'разбил пенёк', spiky: 'укололся о колючего',
+  shot: 'выстрел', heavy: 'тяжёлый выстрел', spread: 'дробь', bow: 'лук', magic: 'магия', zap: 'молния', beam: 'луч',
+  lob: 'бросок', boom: 'взрыв', ice: 'лёд', fire: 'огонь', swing: 'взмах', trap: 'капкан',
+  warn: 'появилась красная зона', moose: 'бежит лось', paw: 'лапа медведя', growl: 'рык', spit: 'плевок',
+  spawn: 'появился враг',
+  door: 'двери открылись', lock: 'двери закрылись', clear: 'комната пройдена', task: 'задание', taskok: 'задание выполнено',
+  taskfail: 'задание провалено', boss: 'выходит босс', bossdie: 'босс побеждён', floor: 'новая локация',
+  gameover: 'охота окончена', record: 'новый рекорд', hire: 'нанял помощника', altar: 'жертвенный камень',
+  well: 'колодец желаний', forge: 'кузница', heal: 'лечение',
+};
+const GROUPS = [
+  ['Лиса', ['dash', 'land', 'hurt', 'shield', 'die', 'respawn', 'nomana']],
+  ['Охота', ['catch', 'escape', 'hit', 'crit', 'kill', 'bush', 'stump', 'spiky']],
+  ['Враги и красные зоны', ['warn', 'moose', 'paw', 'growl', 'spit', 'spawn']],
+  ['Оружие', ['shot', 'heavy', 'spread', 'bow', 'magic', 'zap', 'beam', 'lob', 'boom', 'ice', 'fire', 'swing', 'trap']],
+  ['Комнаты и события', ['door', 'lock', 'clear', 'task', 'taskok', 'taskfail', 'boss', 'bossdie', 'floor', 'gameover', 'record', 'hire', 'altar', 'well', 'forge', 'heal']],
+  ['Окна и вещи', ['tap', 'open', 'close', 'equip', 'deny', 'buy', 'coin', 'pick', 'heart', 'mana', 'potion', 'chest', 'banner', 'gift']],
+];
+const MOOD_NAMES = { forest: 'Опушка', swamp: 'Болото', taiga: 'Зимний бор', cave: 'Пещеры', autumn: 'Осенняя чаща', boss: 'Босс' };
+
+try {
+  const { createSounds, SOUNDS, MOODS = [] } = await import('../games/fox-hunt/sounds.js');
+  const audio = createAudio(createSounds);
+  const play = (name, opts) => audio.get()?.play(name, opts);
+
+  const soundBtn = (name) => el('button', { onclick: () => play(name) }, name, el('small', {}, NOTES[name] ?? ''));
+
+  const groups = document.getElementById('groups');
+  const shown = new Set();
+  for (const [title, names] of GROUPS) {
+    const have = names.filter((n) => SOUNDS.includes(n));
+    have.forEach((n) => shown.add(n));
+    if (have.length) groups.append(el('h2', {}, title), el('div', { className: 'row' }, ...have.map(soundBtn)));
+  }
+  const rest = SOUNDS.filter((n) => !shown.has(n));
+  if (rest.length) groups.append(el('h2', {}, 'Остальное'), el('div', { className: 'row' }, ...rest.map(soundBtn)));
+
+  // музыка: одна кнопка на место, вторая подряд по той же — другая мелодия (новое зерно)
+  const music = document.getElementById('music');
+  let seed = 1;
+  const moodBtns = MOODS.map((mood) => el('button', {
+    className: 'wide',
+    onclick: (e) => {
+      seed += 1;
+      audio.get()?.music(mood, seed);
+      moodBtns.forEach((b) => b.classList.toggle('on', b === e.currentTarget));
+    },
+  }, MOOD_NAMES[mood] ?? mood, el('small', {}, 'музыка места')));
+  music.append(...moodBtns, el('button', {
+    className: 'wide',
+    onclick: () => {
+      audio.get()?.music(null);
+      moodBtns.forEach((b) => b.classList.remove('on'));
+    },
+  }, 'Тишина', el('small', {}, 'остановить музыку')));
+
+  // как это звучит в бою: несколько звуков подряд
+  const chain = (steps, gap) => steps.forEach(([name, opts], i) => setTimeout(() => play(name, opts), i * gap));
+  const combos = [
+    ['Пять кроликов подряд', 'цепочка поимок — тон растёт', () => chain([1, 2, 3, 4, 5].map((n) => ['catch', { n }]), 220)],
+    ['Рывок в кролика', 'рывок → поимка → приземление', () => chain([['dash'], ['catch', { n: 1 }], ['land']], 150)],
+    ['Лось', 'красная зона → топот → удар', () => chain([['warn'], ['moose'], ['hurt']], 700)],
+    ['Медведь', 'красная зона → лапа', () => chain([['warn'], ['paw']], 900)],
+    ['Очередь из оружия', 'восемь выстрелов и попадания', () => chain([...Array(8)].flatMap(() => [['shot'], ['hit']]), 130)],
+    ['Комната пройдена', 'последний враг → двери → звон', () => chain([['kill'], ['clear'], ['door']], 350)],
+  ];
+  document.getElementById('combo').append(...combos.map(([title, note, run]) => el('button', { onclick: run }, title, el('small', {}, note))));
+} catch (e) {
+  err.textContent = `Не удалось загрузить звуки: ${e?.message ?? e}`;
+}
+</script>

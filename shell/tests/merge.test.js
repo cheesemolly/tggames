@@ -328,7 +328,7 @@ async function cases() {
   const g = {};
   for (const id of ['flags', 'checkers', 'flappy-burger', 'bongo-cat', 'snake', 'memory', 'bubble-shooter', 'brick-blast',
     'loop', 'connect-dots', 'mahjong', '2048', 'boggle', 'block-blast', 'sudoku', 'tictactoe', 'wordle', 'chess', 'spider', 'klondike',
-    'minesweeper', 'fifteen', 'rubik', 'hanoi', 'repair', 'arkanoid', 'erudit', 'billiards', 'cities', 'word-circle', 'subwords', 'crostic', 'alchemy', 'logic-gates', 'jump-up', 'basketball']) {
+    'minesweeper', 'fifteen', 'rubik', 'hanoi', 'repair', 'arkanoid', 'erudit', 'billiards', 'cities', 'word-circle', 'subwords', 'crostic', 'alchemy', 'logic-gates', 'jump-up', 'basketball', 'fox-hunt']) {
     g[id] = await mod(id);
   }
   const pinball = await mod('pinball', 'rules.js');
@@ -339,6 +339,7 @@ async function cases() {
     ['game:flappy-burger:stats', g['flappy-burger'].emptyStats(), g['flappy-burger'].isValidStats],
     ['game:jump-up:stats', g['jump-up'].emptyStats(), g['jump-up'].isValidStats],
     ['game:basketball:stats', g.basketball.emptyStats(), g.basketball.isValidStats],
+    ['game:fox-hunt:stats', g['fox-hunt'].emptyStats(), g['fox-hunt'].isValidStats],
     ['game:bongo-cat:stats', g['bongo-cat'].emptyStats(), g['bongo-cat'].isValidStats],
     ['game:snake:stats', { ...g.snake.emptyStats() }, g.snake.isValidStats],
     ['game:memory:stats', g.memory.emptyStats(), g.memory.isValidStats],
@@ -524,6 +525,36 @@ test('Эрудит: строки коротких партий не теряют
     assert.deepEqual(v.easy, { played: 3, wins: 2, losses: 1, draws: 0, best: 240, bestMove: 30 });
     assert.deepEqual(v.hard, old.hard);
     assert.ok(er.isValidStats(er.migrateStats(v)));
+  }
+});
+
+test('Лисья охота: рекорд и самая дальняя локация — лучшее, счётчики складываются, встреченные предметы — множество', () => {
+  const key = 'game:fox-hunt:stats';
+  const seenKey = 'game:fox-hunt:seen';
+  for (const field of ['games', 'rabbits', 'foes', 'bosses', 'rooms', 'tasks', 'coins', 'donated']) assert.equal(kindAt(key, field), 'count', field);
+  for (const field of ['best', 'deep']) assert.equal(kindAt(key, field), 'max', field);
+  assert.equal(kindAt(seenKey, ''), 'union');
+  const zero = { games: 0, best: 0, deep: 0, rabbits: 0, foes: 0, bosses: 0, rooms: 0, tasks: 0, coins: 0, donated: 0 };
+  const doc = loadDoc({ [key]: { ...zero, games: 2, best: 40, deep: 2, rabbits: 30, rooms: 9 }, [seenKey]: ['pinecone', 'vest'] }, null, 1000);
+  const known = (k) => cleanEntry(k, entriesSince(doc, 0)[k]);
+  const push = (k, value, dev) => {
+    const e = absorb(k, known(k), value, dev);
+    return { device: dev, seq: 1, keys: { [k]: { v: e.v, f: e.f, e: e.e } } };
+  };
+  // телефон: ещё одна охота — 55 очков, дошёл до третьей локации; планшет: короткая охота на 12 очков
+  const phone = { ...zero, games: 3, best: 55, deep: 3, rabbits: 71, foes: 9, bosses: 2, rooms: 23, coins: 60 };
+  const tablet = { ...zero, games: 3, best: 40, deep: 2, rabbits: 42, foes: 3, rooms: 13, tasks: 1, donated: 5 };
+  const sends = [
+    [push(key, phone, A), push(seenKey, ['pinecone', 'vest', 'fang'], A)],
+    [push(key, tablet, B), push(seenKey, ['vest', 'pinecone', 'magnet'], B)],
+  ];
+  for (const order of [[0, 1], [1, 0]]) {
+    let d = doc;
+    order.forEach((k, n) => { for (const send of sends[k]) d = applyPush(d, send, 2000 + n * 10).doc; });
+    assert.deepEqual(d.k[key].v, {
+      games: 4, best: 55, deep: 3, rabbits: 83, foes: 12, bosses: 2, rooms: 27, tasks: 1, coins: 60, donated: 5,
+    }, `порядок ${order}`);
+    assert.deepEqual([...d.k[seenKey].v].sort(), ['fang', 'magnet', 'pinecone', 'vest'], `порядок ${order}: предметы обоих устройств`);
   }
 });
 

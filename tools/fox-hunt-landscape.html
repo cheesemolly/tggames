@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Альбомный экран — проверка</title>
+<!-- Альбомный экран оболочки (shell/landscape.js) без самой игры: http://localhost:8000/tools/fox-hunt-landscape.html
+     На экране — сетка в осях игры (клетка 50 px): углы подписаны, пунктир — рамка отступов, точка ставится туда, куда
+     пришлось касание, и должна оказаться ровно под пальцем. В узком окне (телефон стоя) экран лежит на боку.
+       ?flip          — на другой бок (−90°)
+       ?desktop       — как на компьютере: без поворота, каким бы ни было окно
+       ?fs=105,0,34,0 — как в полном экране Telegram: отступы устройства сверху, справа, снизу, слева (серые полосы —
+                        место часов и кнопок Telegram), шапки заглушки нет
+       ?host          — то же через настоящий хост игры (shell/game-host.js) с игрой-пустышкой: api.screen, api.exit(),
+                        onBack(), onHide(), карточка итога оболочки. ?host&portrait — та же игра без landscape,
+                        ?host&noshare — карточка с двумя кнопками, ?host&slow=мс — подольше «Загрузка…», ?host&err —
+                        экран ошибки
+     Сценариям — window.__land: screen (api.screen), touches, calls (что просили у платформы), changes, exits, backs,
+     hides, menuClicks и события Telegram: fullscreen(отступы | null), activate(), deactivate(), back(); toast(текст) —
+     сообщение оболочки; с хостом — ещё pause() и finish(). -->
+<link rel="stylesheet" href="../styles/theme.css">
+<link rel="stylesheet" href="../styles/app.css">
+<style>
+  .lc-root { position: relative; }
+  .lc-stage {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    touch-action: none;
+    --lc-line: color-mix(in srgb, var(--tg-theme-hint-color) 32%, transparent);
+    background:
+      linear-gradient(to right, var(--lc-line) 1px, transparent 1px) 0 0 / 50px 50px,
+      linear-gradient(to bottom, var(--lc-line) 1px, transparent 1px) 0 0 / 50px 50px,
+      var(--tg-theme-secondary-bg-color);
+  }
+  .lc-safe {
+    position: absolute;
+    inset: var(--ls-t, 0px) var(--ls-r, 0px) var(--ls-b, 0px) var(--ls-l, 0px);
+    border: 2px dashed var(--tg-theme-button-color);
+    pointer-events: none;
+  }
+  .lc-corner {
+    position: absolute;
+    padding: 3px 8px;
+    border-radius: 6px;
+    background: var(--tg-theme-button-color);
+    color: var(--tg-theme-button-text-color);
+    font-size: 13px;
+    font-weight: 700;
+    pointer-events: none;
+  }
+  .lc-tl { left: calc(var(--ls-l, 0px) + 8px); top: calc(var(--ls-t, 0px) + 8px); }
+  .lc-tr { right: calc(var(--ls-r, 0px) + 8px); top: calc(var(--ls-t, 0px) + 8px); }
+  .lc-bl { left: calc(var(--ls-l, 0px) + 8px); bottom: calc(var(--ls-b, 0px) + 8px); }
+  .lc-br { right: calc(var(--ls-r, 0px) + 8px); bottom: calc(var(--ls-b, 0px) + 8px); }
+  .lc-info {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    translate: -50% -50%;
+    width: max-content;
+    max-width: 80%;
+    text-align: center;
+    font-size: 14px;
+    line-height: 1.5;
+    pointer-events: none;
+  }
+  .lc-dot {
+    position: absolute;
+    left: -9px;
+    top: -9px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--cat-arcade);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--tg-theme-bg-color) 70%, transparent);
+    pointer-events: none;
+  }
+  .lc-btn {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 8px 14px;
+    border: 0;
+    border-radius: 10px;
+    background: var(--tg-theme-button-color);
+    color: var(--tg-theme-button-text-color);
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .lc-pause-btn { position: absolute; right: calc(var(--ls-r, 0px) + 8px); top: calc(var(--ls-t, 0px) + 44px); }
+  .lc-pause {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    display: grid;
+    place-items: center;
+    padding: calc(8px + var(--ls-t, 0px)) calc(8px + var(--ls-r, 0px)) calc(8px + var(--ls-b, 0px)) calc(8px + var(--ls-l, 0px));
+    background: color-mix(in srgb, var(--tg-theme-bg-color) 80%, transparent);
+  }
+  .lc-pause-card { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; max-width: 520px; }
+  .lc-pause-card h2 { flex: 0 0 100%; margin: 0 0 4px; text-align: center; }
+  /* серые полосы — где в полном экране Telegram часы, вырез и его кнопки (оси устройства, не игры) */
+  .lc-chrome { position: fixed; z-index: 300; background: rgb(120 120 120 / 0.45); pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script type="module">
+import { platform as stub } from '../platform/telegram.js';
+import { createLandscape } from '../shell/landscape.js';
+import { openGame } from '../shell/game-host.js';
+import { el } from '../shared/dom.js';
+import { createToast } from '../shared/toast.js';
+
+const Q = new URLSearchParams(location.search);
+const GAME_ID = 'land-check';
+const app = document.getElementById('app');
+const root = document.documentElement;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// ---------- платформа: настоящая заглушка, но ориентация, отступы и события Telegram — подставные и под запись ----------
+
+const calls = [];
+const subs = { insets: new Set(), activated: new Set(), deactivated: new Set() };
+let device = { top: 0, right: 0, bottom: 0, left: 0 };
+const sub = (set) => (cb) => {
+  set.add(cb);
+  return () => set.delete(cb);
+};
+const platform = Object.create(stub, Object.getOwnPropertyDescriptors({
+  isDesktop: Q.has('desktop'),
+  insets: () => ({ ...device }),
+  onInsets: sub(subs.insets),
+  onActivated: sub(subs.activated),
+  onDeactivated: sub(subs.deactivated),
+  orientation: { supported: true, isLocked: false, lock: () => calls.push('lock'), unlock: () => calls.push('unlock') },
+  confirmClose: (on) => calls.push(`confirmClose ${on}`),
+}));
+
+/** Как полный экран Telegram: признак на <html>, отступы — и в переменных (их читает styles/app.css), и событием. */
+function fullscreen(insets) {
+  device = insets ?? { top: 0, right: 0, bottom: 0, left: 0 };
+  root.dataset.fullscreen = insets ? 'on' : 'off';
+  for (const side of ['top', 'right', 'bottom', 'left']) root.style.setProperty(`--tg-safe-area-inset-${side}`, `${device[side]}px`);
+  document.querySelector('.tg-stub-header').hidden = Boolean(insets);
+  document.querySelectorAll('.lc-chrome').forEach((node) => node.remove());
+  const strip = (style) => document.body.append(el('div', { class: 'lc-chrome', style }));
+  if (device.top) strip(`left: 0; right: 0; top: 0; height: ${device.top}px`);
+  if (device.bottom) strip(`left: 0; right: 0; bottom: 0; height: ${device.bottom}px`);
+  if (device.left) strip(`left: 0; top: 0; bottom: 0; width: ${device.left}px`);
+  if (device.right) strip(`right: 0; top: 0; bottom: 0; width: ${device.right}px`);
+  subs.insets.forEach((cb) => cb());
+}
+
+// ---------- экран с сеткой ----------
+
+const land = { mode: Q.has('host') ? 'host' : 'helper', screen: null, touches: [], calls, changes: 0, exits: 0, backs: 0, hides: 0, menuClicks: 0 };
+globalThis.__land = land;
+
+/**
+ * Кнопка по отпусканию пальца, а не по click: так же делает альбомная игра (второй палец click не даёт). Click,
+ * который браузер шлёт вдогонку, здесь нарочно не гасится (touchend без preventDefault) — видно, что его держит оболочка.
+ */
+function tap(node, action) {
+  let armed = false;
+  node.addEventListener('pointerdown', () => { armed = true; });
+  node.addEventListener('pointercancel', () => { armed = false; });
+  node.addEventListener('pointerup', (e) => {
+    if (!armed) return;
+    armed = false;
+    if (node.contains(document.elementFromPoint(e.clientX, e.clientY))) action();
+  });
+  return node;
+}
+
+/** Сетка в осях игры: подписи углов, рамка отступов, сводка и точки касаний. screen — api.screen или null. */
+function buildStage(host, screen, extra = []) {
+  const info = el('div', { class: 'lc-info' });
+  const stage = el('div', { class: 'lc-stage' },
+    el('div', { class: 'lc-safe' }),
+    el('span', { class: 'lc-corner lc-tl' }, 'лево-верх'),
+    el('span', { class: 'lc-corner lc-tr' }, 'право-верх'),
+    el('span', { class: 'lc-corner lc-bl' }, 'лево-низ'),
+    el('span', { class: 'lc-corner lc-br' }, 'право-низ'),
+    info,
+    ...extra,
+  );
+  host.append(stage);
+  const dots = new Map();
+  const out = { x: 0, y: 0 };
+  const paint = () => {
+    const size = screen ? screen.size() : { w: stage.offsetWidth, h: stage.offsetHeight };
+    const i = screen ? screen.insets() : null;
+    info.replaceChildren(
+      el('b', {}, screen ? `поворот ${screen.turn}°${screen.flipped ? ' · другой бок' : ''}` : 'без api.screen'),
+      el('br'), `экран игры ${size.w} × ${size.h}`,
+      el('br'), i ? `отступы: верх ${i.top} · право ${i.right} · низ ${i.bottom} · лево ${i.left}` : 'отступов нет',
+      el('br'), `касаний: ${land.touches.filter((t) => t.type === 'pointerdown').length}`,
+    );
+  };
+  const onPointer = (e) => {
+    if (e.target.closest('button')) return;
+    let p = out;
+    if (screen) screen.toLocal(e.clientX, e.clientY, out);
+    else {
+      const r = stage.getBoundingClientRect();
+      p = { x: e.clientX - r.left, y: e.clientY - r.top };
+    }
+    if (!dots.has(e.pointerId)) {
+      dots.set(e.pointerId, el('div', { class: 'lc-dot' }));
+      stage.append(dots.get(e.pointerId));
+    }
+    dots.get(e.pointerId).style.translate = `${p.x}px ${p.y}px`;
+    land.touches.push({ type: e.type, id: e.pointerId, cx: e.clientX, cy: e.clientY, x: p.x, y: p.y });
+    if (e.type !== 'pointermove') paint();
+  };
+  for (const type of ['pointerdown', 'pointermove', 'pointerup']) stage.addEventListener(type, onPointer);
+  paint();
+  return { stage, paint };
+}
+
+// ---------- без хоста: помощник сам по себе ----------
+
+function runHelper() {
+  const screen = el('main', { class: 'screen' });
+  app.replaceChildren(screen);
+  const helper = createLandscape(screen, { platform, app });
+  land.screen = helper.api;
+  land.helper = helper;
+  const { paint } = buildStage(screen, helper.api);
+  helper.api.onChange(() => {
+    land.changes += 1;
+    paint();
+  });
+  if (Q.has('flip')) helper.api.flip(true);
+}
+
+// ---------- через настоящий хост игры ----------
+
+function runHost() {
+  let api = null;
+  let view = null;
+  let pause = null;
+  let offChange = null;
+
+  const closePause = () => {
+    pause?.remove();
+    pause = null;
+  };
+  const finish = () => api?.finish({
+    outcome: 'lose', title: 'Охота окончена', score: 17, locale: 'ru',
+    message: 'Кроликов: 12 · врагов: 5 · локация 2', share: Q.has('noshare') ? null : 'Лисья охота: 17 очков',
+  });
+  const openPause = () => {
+    if (pause || !view) return;
+    const button = (text, action) => tap(el('button', { class: 'lc-btn' }, text), action);
+    pause = el('div', { class: 'lc-pause' }, el('div', { class: 'lc-pause-card' },
+      el('h2', {}, 'Пауза'),
+      button('Продолжить', closePause),
+      api.screen?.rotated && button('Перевернуть экран', () => api.screen.flip(!api.screen.flipped)),
+      // итог — не сразу по нажатию, а чуть погодя, как у настоящей игры после последней анимации
+      button('Конец игры', () => {
+        closePause();
+        setTimeout(finish, 350);
+      }),
+      button('В меню', () => api.exit()),
+    ));
+    view.stage.append(pause);
+  };
+
+  // игра-пустышка по контракту: сетка, «Пауза» и необязательные onBack() / onHide()
+  const game = {
+    id: GAME_ID,
+    title: 'Проверка альбомного экрана',
+    init(host, gameApi) {
+      api = gameApi;
+      land.screen = api.screen;
+      host.classList.add('lc-root');
+      view = buildStage(host, api.screen, [tap(el('button', { class: 'lc-btn lc-pause-btn' }, 'Пауза'), openPause)]);
+      offChange = api.screen?.onChange(() => {
+        land.changes += 1;
+        view?.paint();
+      }) ?? null;
+      if (Q.has('flip')) api.screen?.flip(true);
+    },
+    getState: () => ({ floor: 2, score: 17 }),
+    destroy() {
+      offChange?.();
+      closePause();
+      api = null;
+      view = null;
+      offChange = null;
+    },
+    // первое «Назад» открывает паузу (оболочка остаётся в игре), второе — выходит
+    onBack() {
+      land.backs += 1;
+      if (pause) return false;
+      openPause();
+      return true;
+    },
+    onHide() {
+      land.hides += 1;
+      openPause();
+    },
+  };
+  if (Q.has('nohooks')) {
+    delete game.onBack;
+    delete game.onHide;
+  }
+
+  const entry = {
+    id: GAME_ID,
+    title: game.title,
+    landscape: !Q.has('portrait'),
+    async load() {
+      if (Q.has('slow')) await sleep(Number(Q.get('slow')) || 1500);
+      if (Q.has('err')) throw new Error('модуль не загрузился (так выглядит экран ошибки)');
+      return { default: game };
+    },
+  };
+
+  const screen = el('main', { class: 'screen' });
+  app.replaceChildren(screen);
+  // «меню»: экран сменяется сразу же, под пальцем; нажатия по нему считаются — click вдогонку за «В меню» сюда
+  // попадать не должен
+  const onExit = () => {
+    land.exits += 1;
+    land.session?.close();
+    land.session = null;
+    land.screen = null;
+    stub.backButton.hide();
+    app.replaceChildren(el('main', { class: 'screen', onclick: () => { land.menuClicks += 1; } }, el('div', { class: 'scroll' },
+      el('h2', {}, 'Вышли в меню'),
+      el('p', { class: 'hint' }, 'Экран игры закрыт: стили поворота сняты, ориентация отпущена.'),
+    )));
+  };
+  stub.backButton.show();
+  land.back = () => {
+    if (land.session?.back?.()) return;
+    onExit();
+  };
+  stub.backButton.onClick(land.back);
+  land.session = openGame(screen, entry, { platform, onExit });
+  land.pause = openPause;
+  land.finish = finish;
+}
+
+// прошлые запуски игры-пустышки в хранилище не остаются (страница живёт на том же адресе, что и сами игры)
+const forget = () => {
+  for (const key of Object.keys(localStorage)) if (key.startsWith('tggames:') && key.includes(`:${GAME_ID}`)) localStorage.removeItem(key);
+};
+forget();
+
+// сообщение оболочки — как в shell/app.js: на body, вне экрана игры; должно лечь на тот же бок, у верха игры
+const toast = createToast();
+document.body.append(toast.el);
+
+Object.assign(land, {
+  fullscreen,
+  activate: () => subs.activated.forEach((cb) => cb()),
+  deactivate: () => subs.deactivated.forEach((cb) => cb()),
+  toast: (text = 'Сервер не отвечает, играем на этом устройстве', ms = 2600) => toast.show(text, ms),
+});
+if (Q.has('fs')) {
+  const [top = 0, right = 0, bottom = 0, left = 0] = Q.get('fs').split(',').map(Number);
+  fullscreen({ top, right, bottom, left });
+}
+if (land.mode === 'host') runHost();
+else runHelper();
+// после обработчиков хоста: тот при закрытии страницы ещё сохраняет партию
+addEventListener('pagehide', forget);
+</script>
+</body>
+</html>

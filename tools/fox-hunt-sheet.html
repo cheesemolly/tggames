@@ -1,0 +1,319 @@
+<!doctype html><meta charset="utf-8"><title>Лисья охота — лист рисунков</title>
+<!-- Все рисунки «Лисьей охоты» на одном листе: http://localhost:8000/tools/fox-hunt-sheet.html
+     Рисует через createArt — теми же вызовами, что и игра (put / putX / rig), под существами — тень fx.shadow.
+       ?part=sprites|rigs     только картинки (все ключи и все варианты) или только фигуры (без него — и то и другое)
+       ?part=kit              приёмы набора художника (art-kit.js) с подписями — памятка тому, кто рисует новое
+       ?only=mob.fox,fx.      оставить ключи и фигуры с таким началом (через запятую — несколько)
+       ?acts=idle,run         какие позы показать у фигур (без него — те, что фигура назвала сама в RIG_INFO)
+       ?zoom=1..6             1 — как на телефоне (1,22 пикселя CSS на единицу мира), 4 — рассмотреть детали
+       ?bg=forest|swamp|taiga|cave|autumn|dark|light   цвет земли под рисунками
+       ?live=1                фигуры двигаются; иначе застыли в момент ?t= (секунды)
+       ?cols=4                сколько кадров у каждой позы (k от 0 до 1); ?step=0.09 — на сколько секунд отличаются
+                              соседние кадры; ?dur=0.8 — длина позы при live
+       ?aim=-30 ?speed=1 ?flash=0.6 ?elite=1 ?hp=0.4   что передать в позу (aim — в градусах, 0 — вперёд, минус — вверх)
+       ?marks=1               рамка картинки и крестик в точке привязки; ?mirror=0 — без пятого, зеркального кадра
+     Файлы рисунков подключаются сами; которого ещё нет — тот пропускается (список внизу листа). -->
+<style>
+  html, body { margin: 0; background: #1b1d22; }
+  canvas { display: block; }
+</style>
+<body>
+<canvas id="c"></canvas>
+<script type="module">
+import * as A from '../games/fox-hunt/art.js';
+import * as K from '../games/fox-hunt/art-kit.js';
+
+const FILES = ['art-fox.js', 'art-fx.js', 'art-tiles.js', 'art-tiles2.js', 'art-tiles3.js', 'art-mobs.js', 'art-mobs2.js', 'art-mobs3.js', 'art-items.js', 'art-items2.js'];
+const INFO = {};                         // что фигуры сказали о себе: { acts, w, h }
+const skipped = [];
+for (const file of FILES) {
+  try {
+    const mod = await import(`../games/fox-hunt/${file}`);
+    Object.assign(INFO, mod.RIG_INFO ?? {});
+  } catch (e) {
+    skipped.push(`${file} — ${String(e.message).split('\n')[0]}`);
+  }
+}
+
+const Q = new URLSearchParams(location.search);
+const numQ = (name, d) => (Q.has(name) && Number.isFinite(Number(Q.get(name))) ? Number(Q.get(name)) : d);
+const part = Q.get('part') || 'all';
+const only = (Q.get('only') || '').split(',').filter(Boolean);
+const zoom = Math.min(6, Math.max(0.5, numQ('zoom', 3)));
+const live = Q.get('live') === '1';
+const marks = Q.get('marks') === '1';
+const mirror = Q.get('mirror') !== '0';
+const COLS = Math.max(2, Math.min(12, Math.round(numQ('cols', 4))));
+const T0 = numQ('t', 0.4);
+const STEP = numQ('step', 0.09);
+const DUR = Math.max(0.05, numQ('dur', 0.8));
+const AIM = (numQ('aim', -25) * Math.PI) / 180;
+
+// земля мест (основной тон) и две нейтральные подложки
+const GROUND = { forest: '#7cc45a', swamp: '#6f9a6a', taiga: '#e6eef6', cave: '#5a5868', autumn: '#c98a3c', dark: '#22242b', light: '#f1ede4' };
+const bg = GROUND[Q.get('bg')] ?? GROUND.forest;
+const darkBg = ['dark', 'cave'].includes(Q.get('bg'));
+const INK = darkBg ? 'rgba(255,255,255,0.78)' : 'rgba(20,24,40,0.78)';
+const FAINT = darkBg ? 'rgba(255,255,255,0.22)' : 'rgba(20,24,40,0.2)';
+
+const dpr = window.devicePixelRatio || 1;
+const k = 1.22 * zoom * dpr;             // точек холста на единицу мира — как считает рендер игры
+const art = A.createArt(k);
+const FONT = Math.round(10 * dpr);
+const GAP = Math.round(8 * dpr);
+const PAGE_W = Math.max(160, window.innerWidth) * dpr;
+const fits = (name) => !only.length || only.some((p) => name.startsWith(p));
+
+const DEFAULT_ACTS = ['spawn', 'idle', 'move', 'windup', 'attack', 'recover', 'stun', 'hurt'];
+const actsOf = (id) => (Q.get('acts') ? Q.get('acts').split(',').filter(Boolean) : INFO[id]?.acts ?? DEFAULT_ACTS);
+
+// ---------- раскладка: сначала считаем клетки, потом рисуем ----------
+
+const cells = [];                        // { x, y, w, h, label, draw(ctx, x, y, t) }
+let cx = GAP;
+let cy = GAP;
+let rowH = 0;
+const newRow = (extra = 0) => {
+  cx = GAP;
+  cy += rowH + extra;
+  rowH = 0;
+};
+const ruler = document.createElement('canvas').getContext('2d');
+ruler.font = `${FONT}px system-ui, "Segoe UI", sans-serif`;
+function cell(w, h, label, draw) {
+  const full = Math.ceil(h + FONT * 1.5);
+  const wide = Math.max(w, ruler.measureText(label).width);      // клетка не уже своей подписи
+  if (cx + wide > PAGE_W - GAP && cx > GAP) newRow(GAP);
+  cells.push({ x: cx, y: cy, w, h, label, draw });
+  cx += Math.ceil(wide) + GAP;
+  rowH = Math.max(rowH, full);
+}
+function title(text) {
+  newRow(GAP);
+  cells.push({ x: GAP, y: cy, w: 0, h: 0, title: text });
+  cy += Math.round(FONT * 2);
+}
+
+if (part === 'all' || part === 'sprites') {
+  const keys = A.spriteKeys().filter(fits).sort();
+  if (keys.length) title(`картинки — ${keys.length}`);
+  for (const key of keys) {
+    const def = A.spriteDef(key);
+    const w = (def.w + def.pad * 2) * k;
+    const h = (def.h + def.pad * 2) * k;
+    for (let v = 0; v < def.variants; v++) {
+      cell(w, h, def.variants > 1 ? `${key} ·${v}` : key, (ctx, x, y) => {
+        const ax = x + (def.ox + def.pad) * k;
+        const ay = y + (def.oy + def.pad) * k;
+        art.put(ctx, key, ax, ay, v);
+        if (marks) {
+          ctx.setTransform(1, 0, 0, 1, 0, 0);
+          ctx.strokeStyle = FAINT;
+          ctx.lineWidth = 1;
+          ctx.strokeRect(x + def.pad * k + 0.5, y + def.pad * k + 0.5, def.w * k, def.h * k);
+          ctx.strokeStyle = '#ff2d6f';
+          ctx.beginPath();
+          ctx.moveTo(ax - 4 * dpr, ay);
+          ctx.lineTo(ax + 4 * dpr, ay);
+          ctx.moveTo(ax, ay - 4 * dpr);
+          ctx.lineTo(ax, ay + 4 * dpr);
+          ctx.stroke();
+        }
+      });
+    }
+  }
+}
+
+if (part === 'all' || part === 'rigs') {
+  const ids = A.rigIds().filter(fits);
+  const pose = { t: 0, act: 'idle', k: 0, speed: 1, vx: 1, vy: 0, z: 0, flash: 0, hp: 1, elite: false, aim: 0, data: null };
+  for (const id of ids) {
+    const info = INFO[id] ?? {};
+    const w = (info.w ?? 72) * k;
+    const h = (info.h ?? 60) * k;
+    const shadow = (info.shadow ?? (info.w ?? 72) * 0.42) / 32;
+    title(`${id} — ${actsOf(id).join(', ')}`);
+    for (const act of actsOf(id)) {
+      // кадры позы по порядку и последний — зеркально (смотрит влево)
+      for (let i = 0; i < COLS + (mirror ? 1 : 0); i++) {
+        const dir = i === COLS ? -1 : 1;
+        const phase = i === COLS ? 0.5 : i / (COLS - 1);
+        cell(w, h, i === 0 ? act : i === COLS ? '← 0,5' : phase.toFixed(2).replace('.', ','), (ctx, x, y, t) => {
+          const ax = x + w * (dir > 0 ? 0.56 : 0.44);
+          const ay = y + h * 0.84;
+          pose.act = act;
+          pose.k = live ? (t / DUR + phase) % 1 : phase;
+          pose.t = live ? t : T0 + (i === COLS ? 1.5 : i) * STEP;
+          pose.speed = numQ('speed', 1);
+          pose.aim = dir > 0 ? AIM : Math.PI - AIM;
+          pose.vx = Math.cos(pose.aim);
+          pose.vy = Math.sin(pose.aim);
+          pose.flash = numQ('flash', 0);
+          pose.hp = numQ('hp', 1);
+          pose.elite = Q.get('elite') === '1';
+          art.putX(ctx, 'fx.shadow', ax, ay, 0, shadow, shadow, 1);
+          art.rig(ctx, id, ax, ay, dir, pose);
+          if (marks) {
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            ctx.strokeStyle = '#ff2d6f';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(ax - 4 * dpr, ay);
+            ctx.lineTo(ax + 4 * dpr, ay);
+            ctx.moveTo(ax, ay - 4 * dpr);
+            ctx.lineTo(ax, ay + 4 * dpr);
+            ctx.stroke();
+          }
+        });
+      }
+      newRow(GAP);
+    }
+  }
+}
+// ---------- приёмы набора художника: памятка для того, кто рисует новое ----------
+
+if (part === 'kit') {
+  const U = Math.max(k, 3 * dpr);        // приёмы показываем не мельче чем втрое
+  const fox = K.tone('#f0862b', { light: '#ffb057', dark: '#c4601a' });
+  const cream = K.tone('#fff1dc', { light: '#ffffff', dark: '#e8cfae', line: fox.line });
+  const show = (name, w, h, draw) => cell(w * U, h * U, name, (ctx, x, y) => {
+    ctx.setTransform(U, 0, 0, U, x + (w * U) / 2, y + (h * U) / 2);
+    ctx.lineCap = 'round';
+    draw(ctx);
+  });
+  title('формы: один вызов — основа, свет слева сверху, тень-серп справа снизу, кайма света, обводка');
+  show('blob', 34, 26, (g) => K.blob(g, [[-13, 0], [-6, -9], [6, -8], [13, 1], [5, 9], [-7, 8]], fox));
+  show('blob + острые узлы', 34, 26, (g) => K.blob(g, [[-12, -2], [0, -9], [12, -2], [8, 6], [3, 10, 1], [0, 6], [-4, 10, 1], [-8, 6]], fox));
+  show('egg', 34, 26, (g) => K.egg(g, 0, 0, 13, 8.5, fox, Math.PI, 0.2));
+  show('ball', 26, 26, (g) => K.ball(g, 0, 0, 9, 9, fox));
+  show('capsule', 34, 26, (g) => K.capsule(g, -9, 3, 5, 9, -3, 3, fox));
+  show('limb — открытый сустав слева', 34, 26, (g) => K.limb(g, -9, 0, 5, 9, 0, 3.4, fox));
+  show('leaf', 30, 26, (g) => K.leaf(g, -10, 4, 10, -4, 9, K.tone('#58b84e', { light: '#9ee27a', dark: '#2f7f3a' }), 0.06, '#2f7f3a'));
+  show('patch — пятно внутри формы', 34, 26, (g) => K.blob(g, [[-13, 0], [-6, -9], [6, -8], [13, 1], [5, 9], [-7, 8]], fox, {
+    over: (c, patch) => patch([[-16, 2], [-4, 0], [4, 3], [16, 1], [16, 12], [-16, 12]], cream),
+  }));
+  show('union — круги внахлёст', 34, 26, (g) => K.solid(g, (c) => {
+    for (const [x, y, r] of [[-6, 2, 6], [1, -3, 7], [8, 3, 5]]) {
+      c.moveTo(x + r, y);
+      c.arc(x, y, r, 0, K.TAU);
+    }
+    return [-12, -10, 13, 8];
+  }, K.tone('#58b84e', { light: '#9ee27a', dark: '#2f7f3a' }), { union: true }));
+  show('flat — без объёма', 26, 26, (g) => K.ball(g, 0, 0, 9, 9, K.tone('#f0862b', { flat: true })));
+  newRow(GAP);
+  title('мех: tufts() и tuftsArc() — узлы для контура, fur() — штрихи внутри');
+  show('tufts по нижнему краю', 36, 28, (g) => K.blob(g, [[-12, 4], [-12, -4], [0, -9], [12, -4], [12, 4], ...K.tufts(12, 4, -12, 4, 4, 4.5, 0.6)], cream));
+  show('tuftsArc — щека', 36, 28, (g) => K.blob(g, [[-8, -6], [0, -9], [8, -6], [9, 0, 1], ...K.tuftsArc(0, 0, 9, 0.1, Math.PI - 0.1, 5, 3.4, 0.7), [-9, 0, 1]], fox));
+  show('fur', 34, 28, (g) => K.egg(g, 0, 0, 13, 9, fox, 0, 0, {
+    over: (c) => K.fur(c, [[-5, -3, 0.4, 3.2], [1, -4, 0.3, 3], [6, -1, 0.5, 3], [-1, 2, 0.4, 3]], K.alpha('#c4601a', 0.8)),
+  }));
+  newRow(GAP);
+  title('мордочка: eye({ kind }), nose, blush, speck, shine');
+  for (const kind of ['round', 'prey', 'narrow', 'closed', 'happy', 'cross', 'squint', 'wide']) {
+    show(kind, 20, 20, (g) => {
+      K.ball(g, 0, 0, 8, 8, cream);
+      K.eye(g, 0, 0, 4.2, { kind, lid: 0.35, slant: 0.2 });
+    });
+  }
+  show('narrow + brow — враг', 20, 20, (g) => {
+    K.ball(g, 0, 0, 8, 8, K.tone('#8a8898'));
+    K.eye(g, 0, 0.6, 4.2, { kind: 'narrow', lid: 0.4, slant: 0.3, brow: '#2f2e3c', color: '#2a1420' });
+  });
+  show('round + glint', 20, 20, (g) => {
+    K.ball(g, 0, 0, 8, 8, fox);
+    K.eye(g, 0, 0, 4.2, { glint: '#a85a1e' });
+  });
+  show('nose', 16, 20, (g) => K.nose(g, 0, 0, 4));
+  show('blush', 20, 20, (g) => {
+    K.ball(g, 0, 0, 8, 8, cream);
+    K.blush(g, 0, 1, 5);
+  });
+  show('speck', 16, 20, (g) => {
+    K.ball(g, 0, 0, 6, 6, '#e4473c');
+    K.speck(g, -2, -2.4, 1.6);
+  });
+  show('shine', 16, 20, (g) => {
+    K.ball(g, 0, 0, 6, 6, '#4aa3ff');
+    K.shine(g, 0, 0, 6);
+  });
+  show('sparkle', 16, 20, (g) => {
+    K.sparkle(g, 0, 0, 6.6, '#d98a1c', 0.34);
+    K.sparkle(g, 0, 0, 5.6, '#fff6c0');
+  });
+  show('glow', 22, 20, (g) => K.glow(g, 0, 0, 9, '#ffc93c', 0.8));
+  newRow(GAP);
+  title('tone(цвет) сам подбирает свет, тень и обводку — краски мест');
+  for (const color of ['#7cc45a', '#3f9a45', '#8a5a34', '#9aa3ad', '#6f9a6a', '#e6eef6', '#2f6b54', '#5a5868', '#7fe0ff', '#c98a3c', '#e0672e', '#4a2a1c', '#ffd24a', '#ff4d5e']) {
+    show(color, 20, 20, (g) => K.ball(g, 0, 0, 7.4, 7.4, color));
+  }
+  newRow(GAP);
+}
+
+newRow(GAP);
+if (skipped.length) {
+  for (const line of skipped) {
+    cells.push({ x: GAP, y: cy, w: 0, h: 0, note: `не подключён: ${line}` });
+    cy += Math.round(FONT * 1.5);
+  }
+}
+
+// ---------- рисуем ----------
+
+// лист не шире того, что на нём есть (но и не шире окна): узкие снимки без пустых полей
+let used = 0;
+for (const c of cells) {
+  ruler.font = `${c.title ? '600 ' : ''}${Math.round(FONT * (c.title ? 1.2 : 1))}px system-ui, "Segoe UI", sans-serif`;
+  used = Math.max(used, c.x + Math.max(c.w, ruler.measureText(c.title ?? c.note ?? c.label ?? '').width));
+}
+const canvas = document.getElementById('c');
+canvas.width = Math.ceil(Math.min(PAGE_W, used + GAP));
+// выше 16 тысяч точек холст в браузере не бывает: что не влезло — смотреть по частям
+const TALL = 16000;
+canvas.height = Math.min(TALL, Math.ceil(cy + GAP));
+if (cy + GAP > TALL) {
+  const p = document.createElement('p');
+  p.textContent = `Лист не поместился целиком (${Math.ceil(cy + GAP)} точек в высоту): выберите часть — ?part=, ?only=, ?acts= — или уменьшите ?zoom=.`;
+  p.style.cssText = 'margin: 12px; color: #ffb629; font: 14px system-ui, sans-serif';
+  document.body.append(p);
+}
+canvas.style.width = `${canvas.width / dpr}px`;
+canvas.style.height = `${canvas.height / dpr}px`;
+const ctx = canvas.getContext('2d');
+
+function paint(t) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  for (const c of cells) {
+    if (c.draw) c.draw(ctx, c.x, c.y, t);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.textBaseline = 'top';
+    if (c.title) {
+      ctx.font = `600 ${Math.round(FONT * 1.2)}px system-ui, "Segoe UI", sans-serif`;
+      ctx.fillStyle = INK;
+      ctx.fillText(c.title, c.x, c.y);
+    } else if (c.note) {
+      ctx.font = `${FONT}px system-ui, "Segoe UI", sans-serif`;
+      ctx.fillStyle = INK;
+      ctx.fillText(c.note, c.x, c.y);
+    } else if (c.label) {
+      ctx.font = `${FONT}px system-ui, "Segoe UI", sans-serif`;
+      ctx.fillStyle = INK;
+      ctx.fillText(c.label, c.x, c.y + c.h + 2);
+    }
+  }
+}
+
+if (live) {
+  const start = performance.now();
+  const frame = (now) => {
+    paint(T0 + Math.max(0, now - start) / 1000);
+    requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+} else paint(T0);
+document.title = 'готово';
+</script>
+</body>

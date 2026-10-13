@@ -8,6 +8,9 @@
 //   progress: 'replace' — вместо статистики строка от самой игры (api.progress), 'append' — в конец.
 // Побед нет у бесконечных игр, а у уровневых важен уровень, а не число партий.
 //
+// landscape: true (необязательно) — альбомная игра: оболочка кладёт её экран набок, пока телефон держат стоя,
+// и даёт ей api.screen (shell/landscape.js; контракт, раздел 5).
+//
 // Новая игра сначала попадает в бету (shell/beta.js, kind: 'game') — её видит только владелец, пока
 // не скажет «релиз». Раньше для этого было поле admin: true; оно больше не используется.
 
@@ -306,5 +309,14 @@ export const games = [
     load: () => import('../games/basketball/index.js'),
     css: new URL('../games/basketball/game.css', import.meta.url),
     menu: { wins: false },                               // бросаешь до первого промаха, победить нельзя
+  },
+  {
+    id: 'fox-hunt',
+    title: 'Лисья охота',
+    load: () => import('../games/fox-hunt/index.js'),
+    css: new URL('../games/fox-hunt/game.css', import.meta.url),
+    landscape: true,
+    // бесконечная охота, победить нельзя; экран альбомный; у начатой — «Локация 3 · очков: 41»
+    menu: { wins: false, saveLine: (s) => (Number.isInteger(s.floor) ? `Локация ${s.floor} · очков: ${s.score ?? 0}` : null) },
   },
 ];

@@ -9,11 +9,13 @@ export function fakeContext() {
     value: 0,
     setValueAtTime() {}, linearRampToValueAtTime() {},
     exponentialRampToValueAtTime(v) { assert.ok(v > 0, 'экспоненциальный спад до нуля невозможен'); },
+    cancelScheduledValues() {},
   });
   const node = (kind, extra = {}) => {
     const n = {
       kind, connections: 0,
       connect(target) { assert.ok(target, `${kind}: соединение в пустоту`); n.connections++; return target; },
+      disconnect() {},
       ...extra,
     };
     created.push(n);

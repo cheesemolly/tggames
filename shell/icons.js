@@ -120,6 +120,12 @@ export const GAME_ICONS = {
   basketball: svg('<circle cx="12" cy="5.6" r="3.4" fill="currentColor" stroke="none"/>'
     + '<ellipse cx="12" cy="12.4" rx="7.8" ry="2.3" stroke-width="2"/>'
     + '<path d="M5.4 14.2 8.2 21h7.6l2.8-6.8"/><path d="M9.6 14.9 10.6 21M14.4 14.9 13.4 21M6.9 17.6h10.2" opacity="0.5"/>'),
+  // лисья охота: морда лисы — уши торчком, щёки-кисточки, светлая маска от щёк к носу
+  'fox-hunt': svg('<path d="M4.2 2.8 9.2 7.8h5.6l5-5 .6 7.4 1.2 2.6-4.4 2.4L12 21l-5.2-5.8-4.4-2.4 1.2-2.6Z"/>'
+    + '<path d="M2.4 12.8 8.6 14l3.4 5.2 3.4-5.2 6.2-1.2" opacity="0.5"/>'
+    + '<circle cx="9.1" cy="11.2" r="1" fill="currentColor" stroke="none"/>'
+    + '<circle cx="14.9" cy="11.2" r="1" fill="currentColor" stroke="none"/>'
+    + '<circle cx="12" cy="19.4" r="1.3" fill="currentColor" stroke="none"/>'),
   arkanoid: svg('<rect x="2.6" y="3.4" width="5.2" height="3.4" rx="1"/><rect x="9.4" y="3.4" width="5.2" height="3.4" rx="1"/>'
     + '<rect x="16.2" y="3.4" width="5.2" height="3.4" rx="1"/><rect x="6" y="8.4" width="5.2" height="3.4" rx="1" opacity="0.5"/>'
     + '<rect x="12.8" y="8.4" width="5.2" height="3.4" rx="1" opacity="0.5"/>'

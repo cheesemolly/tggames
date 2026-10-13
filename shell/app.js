@@ -463,7 +463,12 @@ function stableLogin() {
 // Смысл рекорда у части игр изменился — старые числа чистятся один раз (shell/stats.js).
 await migrateStats();
 
-platform.backButton.onClick(() => backFrom());
+// «Назад» в игре (кнопка Telegram, системный жест на Android): сначала спрашиваем саму игру — та, у которой есть
+// onBack(), открывает паузу, и случайно из неё не выйти; остальные игры отвечают «нет», и всё как раньше.
+platform.backButton.onClick(() => {
+  if (session?.back?.()) return;
+  backFrom();
+});
 onRouteChange(show);
 // Ссылка из инлайн-режима бота (t.me/<бот>?startapp=sudoku) открывает сразу игру, а не меню.
 // replaceState, а не location.replace: без лишнего hashchange (иначе игра открылась бы дважды).

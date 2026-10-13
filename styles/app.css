@@ -319,6 +319,74 @@ h1, h2 { margin: 0 0 8px; line-height: 1.2; }
 
 .error-text { color: var(--tg-theme-destructive-text-color); word-break: break-word; }
 
+/* ---------- Альбомная игра (shell/landscape.js; в реестре landscape: true) ----------
+   Экран такой игры оболочка кладёт набок, пока телефон держат стоя: место, размер и поворот стоят в style экрана
+   (пиксели из вёрстки: vh и переменные Telegram о повёрнутом экране не знают). Вместе с игрой поворачиваются
+   «Загрузка…», экран ошибки и карточка итога. --ls-t / --ls-r / --ls-b / --ls-l — отступы от краёв УЖЕ в осях
+   игры: под ними часы, вырез и кнопки Telegram. Поле игра рисует в край, надписи и кнопки держатся внутри отступов.
+   Класс screen-land есть только у экрана альбомной игры — остальных игр эти правила не касаются. */
+.screen-land {
+  flex: none;
+  overflow: hidden;
+  /* два пальца на джойстиках — не щипок и не прокрутка страницы; палец, лежащий подолгу, — не выделение текста */
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+/* в поля ввода при этом печатать можно (без выделения iOS не ставит в них курсор) */
+.screen-land input, .screen-land textarea { user-select: text; -webkit-user-select: text; }
+/* корень игры — во весь экран, без полей и прокрутки (в повёрнутом экране палец и прокрутка расходятся) */
+.screen-land > .game-root { padding: 0; overflow: hidden; }
+/* «Загрузка…» и экран ошибки — внутри отступов */
+.screen-land > .scroll:not(.game-root) {
+  padding: calc(16px + var(--ls-t, 0px)) calc(16px + var(--ls-r, 0px)) calc(16px + var(--ls-b, 0px)) calc(16px + var(--ls-l, 0px));
+}
+.screen-land > .scroll:not(.game-root) .btn { max-width: 320px; }
+
+/* Карточка итога на низком широком экране: шире и плотнее, кнопки в один ряд — заголовок, сообщение, три строки и
+   кнопки влезают в 320 px высоты. Ряд кнопок — flex, а не сетка с auto-fit: под надписями во всю ширину пустая
+   колонка сетки не схлопывается, и две кнопки стояли бы со щелью справа. */
+.screen-land .result {
+  padding: calc(8px + var(--ls-t, 0px)) calc(12px + var(--ls-r, 0px)) calc(8px + var(--ls-b, 0px)) calc(12px + var(--ls-l, 0px));
+}
+.screen-land .result-card {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  max-width: 560px;
+  max-height: 100%;
+  overflow-y: auto;            /* совсем низкое окно (разделённый экран): прокрутка лучше обрезанных кнопок */
+  padding: 14px 14px 12px;
+}
+.screen-land .result-card > * { flex: 0 0 100%; min-width: 0; }
+.screen-land .result-card > .btn { flex: 1 1 130px; width: auto; margin-top: 8px; padding: 11px 12px; }
+.screen-land .result-title { margin: 0; padding: 0 44px; font-size: 21px; }      /* по бокам — место «глаза» */
+.screen-land .result-message { margin: 0; font-size: 15px; line-height: 1.3; }
+.screen-land .result-line { font-size: 14px; }
+.screen-land .result-eye { top: 8px; right: 8px; }
+.screen-land .result-show { top: calc(12px + var(--ls-t, 0px)); }
+
+/* Сообщения оболочки (shared/toast.js) лежат на body, вне экрана игры, — кладём их на тот же бок: у верхнего края
+   игры, по центру. Признак data-land на <html> и отступ --land-t ставит shell/landscape.js, пока открыта альбомная
+   игра. Поворот — вокруг угла сообщения, поэтому в обоих состояниях (спрятано и показано) transform записан целиком. */
+:root[data-land="90"] body > .toast {
+  top: 50%;
+  left: auto;
+  right: calc(12px + var(--land-t, 0px));
+  transform-origin: 100% 0;
+  transform: rotate(90deg) translate(50%, -8px) scale(0.96);
+}
+:root[data-land="90"] body > .toast.toast-show { transform: rotate(90deg) translate(50%, 0) scale(1); }
+:root[data-land="-90"] body > .toast {
+  top: 50%;
+  left: calc(12px + var(--land-t, 0px));
+  transform-origin: 0 0;
+  transform: rotate(-90deg) translate(-50%, -8px) scale(0.96);
+}
+:root[data-land="-90"] body > .toast.toast-show { transform: rotate(-90deg) translate(-50%, 0) scale(1); }
+:root[data-land="0"] body > .toast { top: calc(12px + var(--land-t, 0px)); }
+
 /* ---------- Движение ---------- */
 
 @keyframes fade-in { from { opacity: 0; } }

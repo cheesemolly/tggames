@@ -1,0 +1,183 @@
+/* ---------- стики ---------- */
+/*
+ * Два джойстика поверх холста (input.js): кольцо и ручка. Место им задаёт игра — только через transform, поэтому
+ * всё, что здесь оживает (нажатие, волна), сделано на вложенных частях свойствами scale и opacity: scale на самом
+ * джойстике растянул бы и его сдвиг. Радиус кольца приходит из игры (--fh-stick-r, по умолчанию 46px).
+ * Цвета — --fh-stick (кольцо), --fh-stick-knob (ручка), --fh-stick-aim (рывок заряжен). Пока палитра игры их не
+ * задала, они берутся из темы: кольцо и ручка — цвет кнопок, почти целиком разбавленный белым (мир игры от темы
+ * не зависит, и светлым кольцо должно быть в любой), рывок — сам цвет кнопок. Светлое кольцо с тонкой тёмной
+ * каймой видно и на яркой траве, и на снегу, и на тёмном полу пещеры.
+ */
+[data-game="fox-hunt"] .fh-sticks {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+/* играют мышью — джойстики не нужны */
+[data-game="fox-hunt"] .fh-sticks--off { opacity: 0; }
+[data-game="fox-hunt"] .fh-stick {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  opacity: 0.94;
+  will-change: transform, opacity;
+  transition: opacity 0.12s ease;
+}
+/* палец убран: джойстик бледнеет и съезжает на своё место; под палец он встаёт сразу, без переезда */
+[data-game="fox-hunt"] .fh-stick--idle {
+  opacity: 0.5;
+  transition: transform 0.24s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.3s ease;
+}
+[data-game="fox-hunt"] .fh-stick-ring {
+  position: absolute;
+  left: calc(var(--fh-stick-r, 46px) * -1);
+  top: calc(var(--fh-stick-r, 46px) * -1);
+  box-sizing: border-box;
+  width: calc(var(--fh-stick-r, 46px) * 2);
+  height: calc(var(--fh-stick-r, 46px) * 2);
+  border: 3px solid var(--fh-stick, color-mix(in srgb, var(--tg-theme-button-color) 8%, rgba(255, 255, 255, 0.92)));
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.16);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.44), inset 0 0 0 1.5px rgba(0, 0, 0, 0.32);
+  /* scale задан всегда, даже единицей: появление и пропажа свойства заставили бы браузер пересчитывать раскладку */
+  scale: 1;
+  transition: scale 0.16s ease, border-color 0.16s ease, background-color 0.16s ease;
+}
+[data-game="fox-hunt"] .fh-stick--idle .fh-stick-ring { scale: 0.92; }
+/* волна от кольца, пока держат огонь (в покое её не видно) */
+[data-game="fox-hunt"] .fh-stick-ring::before {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border: 3px solid var(--fh-stick, color-mix(in srgb, var(--tg-theme-button-color) 8%, rgba(255, 255, 255, 0.92)));
+  border-radius: 50%;
+  opacity: 0;
+  scale: 1;
+  transition: opacity 0.16s ease;
+}
+/* четыре точки по сторонам света — джойстик ходьбы */
+[data-game="fox-hunt"] .fh-stick--move .fh-stick-ring::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  margin: -2.5px 0 0 -2.5px;
+  border-radius: 50%;
+  color: var(--fh-stick, color-mix(in srgb, var(--tg-theme-button-color) 8%, rgba(255, 255, 255, 0.92)));
+  box-shadow:
+    0 calc(var(--fh-stick-r, 46px) * -0.66) 0 0 currentColor,
+    calc(var(--fh-stick-r, 46px) * 0.66) 0 0 0 currentColor,
+    0 calc(var(--fh-stick-r, 46px) * 0.66) 0 0 currentColor,
+    calc(var(--fh-stick-r, 46px) * -0.66) 0 0 0 currentColor;
+}
+/* ручка: сам элемент — только точка, которую двигает игра; кружок — на ::before */
+[data-game="fox-hunt"] .fh-stick-knob {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  will-change: transform;
+}
+[data-game="fox-hunt"] .fh-stick--idle .fh-stick-knob { transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1); }
+[data-game="fox-hunt"] .fh-stick-knob::before {
+  content: "";
+  position: absolute;
+  left: calc(var(--fh-stick-r, 46px) * -0.48);
+  top: calc(var(--fh-stick-r, 46px) * -0.48);
+  width: calc(var(--fh-stick-r, 46px) * 0.96);
+  height: calc(var(--fh-stick-r, 46px) * 0.96);
+  border-radius: 50%;
+  background: var(--fh-stick-knob, color-mix(in srgb, var(--tg-theme-button-color) 8%, rgba(255, 255, 255, 0.84)));
+  /* кайма, тень под ручкой и чуть объёма: свет — слева сверху, как у всего в игре */
+  box-shadow: 0 0 0 1.5px rgba(0, 0, 0, 0.44), 0 2px 5px rgba(0, 0, 0, 0.3), inset -2px -3px 0 rgba(0, 0, 0, 0.13), inset 2px 2px 0 rgba(255, 255, 255, 0.5);
+  scale: 1;
+  transition: scale 0.12s ease, background-color 0.16s ease;
+}
+
+/* значок на ручке джойстика действия: что будет, если нажать и не тянуть */
+[data-game="fox-hunt"] .fh-stick-glyph {
+  position: absolute;
+  left: -11px;
+  top: -11px;
+  width: 22px;
+  height: 22px;
+  color: rgba(0, 0, 0, 0.6);
+  opacity: 0;
+  scale: 0.5;
+  transition: opacity 0.16s ease, scale 0.16s ease;
+}
+/* пока рывок заряжен, значка нет: отпускание — уже не огонь */
+[data-game="fox-hunt"] .fh-stick[data-action="fire"]:not(.fh-stick--aim) .fh-stick-glyph--fire,
+[data-game="fox-hunt"] .fh-stick[data-action="use"]:not(.fh-stick--aim) .fh-stick-glyph--use { opacity: 1; scale: 1; }
+/* огонь — мишень: кольцо и точка */
+[data-game="fox-hunt"] .fh-stick-glyph--fire::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border: 3px solid currentColor;
+  border-radius: 50%;
+}
+[data-game="fox-hunt"] .fh-stick-glyph--fire::after {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+/* взять, купить, нанять — лапа: подушечка и три пальца */
+[data-game="fox-hunt"] .fh-stick-glyph--use::before {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 10px;
+  width: 14px;
+  height: 11px;
+  border-radius: 50% 50% 46% 46% / 58% 58% 42% 42%;
+  background: currentColor;
+}
+[data-game="fox-hunt"] .fh-stick-glyph--use::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: 1px;
+  width: 6px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: -7px 4px 0 -0.5px currentColor, 7px 4px 0 -0.5px currentColor;
+}
+
+/* держат на месте — огонь или «взять»: ручка вдавлена, от кольца идёт волна */
+[data-game="fox-hunt"] .fh-stick--hold .fh-stick-knob::before {
+  scale: 0.86;
+  background: var(--fh-stick, color-mix(in srgb, var(--tg-theme-button-color) 8%, rgba(255, 255, 255, 0.92)));
+}
+[data-game="fox-hunt"] .fh-stick--hold .fh-stick-ring::before {
+  opacity: 0.4;
+  animation: fh-stick-wave 0.7s ease-out infinite;
+}
+@keyframes fh-stick-wave {
+  from { scale: 0.56; opacity: 0.6; }
+  to { scale: 1.16; opacity: 0; }
+}
+/* оттянули — рывок заряжен: кольцо и ручка в цвет рывка */
+[data-game="fox-hunt"] .fh-stick--aim .fh-stick-ring {
+  scale: 1.05;
+  border-color: var(--fh-stick-aim, var(--tg-theme-button-color));
+  background: color-mix(in srgb, var(--fh-stick-aim, var(--tg-theme-button-color)) 24%, transparent);
+}
+[data-game="fox-hunt"] .fh-stick--aim .fh-stick-knob::before { background: var(--fh-stick-aim, var(--tg-theme-button-color)); }
+
+@media (prefers-reduced-motion: reduce) {
+  [data-game="fox-hunt"] .fh-sticks, [data-game="fox-hunt"] .fh-sticks *,
+  [data-game="fox-hunt"] .fh-sticks *::before, [data-game="fox-hunt"] .fh-sticks *::after { transition-duration: 0s !important; }
+  [data-game="fox-hunt"] .fh-stick--hold .fh-stick-ring::before { animation: none; }
+}
+/* ---------- конец: стики ---------- */

@@ -1,0 +1,368 @@
+<!doctype html><meta charset="utf-8"><title>Лисья охота — комнаты</title>
+<!-- Комнаты «Лисьей охоты» целиком, как их соберёт игра: http://localhost:8000/tools/fox-hunt-rooms.html
+     Фон комнаты — одной заготовкой (paintRoom), поверх — предметы по глубине (propsOf), потом нависающая листва.
+     ?size=S|M|L (по умолчанию M), ?tpl=0|1|2 — образец, ?seed=N, ?doors=nesw — где двери, ?closed=1 — закрыты,
+     ?zoom=1 — как на телефоне (короткая сторона окна — 320 единиц мира), ?cx=&cy= — середина кадра в клетках,
+     ?biome=forest, ?things=0 — без вещей на полу, ?marks=1 — красные зоны и зверьки для проверки, что пол их не глушит,
+     ?grid=1 — сетка клеток, ?props=0 — один фон, ?sheet=1 — все картинки листом (?only=door — только с таким словом в ключе;
+     на листе zoom — точек на единицу мира). Когда нарисовано, заголовок окна — «готово». -->
+<style>
+  html, body { margin: 0; height: 100%; background: #101814; overflow: hidden; }
+  canvas { display: block; }
+  #err { position: fixed; left: 8px; top: 8px; color: #fff; font: 13px/1.4 system-ui, sans-serif; white-space: pre-wrap; }
+</style>
+<body>
+<canvas id="c"></canvas>
+<div id="err"></div>
+<!-- Образцы комнат буквами (см. games/fox-hunt/tiles.js): по три на размер. Их же читает тест рисунков. -->
+<script type="application/json" id="samples">
+{
+  "S": [
+    ["#################",
+     "#..T....,....b..#",
+     "#.TT...,,.....B.#",
+     "#......,..~~....#",
+     "#..o...,.~~~~...#",
+     "#......,,.~~..=.#",
+     "#.b.....,....===#",
+     "#..R....,..^^.==#",
+     "#.....B.,..^..T.#",
+     "#..oo...,......B#",
+     "#################"],
+    ["#################",
+     "#T..o.......=..T#",
+     "#...b.......==..#",
+     "#..............R#",
+     "#....TT...oo....#",
+     "#.B..TT.........#",
+     "#.........^^..b.#",
+     "#..~~.....^.....#",
+     "#.~~~..B.....T..#",
+     "#..~......bB..T.#",
+     "#################"],
+    ["#################",
+     "#.......,.......#",
+     "#..T....,...oo..#",
+     "#.......,.......#",
+     "#...B..,,,..b...#",
+     "#,,,,,,,R,,,,,,,#",
+     "#...b..,,,......#",
+     "#..=....,....T..#",
+     "#.===...,..~~...#",
+     "#..=....,..~~.B.#",
+     "#################"]
+  ],
+  "M": [
+    ["#####################",
+     "#..T......,.......T.#",
+     "#.TT.....,,....b....#",
+     "#........,...~~~....#",
+     "#..o..B..,..~~~~~...#",
+     "#.......,,...~~~..B.#",
+     "#,,,,,,,,R..........#",
+     "#.......,...^^......#",
+     "#..b....,,..^^^..o..#",
+     "#.===....,.......oo.#",
+     "#.====...,...T......#",
+     "#..==..B..,..TT...b.#",
+     "#####################"],
+    ["#####################",
+     "#T..o..............T#",
+     "#....oo....=====....#",
+     "#..b.......=====..B.#",
+     "#....TTT............#",
+     "#....TT....b...~~...#",
+     "#.........R...~~~~..#",
+     "#..B...........~~...#",
+     "#.....^^.....o......#",
+     "#....^^^....bb...T..#",
+     "#.o...............T.#",
+     "#T...B........B....T#",
+     "#####################"],
+    ["#####################",
+     "#.T...............T.#",
+     "#....b.........b....#",
+     "#.......1.2.3.......#",
+     "#...................#",
+     "#..o......C......o..#",
+     "#.........,.........#",
+     "#..==....,,,....S...#",
+     "#.===.....,.....~~..#",
+     "#..=..B...,..B..~~..#",
+     "#....4....,....5..R.#",
+     "#.T.......,.......T.#",
+     "#####################"]
+  ],
+  "L": [
+    ["#########################",
+     "#..T........,.........T.#",
+     "#.TT.......,,....b......#",
+     "#..........,....~~~~....#",
+     "#..o...B...,...~~~~~~...#",
+     "#..........,,..~~~~~~.B.#",
+     "#...b.......,...~~~~....#",
+     "#,,,,,,,,,,,R,,,,,,,,,,,#",
+     "#.......^^..,.......o...#",
+     "#......^^^..,......oo...#",
+     "#..===......,,..........#",
+     "#.=====..B...,....TT....#",
+     "#..====.....,,....TT.b..#",
+     "#.B..=......,........B..#",
+     "#########################"],
+    ["#########################",
+     "#T...o.................T#",
+     "#..TT....b....=====.....#",
+     "#..TT.........======..B.#",
+     "#.......oo.....====.....#",
+     "#.B.....................#",
+     "#....~~~......T.....^^..#",
+     "#...~~~~~....TTT...^^^..#",
+     "#....~~~......T.....^...#",
+     "#.......................#",
+     "#..b......R.......oo....#",
+     "#.....bb..........o..T..#",
+     "#.T..................TT.#",
+     "#TT...B.........B.....T.#",
+     "#########################"],
+    ["#########################",
+     "#.......................#",
+     "#..##...............##..#",
+     "#..##.....o...o.....##..#",
+     "#.......................#",
+     "#.....T...........T.....#",
+     "#...B.......S.......B...#",
+     "#...........C...........#",
+     "#...B...S.......S...B...#",
+     "#.....T...........T.....#",
+     "#.......................#",
+     "#..##.....b...b.....##..#",
+     "#..##........R......##..#",
+     "#.......................#",
+     "#########################"]
+  ]
+}
+</script>
+<script type="module">
+import { T, TILE, CHAR, SIZES } from '../games/fox-hunt/tiles.js';
+import { createArt, spriteKeys, spriteDef, hasRig } from '../games/fox-hunt/art.js';
+import { paintRoom, propsOf, ROOM_MARGIN } from '../games/fox-hunt/art-tiles.js';
+// остальные места записывают себя сами (addBiome); файла ещё нет — комната рисуется лесной
+await import('../games/fox-hunt/art-tiles2.js').catch(() => null);
+await import('../games/fox-hunt/art-tiles3.js').catch(() => null);
+
+const Q = new URLSearchParams(location.search);
+const err = (text) => { document.getElementById('err').textContent += `${text}\n`; };
+addEventListener('error', (e) => err(e.message));
+addEventListener('unhandledrejection', (e) => err(String(e.reason?.stack ?? e.reason)));
+
+// лиса и кролик художника зверей — если их файл уже есть: на них проверяется, не глушит ли их пол
+if (Q.get('marks')) await import('../games/fox-hunt/art-fox.js').catch(() => null);
+
+const SAMPLES = JSON.parse(document.getElementById('samples').textContent);
+const size = SIZES[Q.get('size')] ? Q.get('size') : 'M';
+const rows = SAMPLES[size][Math.max(0, Math.min(2, Number(Q.get('tpl') || 0)))];
+const seed = Number(Q.get('seed') || 7) >>> 0;
+const sides = Q.get('doors') ?? 'nesw';
+const open = !Q.get('closed');
+const biome = Q.get('biome') || 'forest';
+
+/** Комната из букв — как её отдаст игра: клетки, двери посередине сторон, зерно. */
+function buildRoom() {
+  const [w, h] = SIZES[size];
+  if (rows.length !== h || rows.some((r) => r.length !== w)) err(`образец ${size}: не ${w}×${h}`);
+  const tiles = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) tiles[y * w + x] = CHAR[rows[y][x]] ?? TILE.FLOOR;
+  const doors = {};
+  const mx = w >> 1;
+  const my = h >> 1;
+  for (const side of sides) {
+    for (let i = -1; i <= 1; i++) {
+      if (side === 'n') tiles[mx + i] = TILE.DOOR;
+      else if (side === 's') tiles[(h - 1) * w + mx + i] = TILE.DOOR;
+      else if (side === 'w') tiles[(my + i) * w] = TILE.DOOR;
+      else if (side === 'e') tiles[(my + i) * w + w - 1] = TILE.DOOR;
+    }
+    if (side === 'n') doors.n = { x: mx, y: 0, open };
+    else if (side === 's') doors.s = { x: mx, y: h - 1, open };
+    else if (side === 'w') doors.w = { x: 0, y: my, open };
+    else if (side === 'e') doors.e = { x: w - 1, y: my, open };
+  }
+  return { w, h, tiles, biome, seed, doors };
+}
+
+const room = buildRoom();
+const RW = room.w * T;
+const RH = room.h * T;
+const dpr = Math.min(3, window.devicePixelRatio || 1);
+const zoom = Number(Q.get('zoom') || 1);
+const cssW = innerWidth;
+const cssH = innerHeight;
+const scale = Q.get('sheet') ? zoom : (Math.min(cssW, cssH) / 320) * zoom;        // точек экрана на единицу мира (на листе — сам zoom)
+const k = scale * dpr;                                    // точек холста на единицу мира
+const art = createArt(k);
+
+const canvas = document.getElementById('c');
+canvas.width = Math.round(cssW * dpr);
+canvas.height = Math.round(cssH * dpr);
+canvas.style.width = `${cssW}px`;
+canvas.style.height = `${cssH}px`;
+const ctx = canvas.getContext('2d');
+
+if (Q.get('sheet')) sheet();
+else scene();
+document.title = 'готово';
+
+/** Свободная клетка земли рядом с (tx, ty): вещи не ставятся на воду и в кусты. */
+function freeTile(tx, ty, taken) {
+  const ok = (x, y) => x > 1 && y > 1 && x < room.w - 2 && y < room.h - 2 && room.tiles[y * room.w + x] === TILE.FLOOR && !taken.has(y * room.w + x);
+  for (let r = 0; r < 8; r++) {
+    for (let y = ty - r; y <= ty + r; y++) {
+      for (let x = tx - r; x <= tx + r; x++) {
+        if (Math.max(Math.abs(x - tx), Math.abs(y - ty)) === r && ok(x, y)) {
+          taken.add(y * room.w + x);
+          return [x, y];
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function scene() {
+  const viewW = cssW / scale;
+  const viewH = cssH / scale;
+  const camX = (Q.has('cx') ? Number(Q.get('cx')) * T : RW / 2) - viewW / 2;
+  const camY = (Q.has('cy') ? Number(Q.get('cy')) * T : RH / 2) - viewH / 2;
+  const px = (x) => (x - camX) * k;
+  const py = (y) => (y - camY) * k;
+
+  // глубокий лес — клеткой по сетке от угла комнаты
+  const deep = art.sprite(`tile.${biome}.deep`) ?? art.sprite('tile.forest.deep');
+  for (let gy = Math.floor(camY / 64); gy * 64 < camY + viewH; gy++) {
+    for (let gx = Math.floor(camX / 64); gx * 64 < camX + viewW; gx++) ctx.drawImage(deep.c, Math.round(px(gx * 64)), Math.round(py(gy * 64)));
+  }
+
+  // фон комнаты — одной заготовкой, как в игре
+  const M = ROOM_MARGIN;
+  const bg = document.createElement('canvas');
+  bg.width = Math.ceil((RW + 2 * M) * k);
+  bg.height = Math.ceil((RH + 2 * M) * k);
+  const b = bg.getContext('2d');
+  b.setTransform(k, 0, 0, k, M * k, M * k);
+  const t0 = performance.now();
+  paintRoom(b, room);
+  b.getImageData(0, 0, 1, 1);          // дождаться настоящей отрисовки: иначе время — только запись команд
+  const bakeMs = performance.now() - t0;
+  ctx.drawImage(bg, Math.round(px(-M)), Math.round(py(-M)));
+
+  const props = Q.get('props') === '0' ? [] : propsOf(room);
+  const list = props.filter((p) => !p.over);
+  if (Q.get('things') !== '0') {
+    const taken = new Set();
+    const cx = room.w >> 1;
+    const cy = room.h >> 1;
+    const put = (key, v, dx, dy) => {
+      const at = freeTile(cx + dx, cy + dy, taken);
+      if (at) list.push({ key, v, x: at[0] * T + T / 2, y: at[1] * T + T / 2 + 8 });
+    };
+    put('thing.chest', 0, -3, -2);
+    put('thing.chest', 1, -1, -2);
+    put('thing.pedestal', 0, 2, -2);
+    put('thing.portal', 0, 4, -1);
+    put('thing.stump', 0, -4, 2);
+    put('thing.stump', 1, -2, 2);
+    put('thing.target', 0, 1, 2);
+    put('thing.sign', 0, 3, 2);
+  }
+  list.sort((p, q) => p.y - q.y);
+
+  if (Q.get('marks')) zones(px, py);
+  for (const p of list) art.put(ctx, p.key, px(p.x), py(p.y), p.v);
+  if (Q.get('marks')) critters(px, py);
+  for (const p of props) if (p.over) art.put(ctx, p.key, px(p.x), py(p.y), p.v);
+
+  if (Q.get('grid')) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    for (let x = 0; x <= room.w; x++) ctx.fillRect(Math.round(px(x * T)), py(0), 1, RH * k);
+    for (let y = 0; y <= room.h; y++) ctx.fillRect(px(0), Math.round(py(y * T)), RW * k, 1);
+  }
+  window.__rooms = { room, props, bakeMs, k, scale, bg: [bg.width, bg.height] };
+}
+
+/** Красные зоны как в игре: ровная заливка и светлая кромка — круг лапы и полоса лося. */
+function zones(px, py) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  const cx = px(RW * 0.36);
+  const cy = py(RH * 0.62);
+  ctx.fillStyle = 'rgba(255,59,48,0.26)';
+  ctx.strokeStyle = '#ffe1dc';
+  ctx.lineWidth = 1.4 * k;
+  ctx.beginPath();
+  ctx.arc(cx, cy, 54 * k, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.rect(px(T), py(RH * 0.3), (RW - 2 * T) * k, 30 * k);
+  ctx.fill();
+  ctx.stroke();
+}
+
+/** Зверьки для примерки: настоящие, если их рисунки уже есть, иначе — пятна их размера и цвета. */
+function critters(px, py) {
+  const spots = [[0.3, 0.42, 'rabbit'], [0.44, 0.7, 'rabbit'], [0.62, 0.5, 'rabbit'], [0.52, 0.34, 'fox'], [0.2, 0.74, 'rabbit']];
+  for (const [u, v, id] of spots) {
+    const x = px(RW * u);
+    const y = py(RH * v);
+    const a = { t: 0.3, act: 'idle', k: 0, speed: 0, vx: 0, vy: 0, z: 0, flash: 0, hp: 1, elite: false, aim: 0, data: null };
+    if (hasRig(id)) {
+      art.put(ctx, 'fx.shadow', x, y);
+      art.rig(ctx, id, x, y, 1, a);
+      continue;
+    }
+    const [w, h, color] = id === 'fox' ? [34, 30, '#f0862b'] : [16, 18, '#b8a48f'];
+    ctx.setTransform(k, 0, 0, k, x, y);
+    ctx.fillStyle = 'rgba(20,24,40,0.28)';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, w * 0.42, w * 0.16, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = color;
+    ctx.strokeStyle = '#5a3a2a';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.ellipse(0, -h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+}
+
+/** Все картинки мира листом: на цвете земли, каждая со своей точкой привязки. */
+function sheet() {
+  ctx.fillStyle = '#7cc45a';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  let x = 8;
+  let y = 8;
+  let rowH = 0;
+  const only = Q.get('only');
+  for (const key of spriteKeys().filter((s) => /^(prop|thing|tile)\./.test(s) && (!only || s.includes(only)))) {
+    const def = spriteDef(key);
+    for (let v = 0; v < def.variants; v++) {
+      const s = art.sprite(key, v);
+      if (x + s.c.width > canvas.width - 8) {
+        x = 8;
+        y += rowH + 8;
+        rowH = 0;
+      }
+      ctx.fillStyle = 'rgba(0,0,0,0.12)';
+      ctx.fillRect(x, y, s.c.width, s.c.height);
+      art.put(ctx, key, x + s.ox * k, y + s.oy * k, v);
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.fillStyle = '#ff3b30';
+      ctx.fillRect(Math.round(x + s.ox * k) - 1, Math.round(y + s.oy * k) - 1, 3, 3);
+      x += s.c.width + 8;
+      rowH = Math.max(rowH, s.c.height);
+    }
+  }
+}
+</script>
+</body>
