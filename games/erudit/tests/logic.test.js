@@ -6,6 +6,7 @@ import {
   SIZE, CELLS, CENTER, RACK, BINGO, BLANK, BLANKS, LETTERS, TILES, TOTAL_TILES, PREMIUM, LEVEL_IDS, IDLE_LIMIT, EMPTY_BOARD,
   layout, checkMove, hasTiles, newBag, newGame, play, swap, pass, canSwap, ending, finalScores, outcomeOf,
   isValidState, emptyStats, isValidStats, migrateStats, recordGame, valueOf,
+  SPRINT_GOAL, SPRINT_IDS, STAT_IDS, statKey,
 } from '../logic.js';
 
 function rngOf(seed) {
@@ -337,7 +338,8 @@ test('сохранение: испорченное не принимается',
 
 test('статистика по уровням: запись партии, проверка, восстановление', () => {
   const stats = emptyStats();
-  assert.deepEqual(Object.keys(stats), LEVEL_IDS);
+  assert.deepEqual(Object.keys(stats), STAT_IDS);
+  assert.deepEqual(STAT_IDS.slice(0, LEVEL_IDS.length), LEVEL_IDS, 'строки уровней — как раньше, короткие партии — после них');
   assert.ok(isValidStats(stats));
   recordGame(stats, 'easy', 'win', 250, 40);
   recordGame(stats, 'easy', 'lose', 300, 22);
@@ -353,4 +355,115 @@ test('статистика по уровням: запись партии, пр�
   assert.equal(fixed.easy.best, 0);
   assert.equal(fixed.master.played, 0);
   assert.deepEqual(migrateStats(undefined), emptyStats());
+});
+
+// ---------- короткая партия: до SPRINT_GOAL очков ----------
+
+/** Ход двумя фишками через центр или рядом с выложенным: очки нам не важны, важен переход хода. */
+function scoreTo(game, who, points) {
+  game.scores[who] = points;
+}
+
+test('короткая партия: первым ходит игрок, цель записана в партии, обычная партия её не знает', () => {
+  for (let seed = 1; seed <= 20; seed++) {
+    const game = newGame('medium', rngOf(seed), SPRINT_GOAL);
+    assert.equal(game.turn, 0, 'жребия нет');
+    assert.equal(game.goal, SPRINT_GOAL);
+    assert.equal(ending(game), null);
+    assert.ok(isValidState(game));
+    assert.ok(isValidState(JSON.parse(JSON.stringify(game))), 'переживает JSON');
+  }
+  const full = newGame('medium', rngOf(3));
+  assert.equal('goal' in full, false, 'обычная партия сохраняется как раньше');
+  assert.equal(newGame('medium', rngOf(3), 0).goal, undefined);
+  assert.equal(newGame('medium', rngOf(3), 30).goal, undefined, 'другой цели нет — обычная партия');
+  // фишки раздаются так же, как в обычной партии с тем же зерном
+  assert.deepEqual(newGame('easy', rngOf(9), SPRINT_GOAL).racks, newGame('easy', rngOf(9)).racks);
+});
+
+test('короткая партия кончается, как только кто-то набрал цель; фишки на руках не вычитаются', () => {
+  const game = newGame('easy', rngOf(3), SPRINT_GOAL);
+  scoreTo(game, 0, SPRINT_GOAL - 1);
+  scoreTo(game, 1, SPRINT_GOAL - 1);
+  assert.equal(ending(game), null, 'до цели — играем');
+  assert.ok(isValidState(game));
+  // игрок выкладывает слово и переходит цель
+  const rack = game.racks[0];
+  const letter = (ch) => (ch === BLANK ? 'а' : ch);
+  const tiles = [0, 1].map((k) => ({ i: CENTER + k, ch: letter(rack[k]), blank: rack[k] === BLANK }));
+  const res = checkMove(game.board, tiles, any);
+  play(game, tiles, res);
+  assert.equal(ending(game), 'goal');
+  assert.equal(isValidState(game), false, 'законченная партия не сохраняется');
+  const f = finalScores(game);
+  assert.deepEqual(f.scores, [SPRINT_GOAL - 1 + res.score, SPRINT_GOAL - 1]);
+  assert.deepEqual(f.left, [0, 0]);
+  assert.equal(f.out, null);
+  assert.equal(outcomeOf(f.scores), 'win');
+  // цель набрал бот — поражение, сколько бы ни было у игрока
+  const lost = newGame('easy', rngOf(4), SPRINT_GOAL);
+  lost.scores = [SPRINT_GOAL - 1, SPRINT_GOAL];
+  assert.equal(ending(lost), 'goal');
+  assert.equal(outcomeOf(finalScores(lost).scores), 'lose');
+  // ровно цель — уже конец
+  const exact = newGame('easy', rngOf(5), SPRINT_GOAL);
+  exact.scores = [SPRINT_GOAL, 0];
+  assert.equal(ending(exact), 'goal');
+});
+
+test('обычная партия на цель не смотрит: счёт выше 50 — играем дальше', () => {
+  const game = newGame('easy', rngOf(3));
+  game.scores = [SPRINT_GOAL + 100, SPRINT_GOAL + 50];
+  assert.equal(ending(game), null);
+  assert.ok(isValidState(game));
+});
+
+test('короткая партия без цели кончается по обычным правилам — с вычетом фишек', () => {
+  const game = newGame('easy', rngOf(3), SPRINT_GOAL);
+  game.scores = [20, 30];
+  for (let k = 0; k < IDLE_LIMIT; k++) pass(game);
+  assert.equal(ending(game), 'idle');
+  const f = finalScores(game);
+  assert.ok(f.left[0] > 0 && f.left[1] > 0);
+  assert.deepEqual(f.scores, [Math.max(0, 20 - f.left[0]), Math.max(0, 30 - f.left[1])]);
+});
+
+test('сохранение короткой партии: чужая цель не принимается', () => {
+  const good = () => newGame('hard', rngOf(11), SPRINT_GOAL);
+  assert.ok(isValidState(good()));
+  for (const goal of [0, 30, 51, -50, '50', null, 1e9]) assert.equal(isValidState({ ...good(), goal }), false, String(goal));
+  // цель уже набрана — такая партия не продолжается
+  assert.equal(isValidState({ ...good(), scores: [SPRINT_GOAL, 3] }), false);
+  assert.equal(isValidState({ ...good(), scores: [3, SPRINT_GOAL + 20] }), false);
+});
+
+test('статистика коротких партий: свои строки, вместо рекорда счёта — самая быстрая победа', () => {
+  assert.deepEqual(SPRINT_IDS, LEVEL_IDS.map((id) => `sprint-${id}`));
+  for (const id of LEVEL_IDS) {
+    assert.equal(statKey(id, 0), id);
+    assert.equal(statKey(id, undefined), id);
+    assert.equal(statKey(id, SPRINT_GOAL), `sprint-${id}`);
+  }
+  const stats = emptyStats();
+  assert.deepEqual(stats['sprint-easy'], { played: 0, wins: 0, losses: 0, draws: 0, bestMove: 0, fast: 0 });
+  recordGame(stats, 'sprint-easy', 'win', 52, 18, 7);
+  recordGame(stats, 'sprint-easy', 'win', 61, 30, 5);
+  recordGame(stats, 'sprint-easy', 'win', 50, 12, 9);
+  recordGame(stats, 'sprint-easy', 'lose', 44, 40, 3);          // проигрыш быстрой победой не считается
+  recordGame(stats, 'sprint-easy', 'win', 55, 10);                // победа не по цели — без числа ходов
+  assert.deepEqual(stats['sprint-easy'], { played: 5, wins: 4, losses: 1, draws: 0, bestMove: 40, fast: 5 });
+  // обычные строки не тронуты, и «быстрой победы» у них нет
+  assert.deepEqual(stats.easy, { played: 0, wins: 0, losses: 0, draws: 0, best: 0, bestMove: 0 });
+  recordGame(stats, 'easy', 'win', 250, 40, 9);
+  assert.deepEqual(stats.easy, { played: 1, wins: 1, losses: 0, draws: 0, best: 250, bestMove: 40 });
+  assert.ok(isValidStats(stats));
+  // статистика, записанная до коротких партий, — дополняется нулями и не теряется
+  const old = Object.fromEntries(LEVEL_IDS.map((id) => [id, { played: 3, wins: 2, losses: 1, draws: 0, best: 200, bestMove: 33 }]));
+  assert.equal(isValidStats(old), false);
+  const fixed = migrateStats(old);
+  assert.ok(isValidStats(fixed));
+  assert.deepEqual(fixed.hard, old.hard);
+  assert.deepEqual(fixed['sprint-hard'], emptyStats()['sprint-hard']);
+  assert.equal(migrateStats({ 'sprint-easy': { fast: -2, wins: 3, played: 'пять' } })['sprint-easy'].fast, 0);
+  assert.equal(migrateStats({ 'sprint-easy': { fast: 6, wins: 3, played: 4 } })['sprint-easy'].fast, 6);
 });

@@ -83,3 +83,12 @@ test('в реестре у каждой игры разумная настрой
   assert.equal(byId.wordle.progress, 'append', 'Wordle дописывает серию');
   assert.deepEqual(byId['2048'], {}, '2048 — обычная статистика, рекорд = лучшая плитка');
 });
+
+test('Эрудит: у начатой партии — счёт, у короткой — ещё и цель', () => {
+  const menu = games.find((g) => g.id === 'erudit').menu;
+  assert.equal(menuLine(stats(0), { menu, save: { state: { level: 'easy', scores: [27, 25] } } }), 'Счёт 27 : 25');
+  assert.equal(menuLine(stats(0), { menu, save: { state: { level: 'easy', scores: [27, 25], goal: 0 } } }), 'Счёт 27 : 25');
+  assert.equal(menuLine(stats(0), { menu, save: { state: { level: 'easy', scores: [27, 25], goal: 50 } } }), 'Счёт 27 : 25 · до 50');
+  assert.equal(menuLine(stats(3, 1, 240), { menu, save: { state: { scores: [7, 6], goal: 50 } } }), 'Сыграно: 3 · Побед: 1 · Рекорд: 240 · Счёт 7 : 6 · до 50');
+  assert.equal(menuLine(stats(3, 1, 240), { menu, save: { state: {} } }), 'Сыграно: 3 · Побед: 1 · Рекорд: 240');
+});

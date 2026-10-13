@@ -30,6 +30,8 @@ test('цены есть у всех настоящих вариантов игр
   has('tictactoe', tt.MODES.flatMap((m) => tt.LEVELS.map((l) => `${m}-${l}`)));
   has('fifteen', (await import('../../games/fifteen/logic.js')).SIZES.map(String));
   has('hanoi', (await import('../../games/hanoi/logic.js')).STAT_KEYS);
+  const er = await import('../../games/erudit/logic.js');
+  has('erudit', er.STAT_IDS);
   // сложнее — дороже
   const up = (id, keys) => keys.reduce((prev, k) => (assert.ok(WIN_POINTS[id].by[k] > prev, `${id}: «${k}» не дороже`), WIN_POINTS[id].by[k]), 0);
   up('sudoku', ['easy', 'medium', 'hard', 'expert']);
@@ -39,6 +41,10 @@ test('цены есть у всех настоящих вариантов игр
   up('go', ['9-1', '9-5', '13-5', '19-5']);
   up('hanoi', ['3-3', '3-5', '3-8', '3-10']);
   up('fifteen', ['3', '4', '5', '6', '7', '8']);
+  up('erudit', er.LEVEL_IDS);
+  up('erudit', er.SPRINT_IDS);
+  // короткая партия эрудита — намного дешевле полной того же уровня
+  for (const id of er.LEVEL_IDS) assert.ok(WIN_POINTS.erudit.by[`sprint-${id}`] * 5 <= WIN_POINTS.erudit.by[id], id);
   // киллер дороже обычного судоку той же сложности
   for (const d of ['easy', 'medium', 'hard', 'expert']) assert.ok(WIN_POINTS['killer-sudoku'].by[d] > WIN_POINTS.sudoku.by[d]);
 });
@@ -56,6 +62,11 @@ test('победы: по вариантам, старые — по самой д
   assert.equal(winPoints({}, 'sudoku'), 0);
   // Wordle: язык не важен
   assert.equal(winPoints(stats('wordle', { played: 6, wins: 5 }, { en: { played: 3, wins: 3 }, ru: { played: 3, wins: 2 } }), 'wordle'), 250);
+  // эрудит: короткие победы (до 50 очков) считаются по своей цене, а не по цене полной партии
+  const er = stats('erudit', { played: 6, wins: 5 }, {
+    easy: { played: 1, wins: 1 }, 'sprint-easy': { played: 3, wins: 2 }, 'sprint-master': { played: 2, wins: 2 },
+  });
+  assert.equal(winPoints(er, 'erudit'), 60 + 2 * 10 + 2 * 120);
   // неизвестный вариант — по legacy
   assert.equal(winPoints(stats('mahjong', { played: 1, wins: 1 }, { star: { played: 1, wins: 1 } }), 'mahjong'), 40);
 });

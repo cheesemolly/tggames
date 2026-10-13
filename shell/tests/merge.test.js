@@ -489,6 +489,44 @@ test('явный сброс (storage.reset): записанное раньше �
   assert.deepEqual(doc.k[key].v, { played: 1, wins: 1, best: 3 });
 });
 
+test('Эрудит: строки коротких партий не теряются от устройства, которое о них не знает; быстрая победа — меньшее', async () => {
+  const key = 'game:erudit:stats';
+  assert.equal(kindAt(key, 'sprint-easy.fast'), 'min');
+  assert.equal(kindAt(key, 'sprint-easy.played'), 'count');
+  assert.equal(kindAt(key, 'sprint-easy.bestMove'), 'max');
+  assert.equal(kindAt(key, 'easy.best'), 'max');
+  const er = await import('../../games/erudit/logic.js');
+  // на сервере — статистика, записанная до коротких партий
+  const old = Object.fromEntries(er.LEVEL_IDS.map((id) => [id, { played: 2, wins: 1, losses: 1, draws: 0, best: 180, bestMove: 24 }]));
+  const doc = loadDoc({ [key]: old }, null, 1000);
+  const known = cleanEntry(key, entriesSince(doc, 0)[key]);
+  // телефон с новой игрой: две короткие победы — за 7 и за 5 ходов
+  const phone = er.migrateStats(old);
+  er.recordGame(phone, 'sprint-easy', 'win', 52, 18, 7);
+  er.recordGame(phone, 'sprint-easy', 'win', 55, 21, 5);
+  // планшет с новой игрой: короткая победа за 9 ходов и поражение
+  const tablet = er.migrateStats(old);
+  er.recordGame(tablet, 'sprint-easy', 'win', 50, 30, 9);
+  er.recordGame(tablet, 'sprint-easy', 'lose', 31, 12);
+  // ПК с прежней игрой: строк коротких партий не знает, выиграл полную партию
+  const pc = structuredClone(old);
+  pc.easy = { played: 3, wins: 2, losses: 1, draws: 0, best: 240, bestMove: 30 };
+  const push = (value, dev) => {
+    const e = absorb(key, known, value, dev);
+    return { device: dev, seq: 1, keys: { [key]: { v: e.v, f: e.f, e: e.e } } };
+  };
+  const sends = [push(phone, A), push(tablet, B), push(pc, C)];
+  for (const order of [[0, 1, 2], [2, 1, 0], [1, 2, 0], [2, 0, 1]]) {
+    let d = doc;
+    order.forEach((k, n) => { d = applyPush(d, sends[k], 2000 + n * 10).doc; });
+    const v = d.k[key].v;
+    assert.deepEqual(v['sprint-easy'], { played: 4, wins: 3, losses: 1, draws: 0, bestMove: 30, fast: 5 }, `порядок ${order}`);
+    assert.deepEqual(v.easy, { played: 3, wins: 2, losses: 1, draws: 0, best: 240, bestMove: 30 });
+    assert.deepEqual(v.hard, old.hard);
+    assert.ok(er.isValidStats(er.migrateStats(v)));
+  }
+});
+
 test('правка в панели уровня «Петли» вниз не отменяется большим уровнем со старого устройства', () => {
   const key = 'game:loop:current';
   let doc = loadDoc({ [key]: { v: 1, level: 60 } }, null, 1000);

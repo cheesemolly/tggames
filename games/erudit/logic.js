@@ -53,6 +53,13 @@ const WORD_MULT = { 2: 2, 3: 3 };
 
 export const LEVEL_IDS = ['easy', 'medium', 'hard', 'master'];
 export const IDLE_LIMIT = 4;            // столько ходов подряд без слов (два круга) — партия кончается
+// Короткая партия: кто первым набрал столько очков, тот и победил; первым ходит игрок. В партии — поле goal
+// (у обычной его нет), в статистике — свои строки 'sprint-<уровень>'.
+export const SPRINT_GOAL = 50;
+export const SPRINT_IDS = LEVEL_IDS.map((id) => `sprint-${id}`);
+export const STAT_IDS = [...LEVEL_IDS, ...SPRINT_IDS];
+/** Строка статистики (и вариант для оболочки) партии: уровень, у короткой — 'sprint-<уровень>'. */
+export const statKey = (level, goal) => (goal ? `sprint-${level}` : level);
 
 export const rowOf = (i) => Math.floor(i / SIZE);
 export const colOf = (i) => i % SIZE;
@@ -189,8 +196,11 @@ function refill(game, who) {
   while (game.racks[who].length < RACK && game.bag.length) game.racks[who].push(game.bag.pop());
 }
 
-/** Новая партия: по семь фишек, кто ходит первым — жребий. */
-export function newGame(level = 'easy', rng = Math.random) {
+/**
+ * Новая партия: по семь фишек, кто ходит первым — жребий. goal — короткая партия до стольких очков (SPRINT_GOAL):
+ * в ней первым ходит игрок — так бот не окажется у цели, сделав на ход больше.
+ */
+export function newGame(level = 'easy', rng = Math.random, goal = 0) {
   const game = {
     v: 1,
     level: LEVEL_IDS.includes(level) ? level : 'easy',
@@ -206,7 +216,8 @@ export function newGame(level = 'easy', rng = Math.random) {
   };
   refill(game, 0);
   refill(game, 1);
-  game.turn = rng() < 0.5 ? 0 : 1;
+  if (goal === SPRINT_GOAL) game.goal = goal;
+  else game.turn = rng() < 0.5 ? 0 : 1;
   return game;
 }
 
@@ -259,10 +270,11 @@ export function pass(game) {
 }
 
 /**
- * Кончилась ли партия: 'out' — мешок пуст и у кого-то не осталось фишек; 'idle' — два круга подряд никто
- * не выложил слово; иначе null.
+ * Кончилась ли партия: 'goal' — в короткой партии кто-то набрал нужные очки; 'out' — мешок пуст и у кого-то не
+ * осталось фишек; 'idle' — два круга подряд никто не выложил слово; иначе null.
  */
 export function ending(game) {
+  if (game.goal && game.scores.some((n) => n >= game.goal)) return 'goal';
   if (!game.bag.length && game.racks.some((r) => r.length === 0)) return 'out';
   if (game.idle >= IDLE_LIMIT) return 'idle';
   return null;
@@ -273,8 +285,10 @@ const rackValue = (rack) => rack.reduce((n, ch) => n + valueOf(ch), 0);
 /**
  * Итог: у каждого вычитаются очки оставшихся на руках фишек; кто выложил всё — получает очки фишек соперника.
  * Меньше нуля счёт не опускается. → { scores, left: [минус игроку, минус боту], out: кто выложил всё | null }
+ * Короткая партия, дошедшая до цели, — счёт как есть: фишки на руках не считаются.
  */
 export function finalScores(game) {
+  if (ending(game) === 'goal') return { scores: [...game.scores], left: [0, 0], out: null };
   const left = game.racks.map(rackValue);
   const out = !game.bag.length ? game.racks.findIndex((r) => r.length === 0) : -1;
   const scores = game.scores.map((s, who) => Math.max(0, s - left[who] + (who === out ? left[1 - who] : 0)));
@@ -295,6 +309,7 @@ const BOARD_RE = /^[.а-яА-Я]{225}$/;
 /** Сохранённая партия цела: все 131 фишка на месте (поле + мешок + руки), счёт и очередь — в пределах. */
 export function isValidState(s) {
   if (!s || typeof s !== 'object' || s.v !== 1 || !LEVEL_IDS.includes(s.level)) return false;
+  if (s.goal !== undefined && s.goal !== SPRINT_GOAL) return false;
   if (typeof s.board !== 'string' || !BOARD_RE.test(s.board)) return false;
   if (!Array.isArray(s.bag) || !Array.isArray(s.racks) || s.racks.length !== 2) return false;
   if (!s.racks.every((r) => Array.isArray(r) && r.length <= RACK)) return false;
@@ -328,25 +343,29 @@ export function isValidState(s) {
 
 // ---------- статистика ----------
 
+// Обычная партия: best — лучший счёт партии. Короткая: счёт у всех побед около цели, поэтому вместо него fast —
+// за сколько своих ходов выиграна самая быстрая партия (0 — побед ещё не было).
 const emptyLevel = () => ({ played: 0, wins: 0, losses: 0, draws: 0, best: 0, bestMove: 0 });
+const emptySprint = () => ({ played: 0, wins: 0, losses: 0, draws: 0, bestMove: 0, fast: 0 });
+const emptyRow = (id) => (SPRINT_IDS.includes(id) ? emptySprint() : emptyLevel());
 
-/** Статистика по уровням бота: партий, побед, поражений, ничьих, лучший счёт партии и лучший ход. */
+/** Статистика по уровням бота: партий, побед, поражений, ничьих, лучший счёт партии и лучший ход; короткие партии — свои строки. */
 export function emptyStats() {
-  return Object.fromEntries(LEVEL_IDS.map((id) => [id, emptyLevel()]));
+  return Object.fromEntries(STAT_IDS.map((id) => [id, emptyRow(id)]));
 }
 
 export function isValidStats(s) {
   if (!s || typeof s !== 'object') return false;
-  return LEVEL_IDS.every((id) => {
+  return STAT_IDS.every((id) => {
     const lv = s[id];
-    return lv && typeof lv === 'object' && Object.keys(emptyLevel()).every((k) => isCount(lv[k], 1e7));
+    return lv && typeof lv === 'object' && Object.keys(emptyRow(id)).every((k) => isCount(lv[k], 1e7));
   });
 }
 
 /** Статистика из хранилища: чего нет или испорчено — нули. */
 export function migrateStats(saved) {
   const stats = emptyStats();
-  for (const id of LEVEL_IDS) {
+  for (const id of STAT_IDS) {
     for (const k of Object.keys(stats[id])) {
       const v = saved?.[id]?.[k];
       if (isCount(v, 1e7)) stats[id][k] = v;
@@ -355,14 +374,18 @@ export function migrateStats(saved) {
   return stats;
 }
 
-/** Записать законченную партию в статистику уровня. */
-export function recordGame(stats, level, outcome, score, bestMove) {
-  const lv = stats[level];
+/**
+ * Записать законченную партию в строку статистики key (statKey): score — счёт игрока, bestMove — его лучший ход,
+ * moves — за сколько своих ходов он выиграл короткую партию (0 — не считать).
+ */
+export function recordGame(stats, key, outcome, score, bestMove, moves = 0) {
+  const lv = stats[key];
   lv.played += 1;
   if (outcome === 'win') lv.wins += 1;
   else if (outcome === 'lose') lv.losses += 1;
   else lv.draws += 1;
-  lv.best = Math.max(lv.best, score);
+  if ('best' in lv) lv.best = Math.max(lv.best, score);
   lv.bestMove = Math.max(lv.bestMove, bestMove);
+  if ('fast' in lv && outcome === 'win' && moves > 0) lv.fast = lv.fast ? Math.min(lv.fast, moves) : moves;
   return stats;
 }

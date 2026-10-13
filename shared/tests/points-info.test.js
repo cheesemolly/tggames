@@ -8,7 +8,7 @@ import {
   LEVEL_PRICES, match3LevelPoints, nonogramLevelPoints, SUBWORDS_STAR_POINTS, LOGIC_GATES, logicGatesStarPoints,
 } from '../../server/lib.js';
 
-const text = (id) => POINTS_INFO[id].lines.join(' ');
+const text = (id) => POINTS_INFO[id].lines.map((line) => (typeof line === 'string' ? line : line.text)).join(' ');
 const nums = (id) => new Set((text(id).match(/\d+/g) ?? []).map(Number));
 const has = (id, values) => values.forEach((v) => assert.ok(nums(id).has(v), `${id}: в подсказке нет «${v}»`));
 

@@ -4,6 +4,7 @@
 // ходу фишки возвращает её на руку. С клавиатуры — буквы, Backspace, пробел (повернуть стрелку), Enter.
 // Словарь (words/ru.json) грузится один раз на страницу; бот считает в основном потоке — перебор ходов занимает
 // миллисекунды. Партия, статистика по уровням и настройки (скин поля) — в api.storage игры.
+// Короткая партия — до 50 очков (в бете 'erudit-sprint'): выбирается в окне новой партии, первым ходит игрок.
 
 import { el } from '../../shared/dom.js';
 import { animate, showLayer, hideLayer, shake, reducedMotion } from '../../shared/motion.js';
@@ -12,13 +13,14 @@ import { createAudio } from '../../shared/sfx.js';
 import { pointsInfo } from '../../shared/points-info.js';
 import { createSounds } from './sounds.js';
 import {
-  SIZE, CELLS, CENTER, RACK, BINGO, BLANK, LETTERS, PREMIUM, LEVEL_IDS, IDLE_LIMIT,
+  SIZE, CELLS, CENTER, RACK, BINGO, BLANK, LETTERS, PREMIUM, LEVEL_IDS, IDLE_LIMIT, SPRINT_GOAL,
   rowOf, colOf, valueOf, layout, checkMove, newGame, play, swap, pass, canSwap, ending, finalScores, outcomeOf,
-  isValidState, emptyStats, migrateStats, recordGame,
+  isValidState, emptyStats, migrateStats, recordGame, statKey,
 } from './logic.js';
 import { createDict, joinWords, generateMoves, botMove, LEVELS, LEVELS_V1 } from './engine.js';
 
 const SKINS = ['telegram', 'classic', 'wood', 'felt', 'night', 'paper'];
+const MODES = ['full', 'sprint'];
 const T = {
   title: 'Эрудит',
   levels: { easy: 'Лёгкий', medium: 'Средний', hard: 'Сложный', master: 'Мастер' },
@@ -28,9 +30,13 @@ const T = {
     hard: 'Весь словарь, иногда ошибается',
     master: 'Весь словарь и самый дорогой ход',
   },
+  mode: 'Партия',
+  modes: { full: 'Полная', sprint: `До ${SPRINT_GOAL} очков` },
+  modeHint: { full: 'пока есть фишки', sprint: 'кто первым наберёт' },
   you: 'Вы',
   bot: 'Бот',
   bag: 'в мешке',
+  goal: 'цель',
   loading: 'Загружаю словарь…',
   loadError: 'Не удалось загрузить словарь',
   retry: 'Повторить',
@@ -80,15 +86,23 @@ const T = {
   win: 'Победа!',
   lose: 'Поражение',
   draw: 'Ничья',
-  reasons: { out: 'фишки кончились', idle: 'два круга без слов' },
+  reasons: { out: 'фишки кончились', idle: 'два круга без слов', goal: `до ${SPRINT_GOAL} очков` },
+  goalYou: `Вы первыми набрали ${SPRINT_GOAL} очков`,
+  goalBot: `Бот первым набрал ${SPRINT_GOAL} очков`,
   left: (mine, bots) => `Остаток на руках: у вас −${mine}, у бота −${bots}`,
   outYou: (n) => `Вы выложили все фишки: +${n} вам, −${n} боту`,
   outBot: (n) => `Бот выложил все фишки: +${n} боту, −${n} вам`,
-  stats: { open: 'Статистика', title: 'Статистика', played: 'Партий', wins: 'Побед', best: 'Рекорд', move: 'Ход', note: 'Рекорд — лучший счёт партии, ход — самый дорогой ход.' },
+  stats: {
+    open: 'Статистика', title: 'Статистика', played: 'Партий', wins: 'Побед', best: 'Рекорд', move: 'Ход', fast: 'Быстро',
+    full: 'Полная партия',
+    note: 'Рекорд — лучший счёт партии, ход — самый дорогой ход.',
+    bothNote: 'Рекорд — лучший счёт партии, быстро — за сколько своих ходов выиграна самая быстрая, ход — самый дорогой ход.',
+  },
   help: { open: 'Правила', title: 'Правила' },
   settings: { open: 'Настройки', title: 'Настройки', skin: 'Поле' },
   skins: { telegram: 'По умолчанию', classic: 'Классика', wood: 'Дерево', felt: 'Сукно', night: 'Ночь', paper: 'Тетрадь' },
   legend: { d: 'буква ×2', t: 'буква ×3', 2: 'слово ×2', 3: 'слово ×3' },
+  legendShort: { letter: 'буква', word: 'слово' },
   values: 'Очки букв',
   rules: [
     'Составляйте слова из своих фишек: слева направо или сверху вниз. Первое слово проходит через центр, каждое следующее касается выложенных. Все получившиеся слова должны быть в словаре.',
@@ -97,6 +111,7 @@ const T = {
     'Как ставить: коснитесь клетки — появится стрелка, ещё раз — она повернётся вниз. Потом касайтесь фишек, они встают по стрелке. Касание выложенной фишки возвращает её.',
     'Партия кончается, когда мешок пуст и кто-то выложил все фишки, или когда два круга подряд никто не выложил слово. Очки оставшихся на руках фишек вычитаются.',
   ],
+  sprintRule: `Короткая партия — до ${SPRINT_GOAL} очков: первым ходите вы, и кто первым набрал ${SPRINT_GOAL}, тот победил. Фишки на руках в конце не считаются.`,
 };
 
 const svgIcon = (body, fill = false) => `<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" `
@@ -127,7 +142,7 @@ let dict = null;
 const dictPromises = new Map();    // словари (с современными словами и без) — на страницу, переживают закрытие игры
 let game = null;
 let stats = emptyStats();
-let setup = { level: 'easy' };
+let setup = { level: 'easy', mode: 'full' };
 let settings = { skin: 'telegram' };
 let pending = [];                  // фишки этого хода на поле: { i, slot, ch, blank } — slot — место на руке
 let cursor = null;                 // { i, dir: 'h' | 'v' } — куда встанет следующая фишка
@@ -184,6 +199,8 @@ function loadDict(modern = false) {
 
 // Уровни бота: в бете 'erudit-bot' — слабее (лёгкий берёт дешёвые слова и чаще меняет фишки), иначе прежние
 const botLevels = () => (api.feature('erudit-bot') ? LEVELS : LEVELS_V1);
+// Короткая партия — пока в бете ('erudit-sprint'); начатую доигрывает любой
+const sprintOn = () => Boolean(api.feature('erudit-sprint'));
 const save = () => game && !over && api?.storage.set('current', game);
 const myTurn = () => Boolean(game && dict && !over && !busy && game.turn === 0);
 const pendingAt = (i) => pending.find((p) => p.i === i);
@@ -344,7 +361,12 @@ function renderInfo() {
   const scores = game ? (over && ui.final ? ui.final : game.scores) : [0, 0];
   setNumber(ui.score[0], scores[0]);
   setNumber(ui.score[1], scores[1]);
-  setNumber(ui.bag, game ? game.bag.length : 0);
+  // короткая партия: посередине — цель, плашки счёта заполняются по мере приближения к ней
+  const goal = game?.goal ?? 0;
+  setNumber(ui.bag, goal || (game ? game.bag.length : 0));
+  ui.bagLabel.textContent = goal ? T.goal : T.bag;
+  ui.scores.classList.toggle('er-race', goal > 0);
+  ui.side.forEach((side, who) => side.style.setProperty('--er-run', `${goal ? Math.min(100, Math.round((100 * scores[who]) / goal)) : 0}%`));
   ui.sub.textContent = game ? T.levels[game.level] : '';
   ui.side[0].classList.toggle('er-active', Boolean(game && !over && game.turn === 0));
   ui.side[1].classList.toggle('er-active', Boolean(game && !over && game.turn === 1));
@@ -760,30 +782,54 @@ function finishGame(reason) {
   const f = finalScores(game);
   const outcome = outcomeOf(f.scores);
   ui.final = f.scores;
-  ui.status.dataset.final = f.out === 0 ? T.outYou(f.left[1]) : f.out === 1 ? T.outBot(f.left[0]) : T.left(f.left[0], f.left[1]);
+  if (reason === 'goal') ui.status.dataset.final = outcome === 'win' ? T.goalYou : T.goalBot;
+  else ui.status.dataset.final = f.out === 0 ? T.outYou(f.left[1]) : f.out === 1 ? T.outBot(f.left[0]) : T.left(f.left[0], f.left[1]);
   renderAll();
-  recordGame(stats, game.level, outcome, f.scores[0], game.best);
+  // в короткой партии первым ходит игрок: победный ход — его, своих ходов — половина всех, с округлением вверх
+  const fast = reason === 'goal' && outcome === 'win' ? Math.ceil(game.moves / 2) : 0;
+  recordGame(stats, statKey(game.level, game.goal), outcome, f.scores[0], game.best, fast);
   api.storage.set('stats', stats);
   api.storage.remove('current');
   sfx(outcome);
   api.platform.haptic.notification(outcome === 'win' ? 'success' : outcome === 'draw' ? 'warning' : 'error');
   const title = outcome === 'win' ? T.win : outcome === 'draw' ? T.draw : T.lose;
   const result = {
-    outcome, title, locale: 'ru', variant: game.level,
+    outcome, title, locale: 'ru', variant: statKey(game.level, game.goal),
     message: `${T.levels[game.level]} · ${f.scores[0]} : ${f.scores[1]} · ${T.reasons[reason]}`,
   };
-  if (outcome === 'win') result.score = f.scores[0];
+  // рекорд в меню — счёт лучшей выигранной полной партии: в короткой он у всех около цели
+  if (outcome === 'win' && !game.goal) result.score = f.scores[0];
   later(() => api?.finish(result), reducedMotion() ? 0 : 1600);
 }
 
 // ---------- окна ----------
 
-function legend() {
-  return el('div', { class: 'er-legend' }, ['d', 't', '2', '3'].map((p) => el('span', { class: 'er-legend-item' },
-    el('i', { class: `er-chip er-p-${p}` }, p === 'd' || p === '2' ? '×2' : '×3'), T.legend[p])));
+/** Легенда премий; compact — в одну строку: пара клеток «буква» и пара «слово» (в окне новой партии с выбором партии). */
+function legend(compact = false) {
+  const chip = (p) => el('i', { class: `er-chip er-p-${p}` }, p === 'd' || p === '2' ? '×2' : '×3');
+  if (compact) {
+    return el('div', { class: 'er-legend er-legend-row' },
+      el('span', { class: 'er-legend-item' }, chip('d'), chip('t'), T.legendShort.letter),
+      el('span', { class: 'er-legend-item' }, chip('2'), chip('3'), T.legendShort.word));
+  }
+  return el('div', { class: 'er-legend' }, ['d', 't', '2', '3'].map((p) => el('span', { class: 'er-legend-item' }, chip(p), T.legend[p])));
 }
 
-/** Окно новой партии: уровень бота. */
+/** Выбор партии: полная или короткая (до SPRINT_GOAL очков). */
+function modePicker() {
+  if (!MODES.includes(setup.mode)) setup.mode = 'full';
+  const buttons = MODES.map((id) => el('button', {
+    class: 'er-seg-btn', role: 'radio', 'aria-checked': String(setup.mode === id),
+    onclick: () => {
+      setup.mode = id;
+      buttons.forEach((b, k) => b.setAttribute('aria-checked', String(MODES[k] === id)));
+      sfx('pick');
+    },
+  }, el('b', {}, T.modes[id]), el('span', {}, T.modeHint[id])));
+  return el('div', { class: 'er-seg', role: 'radiogroup', 'aria-label': T.mode }, buttons);
+}
+
+/** Окно новой партии: вид партии (в бете 'erudit-sprint') и уровень бота. */
 function showNewGame(closable = true) {
   const buttons = LEVEL_IDS.map((id) => el('button', {
     class: 'er-option', role: 'radio', 'aria-checked': String(setup.level === id),
@@ -799,9 +845,10 @@ function showNewGame(closable = true) {
       el('h2', {}, T.newGame),
       closable ? el('button', { class: 'er-icon-btn', 'aria-label': T.close, title: T.close, onclick: closeModal }, '✕') : null,
     ),
+    sprintOn() ? modePicker() : null,
     el('h3', { class: 'er-section' }, T.level),
     el('div', { class: 'er-levels', role: 'radiogroup' }, buttons),
-    legend(),
+    legend(sprintOn()),
     started ? el('p', { class: 'er-note' }, T.abandon) : null,
     el('button', {
       class: 'btn er-start',
@@ -818,10 +865,10 @@ function startGame() {
   api.storage.set('setup', setup);
   if (game && !over && game.moves >= 2) {
     // брошенная партия — поражение (если оба уже сходили)
-    recordGame(stats, game.level, 'lose', game.scores[0], game.best);
+    recordGame(stats, statKey(game.level, game.goal), 'lose', game.scores[0], game.best);
     api.storage.set('stats', stats);
   }
-  game = newGame(setup.level);
+  game = newGame(setup.level, Math.random, sprintOn() && setup.mode === 'sprint' ? SPRINT_GOAL : 0);
   over = false;
   busy = false;
   autoPass = false;
@@ -839,15 +886,25 @@ function startGame() {
   if (game.turn === 1) botTurn();
 }
 
+/** Таблица статистики по уровням: goal — строки коротких партий (вместо рекорда счёта — самая быстрая победа). */
+function statsTable(goal, tight = false) {
+  const record = goal ? 'fast' : 'best';
+  return el('table', { class: `er-stats${tight ? ' er-stats-tight' : ''}` },
+    el('thead', {}, el('tr', {}, el('th', {}, ''), el('th', {}, T.stats.played), el('th', {}, T.stats.wins), el('th', {}, T.stats[record]), el('th', {}, T.stats.move))),
+    el('tbody', {}, LEVEL_IDS.map((id) => {
+      const s = stats[statKey(id, goal)];
+      return el('tr', {}, el('td', {}, T.levels[id]), el('td', {}, s.played), el('td', {}, s.wins), el('td', {}, s[record] || '—'), el('td', {}, s.bestMove || '—'));
+    })));
+}
+
 function showStats() {
+  // короткие партии — отдельной таблицей: пока режим в бете, её видит тот, у кого он открыт или уже сыгран
+  const sprint = sprintOn() || LEVEL_IDS.some((id) => stats[statKey(id, SPRINT_GOAL)].played > 0);
   openModal(card(T.stats.title,
-    el('table', { class: 'er-stats' },
-      el('thead', {}, el('tr', {}, el('th', {}, ''), el('th', {}, T.stats.played), el('th', {}, T.stats.wins), el('th', {}, T.stats.best), el('th', {}, T.stats.move))),
-      el('tbody', {}, LEVEL_IDS.map((id) => {
-        const s = stats[id];
-        return el('tr', {}, el('td', {}, T.levels[id]), el('td', {}, s.played), el('td', {}, s.wins), el('td', {}, s.best || '—'), el('td', {}, s.bestMove || '—'));
-      }))),
-    el('p', { class: 'er-note' }, T.stats.note),
+    sprint ? el('h3', { class: 'er-section' }, T.stats.full) : null,
+    statsTable(0, sprint),
+    sprint ? [el('h3', { class: 'er-section er-section-next' }, T.modes.sprint), statsTable(SPRINT_GOAL, true)] : null,
+    el('p', { class: `er-note${sprint ? ' er-stats-note' : ''}` }, sprint ? T.stats.bothNote : T.stats.note),
   ));
 }
 
@@ -867,6 +924,7 @@ function showHelp() {
     T.rules.slice(0, 2).map((text) => el('p', { class: 'er-rule' }, text)),
     legend(),
     T.rules.slice(2).map((text) => el('p', { class: 'er-rule' }, text)),
+    sprintOn() ? el('p', { class: 'er-rule' }, T.sprintRule) : null,
     el('h3', { class: 'er-section' }, T.values),
     valuesTable(),
   ));
@@ -1045,7 +1103,10 @@ export default {
     if (!api) return;
     soundOn = savedSound !== false;
     stats = migrateStats(savedStats);
-    setup = { level: LEVEL_IDS.includes(savedSetup?.level) ? savedSetup.level : 'easy' };
+    setup = {
+      level: LEVEL_IDS.includes(savedSetup?.level) ? savedSetup.level : 'easy',
+      mode: MODES.includes(savedSetup?.mode) ? savedSetup.mode : 'full',
+    };
     settings = { skin: SKINS.includes(savedSettings?.skin) ? savedSettings.skin : 'telegram' };
     host.dataset.skin = settings.skin;
 
@@ -1053,6 +1114,7 @@ export default {
       sub: el('div', { class: 'er-sub' }),
       score: [el('b', {}), el('b', {})],
       bag: el('b', {}),
+      bagLabel: el('span', {}, T.bag),
       board: el('div', { class: 'er-board' }),
       status: el('div', { class: 'er-status', role: 'status' }),
       rack: el('div', { class: 'er-rack' }),
@@ -1063,6 +1125,7 @@ export default {
       el('div', { class: 'er-side' }, el('span', {}, T.you), ui.score[0]),
       el('div', { class: 'er-side er-side-bot' }, el('span', {}, T.bot), ui.score[1]),
     ];
+    ui.scores = el('div', { class: 'er-scores' }, ui.side[0], el('div', { class: 'er-bag' }, ui.bag, ui.bagLabel), ui.side[1]);
     ui.board.addEventListener('click', onBoardTap);
     ui.rack.addEventListener('click', onRackTap);
     ui.soundBtn = iconButton(ICONS.soundOn, 'Выключить звук', toggleSound);
@@ -1089,11 +1152,7 @@ export default {
           iconButton(ICONS.gear, T.settings.open, showSettings),
         ),
       ),
-      el('div', { class: 'er-scores' },
-        ui.side[0],
-        el('div', { class: 'er-bag' }, ui.bag, el('span', {}, T.bag)),
-        ui.side[1],
-      ),
+      ui.scores,
       el('div', { class: 'er-wrap' }, ui.board),
       ui.status,
       ui.rack,
@@ -1130,7 +1189,7 @@ export default {
   getState() {
     if (!game || over || game.moves === 0) return null;
     save();
-    return { level: game.level, scores: [...game.scores] };
+    return { level: game.level, scores: [...game.scores], goal: game.goal ?? 0 };
   },
 
   destroy() {
@@ -1146,7 +1205,7 @@ export default {
     busy = over = modalActive = autoPass = stuck = false;
     lastDir = 'h';
     stats = emptyStats();
-    setup = { level: 'easy' };
+    setup = { level: 'easy', mode: 'full' };
     settings = { skin: 'telegram' };
   },
 };

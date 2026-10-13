@@ -239,8 +239,9 @@ export const games = [
     title: 'Эрудит',
     load: () => import('../games/erudit/index.js'),
     css: new URL('../games/erudit/game.css', import.meta.url),
-    // «Сыграно · Побед · Рекорд» — рекорд — счёт лучшей выигранной партии; у начатой — «Счёт 120 : 98»
-    menu: { saveLine: (s) => (Array.isArray(s.scores) ? `Счёт ${s.scores[0]} : ${s.scores[1]}` : null) },
+    // «Сыграно · Побед · Рекорд» — рекорд — счёт лучшей выигранной полной партии; у начатой — «Счёт 120 : 98»,
+    // у короткой — «Счёт 27 : 25 · до 50»
+    menu: { saveLine: (s) => (Array.isArray(s.scores) ? `Счёт ${s.scores[0]} : ${s.scores[1]}${s.goal ? ` · до ${s.goal}` : ''}` : null) },
   },
   {
     id: 'billiards',

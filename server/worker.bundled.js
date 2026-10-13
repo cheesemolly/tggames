@@ -660,8 +660,15 @@ const WIN_POINTS = {
   hanoi: { legacy: 5, by: Object.fromEntries(Object.entries(HANOI).flatMap(([pegs, row]) => Object.entries(row).map(([n, p]) => [`${pegs}-${n}`, p]))) },
   rubik: { legacy: 200, by: { '3x3': 200 } },
   wordle: { legacy: 50, by: {} },                                        // язык не важен — 50 за слово
-  // эрудит: партия долгая (минут 15–20), поэтому дороже шашек
-  erudit: { legacy: 60, by: { easy: 60, medium: 150, hard: 350, master: 700 } },
+  // эрудит: партия долгая (минут 15–20), поэтому дороже шашек; короткая партия до 50 очков (sprint-…) — минут
+  // пять, и сильного бота в ней обыграть куда проще (решает пара удачных ходов), поэтому вшестеро дешевле
+  erudit: {
+    legacy: 60,
+    by: {
+      easy: 60, medium: 150, hard: 350, master: 700,
+      'sprint-easy': 10, 'sprint-medium': 25, 'sprint-hard': 60, 'sprint-master': 120,
+    },
+  },
   // бильярд: партия минут на пять; «вдвоём» в статистику оболочки не пишется
   billiards: { legacy: 25, by: { easy: 25, medium: 60, hard: 150, master: 350 } },
   // города: лёгкого бота обыгрывают минут за пять, сильных — только зная редкие города
@@ -1185,7 +1192,8 @@ const RULES = [
   ['game:hanoi:stats', { type: 'fields', fields: { '*.played': 'count', '*.wins': 'count', '*.perfect': 'count', '*.bestMoves': 'min', '*.bestTime': 'min' } }],
   ['game:fifteen:stats', { type: 'fields', fields: { '*.played': 'count', '*.wins': 'count', '*.totalMoves': 'count', '*.bestMoves': 'min', '*.bestTime': 'min' } }],
   ['game:boggle:stats', { type: 'fields', fields: { '*.played': 'count', '*.best': 'max', '*.bonus': 'count' } }],
-  ['game:erudit:stats', { type: 'fields', fields: { ...COUNT4('*.'), '*.best': 'max', '*.bestMove': 'max' } }],
+  // эрудит: строки — уровни бота и короткие партии ('sprint-<уровень>'); fast — самая быстрая победа в ходах
+  ['game:erudit:stats', { type: 'fields', fields: { ...COUNT4('*.'), '*.best': 'max', '*.bestMove': 'max', '*.fast': 'min' } }],
   ['game:billiards:stats', { type: 'fields', fields: { '*.played': 'count', '*.wins': 'count', '*.losses': 'count', bestRun: 'max' } }],
   // круг слов: уровень — максимум, монеты — расходуемое (подсказки), начатый уровень — у кого уровень больше
   ['game:word-circle:progress', { type: 'fields', fields: { level: 'max', coins: { spend: 100 } } }],
