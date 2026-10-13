@@ -74,7 +74,7 @@ export const POSE = { land: 0.12, hurt: 0.25, fire: 0.12, bite: 0.2, rise: 0.5, 
 
 /** Числа умений-флагов (сами флаги — в player.js). */
 export const PERK = {
-  bugRange: 96, bugGap: 1.1, bugDmg: 1,          // светлячок: как далеко, как часто и как сильно бьёт
+  bugRange: 96, bugGap: 1, bugDmg: 1,          // светлячок: как далеко, как часто и как сильно бьёт
   sporeR: 48, sporeTime: 3, sporePoison: 2,       // облако спор, когда лису ударили
   blockInv: 0.6,                                  // оберег сработал — столько секунд лису не тронуть
   dodgeInv: 0.4,                                  // увернулась — столько
