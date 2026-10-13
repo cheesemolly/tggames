@@ -17,7 +17,7 @@
 
 import { defineRig, hasSprite } from './art.js';
 import {
-  TAU, clamp, clamp01, lerp, smooth, easeOut, backOut, bump, num, alpha, darken, lighten, mix, outline, tone,
+  TAU, INK, clamp, clamp01, lerp, smooth, easeOut, backOut, bump, num, alpha, darken, lighten, mix, outline, tone,
   definePart, solid, blob, ball, capsule, limb, eggNodes, pathBlob, pathBlobSpan, pathEllipse, pathPoly, tufts, tuftsArc,
   stroke, fur, fadeEdge, glow, radial, linear, speck, shine, sparkle, eye, nose,
 } from './art-kit.js';
@@ -1033,3 +1033,1211 @@ beastRig('wolverine', GLUT_M, glutPose, (act, t) => {
   }
 });
 RIG_INFO.wolverine = { acts: [...COMMON, 'rage'], w: 76, h: 52, shadow: 36 };
+
+// ---------- остальные: кто не на четырёх лапах ----------
+// Летучая мышь, пауки, крот, жук и сундук расставляют свои части сами, через тот же put(); общее у них с
+// четвероногими одно — появление из метки.
+
+/** Опорная часть (тело): её середина, наклон и растяжение — от них считаются крепления остальных. */
+function stage(x, y, rot = 0, sx = 1, sy = 1) {
+  ox = x;
+  oy = y;
+  oc = Math.cos(rot);
+  os = Math.sin(rot);
+  osx = sx;
+  osy = sy;
+}
+const onX = (x, y) => ox + x * osx * oc - y * osy * os;
+const onY = (x, y) => oy + x * osx * os + y * osy * oc;
+
+/** Выпад: быстро вперёд (до доли peak) и плавно назад. */
+const lunge = (k, peak = 0.3) => (k < peak ? easeOut(k / peak) : 1 - smooth((k - peak) / (1 - peak)));
+
+/** Фигура, которая ставит части сама: draw(act, t, k, a). */
+function plainRig(id, acts, w, h, shadow, draw) {
+  defineRig(id, {
+    draw(kit, ctx, a) {
+      begin(kit, ctx);
+      const k = clamp01(num(a.k));
+      let act = a.act;
+      if (act === 'spawn') {
+        rise(k);
+        act = 'idle';
+      }
+      draw(act, num(a.t), k, a);
+    },
+  });
+  RIG_INFO[id] = { acts, w, h, shadow };
+}
+
+// ---------- летучая мышь ----------
+// Пушистый комок с большими ушами между двух перепончатых крыльев; жёлтые глаза горят в темноте. Всегда в воздухе
+// (на высоту её поднимает рендер). Замах — зависла, крылья вскинуты и дрожат, пасть раскрыта; бросок — крылья углом.
+
+const BAT = { coat: '#4b3a5e', light: '#8370a0', dark: '#281e34', wing: '#8d62a2', wingLight: '#c29ad4', wingDark: '#553a6c', ear: '#f0a0ac', eye: '#ffd23f' };
+const batCoat = tone(BAT.coat, { light: BAT.light, dark: BAT.dark, line: outline(BAT.coat, 0.6), lw: 1 });
+const batWing = tone(BAT.wing, { light: BAT.wingLight, dark: BAT.wingDark, line: batCoat.line, lw: 0.9 });
+const batWingFar = tone(mix(BAT.wing, BAT.wingDark, 0.75), { light: BAT.wing, dark: darken(BAT.wingDark, 0.3), line: batCoat.line, lw: 0.9, rim: 0.2 });
+
+// крыло: растёт из плеча (оно в нуле) вправо; перепонка с зубцами по нижнему краю. 0 — ближнее, 1 — дальнее
+const BAT_WING = [[-0.6, -1.5], [2.2, -3.6], [4.6, -4.6, 1], [7.4, -3.8], [9.8, -1.6, 1], [7.6, 0.2], [6.6, 3, 1], [4.6, 1.2], [3.5, 3.9, 1], [1.8, 1.7], [-0.6, 2.2]];
+definePart('mob.bat.wing', [-1.8, -5.8, 11, 5.2], (g, v) => {
+  blob(g, BAT_WING, v ? batWingFar : batWing, {
+    over(c) {
+      // кости: плечо до запястья и два пальца к зубцам перепонки
+      const bone = alpha(BAT.dark, v ? 0.5 : 0.7);
+      stroke(c, [[-0.4, -0.5], [2.4, -2.9], [4.6, -4.2]], bone, 0.9);
+      stroke(c, [[4.6, -4.2], [6.4, -0.8], [6.6, 2.6]], bone, 0.5);
+      stroke(c, [[4.6, -4.2], [4.1, -0.2], [3.5, 3.4]], bone, 0.5);
+    },
+  });
+}, 2);
+
+// тело с головой заодно; сустав — середина. 0 — злая, 1 — пасть раскрыта, 2 — больно, 3 — оглушена
+definePart('mob.bat.body', [-6.4, -11.6, 6.8, 6.8], (g, v) => {
+  const ear = (x0, y0, x1, y1, h, lean, look) => {
+    const E = earAxes(x0, y0, x1, y1, h, lean);
+    blob(g, [[x0, y0], ...earSharp(E), [x1, y1], [(x0 + x1) / 2, (y0 + y1) / 2 + 2]], look);
+    blob(g, earInside(E), tone(BAT.ear, { dark: '#b8687c', lw: 0 }));
+  };
+  ear(0.2, -3.6, 3.8, -3, 6, 0.24, { ...batCoat, fill: mix(BAT.coat, BAT.dark, 0.5), lw: 0.9 });
+  ear(-3.8, -3, -0.2, -3.8, 6.8, -0.14, { ...batCoat, lw: 0.9 });
+  blob(g, [[-4.5, 0.4], [-3.9, -2.8], [-1.6, -4.5], [1.6, -4.5], [4, -2.6], [4.7, 0.4], [3.6, 3.2], [1.8, 4.6], ...tufts(1.8, 4.6, -2.2, 4.6, 2, 1.1, 0.5),
+    [-2.2, 4.6], [-3.8, 3]], batCoat, {
+    over: (c) => glow(c, 1, 2.8, 3, BAT.light, 0.45),             // светлая грудка
+  });
+  if (v >= 2) {
+    const kind = v === 2 ? 'squint' : 'cross';
+    eye(g, 3, -1, 1, { kind, color: '#fff1dc' });
+    eye(g, 0, -0.8, 1.3, { kind, color: '#fff1dc' });
+  } else {
+    fierceEye(g, 3, -1, 0.95, BAT.eye, { lid: 0.3, slant: 0.4, wide: 0.75, shine: 0.5, rim: BAT.dark });
+    fierceEye(g, 0, -0.8, 1.3, BAT.eye, { lid: 0.3, slant: 0.32, shine: 0.5, rim: BAT.dark });
+  }
+  g.fillStyle = '#e88a9a';
+  g.beginPath();
+  g.ellipse(2.3, 0.7, 0.6, 0.45, 0, 0, TAU);
+  g.fill();
+  if (v === 1) {
+    g.fillStyle = MOUTH;
+    g.beginPath();
+    g.ellipse(1.9, 2.5, 1.8, 1.4, 0, 0, TAU);
+    g.fill();
+    fang(g, 1, 1.5, 0.45, 1.5);
+    fang(g, 2.8, 1.4, 0.45, 1.5);
+  } else {
+    stroke(g, [[0.6, 1.8], [1.9, 2.2], [3.1, 1.7]], alpha(BAT.dark, 0.9), 0.6);
+    fang(g, 1.1, 1.9, 0.35, 1);
+    fang(g, 2.7, 1.8, 0.35, 1);
+  }
+}, 4);
+
+function drawBat(act, t, k, a) {
+  let face = 0;
+  let beat = 22;        // как часто машет
+  let amp = 0.8;        // размах крыла
+  let mid = -0.1;       // его среднее положение (минус — кверху)
+  let span = 1;         // насколько крылья расправлены
+  let x = 0;
+  let y = -7.4;
+  let rot = 0;
+  let sx = 1;
+  let sy = 1;
+  switch (act) {
+    case 'move':
+      rot = 0.14 * clamp01(num(a.speed, 1));
+      beat = 26;
+      break;
+    case 'windup': {
+      // зависла перед броском: крылья вскинуты и мелко дрожат, пасть раскрыта; чем ближе укус, тем дальше отходит
+      const c = 0.7 + 0.3 * smooth(k);
+      mid = -0.8 * c;
+      amp = 0.2;
+      beat = 48;
+      x = -2.4 * c;
+      y -= 1.4 * c;
+      rot = -0.24 * c;
+      face = 1;
+      break;
+    }
+    case 'attack': {
+      // бросок: крылья сложены углом над спиной, тело вытянуто носом вниз; к концу расправляются
+      const s = smooth(k / 0.12) * (1 - smooth((k - 0.72) / 0.28));
+      mid = lerp(-0.1, -1, s);
+      amp = lerp(0.8, 0.08, s);
+      span = 1 - 0.4 * s;
+      rot = 0.3 * s;
+      sx = 1 + 0.16 * s;
+      sy = 1 - 0.1 * s;
+      x = 1.6 * s;
+      if (k < 0.85) face = 1;
+      break;
+    }
+    case 'recover': {
+      // отдувается: тяжёлые редкие взмахи, висит пониже
+      const q = 1 - smooth((k - 0.5) / 0.5);
+      beat = 13;
+      amp = 0.8 + 0.2 * q;
+      y += 1.6 * q;
+      rot = 0.1 * q;
+      break;
+    }
+    case 'stun':
+      face = 3;
+      mid = 0.9;
+      amp = 0.1;
+      beat = 9;
+      y += 1.6 + Math.sin(t * 4.2) * 0.8;
+      rot = Math.sin(t * 4.2) * 0.3;
+      break;
+    case 'hurt': {
+      const q = (1 - k) * (1 - k);
+      x = -2.8 * q;
+      y -= q;
+      rot = -0.4 * q;
+      if (k < 0.7) face = 2;
+      break;
+    }
+    default:
+  }
+  const flap = Math.sin(t * beat);
+  const wing = mid + flap * amp;
+  y -= flap * amp * 1.1;                  // крылья вниз — тело вверх
+  stage(x, y, rot, sx, sy);
+  put('mob.bat.wing', onX(-2.4, -1), onY(-2.4, -1), rot - wing, -span, 1, 1);
+  put('mob.bat.wing', onX(2.6, -0.8), onY(2.6, -0.8), rot + wing, span, 1, 0);
+  put('mob.bat.body', ox, oy, rot, sx, sy, face);
+}
+plainRig('bat', COMMON, 34, 30, 12, drawBat);
+
+// ---------- паук и паучья королева ----------
+// Одна фигура на двоих: королева — тот же паук, только вчетверо больше, с золотой короной на брюшке вместо рыжих
+// «песочных часов» и лишней парой глаз. Мохнатое брюшко висит между восьми лап, колени — выше спины; глаза горят.
+// Замах — встал на задние лапы, передние перебирают в воздухе, жвалы раскрыты.
+
+const SPIDER_KINDS = {
+  spider: { u: 1, lw: 1.1, coat: '#4a3a52', light: '#806c8e', dark: '#271e2e', mark: '#ff7a3c', markDark: '#c4481c', eye: '#ff5a4a', fang: 1, breath: 3.1, pace: 17 },
+  spiderqueen: { u: 3.7, lw: 1.9, coat: '#3f3058', light: '#7a66a0', dark: '#1f1730', mark: '#ffc93c', markDark: '#c8901c', eye: '#ff4d8a', fang: 1.3, breath: 1.9, pace: 9, queen: true },
+};
+
+const SPIDER_M = {};         // по виду: размер и картинки — по ним фигура собирается
+
+// числа ниже — для обычного паука, в осях его тела; у королевы всё множится на u
+function defineSpider(id, S, acts, w, h, shadow) {
+  const u = S.u;
+  const lw = S.lw / u;
+  const coat = tone(S.coat, { light: S.light, dark: S.dark, line: outline(S.coat, 0.6), lw });
+  const far = tone(mix(S.coat, S.dark, 0.7), { light: S.coat, dark: darken(S.dark, 0.3), line: coat.line, lw: lw * 0.9, rim: 0.2 });
+  const mark = tone(S.mark, { dark: S.markDark, line: coat.line, lw });
+  const box = (b) => b.map((n) => n * u);
+  const M = { u, kLeg: `mob.${id}.leg`, kBody: `mob.${id}.body`, breath: S.breath, pace: S.pace, queen: Boolean(S.queen) };
+  SPIDER_M[id] = M;
+
+  // лапа дугой: от сустава (он в нуле) вверх к колену и вниз к земле. 0 — ближняя (у сустава тает), 1 — дальняя
+  definePart(M.kLeg, box([-2.2, -13.3, 12, 8.6]), (g, v) => {
+    g.scale(u, u);
+    const look = v ? far : coat;
+    limb(g, 0, 0, 1.2, 4.4, -11.2, 0.95, look);
+    limb(g, 4.4, -11.2, 0.95, 10.4, 7, 0.45, look);
+    // щетинки
+    for (const [x1, y1, x2, y2] of [[0.9, -5.2, -0.4, -5.8], [2.2, -8.4, 0.9, -9], [7.2, -5.1, 8.5, -5.5], [8.9, 0.4, 10.2, 0]]) {
+      stroke(g, [[x1, y1], [x2, y2]], look.line, 0.4);
+    }
+    if (!v) fadeEdge(g, -0.7, 0, 1.3, 0);         // тает только у сустава: стопа ниже него, вдоль лапы растворять нельзя
+  }, 2);
+
+  // тело: брюшко сзади, головогрудь с глазами спереди; сустав — середина.
+  // 0 — злой, 1 — жвалы раскрыты, 2 — больно, 3 — оглушён
+  definePart(M.kBody, box([-12.4, -8.8, 9.8, 8.4]), (g, v) => {
+    g.scale(u, u);
+    blob(g, [[-10.8, -0.2], [-9.5, -3.7], ...tuftsArc(-4.6, -0.4, 5.9, -2.55, -0.75, 4, 1.05, 0.6), [-0.3, -4.4], [1.3, -1.6], [1.5, 1.4], [0, 3.9], [-3, 5.1],
+      [-7, 4.6], [-9.8, 2.6]], coat, {
+      over(c, patch) {
+        if (S.queen) {
+          // корона: три зубца и камни под ними
+          patch([[-9.2, 1.2], [-8.9, -2.4, 1], [-7.5, -0.4, 1], [-6, -3.4, 1], [-4.5, -0.4, 1], [-3.1, -2.4, 1], [-2.8, 1.2], [-6, 2.3]], mark);
+          c.fillStyle = S.eye;
+          for (const x of [-7.7, -6, -4.3]) {
+            c.beginPath();
+            c.arc(x, 0.9, 0.5, 0, TAU);
+            c.fill();
+          }
+        } else {
+          // «песочные часы»
+          patch([[-7.9, -2.7, 1], [-4.1, -2.7, 1], [-6, -0.3, 1]], mark);
+          patch([[-6, 0.3, 1], [-4.2, 2.7, 1], [-7.8, 2.7, 1]], mark);
+        }
+        glow(c, -8.6, -2.4, 2.6, S.light, 0.4);
+        fur(c, [[-9.4, 1.6, 1.2, 1.5], [-1.4, 2.6, 1.9, 1.5], [-6, 3.8, 1.5, 1.4], [-3.4, 4, 1.7, 1.4]], alpha(S.dark, 0.7), 0.5);
+      },
+    });
+    blob(g, [[0.6, 0.6], [1.6, -1.8], [4.2, -2.7], [6.8, -1.9], [8.2, 0.6], [7.6, 3.2], [5.2, 4.6], [2.4, 4.2], [0.9, 2.6]], coat, {
+      over: (c) => glow(c, 3, -1, 2.4, S.light, 0.35),
+    });
+    // жвалы
+    const open = v === 1;
+    if (open) {
+      g.fillStyle = MOUTH;
+      g.beginPath();
+      g.ellipse(6.3, 4.3, 1.7, 1.3, 0, 0, TAU);
+      g.fill();
+    }
+    fang(g, open ? 4.9 : 5.4, 4.1, 0.55 * S.fang, (open ? 2.4 : 1.7) * S.fang);
+    fang(g, open ? 7.5 : 7.2, 3.6, 0.5 * S.fang, (open ? 2.2 : 1.5) * S.fang);
+    // глаза-бусины: светятся
+    const bead = (x, y, r) => {
+      glow(g, x, y, r * 2.4, S.eye, 0.55);
+      g.fillStyle = S.dark;
+      g.beginPath();
+      g.arc(x, y, r + 0.3, 0, TAU);
+      g.fill();
+      g.fillStyle = S.eye;
+      g.beginPath();
+      g.arc(x, y, r, 0, TAU);
+      g.fill();
+      speck(g, x - r * 0.3, y - r * 0.35, r * 0.34, 0.95);
+    };
+    if (v >= 2) {
+      const kind = v === 2 ? 'squint' : 'cross';
+      eye(g, 4.6, 0.3, 1.3, { kind, color: '#fff1dc' });
+      eye(g, 7, 0.5, 1, { kind, color: '#fff1dc' });
+    } else {
+      bead(4.6, 0.3, 1.15);
+      bead(7, 0.5, 0.85);
+      // хмурые брови
+      stroke(g, [[3.2, -1.2], [5.9, -0.3]], S.dark, 0.6);
+      stroke(g, [[6.2, -0.4], [7.9, -0.6]], S.dark, 0.5);
+    }
+    bead(3.3, -1.6, 0.42);
+    bead(6, -1.8, 0.38);
+    if (S.queen) {
+      bead(2.1, 0.5, 0.36);
+      bead(7.9, -1.1, 0.3);
+    }
+  }, 4);
+
+  plainRig(id, acts, w, h, shadow, (act, t, k, a) => drawSpider(M, act, t, k, a));
+}
+
+// лапы: сустав в осях тела (x, y), размах (минус — назад), длина, шагает ли в противофазе; первые четыре — дальние
+const SPIDER_LEGS = [
+  [1.4, 1, 0.86, 0.94, 1], [1, 1, 0.42, 0.9, 0], [-0.8, 1, -0.4, 0.9, 1], [-1.2, 1, -0.82, 0.92, 0],
+  [0.6, 1.6, 1.06, 1, 0], [0.2, 1.8, 0.62, 0.97, 1], [-0.2, 1.8, -0.58, 0.97, 0], [-0.6, 1.6, -1, 1, 1],
+];
+const FRONT = [0, 1, 4, 5];   // передние лапы: ими паук замахивается и бьёт
+const SPIDER_FOOT = 7;        // на сколько стопа ниже сустава
+const SPIDER_REST = -8.6;     // середина тела над землёй
+// поза лап — по четыре числа на лапу: подъём (поворот от земли), размах, длина, стоит ли на земле
+const SP_LIFT = 0;
+const SP_REACH = 1;
+const SP_LEN = 2;
+const SP_GROUND = 3;
+const SP = new Float32Array(8 * 4);
+
+function spiderLeg(i, lift, ground, len = 1) {
+  SP[i * 4 + SP_LIFT] = lift;
+  SP[i * 4 + SP_GROUND] = ground;
+  SP[i * 4 + SP_LEN] = len;
+}
+
+// шаг: лапа, что идёт вперёд, приподнята; соседние — в противофазе
+function spiderWalk(t, pace, speed) {
+  for (let i = 0; i < 8; i++) {
+    const L = SPIDER_LEGS[i];
+    const ph = t * pace + (L[4] ? Math.PI : 0) + (i < 4 ? 0.9 : 0);
+    SP[i * 4 + SP_REACH] = 1 + Math.sin(ph) * 0.2 * speed * (L[2] < 0 ? -1 : 1);
+    SP[i * 4 + SP_LEN] = 1 - Math.max(0, Math.cos(ph)) * 0.17 * speed;
+  }
+}
+
+function spiderLegs(M, from, to, lean) {
+  const u = M.u;
+  for (let i = from; i < to; i++) {
+    const L = SPIDER_LEGS[i];
+    const x = onX(L[0] * u, L[1] * u);
+    const y = onY(L[0] * u, L[1] * u);
+    const lift = SP[i * 4 + SP_LIFT];
+    const ground = SP[i * 4 + SP_GROUND];
+    const back = L[2] < 0;
+    // стоит — сама дотягивается до земли; на весу — наклоняется вместе с телом
+    const fit = clamp(-y / (SPIDER_FOOT * u * Math.max(0.4, Math.cos(lift))), 0.3, 1.4);
+    put(M.kLeg, x, y, (back ? lift : -lift) + lean * (1 - ground), L[2] * SP[i * 4 + SP_REACH], L[3] * SP[i * 4 + SP_LEN] * lerp(1, fit, ground), i < 4 ? 1 : 0);
+  }
+}
+
+function drawSpider(M, act, t, k, a) {
+  const breath = Math.sin(t * M.breath);
+  let face = 0;
+  let x = 0;
+  let y = breath * 0.25;
+  let rot = 0;
+  let sx = 1;
+  let sy = 1 + breath * 0.02;
+  let wide = 1;         // лапы шире обычного
+  for (let i = 0; i < 8; i++) {
+    SP[i * 4 + SP_LIFT] = 0;
+    SP[i * 4 + SP_REACH] = 1;
+    SP[i * 4 + SP_LEN] = 1;
+    SP[i * 4 + SP_GROUND] = 1;
+  }
+  switch (act) {
+    case 'move': {
+      const sp = Math.max(clamp01(num(a.speed, 1)), 0.4);
+      spiderWalk(t, M.pace, sp);
+      y += Math.sin(t * M.pace * 2) * 0.3 * sp;
+      rot = Math.sin(t * M.pace) * 0.03;
+      break;
+    }
+    case 'windup': {
+      // встал на задние лапы: передние вскинуты и перебирают в воздухе, жвалы раскрыты
+      const c = 0.75 + 0.25 * smooth(k);
+      const wave = Math.sin(t * 13) * 0.12 * (0.4 + 0.6 * k);
+      rot = -0.3 * c;
+      x = -1.4 * c;
+      y -= 1.5 * c;
+      spiderLeg(0, 0.7 * c - wave, 0);
+      spiderLeg(4, 0.75 * c + wave, 0, 1.05);
+      spiderLeg(1, 0.4 * c + wave, 0);
+      spiderLeg(5, 0.45 * c - wave, 0);
+      face = 1;
+      break;
+    }
+    case 'attack': {
+      // плевок паутиной: с дыбов — рывком вперёд, передние лапы бьют о землю
+      const hit = easeOut(k / 0.28);
+      const hold = 1 - smooth((k - 0.4) / 0.6);
+      rot = lerp(-0.3, 0.14, hit) * hold;
+      x = lerp(-1.4, 2.6, hit) * hold;
+      y -= 1.5 * (1 - hit) * hold;
+      for (const i of FRONT) spiderLeg(i, (i === 0 || i === 4 ? 0.72 : 0.42) * (1 - hit), hit);
+      if (k < 0.6) face = 1;
+      break;
+    }
+    case 'leap': {
+      // прыжок: лапы врастопырку и поджаты; к приземлению тянутся к земле
+      const s = smooth(k / 0.15) * (1 - smooth((k - 0.7) / 0.3));
+      for (let i = 0; i < 8; i++) spiderLeg(i, 0.48 * s, 1 - s, 1 - 0.14 * s);
+      sx = 1 + 0.08 * s;
+      sy -= 0.06 * s;
+      face = 1;
+      break;
+    }
+    case 'recover': {
+      // осел на лапах, бока ходят
+      const q = 1 - smooth((k - 0.45) / 0.55);
+      const pant = Math.sin(t * 13);
+      y += (1.8 + pant * 0.25) * q;
+      sy += pant * 0.03 * q;
+      wide = 1 + 0.08 * q;
+      break;
+    }
+    case 'stun':
+      face = 3;
+      x = Math.sin(t * 5.2) * 0.6;
+      y += 2.4 + Math.sin(t * 5.2 + 1) * 0.3;
+      rot = Math.sin(t * 5.2) * 0.1;
+      wide = 1.12;
+      break;
+    case 'hurt': {
+      const q = (1 - k) * (1 - k);
+      x = -2.4 * q;
+      y -= 0.8 * q;
+      rot = -0.18 * q;
+      if (k < 0.7) face = 2;
+      break;
+    }
+    case 'cast': {
+      // плюёт паутиной раз за разом: перёд вздёрнут, на каждый плевок — рывок вперёд
+      const on = smooth(k / 0.1) * (1 - smooth((k - 0.88) / 0.12));
+      const spit = flick(t, 0.3, 0, 0.2);
+      rot = (-0.22 + 0.16 * spit) * on;
+      x = (-1 + 2.2 * spit) * on;
+      spiderLeg(0, (0.5 - 0.3 * spit) * on, 1 - on);
+      spiderLeg(4, (0.55 - 0.3 * spit) * on, 1 - on);
+      face = 1;
+      break;
+    }
+    case 'drop': {
+      // падает с потолка: лапы поджаты кверху; у самой земли — врастопырку
+      const land = smooth((k - 0.6) / 0.4);
+      for (let i = 0; i < 8; i++) spiderLeg(i, 0.7 * (1 - land), land, 0.8 + 0.2 * land);
+      y -= 1.5 * (1 - land);
+      sy += 0.06 * (1 - land);
+      face = 1;
+      break;
+    }
+    case 'summon': {
+      // зовёт пауков: на дыбах, передние лапы машут по очереди, всю трясёт
+      const up = smooth(k / 0.18) * (1 - smooth((k - 0.8) / 0.2));
+      const wave = Math.sin(t * 11) * 0.3;
+      rot = -0.36 * up;
+      x = (-1.2 + Math.sin(t * 40) * 0.25) * up;
+      y -= 1.7 * up;
+      spiderLeg(0, (0.85 - wave) * up, 1 - up);
+      spiderLeg(4, (0.9 + wave) * up, 1 - up, 1 + 0.05 * up);
+      spiderLeg(1, 0.45 * up, 1 - up);
+      spiderLeg(5, 0.5 * up, 1 - up);
+      if (up > 0.3) face = 1;
+      break;
+    }
+    case 'tired': {
+      // выдохлась: брюхо у земли, лапы разъехались, бока ходят; к концу поднимается
+      const q = 1 - smooth((k - 0.86) / 0.14);
+      const pant = Math.sin(t * 10);
+      y += (2.6 + pant * 0.3) * q;
+      sy += pant * 0.035 * q;
+      rot = 0.06 * q;
+      wide = 1 + 0.14 * q;
+      break;
+    }
+    case 'dead': {
+      // повержена: падает на брюхо, лапы поджимаются
+      const fall = smooth(k / 0.5);
+      const curl = smooth((k - 0.25) / 0.6);
+      y = 3.3 * fall;
+      rot = 0.14 * fall;
+      sy = 1 - 0.08 * fall;
+      wide = 1 - 0.45 * curl;
+      for (let i = 0; i < 8; i++) spiderLeg(i, 0.85 * curl, 1 - curl, 1 - 0.3 * curl);
+      face = 3;
+      break;
+    }
+    default:
+  }
+  for (let i = 0; i < 8; i++) SP[i * 4 + SP_REACH] *= wide;
+  stage(x * M.u, (SPIDER_REST + y) * M.u, rot, sx, sy);
+  spiderLegs(M, 0, 4, rot);
+  put(M.kBody, ox, oy, rot, sx, sy, face);
+  spiderLegs(M, 4, 8, rot);
+}
+defineSpider('spider', SPIDER_KINDS.spider, [...COMMON, 'leap'], 36, 30, 22);
+defineSpider('spiderqueen', SPIDER_KINDS.spiderqueen, [...BOSS, 'cast', 'drop', 'summon'], 128, 104, 80);
+
+// ---------- крот ----------
+// Под землёй — один ползущий холмик. Наверху — по пояс из норы: тёмная груша с розовым носом и лапами-лопатами.
+// Вылезает уже с камнем над головой; замах — откинулся назад, бросок — хлестнул вперёд, и камня в лапах нет.
+
+const MOLE = { coat: '#51475c', light: '#8a7e98', dark: '#2b2434', belly: '#7a6e88', nose: '#ff9aa8', noseDark: '#d9667a', paw: '#f6bba8', pawDark: '#cf8a78', soil: '#8f6c48', soilLight: '#bd9668', soilDark: '#5c4230' };
+const moleCoat = tone(MOLE.coat, { light: MOLE.light, dark: MOLE.dark, line: outline(MOLE.coat, 0.62), lw: 1.2 });
+const moleSoil = tone(MOLE.soil, { light: MOLE.soilLight, dark: MOLE.soilDark, line: outline(MOLE.soil, 0.62), lw: 1.2 });
+const molePaw = tone(MOLE.paw, { dark: MOLE.pawDark, line: outline(MOLE.paw, 0.6), lw: 0.9 });
+const moleClaw = tone('#fff3dc', { dark: '#d6c39a', line: outline(MOLE.paw, 0.7), lw: 0.6 });
+
+// холмик; привязка — середина низа. 0 — целый (крот под землёй), 1 — задний край с норой, 2 — передний край
+definePart('mob.mole.mound', [-12.6, -8.4, 12.6, 4.4], (g, v) => {
+  const clods = (list) => {
+    for (const [x, y, r] of list) ball(g, x, y, r, r * 0.8, { ...moleSoil, lw: 0.7 });
+  };
+  if (v === 0) {
+    blob(g, [[-11, 0.4], [-9.4, -2.8], [-5.6, -5.6], [-0.6, -7], [4.4, -6.2], [8.4, -3.6], [10.8, -0.8], [10.6, 1.4], [5.6, 2.4], [-1, 2.8], [-7, 2.2]], moleSoil, {
+      over(c) {
+        stroke(c, [[-3.6, -4.6], [-1.6, -2.6], [-2.6, -0.6]], alpha(MOLE.soilDark, 0.7), 0.7);
+        stroke(c, [[3.4, -4], [4.6, -1.8]], alpha(MOLE.soilDark, 0.7), 0.7);
+        glow(c, -4, -4, 4, MOLE.soilLight, 0.4);
+      },
+    });
+    clods([[-10.4, 1.8, 1.3], [9.6, 2, 1.5], [1.6, 2.6, 1.1]]);
+  } else if (v === 1) {
+    blob(g, [[-11, 0.2], [-9.2, -2.6], [-5, -4.2], [0, -4.7], [5, -4.2], [9.2, -2.6], [11, 0.2], [6, 1.4], [0, 1.8], [-6, 1.4]], moleSoil, {
+      over(c) {
+        c.fillStyle = mix(MOLE.soilDark, INK, 0.6);
+        c.beginPath();
+        c.ellipse(0, -1, 7.4, 2.5, 0, 0, TAU);
+        c.fill();
+      },
+    });
+  } else {
+    blob(g, [[-11.2, 0], [-8.4, -1.7], [-4.4, -0.7], [0, -0.3], [4.4, -0.7], [8.4, -1.7], [11.2, 0], [9, 2.2], [3, 3], [-3, 3], [-9, 2.2]], moleSoil, {
+      over: (c) => glow(c, -5, -0.4, 3.4, MOLE.soilLight, 0.4),
+    });
+    clods([[-10, 1.6, 1.3], [9.8, 1.6, 1.4], [0.6, 2.6, 1]]);
+  }
+}, 3);
+
+// крот по пояс: растёт из норы (привязка — середина низа), морда вправо.
+// 0 — хмурый, 1 — натужился (рот открыт), 2 — больно, 3 — оглушён
+definePart('mob.mole.body', [-8.6, -17.8, 13, 3], (g, v) => {
+  blob(g, [[-6.4, 0.6], [-6.9, -5], [-5.7, -10.5], [-3, -14.6], [1, -16], [4.6, -14.7], [6.7, -12.4], [9.4, -11.6], [10.4, -10.2], [9.6, -8.8], [7.2, -7.8],
+    [6.4, -4.6], [6.6, 0.6]], moleCoat, {
+    over(c, patch) {
+      patch([[0.4, -6.6], [4.4, -6.2], [8, -4], [8, 2], [-1.6, 2], [-2, -3]], tone(MOLE.belly, { dark: MOLE.coat }));
+      glow(c, -3, -11, 4.4, MOLE.light, 0.4);
+      fur(c, [[-4.4, -6, 1.3, 1.8], [-3.4, -2.4, 1.4, 1.8], [-1, -12.6, 0.4, 1.8], [-4.6, -9.6, 1.1, 1.6]], alpha(MOLE.dark, 0.7), 0.6);
+      if (v === 1) {
+        c.fillStyle = MOUTH;
+        c.beginPath();
+        c.ellipse(7.2, -8.4, 1.5, 1.2, 0.3, 0, TAU);
+        c.fill();
+      } else stroke(c, [[5.6, -8.2], [7, -7.9], [8.4, -8.6]], alpha(MOLE.dark, 0.9), 0.6);
+    },
+  });
+  // усы, зуб, нос
+  stroke(g, [[7.8, -10.8], [8.6, -13.4]], alpha('#e6dcec', 0.8), 0.4);
+  stroke(g, [[7, -10.8], [6.6, -13.2]], alpha('#e6dcec', 0.8), 0.4);
+  if (v !== 1) {
+    g.fillStyle = TOOTH;
+    g.fillRect(6.8, -8.1, 1.2, 1.3);
+  }
+  ball(g, 10.2, -10.3, 1.5, 1.35, tone(MOLE.nose, { dark: MOLE.noseDark, line: outline(MOLE.nose, 0.55), lw: 0.7 }));
+  speck(g, 9.7, -10.8, 0.4, 0.9);
+  // глаз-бусинка: светлый, иначе на тёмной шкуре его не видно
+  if (v === 0) {
+    g.fillStyle = '#f3ecf6';
+    g.beginPath();
+    g.ellipse(4.4, -11.8, 1.15, 1.05, 0, 0, TAU);
+    g.fill();
+    g.fillStyle = '#16101a';
+    g.beginPath();
+    g.arc(4.7, -11.7, 0.6, 0, TAU);
+    g.fill();
+    stroke(g, [[2.9, -13.2], [5.9, -12.5]], MOLE.dark, 0.7);
+  } else eye(g, 4.4, -11.8, 1.2, { kind: v === 3 ? 'cross' : 'squint', color: '#f3ecf6' });
+}, 4);
+
+// лапа-лопата: розовая ладонь с когтями, смотрит вправо; сустав — запястье. 0 — ближняя, 1 — дальняя
+definePart('mob.mole.paw', [-2.8, -4.4, 7.8, 4.4], (g, v) => {
+  ball(g, 0, 0, 1.7, 1.7, { ...moleCoat, lw: 0.9 });
+  for (const a of [-0.7, -0.25, 0.25, 0.7]) {
+    const c = Math.cos(a);
+    const s = Math.sin(a);
+    solid(g, (p) => pathPoly(p, [[2.2 + c * 2 + s * 0.8, s * 2 - c * 0.8], [2.2 + c * 4.9, s * 4.9], [2.2 + c * 2 - s * 0.8, s * 2 + c * 0.8]]), moleClaw);
+  }
+  ball(g, 2.2, 0, 2.5, 2.7, v ? { ...molePaw, fill: MOLE.pawDark } : molePaw);
+}, 2);
+
+const MOLE_HOLE = -1.4;       // где тело выходит из норы
+const MOLE_TALL = 16;         // рост над норой
+
+function drawMole(act, t, k, a) {
+  if (act === 'burrow') {
+    // под землёй: один холмик, и тот шевелится
+    put('mob.mole.mound', 0, 0, 0, 1 + Math.sin(t * 12) * 0.03, 1 + Math.sin(t * 12 + 1.4) * 0.09, 0);
+    return;
+  }
+  const sway = Math.sin(t * 1.7) * 0.04;
+  let face = 0;
+  let out = 1;          // насколько вылез (0 — весь под землёй)
+  let shut = 0;         // насколько холмик закрыт
+  let lean = sway;
+  let squash = 1 + Math.sin(t * 2.8) * 0.02;
+  let hold = 0;         // лапы у камня над головой (0 — лежат на краю норы)
+  let swing = 0;        // бросок: лапы с камнем уходят вперёд
+  let stone = 0;        // виден ли камень
+  let scrape = 0;       // гребёт лапами
+  switch (act) {
+    case 'emerge':
+      // вылезает: холмик раскрывается, сначала показывается камень, за ним крот
+      out = backOut(k / 0.85);
+      shut = 1 - smooth(k / 0.3);
+      hold = 1;
+      stone = 1;
+      break;
+    case 'windup': {
+      // камень над головой, откинулся назад; чем ближе бросок, тем сильнее дрожит
+      const c = 0.7 + 0.3 * smooth(k);
+      lean = -0.22 * c + Math.sin(t * 40) * 0.015 * k;
+      hold = 1;
+      stone = 1;
+      face = 1;
+      break;
+    }
+    case 'attack': {
+      // бросок: тело хлещет вперёд, лапы — следом; камень уходит из лап в первой пятой
+      const hit = easeOut(k / 0.25);
+      const back = smooth((k - 0.4) / 0.6);
+      lean = lerp(lerp(-0.22, 0.34, hit), sway, back);
+      hold = 1 - back;
+      swing = hit;
+      stone = k < 0.2 ? 1 : 0;
+      if (k < 0.6) face = 1;
+      break;
+    }
+    case 'dig':
+      // зарывается: гребёт лапами и уходит вниз, холмик смыкается
+      out = 1 - smooth(k / 0.85);
+      shut = smooth((k - 0.6) / 0.4);
+      scrape = 1 - shut;
+      break;
+    case 'recover': {
+      const q = 1 - smooth((k - 0.5) / 0.5);
+      const pant = Math.sin(t * 12);
+      lean = lerp(sway, 0.14, q);
+      squash += (pant * 0.03 - 0.06) * q;
+      break;
+    }
+    case 'stun':
+      face = 3;
+      lean = Math.sin(t * 5) * 0.16;
+      squash = 0.94;
+      break;
+    case 'hurt': {
+      const q = (1 - k) * (1 - k);
+      lean = lerp(sway, -0.26, q);
+      squash -= 0.16 * q;
+      if (k < 0.7) face = 2;
+      break;
+    }
+    default:
+  }
+  const open = 1 - shut;
+  // макушка: над ней держат камень
+  const tall = MOLE_TALL * out * squash;
+  const topX = 0.6 * Math.cos(lean) + tall * Math.sin(lean);
+  const topY = MOLE_HOLE + 0.6 * Math.sin(lean) - tall * Math.cos(lean);
+  const sX = topX - 0.5 + 5.5 * swing;
+  const sY = topY - 4.2 + 6 * swing;
+  const dig = Math.sin(t * 30) * 0.5 * scrape;
+  const sink = 2.4 * (1 - Math.min(1, out));
+  if (open > 0.02) put('mob.mole.mound', 0, 0, 0, 1, 1, 1, open);
+  if (out > 0.03) put('mob.mole.body', 0, MOLE_HOLE, lean, 1, out * squash, face);
+  put('mob.mole.paw', lerp(-4.6, sX - 3.2 + 1.4 * swing, hold), lerp(-2.6 + sink, sY + 2.4, hold), lerp(-0.35 - dig, lerp(-1.22, -0.1, swing), hold), hold > 0.5 ? 1 : -1, 1, 1, open);
+  if (stone > 0) put('shot.stone', sX, sY, 0.3, 1.4, 1.4);
+  put('mob.mole.paw', lerp(4.6, sX + 3.2 - 2.2 * swing, hold), lerp(-2.6 + sink, sY + 2.4 - 1.2 * swing, hold), lerp(0.35 + dig, lerp(-1.92, -0.3, swing), hold), 1, 1, 0, open);
+  if (open > 0.02) put('mob.mole.mound', 0, 0, 0, 1, 1, 2, open);
+  if (shut > 0.02) put('mob.mole.mound', 0, 0, 0, 1, 1, 0, shut);
+}
+plainRig('mole', [...COMMON, 'burrow', 'emerge', 'dig'], 32, 36, 20, drawMole);
+
+// ---------- жук-камнеед ----------
+// Спереди — каменный щит с рогом (от него всё отскакивает), сзади — мягкая рыжая спина: бить надо туда.
+// Замах — рог к земле, зад кверху; таран — несётся, вытянувшись.
+
+const BEETLE = { rock: '#9391a6', rockLight: '#d4d2e4', rockDark: '#5a586e', back: '#dc7038', backLight: '#fbab6e', backDark: '#9c4420', belly: '#f3c58e', leg: '#3c3244', horn: '#c2c0d2', eye: '#ffd23f', rage: '#ff5a3c', moss: '#86c06c' };
+const beetleRock = tone(BEETLE.rock, { light: BEETLE.rockLight, dark: BEETLE.rockDark, line: outline(BEETLE.rock, 0.66), lw: 1.4 });
+const beetleBack = tone(BEETLE.back, { light: BEETLE.backLight, dark: BEETLE.backDark, line: outline(BEETLE.back, 0.62), lw: 1.3 });
+const beetleHorn = tone(BEETLE.horn, { light: '#f0eefa', dark: '#7a788e', line: beetleRock.line, lw: 1.2 });
+const beetleLeg = tone(BEETLE.leg, { light: '#6a5c78', dark: '#1e1826', line: '#1e1826', lw: 0.8 });
+
+// мягкая спина: рыжее брюшко с перетяжками; сустав — середина
+definePart('mob.beetle.back', [-11.2, -9.2, 10.4, 8.2], (g) => {
+  blob(g, [[-9.8, 0.6], [-8.8, -3.8], [-5, -6.9], [0, -7.7], [5, -6.5], [8.3, -3], [8.7, 1.4], [6, 5], [0, 6.7], [-5.6, 5.7], [-8.9, 3.2]], beetleBack, {
+    over(c, patch) {
+      patch([[-11, 3.2], [-4, 4.4], [4, 4.2], [10, 2.4], [10, 9], [-11, 9]], tone(BEETLE.belly, { dark: '#c9935a' }));
+      for (const x of [-5.6, -1.6, 2.6]) stroke(c, [[x - 0.6, -8], [x + 0.6, -2], [x - 0.4, 4.4]], alpha(BEETLE.backDark, 0.75), 0.8);
+      glow(c, -4.6, -4.2, 3.6, '#fff0d8', 0.5);
+    },
+  });
+  speck(g, -5.4, -4.6, 1.1, 0.7);
+});
+
+// каменный щит с рогом: закрывает жука спереди; сустав — где щит сидит на теле.
+// 0 — спокоен, 1 — зол (глаз красный), 2 — больно, 3 — оглушён
+definePart('mob.beetle.shield', [-6.8, -14.6, 15.6, 10], (g, v) => {
+  // рог — вперёд и вверх; под ним зубец поменьше
+  blob(g, [[4.6, -7.4], [8.6, -9.8], [13.8, -13, 1], [11.6, -7.6], [8.6, -3.8], [6, -3.2]], beetleHorn);
+  blob(g, [[6.6, 0.6], [11.6, 0.2, 1], [8.2, 3.6]], { ...beetleHorn, lw: 1 });
+  blob(g, [[-3.8, -8.4, 1], [0.6, -10.6], [4.8, -9.6, 1], [7.6, -6.4], [8.8, -1.8, 1], [8.2, 3.2], [6.2, 6.8, 1], [2.2, 8.2], [-2.2, 7.2, 1], [-4.6, 3.2],
+    [-5.2, -3.2]], beetleRock, {
+    over(c, patch) {
+      // грани камня: светлая сверху слева, тёмная снизу справа; трещины и мох
+      patch([[-6, -4, 1], [-1, -5.6, 1], [3.6, -3.6, 1], [5.6, -11, 1], [-6, -11, 1]], tone(mix(BEETLE.rock, BEETLE.rockLight, 0.5), { dark: BEETLE.rock }));
+      patch([[9.6, 1, 1], [5.6, 2.4, 1], [3.6, 6, 1], [3, 9, 1], [9.6, 9, 1]], tone(mix(BEETLE.rock, BEETLE.rockDark, 0.6), { light: BEETLE.rock }));
+      stroke(c, [[-1.4, -5.4], [0.4, -1.6], [-1.2, 1.4], [0.2, 4.6]], alpha(BEETLE.rockDark, 0.8), 0.7);
+      stroke(c, [[0.4, -1.6], [3.4, -0.8]], alpha(BEETLE.rockDark, 0.8), 0.6);
+      spots(c, [[-2.6, -7.4, 1.3, 0.8, 0.3], [0.8, -8.6, 1.1, 0.7, 0], [-4, -5, 0.8, 0.6, 0.6]], alpha(BEETLE.moss, 0.9));
+      // прорезь, из которой смотрит глаз
+      c.fillStyle = '#1e1826';
+      c.beginPath();
+      c.ellipse(4.6, 3.2, 2.7, 1.5, -0.15, 0, TAU);
+      c.fill();
+    },
+  });
+  if (v >= 2) eye(g, 4.8, 3.2, 1.1, { kind: v === 2 ? 'squint' : 'cross', color: '#fff1dc' });
+  else {
+    const iris = v ? BEETLE.rage : BEETLE.eye;
+    glow(g, 4.9, 3.2, v ? 3.4 : 2.6, iris, v ? 0.7 : 0.5);
+    g.fillStyle = iris;
+    g.beginPath();
+    g.ellipse(4.9, 3.2, 1.15, v ? 0.75 : 1, 0, 0, TAU);
+    g.fill();
+    speck(g, 4.5, 2.9, 0.35, 0.95);
+  }
+}, 4);
+
+// лапка с коленом; сустав — вверху. 0 — ближняя, 1 — дальняя
+const BEETLE_LEG = 5.6;
+definePart('mob.beetle.leg', [-2.2, -2.2, 5, 7], (g, v) => {
+  const look = v ? { ...beetleLeg, fill: '#2a2232' } : beetleLeg;
+  capsule(g, 0, 0, 1.2, 2.6, 1.6, 0.95, look);
+  limb(g, 2.6, 1.6, 0.95, 1.6, 5, 0.6, look);
+  stroke(g, [[1.6, 5.2], [2.8, 5.7]], look.line, 0.7);
+}, 2);
+
+// бёдра в осях тела: три дальние лапки, три ближние
+const BEETLE_HIPS = [[-6.6, 4.4], [-0.6, 5], [6.4, 4.6], [-8.8, 4.6], [-2.8, 5.4], [4.2, 5]];
+const BEETLE_REST = -10.2;
+
+function drawBeetle(act, t, k, a) {
+  let face = 0;
+  let x = 0;
+  let y = 0;
+  let rot = 0;
+  let sx = 1;
+  let sy = 1 + Math.sin(t * 2.4) * 0.02;
+  let tilt = Math.sin(t * 1.3) * 0.03;      // наклон щита (плюс — рогом вниз)
+  let pace = 0;         // лапки: как часто и как широко шагают
+  let swing = 0;
+  switch (act) {
+    case 'move': {
+      const sp = Math.max(clamp01(num(a.speed, 1)), 0.4);
+      pace = 15;
+      swing = 0.5 * sp;
+      y = -Math.abs(Math.sin(t * 15)) * 0.5 * sp;
+      tilt = Math.sin(t * 7.5) * 0.04;
+      break;
+    }
+    case 'windup': {
+      // рог к земле, зад кверху; скребёт лапками и дрожит всё сильнее
+      const c = 0.75 + 0.25 * smooth(k);
+      tilt = 0.5 * c;
+      rot = 0.14 * c;
+      x = -2.2 * c + Math.sin(t * 44) * 0.3 * k;
+      y = 0.6 * c;
+      pace = 22;
+      swing = 0.25;
+      face = 1;
+      break;
+    }
+    case 'attack': {
+      // таран: несётся рогом вперёд, вытянувшись
+      const s = smooth(k / 0.1) * (1 - smooth((k - 0.85) / 0.15));
+      tilt = 0.36 * s;
+      rot = 0.06 * s;
+      x = 1.6 * s;
+      sx = 1 + 0.07 * s;
+      pace = 34;
+      swing = 0.7 * s;
+      y = -Math.abs(Math.sin(t * 34)) * 0.6 * s;
+      face = 1;
+      break;
+    }
+    case 'recover': {
+      // стоит и отдувается: щит повис
+      const q = 1 - smooth((k - 0.5) / 0.5);
+      tilt = 0.26 * q;
+      y = 0.8 * q;
+      sy += Math.sin(t * 12) * 0.03 * q;
+      break;
+    }
+    case 'stun':
+      face = 3;
+      tilt = 0.3 + Math.sin(t * 5.2) * 0.14;
+      rot = Math.sin(t * 5.2 + 1) * 0.05;
+      y = 1.2;
+      break;
+    case 'hurt': {
+      const q = (1 - k) * (1 - k);
+      x = -2.6 * q;
+      rot = -0.16 * q;
+      tilt = -0.25 * q;
+      if (k < 0.7) face = 2;
+      break;
+    }
+    default:
+  }
+  stage(x, BEETLE_REST + y, rot, sx, sy);
+  const lift = Math.min(1, swing * 4) * 0.22;
+  for (let i = 0; i < 6; i++) {
+    if (i === 3) put('mob.beetle.back', onX(-5, 0.4), onY(-5, 0.4), rot, sx, sy);
+    const H = BEETLE_HIPS[i];
+    const hy = onY(H[0], H[1]);
+    // тройками: средняя лапка идёт в ногу с крайними другой стороны
+    const ph = t * pace + (i % 2 ? Math.PI : 0) + (i < 3 ? Math.PI : 0);
+    const turn = -Math.sin(ph) * swing;
+    const reach = clamp(-hy / (BEETLE_LEG * Math.max(0.5, Math.cos(turn))), 0.5, 1.5);
+    put('mob.beetle.leg', onX(H[0], H[1]), hy, turn, 1, reach * (1 - Math.max(0, Math.cos(ph)) * lift), i < 3 ? 1 : 0);
+  }
+  put('mob.beetle.shield', onX(3.6, -0.8), onY(3.6, -0.8), rot + tilt, 1, 1, face);
+}
+plainRig('beetle', COMMON, 46, 36, 28, drawBeetle);
+
+// ---------- зубастый сундук ----------
+// Пока спит (sleep) — тот самый сундук из комнаты, не отличить. Проснулся — крышка откидывается от заднего края,
+// как челюсть: под ней зубы в два ряда, тёмное нутро и язык; глаза горят на крышке. Ног нет — скачет.
+
+const CHEST = { wood: '#b07a44', brass: '#e6bc4e' };         // те же краски, что у сундука из комнаты (art-tiles.js)
+const chestWood = tone(CHEST.wood, { light: lighten(CHEST.wood, 0.35), dark: darken(CHEST.wood, 0.4), line: mix(CHEST.wood, INK, 0.66), lw: 1.5 });
+const chestLid = { ...chestWood, fill: lighten(CHEST.wood, 0.08) };
+const MIMIC_EYE = '#ffd23f';
+
+// латунные обручи и щели между досками — как на сундуке
+function chestBands(c, xs, y0, y1) {
+  for (const x of xs) {
+    c.fillStyle = CHEST.brass;
+    c.fillRect(x - 2.2, y0, 4.4, y1 - y0);
+    c.fillStyle = alpha(lighten(CHEST.brass, 0.7), 0.8);
+    c.fillRect(x - 2.2, y0, 1.3, y1 - y0);
+    c.fillStyle = alpha(darken(CHEST.brass, 0.45), 0.7);
+    c.fillRect(x + 1.2, y0, 1, y1 - y0);
+  }
+}
+function chestPlanks(c, x0, x1, ys) {
+  c.strokeStyle = alpha(chestWood.line, 0.55);
+  c.lineWidth = 0.9;
+  for (const y of ys) {
+    c.beginPath();
+    c.moveTo(x0, y);
+    c.lineTo(x1, y);
+    c.stroke();
+  }
+}
+
+// ящик с нижними зубами: они торчат над передней стенкой; привязка — середина низа
+definePart('mob.mimic.base', [-15.6, -19.4, 15.6, 1.8], (g) => {
+  teeth(g, -11.6, 13.4, -13, 7, -4.2);
+  fang(g, 10.8, -13, 1.5, -5.4);
+  blob(g, [[-14, -13.5, 1], [14, -13.5, 1], [13, -1.5], [11.6, 0.2], [-11.6, 0.2], [-13, -1.5]], chestWood, {
+    over(c) {
+      chestPlanks(c, -15, 15, [-9, -4.6]);
+      chestBands(c, [-8, 8], -15, 2);
+    },
+  });
+});
+
+// крышка с верхними зубами и глазами; сустав — петля у заднего края. 0 — злая, 1 — больно, 2 — оглушена
+definePart('mob.mimic.lid', [-1.8, -12.8, 31, 6.6], (g, v) => {
+  teeth(g, 4.6, 28.6, 0.2, 7, 3.8);
+  fang(g, 25.6, 0.2, 1.5, 5);
+  blob(g, [[0, 0.6, 1], [0.5, -5.4], [4.6, -9.6], [14.6, -11], [24.6, -9.6], [28.7, -5.4], [29.2, 0.6, 1]], chestLid, {
+    over(c) {
+      chestPlanks(c, -1, 31, [-7.2, -3.4]);
+      chestBands(c, [6.6, 22.6], -13, 2);
+    },
+  });
+  if (v === 0) {
+    fierceEye(g, 17.8, -4.6, 1.8, MIMIC_EYE, { lid: 0.4, slant: 0.4, wide: 0.8, shine: 0.6, rim: '#3a2416' });
+    fierceEye(g, 12.4, -4.4, 2.3, MIMIC_EYE, { lid: 0.4, slant: 0.32, shine: 0.6, rim: '#3a2416' });
+  } else {
+    const kind = v === 1 ? 'squint' : 'cross';
+    eye(g, 17.8, -4.6, 1.7, { kind, color: '#3a2416' });
+    eye(g, 12.4, -4.4, 2.2, { kind, color: '#3a2416' });
+  }
+}, 3);
+
+// нутро пасти: тёмный клин от петли — его растягивают по раскрытию
+definePart('mob.mimic.maw', [-1, -9, 29.4, 9], (g) => {
+  g.fillStyle = linear(g, 0, 0, 28, 0, [[0, '#2a1016'], [0.6, MOUTH], [1, '#8a2c40']]);
+  g.beginPath();
+  pathPoly(g, [[0, -0.5], [28.4, -8], [28.4, 8], [0, 0.5]]);
+  g.fill();
+}, 1, 0.5);
+
+// язык: растёт из глубины пасти (сустав в нуле) и свешивается вперёд
+definePart('mob.mimic.tongue', [-1.8, -3.8, 15, 7.4], (g) => {
+  blob(g, [[0, -2.2], [5, -2.6], [9.6, -1.6], [13, 0.8], [13.6, 3.6], [11.6, 5.8], [9, 5], [8.4, 2.6], [5.6, 1.6], [0, 2.2]],
+    tone(TONGUE, { light: '#ffc2c6', dark: '#d9606e', line: '#a23a4e', lw: 1 }), {
+      over: (c) => stroke(c, [[1, 0], [6, -0.4], [10.4, 1.2], [11.6, 3.6]], alpha('#c24a5e', 0.8), 0.7),
+    });
+});
+
+const MIMIC_HX = -14.6;       // петля крышки
+const MIMIC_HY = -13.4;
+const MIMIC_GAPE = 1.02;      // пасть нараспашку, радианы
+
+function drawMimic(act, t, k, a) {
+  if (act === 'sleep' && hasSprite('thing.chest')) {
+    put('thing.chest', 0, 0);
+    return;
+  }
+  const ajar = 0.14 + Math.sin(t * 2.4) * 0.04;
+  let face = 0;
+  let open = ajar;      // раствор пасти, радианы
+  let tongue = 0;       // насколько высунут язык
+  let x = 0;
+  let hop = 0;          // подскок
+  let wide = 1;         // сундук плющит: вширь и ввысь
+  let tall = 1;
+  switch (act) {
+    case 'sleep':
+      open = 0;
+      break;
+    case 'reveal': {
+      // крышка распахивается рывком — под ней пасть; сундук подпрыгивает, потом скалится
+      const settle = smooth((k - 0.5) / 0.5);
+      open = lerp(1.05 * backOut(k / 0.4), ajar, settle);
+      hop = bump(k / 0.55) * 5;
+      tall = 1 + 0.1 * bump(k / 0.3);
+      tongue = smooth((k - 0.15) / 0.2) * (1 - settle);
+      break;
+    }
+    case 'move': {
+      // скачет: в воздухе пасть хлопает, у земли сундук плющит
+      const h = Math.abs(Math.sin(t * 7.5));
+      const low = (1 - h) * (1 - h);
+      hop = h * 5.5;
+      open = 0.16 + 0.4 * h;
+      tall = 1 - 0.12 * low + 0.05 * h;
+      wide = 1 + 0.08 * low;
+      break;
+    }
+    case 'windup': {
+      // пасть нараспашку, язык наружу; чем ближе щелчок, тем сильнее дрожит
+      const c = 0.75 + 0.25 * smooth(k);
+      open = MIMIC_GAPE * c + Math.sin(t * 42) * 0.03 * k;
+      tongue = 1;
+      x = -1.6 * c;
+      tall = 1 + 0.05 * c;
+      break;
+    }
+    case 'attack': {
+      // щёлк: пасть захлопывается в первой пятой, сундук подаётся вперёд
+      const shut = clamp01(k / 0.2) ** 2;
+      const back = smooth((k - 0.45) / 0.55);
+      open = lerp(MIMIC_GAPE * (1 - shut), ajar, back);
+      x = 3.2 * lunge(k, 0.22);
+      wide = 1 + 0.06 * shut * (1 - back);
+      tall = 1 - 0.08 * shut * (1 - back);
+      break;
+    }
+    case 'recover': {
+      // отдувается: пасть ходит, язык свесился
+      const q = 1 - smooth((k - 0.6) / 0.4);
+      open = lerp(ajar, 0.42 + Math.sin(t * 11) * 0.1, q);
+      tongue = q;
+      tall = 1 - 0.04 * q;
+      break;
+    }
+    case 'stun':
+      face = 2;
+      open = 0.5 + Math.sin(t * 5) * 0.08;
+      tongue = 1;
+      x = Math.sin(t * 5.2) * 0.9;
+      break;
+    case 'hurt': {
+      const q = (1 - k) * (1 - k);
+      x = -2.6 * q;
+      tall = 1 - 0.12 * q;
+      wide = 1 + 0.06 * q;
+      open += 0.3 * q;
+      if (k < 0.7) face = 1;
+      break;
+    }
+    default:
+  }
+  GX += x * GSX;
+  GY -= hop * GSY;
+  GSX *= wide;
+  GSY *= tall;
+  if (open > 0.06) put('mob.mimic.maw', MIMIC_HX, MIMIC_HY + 0.2, -open / 2, 1, (29 * Math.tan(open / 2)) / 8);
+  put('mob.mimic.lid', MIMIC_HX, MIMIC_HY, -open, 1, 1, face);
+  put('mob.mimic.base', 0, 0);
+  if (tongue > 0.05) {
+    const half = open / 2;
+    put('mob.mimic.tongue', MIMIC_HX + 15 * Math.cos(half), MIMIC_HY - 15 * Math.sin(half) + 1, 0.25 - half * 0.5 + Math.sin(t * 6) * 0.08, tongue, 1);
+  }
+}
+plainRig('mimic', [...COMMON, 'sleep', 'reveal'], 58, 62, 30, drawMimic);
+
+// ---------- лось-великан ----------
+// Тёмно-бурая гора на длинных светлых ногах: горб над плечами, горбатая морда с серьгой под челюстью, рога
+// лопатами; на холке и рогах иней, глаз светится льдом. Замах — голова к земле, рога вперёд, бьёт копытом.
+// Он же, поменьше, — напасть «бегущий лось» (haz.moose): только несётся, опустив рога.
+
+const MOOSE = { coat: '#6d4c3a', light: '#a37c60', dark: '#422c22', back: '#4f3628', cream: '#c9b598', creamShade: '#978268', ink: 0.66 };
+const mooseT = furTones(MOOSE, 1.8);
+const MOOSE_EYE = '#9fe3ff';
+const FROST = '#eef8ff';
+const ANTLER = tone('#eadbb8', { light: '#fff8e4', dark: '#b39a6c', line: outline('#eadbb8', 0.6), lw: 1.5 });
+const ANTLER_FAR = tone('#bca988', { light: '#e0d0aa', dark: '#8a7654', line: ANTLER.line, lw: 1.4, rim: 0.25 });
+
+definePart('mob.moose.body', [-30.5, -22.5, 30.5, 16.5], (g) => {
+  // круп слева, горб над плечами справа; под грудью — клок шерсти
+  blob(g, [[-27.4, -2], [-25.4, -10], [-17, -14], [-6, -13.2], [4, -15], [13, -19.4], [21, -16.6], [26.4, -8.6], [27.6, 0], [24.6, 7.6], [25.4, 13, 1],
+    [20.6, 10.6], [10, 13], [-4, 12], [-14, 10.4], [-22, 11.4], [-27.4, 5]], mooseT.coat, {
+    over(c, patch) {
+      patch([[-32, -6], [-20, -9], [-6, -8], [6, -10], [16, -13], [27, -10], [32, -12], [32, -24], [-32, -24]], mooseT.back);
+      glow(c, -16, -4, 9, MOOSE.light, 0.4);
+      glow(c, 24, -2, 11, darken(MOOSE.dark, 0.3), 0.55);
+      fur(c, [[-10, 9, 1.3, 4], [0, 10, 1.3, 4], [12, 10.6, 1.4, 4], [-20, 8, 1.2, 3.6], [18, -4, 1, 4], [8, -2, 0.9, 4]], alpha(MOOSE.dark, 0.6), 1);
+      // иней на холке и спине
+      spots(c, [[13, -17.4, 2.6, 1.1, -0.2], [7, -14.6, 2.2, 0.9, -0.3], [19, -15, 2, 0.9, 0.5], [-2, -12.4, 2.4, 0.9, 0], [-12, -12.6, 2.2, 0.9, 0.1],
+        [-21, -10.6, 1.8, 0.8, 0.5], [1, -9.6, 1.2, 0.6, 0], [15, -11.4, 1.3, 0.6, 0]], alpha(FROST, 0.85));
+    },
+  });
+});
+
+// нога: узловатое колено, светлый «чулок» и тёмное копыто
+const MOOSE_LEG = [[-5, 0], [0, -5], [5, 0], [4.4, 9], [3, 16], [3.5, 19.4], [2.6, 27], [3.2, 31.4], [5.6, 33.8], [5.2, 36], [-2.6, 36], [-3, 32], [-2.4, 27],
+  [-3.3, 19.4], [-3.6, 14], [-4.6, 7]];
+legPart('mob.moose.leg', [-6.8, -6.4, 7.4, 38.4], MOOSE_LEG, mooseT, {
+  lw: 1.5, fade: 0.6,
+  over(c, patch, v) {
+    patch([[-8, 18.6], [-2, 17.6, 1], [0, 19, 1], [2, 17.6, 1], [8, 18.6], [8, 40], [-8, 40]], v ? { ...mooseT.cream, fill: MOOSE.creamShade } : mooseT.cream);
+    patch([[-8, 32.6, 1], [8, 32.2, 1], [8, 40, 1], [-8, 40, 1]], tone('#2c2220', { light: '#5a4a44', dark: '#161010' }));
+  },
+});
+
+tailPart('mob.moose.tail', [-9, -5, 4, 5.4], [...tailJoint(3), [-3, 3.6], [-6, 3], [-7.4, 0.6], [-6, -2.2], [-3, -3.4]], mooseT.coat);
+
+// рог лопатой: растёт из темени (оно в нуле) — ладонь с отростками, на концах иней
+const MOOSE_ANTLER = [[-2, 0.6], [-5, -5], [-11, -9], [-16.4, -16, 1], [-10.6, -13.4], [-9.8, -21.4, 1], [-5.6, -15.6], [-2.6, -24, 1], [0.4, -16.6], [5, -23.6, 1],
+  [6, -15.6], [11.8, -20, 1], [10.4, -12], [16.6, -12.6, 1], [11, -7], [6, -4.6], [2.6, 0.6]];
+const MOOSE_TIPS = [[-15.4, -15], [-9.6, -20], [-2.6, -22.6], [4.8, -22.2], [11.2, -18.8], [15.4, -12.4]];
+function mooseAntler(g, x, y, look) {
+  g.save();
+  g.translate(x, y);
+  blob(g, MOOSE_ANTLER, look, {
+    over(c) {
+      c.fillStyle = alpha(FROST, 0.9);
+      for (const [px, py] of MOOSE_TIPS) {
+        c.beginPath();
+        c.arc(px, py, 2, 0, TAU);
+        c.fill();
+      }
+      stroke(c, [[0, -1], [-2, -8], [-4, -13]], alpha(look.dark, 0.6), 0.8);
+      stroke(c, [[2, -3], [4, -9], [5, -15]], alpha(look.dark, 0.6), 0.8);
+    },
+  });
+  g.restore();
+}
+
+// голова в профиль с обоими рогами; сустав — шея, середина головы — в MOOSE_HC от него
+const MOOSE_HC = [6, -2];
+definePart('mob.moose.head', [-13.6, -35.6, 35, 19.5], (g, v) => {
+  const F = FACES[v];
+  g.translate(MOOSE_HC[0], MOOSE_HC[1]);
+  mooseAntler(g, 4.6, -6.4, ANTLER_FAR);
+  farEar(g, 0.4, -8.6, 5.4, -8, 7, F.ear * 0.6 + 0.3, { ...mooseT.far, lw: 1.4 });
+  if (F.mouth === 2) jawOpen(g, 12, 7.6, 12.6, 4.6, 0.5, { ...mooseT.coat, lw: 1.4 }, { fang: 0.7, fangH: 1.2 });
+  // серьга под челюстью
+  blob(g, [[3, 8], [9, 9], [8.6, 13.6], [6.2, 18, 1], [4, 13.6]], { ...mooseT.far, lw: 1.3 });
+  const E = earAxes(-7.6, -6.4, -2.6, -9.2, 8.4, F.ear * 0.6 - 0.25);
+  blob(g, [[-9, 2], [-8.6, -3.4], [-7.6, -6.4], ...earSharp(E), [-2.6, -9.2], [4.6, -8.8], [10.4, -5.8], [15, -2.6], [20, -0.8], [24.6, 1.4], [26.8, 5.6],
+    [25.2, 10], [20.6, 11.6], [14, 10.6], [8, 10], [3, 10.6], [-2, 8.8], [-6.4, 7.4]], mooseT.coat, {
+    over(c, patch) {
+      // тёмный лоб и светлая горбатая морда
+      patch([[-12, -3], [-4, -4.6], [4, -3.6], [10, -2.6], [14, -5], [8, -12], [-12, -12]], mooseT.back);
+      patch([[15, 1.6], [20, 0.6], [26, 2], [29, 6], [29, 13], [16, 13], [13.6, 7.6]], mooseT.cream);
+      patch(earInside(E), tone('#b9929c', { dark: '#7d5c68' }));
+      lips(c, F.mouth, 15.6, 24.6, 8.8, mooseT.coat.line);
+      c.fillStyle = '#2a1c1a';
+      c.beginPath();
+      c.ellipse(24.4, 5, 1.3, 0.9, -0.5, 0, TAU);
+      c.fill();
+    },
+  });
+  mooseAntler(g, -1.4, -7.6, ANTLER);
+  if (F.mouth === 3) blob(g, [[17, 9.6], [19.6, 9.4], [20, 12.4], [18.4, 13.8], [16.8, 12.4]], tone(TONGUE, { dark: '#d9606e', lw: 0.8 }));
+  if (F.eye === 'fierce') fierceEye(g, 7.4, -1.4, 2.7, MOOSE_EYE, { lid: F.lid, slant: 0.3, shine: 0.6, rim: '#1c1418' });
+  else eye(g, 7.4, -1.4, 2.7, { kind: F.eye, color: '#fff1dc' });
+}, FACES.length);
+
+const MOOSE_M = {
+  kBody: 'mob.moose.body', kHead: 'mob.moose.head', kLeg: 'mob.moose.leg', kTail: 'mob.moose.tail',
+  body: [-4, -44], neck: [23, -10], tail: [-26.6, -4],
+  legNF: [17, 8], legFF: [21, 7.6], legNH: [-19, 8], legFH: [-15, 7.6], arm: [19, 2],
+  leg: 36.4, sit: 7, size: 1.05,
+  style: { breath: 1.7, head: 0.12, tail: -0.9, tailF: 1.3, tailA: 0.06, pace: 8.5, swing: 0.42, lift: 0.2, bob: 1.8, lean: 0.03, tailRun: -0.6 },
+};
+// во весь опор: шаг шире и чаще
+const MOOSE_RUN = { ...MOOSE_M, style: { ...MOOSE_M.style, pace: 15, swing: 0.72, lift: 0.3, bob: 3.4, lean: 0.05 } };
+const FULL = { speed: 1 };
+
+// несётся, опустив рога
+function mooseGallop(p, t) {
+  beastCommon(p, 'move', t, 0, FULL, MOOSE_RUN);
+  p[HX] += 4;
+  p[HY] += 11;
+  p[HR] += 0.42;
+  p[BR] += 0.05;
+  return SNARL;
+}
+
+function moosePose(p, act, t, k, a) {
+  const M = MOOSE_M;
+  switch (act) {
+    case 'windup': {
+      // голова к земле, рога вперёд; бьёт копытом — и дрожит всё сильнее
+      beastIdle(p, t, M);
+      const c = 0.75 + 0.25 * smooth(k);
+      const paw = Math.sin(t * 12);
+      p[BX] = -3 * c + Math.sin(t * 44) * 0.4 * k;
+      p[BY] += 1.5 * c;
+      p[BR] = 0.07 * c;
+      p[HX] = 3 * c;
+      p[HY] += 13 * c;
+      p[HR] = 0.66 * c;
+      p[TR] += 0.5 * c;
+      p[L1] = -0.3 + paw * 0.4;
+      p[K1] = 0.9 - 0.08 * Math.max(0, paw);
+      p[G1] = 0.2;
+      p[L1 + 2] = 0.14 * c;
+      p[L1 + 3] = 0.1 * c;
+      return SNARL;
+    }
+    case 'charge':
+      return mooseGallop(p, t);
+    case 'attack': {
+      // взмах рогами: голова от земли — вверх и вперёд, потом возвращается
+      beastIdle(p, t, M);
+      const hit = easeOut(k / 0.4);
+      const hold = 1 - smooth((k - 0.55) / 0.45);
+      p[BX] = lerp(-3, 5, hit) * hold;
+      p[BR] = lerp(0.07, -0.08, hit) * hold;
+      p[HX] = lerp(3, 8, hit) * hold;
+      p[HY] += lerp(13, -7, hit) * hold;
+      p[HR] += (lerp(0.66, -0.55, hit) - p[HR]) * hold;
+      p[L1] = -0.4 * hit * hold;
+      p[L1 + 1] = -0.3 * hit * hold;
+      p[L1 + 2] = 0.3 * hit * hold;
+      p[L1 + 3] = 0.25 * hit * hold;
+      return k < 0.6 ? BITE : k < 0.9 ? SNARL : CALM;
+    }
+    case 'stomp': {
+      // копыто взлетает и на середине бьёт оземь (в этот миг сыплются сосульки)
+      beastIdle(p, t, M);
+      const up = k < 0.5 ? smooth(k / 0.38) : 1 - easeOut((k - 0.5) / 0.1);
+      const dip = bump((k - 0.5) / 0.3);
+      p[BR] = -0.16 * up + 0.05 * dip;
+      p[BY] += -3 * up + 2 * dip;
+      p[BX] = -2 * up;
+      p[HR] += -0.3 * up + 0.2 * dip;
+      p[HY] += -3 * up + 3 * dip;
+      p[L1] = -1.25 * up;
+      p[K1] = 1 - 0.25 * up;
+      p[G1] = 1 - up;
+      p[ARM] = 0.45 * up;
+      p[L1 + 1] = -0.2 * up;
+      return k < 0.85 ? SNARL : CALM;
+    }
+    case 'tired': {
+      // запыхался: голова висит, бока ходят, язык наружу; к концу выпрямляется
+      beastIdle(p, t, M);
+      const q = 1 - smooth((k - 0.86) / 0.14);
+      const pant = Math.sin(t * 11);
+      p[BY] += (2.4 + pant * 0.5) * q;
+      p[BSY] += pant * 0.03 * q;
+      p[HX] += 2 * q;
+      p[HY] += 12 * q;
+      p[HR] += 0.4 * q;
+      p[TR] -= 0.3 * q;
+      p[L1] -= 0.14 * q;
+      p[L1 + 2] += 0.12 * q;
+      return q > 0.5 ? HURT : CALM;
+    }
+    case 'dead': {
+      // повержен: ноги подламываются, туша оседает, голова падает
+      beastIdle(p, 0, M);
+      const e = smooth(k / 0.6);
+      p[BY] = M.sit * 3.4 * e - bump((k - 0.5) / 0.3);
+      p[BR] = 0.06 * e;
+      p[BSY] = 1 - 0.06 * e;
+      p[HX] = 3 * e;
+      p[HY] = 8 * e;
+      p[HR] = 0.12 + 0.2 * e;
+      p[TR] = M.style.tail - 0.4 * e;
+      p[L1] = -1.05 * e;
+      p[L1 + 1] = -0.85 * e;
+      p[L1 + 2] = -0.8 * e;
+      p[L1 + 3] = -0.65 * e;
+      return e > 0.4 ? DIZZY : HURT;
+    }
+    default:
+      return beastCommon(p, act, t, k, a, M);
+  }
+}
+beastRig('moose', MOOSE_M, moosePose);
+RIG_INFO.moose = { acts: [...BOSS, 'charge', 'stomp'], w: 140, h: 124, shadow: 80 };
+
+beastRig('haz.moose', { ...MOOSE_RUN, size: 0.82 }, (p, act, t) => mooseGallop(p, t));
+RIG_INFO['haz.moose'] = { acts: ['run'], w: 106, h: 94, shadow: 60 };

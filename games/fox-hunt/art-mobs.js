@@ -1,5 +1,6 @@
 // Враги леса и болота, хозяева этих двух мест и «напасти» — фигуры «Лисьей охоты»: ёж, кабан, оса, ворон;
-// жаба, гадюка, комар, гриб-споровик; медведь-хозяин и царь-жаба; бегущий лось и медвежья лапа. Без DOM.
+// жаба, гадюка, комар, гриб-споровик; медведь-хозяин и царь-жаба; медвежья лапа, что бьёт с неба. Без DOM.
+// (Бегущий лось — вторая напасть — нарисован вместе с лосем-великаном, в art-mobs2.js: это одна фигура.)
 //
 // Устроены как лиса (art-fox.js): части запекаются один раз, поза каждый кадр расставляет их заново. Оси фигуры:
 // (0, 0) — середина ступней (у летающих — низ зверька: на высоту его поднимает рендер), x — вперёд по взгляду,
@@ -16,10 +17,16 @@
 
 import { defineRig } from './art.js';
 import {
-  TAU, INK, COLORS, clamp, clamp01, lerp, smooth, easeOut, backOut, bump, num, alpha, darken, mix, tone,
-  definePart, blob, egg, ball, capsule, limb, pathBlob, pathBlobSpan, pathEllipse, tufts, tuftsArc,
+  TAU, INK, COLORS, clamp, clamp01, lerp, smooth, easeOut, backOut, bump, num, alpha, darken, mix, outline, tone,
+  definePart, solid, blob, egg, ball, capsule, limb, pathBlob, pathBlobSpan, pathEllipse, pathPoly, tufts, tuftsArc,
   stroke, fur, fadeEdge, within, glow, speck, radial, eye, nose, blush,
 } from './art-kit.js';
+// медведь собран на общем скелете четвероногих — как волк и росомаха
+import {
+  TONGUE, CALM, SNARL, BITE, DIZZY, HURT, FACES, BX, BY, BR, BSY, HX, HY, HR, TR, TS, L1, K1, G1, ARM,
+  put as beastPut, atX as beastX, atY as beastY, loop, fang, fierceEye, earAxes, earRound, earInside, farEar, jawOpen, lips, furTones,
+  beastIdle, beastCommon, beastRig, legPart, tailPart, tailJoint,
+} from './art-mobs2.js';
 
 /**
  * Что умеют фигуры этого файла: acts — позы (их показывает лист рисунков и проверяет тест), w × h — рамка, в которую
@@ -1688,3 +1695,288 @@ function drawShroom(kit, ctx, a) {
   }
 }
 rig('shroom', COMMON, 56, 52, 16, drawShroom);
+
+// ---------- медведь-хозяин ----------
+// Бурая гора: горб над плечами, круглые уши, светлая морда, когти. Ходит на четырёх, а перед ударом встаёт на
+// дыбы — туша почти стоймя, лапа занесена над головой: это и есть предупреждение. Удар — всей тушей вниз.
+// Рёв — на дыбах, голова запрокинута, от пасти расходятся дуги.
+
+const BEAR = { coat: '#8a5a3a', light: '#bd8c60', dark: '#583624', back: '#6c442c', cream: '#e4bd88', creamShade: '#b58a58', ink: 0.66 };
+const bearT = furTones(BEAR, 1.8);
+const BEAR_EYE = '#ffb629';
+const BEAR_CLAW = tone('#f6eedd', { light: '#ffffff', dark: '#c9b99a', line: '#5a4636', lw: 0.8 });
+
+definePart('mob.bear.body', [-31, -23.6, 31.4, 21.6], (g) => {
+  // бочка: круп слева, горб справа; по низу — косматая шерсть
+  blob(g, [[-27.4, -2], [-25.4, -12], [-17, -18.4], [-5, -20], [8, -21], [19, -17.4], [26, -9.6], [28.4, 0], [26, 10], [18.6, 16.4],
+    ...tufts(18.6, 16.4, -18, 16, 6, 2.6, 0.6), [-18, 16], [-25.4, 9.6]], bearT.coat, {
+    over(c, patch) {
+      patch([[-32, -6], [-20, -10], [-6, -11], [8, -12], [20, -9], [32, -8], [32, -25], [-32, -25]], bearT.back);
+      glow(c, -15, -8, 10, BEAR.light, 0.4);
+      glow(c, 26, -3, 12, darken(BEAR.dark, 0.3), 0.55);
+      fur(c, [[-16, 10, 1.3, 4.4], [-6, 12, 1.3, 4.4], [5, 12.4, 1.3, 4.4], [14, 11, 1.4, 4], [-10, -15, 0.3, 4.4], [4, -16.4, 0.2, 4.4], [15, -13, 0.5, 4],
+        [-2, 0, 0.8, 4.4], [10, 1, 0.8, 4]], alpha(BEAR.dark, 0.6), 1.1);
+    },
+  });
+});
+
+// лапа: толстая, с тремя когтями
+const BEAR_LEG = [[-7.4, 0], [0, -7.4], [7.4, 0], [7, 9], [8.6, 13], [11.6, 15.4], [11.2, 19.4], [-5, 19.4], [-7.4, 15.6], [-7, 7]];
+legPart('mob.bear.leg', [-9.2, -8.8, 15.8, 23], BEAR_LEG, bearT, {
+  lw: 1.6, fade: 1,
+  after(g, v) {
+    for (const [x, y, len] of [[6, 18, 2.6], [8.6, 17.6, 3], [11, 16.6, 2.8]]) {
+      solid(g, (c) => pathPoly(c, [[x - 1, y - 0.4], [x + 1.1, y - 0.7], [x + len, y + 2.6]]), v ? { ...BEAR_CLAW, fill: '#cfc3a8' } : BEAR_CLAW);
+    }
+  },
+});
+
+tailPart('mob.bear.tail', [-9.4, -5.6, 4.6, 5.6], [...tailJoint(3.4), [-3.4, 4], [-6.4, 3.2], [-7.8, 0.4], [-6.2, -2.8], [-3.2, -3.9]], bearT.back);
+
+// голова в три четверти; сустав — шея, середина головы — в BEAR_HC от него
+const BEAR_HC = [5, 0];
+definePart('mob.bear.head', [-9.8, -21.6, 31.6, 22.6], (g, v) => {
+  const F = FACES[v];
+  g.translate(BEAR_HC[0], BEAR_HC[1]);
+  farEar(g, 2.6, -12.4, 9, -10.6, 5.6, F.ear * 0.4, { ...bearT.far, lw: 1.5 }, earRound);
+  if (F.mouth === 2) jawOpen(g, 8.6, 6.4, 12.6, 5.6, 0.62, { ...bearT.cream, lw: 1.4 }, { fang: 1.7, fangH: 3.6 });
+  const E = earAxes(-9, -9.6, -2.4, -13.4, 6.2, F.ear * 0.4);
+  blob(g, [[-12, 2], [-11.4, -4.6], [-9, -9.6], ...earRound(E), [-2.4, -13.4], [5, -13], [10.6, -9.6], [13.6, -4.8], [17.6, -3], [21.4, -0.4], [22.2, 4.4],
+    [19.4, 8.2], [13, 9.8], [6, 11.4], [-1, 12.4], [-5, 15, 1], [-6.6, 11.8], [-10.6, 12.2, 1], [-10.4, 7]], bearT.coat, {
+    over(c, patch) {
+      // светлая морда; нутро уха тёмное
+      patch([[9.6, -1], [13.6, -3.4], [18, -3], [24, 0], [24, 12], [9, 12], [7, 5]], bearT.cream);
+      patch(earInside(E), tone('#5a3a2a', { dark: '#3a2218' }));
+      glow(c, -3, -7, 6, BEAR.light, 0.35);
+      lips(c, F.mouth, 11.6, 20.4, 6.6, bearT.coat.line);
+    },
+  });
+  if (F.mouth === 2) {
+    fang(g, 18.2, 7.6, 1.7, 4.4);
+    fang(g, 14.4, 8.6, 1.3, 2.8);
+  }
+  if (F.mouth === 3) blob(g, [[13, 8.6], [16.4, 8.2], [17, 12.4], [15, 14.2], [12.8, 12.4]], tone(TONGUE, { dark: '#d9606e', lw: 0.9 }));
+  if (F.eye === 'fierce') {
+    fierceEye(g, 11.6, -5.2, 2, BEAR_EYE, { lid: F.lid, slant: 0.4, wide: 0.72 });
+    fierceEye(g, 4.4, -4, 2.7, BEAR_EYE, { lid: F.lid, slant: 0.32 });
+  } else {
+    eye(g, 11.6, -5.2, 2, { kind: F.eye, color: '#2a1a16' });
+    eye(g, 4.4, -4, 2.8, { kind: F.eye, color: '#2a1a16' });
+  }
+  nose(g, 21, 0.8, 2.7, '#2a1a16');
+}, FACES.length);
+
+// рёв: дуги от пасти (она в нуле) — расходятся, пока медведь ревёт
+definePart('mob.bear.roar', [-0.8, -15, 22, 15], (g) => {
+  g.lineCap = 'round';
+  for (const [R, half] of [[7.6, 0.62], [13.4, 0.7], [19.4, 0.66]]) {
+    for (const [color, lw] of [[alpha('#5a2a22', 0.5), 3], ['#fff6e2', 1.7]]) {
+      g.strokeStyle = color;
+      g.lineWidth = lw;
+      g.beginPath();
+      g.arc(0, 0, R, -half, half);
+      g.stroke();
+    }
+  }
+}, 1, 0.5);
+
+const BEAR_M = {
+  kBody: 'mob.bear.body', kHead: 'mob.bear.head', kLeg: 'mob.bear.leg', kTail: 'mob.bear.tail',
+  body: [-2, -31.4], neck: [24, -7], tail: [-26.4, -5],
+  legNF: [17, 12], legFF: [21, 11.4], legNH: [-18, 12], legFH: [-14, 11.4], arm: [19, -3],
+  leg: 20, sit: 4.6, size: 1.14,
+  style: { breath: 1.8, head: 0.06, tail: -0.5, tailF: 1.5, tailA: 0.06, pace: 9.5, swing: 0.5, lift: 0.22, bob: 1.5, lean: 0.03, tailRun: -0.3 },
+};
+// бежит напролом: шаг шире и чаще
+const BEAR_RUN = { ...BEAR_M, style: { ...BEAR_M.style, pace: 14, swing: 0.58, lift: 0.3, bob: 3, lean: 0.06 } };
+const FULL_SPEED = { speed: 1 };
+
+let bearRoar = 0;      // сила рёва 0…1 — по ней после зверя рисуются дуги
+let bearHX = 0;        // куда сдвинута и как наклонена голова: от неё идут дуги
+let bearHY = 0;
+let bearHR = 0;
+
+// встал на дыбы (up: 0…1): туша почти стоймя на задних лапах, передние — на весу
+function bearRear(p, up) {
+  p[BR] = -0.85 * up;
+  p[BX] = -4 * up;
+  p[BY] -= 9.4 * up;
+  p[HX] = -2 * up;
+  p[HR] -= 0.12 * up;
+  p[TR] += 0.3 * up;
+  p[L1 + 2] = 0.16 * up;
+  p[L1 + 3] = 0.1 * up;
+  p[G1] = 1 - up;
+  p[G1 + 1] = 1 - up;
+}
+
+function bearPose(p, act, t, k, a) {
+  const M = BEAR_M;
+  let face = CALM;
+  bearRoar = 0;
+  switch (act) {
+    case 'windup': {
+      // на дыбах, лапа занесена над головой; чем ближе удар, тем сильнее дрожит
+      beastIdle(p, t, M);
+      const c = 0.8 + 0.2 * smooth(k);
+      bearRear(p, c);
+      p[BX] += Math.sin(t * 44) * 0.4 * k;
+      p[L1] = -2.9 + Math.sin(t * 9) * 0.06;
+      p[K1] = 1.3;
+      p[ARM] = 1;
+      p[L1 + 1] = -0.9 * c;
+      face = SNARL;
+      break;
+    }
+    case 'attack': {
+      // удар: с дыбов всей тушей вниз, лапа бьёт в землю в первой трети; потом встаёт ровно
+      beastIdle(p, t, M);
+      const hit = easeOut(k / 0.3);
+      const back = smooth((k - 0.5) / 0.5);
+      const hold = 1 - back;
+      bearRear(p, (1 - hit) * hold);
+      p[BX] += 5 * hit * hold;
+      p[BR] += 0.12 * hit * hold;
+      p[BY] += 1.6 * hit * hold;
+      p[HX] += 2 * hit * hold;
+      p[HR] += 0.14 * hit * hold;
+      p[L1] = lerp(-2.9, -0.35, hit) * hold;
+      p[K1] = lerp(lerp(1.3, 1.12, hit), 1, back);
+      p[G1] = back;
+      p[ARM] = hold;
+      p[L1 + 1] = lerp(-0.9, -0.2, hit) * hold;
+      p[G1 + 1] = Math.max(hit, back);
+      face = k < 0.5 ? BITE : k < 0.9 ? SNARL : CALM;
+      break;
+    }
+    case 'charge':
+      // бежит напролом на всех четырёх, голова к земле
+      beastCommon(p, 'move', t, 0, FULL_SPEED, BEAR_RUN);
+      p[HX] += 1.5;
+      p[HY] += 3;
+      p[HR] += 0.2;
+      face = SNARL;
+      break;
+    case 'roar': {
+      // рёв: на дыбах, голова запрокинута, лапы врозь, всего трясёт
+      beastIdle(p, t, M);
+      const up = smooth(k / 0.2) * (1 - smooth((k - 0.84) / 0.16));
+      bearRear(p, 0.8 * up);
+      p[BX] += Math.sin(t * 50) * 0.5 * up;
+      p[HR] += (-0.34 + Math.sin(t * 31) * 0.04) * up;
+      p[L1] = -1.25 * up;
+      p[L1 + 1] = -up;
+      p[TS] = 1 + 0.2 * up;
+      bearRoar = up;
+      if (up > 0.02) face = up > 0.3 ? BITE : SNARL;
+      break;
+    }
+    case 'tired': {
+      // выдохся: осел, голова висит, бока ходят, язык наружу; к концу поднимается
+      beastIdle(p, t, M);
+      const q = 1 - smooth((k - 0.88) / 0.12);
+      const pant = Math.sin(t * 10);
+      p[BY] += (3.4 + pant * 0.5) * q;
+      p[BSY] += pant * 0.03 * q;
+      p[HX] += 1.6 * q;
+      p[HY] += 7 * q;
+      p[HR] += 0.36 * q;
+      p[L1] -= 0.2 * q;
+      p[L1 + 1] -= 0.14 * q;
+      p[L1 + 2] += 0.16 * q;
+      p[L1 + 3] += 0.1 * q;
+      if (q > 0.5) face = HURT;
+      break;
+    }
+    case 'dead': {
+      // повержен: лапы подламываются вперёд, туша ложится на брюхо, голова падает
+      beastIdle(p, 0, M);
+      const e = smooth(k / 0.6);
+      p[BY] = M.sit * 2.6 * e - bump((k - 0.5) / 0.3);
+      p[BR] = 0.05 * e;
+      p[BSY] = 1 - 0.07 * e;
+      p[HX] = 2 * e;
+      p[HY] = 9 * e;
+      p[HR] = 0.06 + 0.3 * e;
+      p[L1] = -1.1 * e;
+      p[L1 + 1] = -0.9 * e;
+      p[L1 + 2] = -0.75 * e;
+      p[L1 + 3] = -0.6 * e;
+      face = e > 0.4 ? DIZZY : HURT;
+      break;
+    }
+    default:
+      face = beastCommon(p, act, t, k, a, M);
+  }
+  bearHX = p[HX];
+  bearHY = p[HY];
+  bearHR = p[HR];
+  return face;
+}
+beastRig('bear', BEAR_M, bearPose, (act, t) => {
+  if (bearRoar <= 0.05) return;
+  const hx = beastX(BEAR_M.neck) + bearHX;
+  const hy = beastY(BEAR_M.neck) + bearHY;
+  const c = Math.cos(bearHR);
+  const s = Math.sin(bearHR);
+  for (let i = 0; i < 2; i++) {
+    const u = loop(t, 0.5, i * 0.25);
+    const d = 24 + u * 9;
+    beastPut('mob.bear.roar', hx + d * c - 7 * s, hy + d * s + 7 * c, bearHR + 0.2, 0.7 + u * 0.7, 0.7 + u * 0.7, 0, (1 - u) * bearRoar);
+  }
+});
+RIG_INFO.bear = { acts: [...BOSS, 'charge', 'roar'], w: 128, h: 120, shadow: 70 };
+
+// ---------- медвежья лапа (напасть) ----------
+// Огромная лапа бьёт с неба в красный круг: падает всё быстрее, на середине (k = 0.5) — удар, потом поднимается и
+// тает. Тень под ней растёт, пока лапа близится, — её фигура рисует сама.
+
+const pawCoat = tone(BEAR.coat, { light: BEAR.light, dark: BEAR.dark, line: outline(BEAR.coat, 0.66), lw: 1.9 });
+
+// вид сверху: предплечье уходит ввысь и тает, внизу — ладонь с пальцами и когтями; привязка — куда бьёт
+definePart('haz.paw.paw', [-33.5, -62, 33.5, 12.6], (g) => {
+  for (const [x, y, lean] of [[-22, -1.6, -0.25], [-7.6, 0.6, -0.08], [7.6, 0.6, 0.08], [22, -1.6, 0.25]]) {
+    solid(g, (c) => pathPoly(c, [[x - 3.2, y], [x + 3.2, y], [x + lean * 14, y + 10.4]]), { ...BEAR_CLAW, lw: 1.2 });
+  }
+  blob(g, [[-18, -60, 1], [18, -60, 1], [21, -44], [27, -32], [31.4, -19], [30, -7], [22.6, -0.6], [15, -3.4], [7.6, 1.4], [0, -2.2], [-7.6, 1.4], [-15, -3.4],
+    [-22.6, -0.6], [-30, -7], [-31.4, -19], [-27, -32], [-21, -44]], pawCoat, {
+    over(c, patch) {
+      patch([[-34, -40], [-10, -46], [14, -44], [34, -38], [34, -64], [-34, -64]], bearT.back);
+      glow(c, -12, -22, 13, BEAR.light, 0.4);
+      for (const x of [-15, 0, 15]) stroke(c, [[x, -3], [x * 0.94, -13]], alpha(BEAR.dark, 0.8), 1.3);
+      fur(c, [[-18, -30, 1.5, 5], [-4, -34, 1.6, 5], [10, -30, 1.6, 5], [20, -24, 1.7, 4.6], [-22, -16, 1.4, 4.6], [2, -18, 1.6, 5]], alpha(BEAR.dark, 0.6), 1.2);
+    },
+  });
+  fadeEdge(g, 0, -60, 0, -42);
+});
+
+const PAW_FALL = 76;          // с какой высоты падает
+
+function drawPaw(kit, ctx, a) {
+  const k = clamp01(num(a.k));
+  let h = 0;            // высота над землёй
+  let al = 1;
+  let sx = 1;
+  let sy = 1;
+  if (k < 0.5) {
+    const u = k / 0.5;
+    h = PAW_FALL * (1 - u * u);
+    al = smooth(u / 0.35);
+  } else if (k < 0.66) {
+    // ударила: расплющило о землю
+    const q = bump((k - 0.5) / 0.16);
+    sx = 1 + 0.1 * q;
+    sy = 1 - 0.14 * q;
+  } else {
+    const u = (k - 0.66) / 0.34;
+    h = PAW_FALL * 0.8 * u * u;
+    al = 1 - smooth((u - 0.3) / 0.7);
+  }
+  const near = 1 - h / PAW_FALL;
+  const s = lerp(0.9, 2.3, near);
+  calm();
+  settle();
+  put(kit, ctx, 'fx.shadow', 0, 0, 0, s, s, 0, lerp(0.2, 0.95, near) * al);
+  put(kit, ctx, 'haz.paw.paw', 0, -h, 0, sx, sy, 0, al);
+}
+rig('haz.paw', ['strike'], 80, 156, 0, drawPaw);

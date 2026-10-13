@@ -864,6 +864,11 @@ export function createRenderer({ canvas, probe }) {
       const s = room.shots[i];
       if (s.on && num(s.z, 8) > 3 && visible(s.x, s.y, 30)) shadow(s.x, s.y, 4, 0.5);
     }
+    for (let i = 0; i < room.actors.length; i++) {
+      const a = room.actors[i];
+      // бегущий лось; лапа свою тень рисует сама — она растёт, пока лапа падает
+      if (a.rig === 'haz.moose' && visible(a.x, a.y, 80)) shadow(a.x, a.y, 28);
+    }
 
     // 4. по глубине
     qn = 0;
