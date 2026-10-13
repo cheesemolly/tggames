@@ -80,6 +80,9 @@
     <td align="center"><img src="media/readme/jump-up.gif" width="220" alt="прыгалка вверх"><br><b>прыгалка вверх</b> <sup>скоро</sup><br><sub>каракуля прыгает сама — веди её вверх по тетрадке</sub></td>
     <td align="center"><img src="media/readme/basketball.gif" width="220" alt="баскетбол"><br><b>баскетбол</b> <sup>скоро</sup><br><sub>тяни мяч, как рогатку, и бросай из корзины в корзину</sub></td>
   </tr>
+  <tr>
+    <td align="center"><img src="media/readme/fox-hunt.gif" width="220" alt="лисья охота"><br><b>лисья охота</b> <sup>скоро</sup><br><sub>лиса рывком ловит кроликов в лесных комнатах, уворачивается от лося и медведя, собирает оружие</sub></td>
+  </tr>
 </table>
 
 ## что есть
