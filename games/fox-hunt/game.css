@@ -229,7 +229,7 @@
 }
 
 /* ---------- каркас ---------- */
-[data-game="fox-hunt"] { padding: 0; overflow: hidden; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+[data-game="fox-hunt"] { display: flex; flex-direction: column; padding: 0; overflow: hidden; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 [data-game="fox-hunt"] .fh { position: relative; flex: 1; min-height: 0; isolation: isolate; overflow: hidden; touch-action: none; }
 [data-game="fox-hunt"] .fh-stage { position: absolute; inset: 0; touch-action: none; }
 [data-game="fox-hunt"] .fh-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
