@@ -317,12 +317,24 @@ export function generateMoves(dict, board, rack, { polite = false } = {}) {
 /**
  * Уровни: vocab — словарный запас главного слова ('common' — частые слова, 'all' — весь словарь);
  * temp — «температура» выбора: 0 — всегда самый дорогой ход, больше — чаще ходы подешевле (вес хода —
- * exp((очки − лучшие) / temp), как Skill Level у шахматных движков), Infinity — любой ход наугад;
+ * exp((очки − лучшие) / temp), как Skill Level у шахматных движков), Infinity — любой ход наугад, меньше нуля —
+ * наоборот, тянется к самым дешёвым (вес — exp((очки − худшие) / temp));
+ * skip — как часто бот «не видит слова» и меняет фишки, хотя ход есть;
  * stuck — что делать, когда слов из своего запаса нет: 'swap' — менять фишки, 'any' — взять слово из всего словаря.
  * Менять по своей воле бот перестаёт, когда уже два хода подряд прошли без слов: ещё два — и партия кончилась бы.
- * Подобрано партиями против сильнейшего уровня — очков за ход: ≈ 8 / 12 / 16 / 18 (лёгкий меняет фишки в каждом шестом ходу).
+ * Подобрано партиями против сильнейшего уровня — очков за ход: ≈ 5 / 8 / 12 / 17 (лёгкий без слова в каждом третьем
+ * ходу, средний — в каждом шестом).
  */
 export const LEVELS = {
+  easy: { vocab: 'common', temp: -2, skip: 0.25, stuck: 'swap' },
+  medium: { vocab: 'common', temp: Infinity, stuck: 'swap' },
+  hard: { vocab: 'all', temp: 6, stuck: 'any' },
+  master: { vocab: 'all', temp: 0, stuck: 'any' },
+};
+
+// Прежние уровни (до беты 'erudit-bot') — очков за ход ≈ 8 / 11 / 15 / 17: лёгкий играл как нынешний средний
+// и обыгрывал новичков.
+export const LEVELS_V1 = {
   easy: { vocab: 'common', temp: Infinity, stuck: 'swap' },
   medium: { vocab: 'common', temp: 6, stuck: 'any' },
   hard: { vocab: 'all', temp: 3, stuck: 'any' },
@@ -335,32 +347,39 @@ const STAR_COST = 6;                        // звёздочку жалко т�
  * Ход бота: { type: 'play', tiles, score, word } | { type: 'swap', picks } | { type: 'pass' }.
  * Нет ходов — меняет фишки (звёздочки оставляет), а когда менять нельзя (в мешке меньше семи) — пасует.
  */
-export function botMove(dict, game, level = game.level, rng = Math.random) {
-  const cfg = LEVELS[level] ?? LEVELS.easy;
+export function botMove(dict, game, level = game.level, rng = Math.random, levels = LEVELS) {
+  const cfg = levels[level] ?? levels.easy;
   const rack = game.racks[game.turn];
+  const plain = rack.map((ch, k) => (ch === BLANK ? -1 : k)).filter((k) => k >= 0);
+  // «не увидел слова»: меняет от трёх до шести фишек наугад — пока это можно и партия от этого не кончится
+  if (cfg.skip && plain.length && canSwap(game) && game.idle < 2 && rng() < cfg.skip) {
+    for (let i = plain.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      [plain[i], plain[j]] = [plain[j], plain[i]];
+    }
+    return { type: 'swap', picks: plain.slice(0, 3 + Math.floor(rng() * 4)) };
+  }
   const all = generateMoves(dict, game.board, rack, { polite: true });
   let pool = cfg.vocab === 'common' ? all.filter((m) => m.common) : all;
   // слов из своего запаса нет: слабый бот меняет фишки, пока это можно и партия от этого не кончится; иначе — любое слово
   if (!pool.length && !(cfg.stuck === 'swap' && canSwap(game) && game.idle < 2)) pool = all;
-  if (!pool.length) {
-    if (!canSwap(game)) return { type: 'pass' };
-    const picks = rack.map((ch, k) => (ch === BLANK ? -1 : k)).filter((k) => k >= 0);
-    return picks.length ? { type: 'swap', picks } : { type: 'pass' };
-  }
-  // последние фишки: звёздочку беречь уже не для чего
-  const starCost = game.bag.length ? STAR_COST : 0;
+  if (!pool.length) return canSwap(game) && plain.length ? { type: 'swap', picks: plain } : { type: 'pass' };
+  const cheap = cfg.temp < 0;
+  // последние фишки: звёздочку беречь уже не для чего; слабый (тянется к дешёвым) её не бережёт вовсе
+  const starCost = game.bag.length && !cheap ? STAR_COST : 0;
   const worth = (m) => m.score - starCost * m.tiles.reduce((n, t) => n + (t.blank ? 1 : 0), 0);
+  // top — цена, от которой считаются веса: лучшая, а у слабого — худшая
   let best = pool[0];
   let top = worth(best);
   for (const m of pool) {
     const w = worth(m);
-    if (w > top || (w === top && m.score > best.score)) {
+    if ((cheap ? w < top : w > top) || (w === top && m.score > best.score)) {
       best = m;
       top = w;
     }
   }
   let pick = best;
-  if (cfg.temp > 0) {
+  if (cfg.temp !== 0) {
     const weights = pool.map((m) => (cfg.temp === Infinity ? 1 : Math.exp((worth(m) - top) / cfg.temp)));
     let roll = rng() * weights.reduce((n, w) => n + w, 0);
     for (let k = 0; k < pool.length; k++) {

@@ -311,7 +311,7 @@
 [data-game="erudit"] .er-tool-icon { display: grid; }
 [data-game="erudit"] .er-tool-icon svg { width: 20px; height: 20px; }
 [data-game="erudit"] .er-play { font-weight: 700; }
-[data-game="erudit"] .er-play.er-ready { background: var(--er-accent); color: var(--er-accent-text); }
+[data-game="erudit"] .er-play.er-ready, [data-game="erudit"] .er-tool.er-nudge { background: var(--er-accent); color: var(--er-accent-text); }
 
 /* ---------- окна ---------- */
 
@@ -341,6 +341,7 @@
 [data-game="erudit"] .er-rule { margin: 0 0 10px; font-size: 14px; line-height: 1.4; }
 [data-game="erudit"] .er-card-actions { display: flex; gap: 8px; margin-top: 14px; }
 [data-game="erudit"] .er-card-actions .btn { flex: 1; }
+[data-game="erudit"] .er-wide { width: 100%; margin-top: 8px; }
 [data-game="erudit"] .er-section { margin: 6px 0 8px; font-size: 14px; }
 [data-game="erudit"] .er-levels { display: grid; gap: 6px; }
 [data-game="erudit"] .er-option {

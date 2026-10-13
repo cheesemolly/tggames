@@ -8,7 +8,7 @@ import {
   SIZE, CELLS, CENTER, RACK, BLANK, LETTERS, EMPTY_BOARD, LEVEL_IDS,
   checkMove, hasTiles, newGame, play, swap, pass, ending, finalScores, isValidState,
 } from '../logic.js';
-import { createDict, generateMoves, botMove, LEVELS } from '../engine.js';
+import { createDict, generateMoves, botMove, LEVELS, LEVELS_V1 } from '../engine.js';
 
 const data = JSON.parse(readFileSync(new URL('../words/ru.json', import.meta.url), 'utf8'));
 const dict = createDict(data.words, data.common);
@@ -216,6 +216,7 @@ test('бот не выкладывает грубые слова — ни гла
 
 test('уровни: описаны все, слабые берут частые слова, сильные — самый дорогой ход', () => {
   assert.deepEqual(Object.keys(LEVELS), LEVEL_IDS);
+  assert.deepEqual(Object.keys(LEVELS_V1), LEVEL_IDS);
   const game = positionAfter(6, 31);
   const rack = game.racks[game.turn];
   const all = generateMoves(dict, game.board, rack, { polite: true });
@@ -227,15 +228,72 @@ test('уровни: описаны все, слабые берут частые 
   assert.ok(master.score === top || stars(master) < Math.max(...all.filter((m) => m.score === top).map(stars)));
   if (all.some((m) => m.common)) {
     for (let seed = 1; seed <= 20; seed++) {
+      // лёгкий иногда «не видит слова» и меняет фишки
       const m = botMove(dict, game, 'easy', rngOf(seed));
-      assert.ok(dict.isCommon(m.word), m.word);
+      if (m.type === 'play') assert.ok(dict.isCommon(m.word), m.word);
+      else assert.equal(m.type, 'swap');
     }
     const medium = botMove(dict, game, 'medium', rngOf(1));
     assert.ok(dict.isCommon(medium.word));
   }
 });
 
-test('лёгкий бот без частых слов меняет фишки, а не достаёт редкое слово; остальные — достают', () => {
+test('лёгкий тянется к дешёвым ходам и в каждом четвёртом ходу меняет фишки, хотя слово есть', () => {
+  const game = positionAfter(6, 36);
+  const common = generateMoves(dict, game.board, game.racks[game.turn], { polite: true }).filter((m) => m.common);
+  assert.ok(common.length > 20, `частых ходов в позиции: ${common.length}`);
+  const mean = (list) => list.reduce((n, x) => n + x, 0) / list.length;
+  const runs = 200;
+  const played = { easy: [], medium: [] };
+  const swaps = { easy: 0, medium: 0 };
+  for (const level of ['easy', 'medium']) {
+    for (let seed = 1; seed <= runs; seed++) {
+      const m = botMove(dict, game, level, rngOf(seed));
+      if (m.type === 'play') {
+        played[level].push(m.score);
+      } else {
+        swaps[level] += 1;
+        // меняет от трёх до шести разных фишек, звёздочки не отдаёт
+        assert.ok(m.picks.length >= 3 && m.picks.length <= 6, `фишек в обмене: ${m.picks.length}`);
+        assert.equal(new Set(m.picks).size, m.picks.length);
+        assert.ok(m.picks.every((k) => game.racks[game.turn][k] && game.racks[game.turn][k] !== BLANK));
+      }
+    }
+  }
+  assert.equal(swaps.medium, 0, 'средний, пока слово есть, фишки не меняет');
+  assert.ok(swaps.easy > runs * 0.15 && swaps.easy < runs * 0.35, `обменов лёгкого: ${swaps.easy} из ${runs}`);
+  // средний берёт ход наугад — в среднем как все ходы; лёгкий — заметно дешевле
+  const all = mean(common.map((m) => m.score));
+  assert.ok(mean(played.easy) < all * 0.8, `лёгкий ${mean(played.easy).toFixed(1)}, все ходы ${all.toFixed(1)}`);
+  assert.ok(mean(played.easy) < mean(played.medium), `лёгкий ${mean(played.easy).toFixed(1)}, средний ${mean(played.medium).toFixed(1)}`);
+  // два хода подряд уже без слов — по своей воле не меняет: ещё два, и партия кончилась бы
+  game.idle = 2;
+  for (let seed = 1; seed <= 40; seed++) assert.equal(botMove(dict, game, 'easy', rngOf(seed)).type, 'play');
+  game.idle = 0;
+  // менять уже нельзя — тоже
+  const late = { ...game, bag: game.bag.slice(0, 3) };
+  for (let seed = 1; seed <= 40; seed++) assert.equal(botMove(dict, late, 'easy', rngOf(seed)).type, 'play');
+});
+
+test('прежние уровни (до беты) остаются: лёгкий ходит наугад и зря фишки не меняет', () => {
+  const game = positionAfter(6, 36);
+  const common = generateMoves(dict, game.board, game.racks[game.turn], { polite: true }).filter((m) => m.common);
+  assert.ok(common.length > 20);
+  const scores = [];
+  for (let seed = 1; seed <= 100; seed++) {
+    const m = botMove(dict, game, 'easy', rngOf(seed), LEVELS_V1);
+    assert.equal(m.type, 'play');
+    assert.ok(dict.isCommon(m.word), m.word);
+    scores.push(m.score);
+  }
+  // прежний лёгкий — это нынешний средний
+  for (let seed = 1; seed <= 20; seed++) {
+    assert.deepEqual(botMove(dict, game, 'easy', rngOf(seed), LEVELS_V1), botMove(dict, game, 'medium', rngOf(seed)));
+  }
+  assert.deepEqual(LEVELS_V1.master, LEVELS.master);
+});
+
+test('слабый бот без частых слов меняет фишки, а не достаёт редкое слово; сильные — достают', () => {
   // в словаре одно слово, и оно не из частых
   const rare = createDict(['кот'], []);
   const game = newGame('easy', rngOf(4));
@@ -246,15 +304,17 @@ test('лёгкий бот без частых слов меняет фишки, 
   game.racks[1] = rack;
   game.bag = pool;
   assert.ok(isValidState(game));
-  assert.equal(botMove(rare, game, 'easy', rngOf(1)).type, 'swap');
-  for (const level of ['medium', 'hard', 'master']) assert.equal(botMove(rare, game, level, rngOf(1)).word, 'кот', level);
-  // два хода подряд уже без слов — лёгкий не тянет партию к концу, а выкладывает что есть
+  for (const level of ['easy', 'medium']) {
+    for (let seed = 1; seed <= 10; seed++) assert.equal(botMove(rare, game, level, rngOf(seed)).type, 'swap', level);
+  }
+  for (const level of ['hard', 'master']) assert.equal(botMove(rare, game, level, rngOf(1)).word, 'кот', level);
+  // два хода подряд уже без слов — слабый не тянет партию к концу, а выкладывает что есть
   game.idle = 2;
-  assert.equal(botMove(rare, game, 'easy', rngOf(1)).word, 'кот');
+  for (const level of ['easy', 'medium']) assert.equal(botMove(rare, game, level, rngOf(1)).word, 'кот', level);
   game.idle = 0;
-  // менять уже нельзя — лёгкий тоже берёт редкое слово, чтобы партия не встала
+  // менять уже нельзя — слабый тоже берёт редкое слово, чтобы партия не встала
   game.racks[0].push(...game.bag.splice(3));
-  assert.equal(botMove(rare, game, 'easy', rngOf(1)).word, 'кот');
+  for (const level of ['easy', 'medium']) assert.equal(botMove(rare, game, level, rngOf(1)).word, 'кот', level);
 });
 
 test('нет ходов: бот меняет фишки, а при пустом мешке пасует; звёздочки не отдаёт', () => {

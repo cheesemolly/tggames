@@ -16,7 +16,7 @@ import {
   rowOf, colOf, valueOf, layout, checkMove, newGame, play, swap, pass, canSwap, ending, finalScores, outcomeOf,
   isValidState, emptyStats, migrateStats, recordGame,
 } from './logic.js';
-import { createDict, joinWords, generateMoves, botMove } from './engine.js';
+import { createDict, joinWords, generateMoves, botMove, LEVELS, LEVELS_V1 } from './engine.js';
 
 const SKINS = ['telegram', 'classic', 'wood', 'felt', 'night', 'paper'];
 const T = {
@@ -65,6 +65,10 @@ const T = {
   passTitle: 'Пропустить ход?',
   passNote: 'Если два круга подряд никто не выложит слово, партия закончится.',
   lastIdle: 'Это будет второй круг без слов — партия закончится.',
+  passAll: 'Пас до конца партии',
+  passAllNote: 'Ходить больше нечем? «Пас до конца» — бот доиграет свои слова один, и очки подсчитаются.',
+  autoPass: 'Бот доигрывает',
+  stuck: 'Ходов нет — остаётся только пас',
   starTitle: 'Какая буква?',
   starNote: 'Звёздочка заменяет любую букву, но очков не даёт.',
   cancel: 'Отмена',
@@ -130,6 +134,8 @@ let cursor = null;                 // { i, dir: 'h' | 'v' } — куда вст�
 let picked = null;                 // фишка руки, выбранная до клетки (номер места)
 let lastDir = 'h';
 let busy = false;                  // бот думает или идёт анимация
+let autoPass = false;              // игрок пасует до конца партии — бот доигрывает один
+let stuck = false;                 // конец партии, а слов из фишек игрока нет — остаётся пас
 let over = false;
 let modalActive = false;
 let modalToken = 0;
@@ -176,6 +182,8 @@ function loadDict(modern = false) {
   return dictPromises.get(modern);
 }
 
+// Уровни бота: в бете 'erudit-bot' — слабее (лёгкий берёт дешёвые слова и чаще меняет фишки), иначе прежние
+const botLevels = () => (api.feature('erudit-bot') ? LEVELS : LEVELS_V1);
 const save = () => game && !over && api?.storage.set('current', game);
 const myTurn = () => Boolean(game && dict && !over && !busy && game.turn === 0);
 const pendingAt = (i) => pending.find((p) => p.i === i);
@@ -308,8 +316,8 @@ function renderStatus() {
     text = '';
   } else if (over) {
     text = ui.status.dataset.final ?? '';
-  } else if (game.turn === 1) {
-    text = T.botTurn;
+  } else if (game.turn === 1 || autoPass) {
+    text = autoPass ? T.autoPass : T.botTurn;
     thinking = true;
   } else if (pending.length) {
     const res = layout(game.board, tilesOf());
@@ -323,7 +331,7 @@ function renderStatus() {
       warn = true;
     }
   } else {
-    text = lastText() || T.yourTurn;
+    text = stuck ? T.stuck : lastText() || T.yourTurn;
   }
   ui.status.textContent = text;
   ui.status.classList.toggle('er-thinking', thinking);
@@ -346,6 +354,7 @@ function renderInfo() {
   ui.play.classList.toggle('er-ready', mine && preview != null);
   ui.swap.disabled = !mine;
   ui.pass.disabled = !mine;
+  ui.pass.classList.toggle('er-nudge', mine && stuck && !pending.length);
   const recall = pending.length > 0;
   ui.mix.disabled = !mine;
   ui.mixLabel.textContent = recall ? T.recall : T.shuffle;
@@ -554,6 +563,15 @@ function onPlay() {
   afterTurn();
 }
 
+/**
+ * Конец партии близко (менять фишки уже нельзя): если из фишек игрока не выходит ни одного слова, строка под полем
+ * скажет об этом — иначе он искал бы ход, которого нет (бета 'erudit-bot').
+ */
+function checkStuck() {
+  stuck = Boolean(game && dict && !over && game.turn === 0 && !canSwap(game) && api.feature('erudit-bot')
+    && generateMoves(dict, game.board, game.racks[0]).length === 0);
+}
+
 /** После любого хода: сохранить, проверить конец, передать ход. */
 function afterTurn() {
   const end = ending(game);
@@ -562,8 +580,22 @@ function afterTurn() {
     return;
   }
   save();
+  checkStuck();
   renderInfo();
   if (game.turn === 1) botTurn();
+  else if (autoPass) autoPassTurn();
+}
+
+/** «Пас до конца партии»: ход игрока пропускается сам, пока бот не доиграет. */
+async function autoPassTurn() {
+  busy = true;
+  renderInfo();
+  const snapshot = game;
+  await later(null, reducedMotion() ? 0 : 350);
+  if (!ui || game !== snapshot || over) return;
+  pass(game);
+  busy = false;
+  afterTurn();
 }
 
 // ---------- бот ----------
@@ -575,9 +607,9 @@ async function botTurn() {
   const started = Date.now();
   await later(null, 40);                                   // дать отрисоваться «Бот думает»
   if (!ui || game !== snapshot || over) return;
-  const move = botMove(dict, game, game.level);
-  // чтобы бот не «ходил мгновенно» — хотя бы 0,7 с на раздумье
-  const wait = Math.max(0, 700 - (Date.now() - started));
+  const move = botMove(dict, game, game.level, Math.random, botLevels());
+  // чтобы бот не «ходил мгновенно» — хотя бы 0,7 с на раздумье (доигрывает один — быстрее)
+  const wait = Math.max(0, (autoPass ? 250 : 700) - (Date.now() - started));
   if (wait && !reducedMotion()) await later(null, wait);
   if (!ui || game !== snapshot || over) return;
   if (move.type === 'play') {
@@ -688,26 +720,30 @@ function onSwap() {
 
 function onPass() {
   if (!myTurn()) return;
+  const last = game.idle === IDLE_LIMIT - 1;
+  // конец партии (менять фишки уже нельзя): можно не жать «Пас» после каждого слова бота (бета 'erudit-bot')
+  const toEnd = !last && !canSwap(game) && Boolean(api.feature('erudit-bot'));
+  const go = (all) => {
+    if (!myTurn()) return;
+    closeModal();
+    pending = [];
+    cursor = null;
+    picked = null;
+    autoPass = all;
+    pass(game);
+    sfx('pass');
+    renderTiles();
+    renderRack();
+    afterTurn();
+  };
   openModal(card(T.passTitle,
-    el('p', { class: 'er-note' }, game.idle === IDLE_LIMIT - 1 ? T.lastIdle : T.passNote),
+    el('p', { class: 'er-note' }, last ? T.lastIdle : T.passNote),
+    toEnd ? el('p', { class: 'er-note' }, T.passAllNote) : null,
     el('div', { class: 'er-card-actions' },
       el('button', { class: 'btn btn-secondary', onclick: closeModal }, T.cancel),
-      el('button', {
-        class: 'btn',
-        onclick: () => {
-          if (!myTurn()) return;
-          closeModal();
-          pending = [];
-          cursor = null;
-          picked = null;
-          pass(game);
-          sfx('pass');
-          renderTiles();
-          renderRack();
-          afterTurn();
-        },
-      }, T.pass),
+      el('button', { class: 'btn', onclick: () => go(false) }, T.pass),
     ),
+    toEnd ? el('button', { class: 'btn btn-secondary er-wide', onclick: () => go(true) }, T.passAll) : null,
   ));
 }
 
@@ -716,6 +752,8 @@ function onPass() {
 function finishGame(reason) {
   over = true;
   busy = false;
+  autoPass = false;
+  stuck = false;
   pending = [];
   cursor = null;
   picked = null;
@@ -786,6 +824,8 @@ function startGame() {
   game = newGame(setup.level);
   over = false;
   busy = false;
+  autoPass = false;
+  stuck = false;
   pending = [];
   cursor = null;
   picked = null;
@@ -1075,6 +1115,7 @@ export default {
     if (isValidState(saved)) {
       game = saved;
       over = false;
+      checkStuck();
       renderTiles({ quiet: true });
       renderRack();
       renderInfo();
@@ -1102,7 +1143,7 @@ export default {
     if (globalThis.__erudit) delete globalThis.__erudit;
     api = host = root = ui = toast = game = dict = cursor = picked = onModalClose = null;
     pending = [];
-    busy = over = modalActive = false;
+    busy = over = modalActive = autoPass = stuck = false;
     lastDir = 'h';
     stats = emptyStats();
     setup = { level: 'easy' };
