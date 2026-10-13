@@ -1914,11 +1914,14 @@ definePart('mob.mimic.lid', [-1.8, -12.8, 31, 6.6], (g, v) => {
   }
 }, 3);
 
-// нутро пасти: тёмный клин от петли — его растягивают по раскрытию
-definePart('mob.mimic.maw', [-1, -9, 29.4, 9], (g) => {
-  g.fillStyle = linear(g, 0, 0, 28, 0, [[0, '#2a1016'], [0.6, MOUTH], [1, '#8a2c40']]);
+// нутро пасти: тёмная глубина у петли — клин, который растягивают по раскрытию. Вдоль челюстей он идёт на две трети
+// их длины и кончается вогнутой дугой: за край крышки не вылезает, а спереди пасть открыта — зубы видны на просвет
+const MAW_LEN = 19;
+const MAW_HALF = 5.35;        // полувысота у дальнего края при растяжении 1
+definePart('mob.mimic.maw', [-1, -6.4, 20, 6.4], (g) => {
+  g.fillStyle = linear(g, 0, 0, MAW_LEN, 0, [[0, '#1c0a10'], [1, '#4c1624']]);
   g.beginPath();
-  pathPoly(g, [[0, -0.5], [28.4, -8], [28.4, 8], [0, 0.5]]);
+  pathBlob(g, [[0, -0.5, 1], [MAW_LEN, -MAW_HALF, 1], [15, -2.6], [13.6, 0], [15, 2.6], [MAW_LEN, MAW_HALF, 1], [0, 0.5, 1]]);
   g.fill();
 }, 1, 0.5);
 
@@ -1984,6 +1987,7 @@ function drawMimic(act, t, k, a) {
       const shut = clamp01(k / 0.2) ** 2;
       const back = smooth((k - 0.45) / 0.55);
       open = lerp(MIMIC_GAPE * (1 - shut), ajar, back);
+      tongue = 1 - shut;
       x = 3.2 * lunge(k, 0.22);
       wide = 1 + 0.06 * shut * (1 - back);
       tall = 1 - 0.08 * shut * (1 - back);
@@ -2018,12 +2022,13 @@ function drawMimic(act, t, k, a) {
   GY -= hop * GSY;
   GSX *= wide;
   GSY *= tall;
-  if (open > 0.06) put('mob.mimic.maw', MIMIC_HX, MIMIC_HY + 0.2, -open / 2, 1, (29 * Math.tan(open / 2)) / 8);
+  // клин нутра ложится краями на кромку крышки и на край ящика
+  if (open > 0.06) put('mob.mimic.maw', MIMIC_HX, MIMIC_HY + 0.2, -open / 2, 1, (Math.tan(open / 2) * MAW_LEN) / MAW_HALF);
   put('mob.mimic.lid', MIMIC_HX, MIMIC_HY, -open, 1, 1, face);
   put('mob.mimic.base', 0, 0);
   if (tongue > 0.05) {
     const half = open / 2;
-    put('mob.mimic.tongue', MIMIC_HX + 15 * Math.cos(half), MIMIC_HY - 15 * Math.sin(half) + 1, 0.25 - half * 0.5 + Math.sin(t * 6) * 0.08, tongue, 1);
+    put('mob.mimic.tongue', MIMIC_HX + 12 * Math.cos(half), MIMIC_HY - 12 * Math.sin(half) + 1, 0.25 - half * 0.5 + Math.sin(t * 6) * 0.08, tongue * 1.25, 1);
   }
 }
 plainRig('mimic', [...COMMON, 'sleep', 'reveal'], 58, 62, 30, drawMimic);

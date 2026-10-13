@@ -249,6 +249,18 @@ test('зубастый сундук: спит — тот самый сундук
   assert.ok(Math.abs(chest[0] - one(idle, 'mob.mimic.base').box[0]) < 1.5 && Math.abs(chest[2] - one(idle, 'mob.mimic.base').box[2]) < 1.5 && Math.abs(chest[3] - awake[3]) < 1.5);
   const gape = (parts) => -one(parts, 'mob.mimic.lid').rot;
   assert.ok(gape(idle) > 0.05 && gape(idle) < 0.3, 'стойка: пасть приоткрыта');
+  // нутро пасти не торчит треугольником: его дальние углы лежат на кромке крышки и на краю ящика и до их концов не доходят
+  for (const [act, k] of [['windup', 1], ['reveal', 0.4], ['recover', 0.2], ['stun', 0], ['move', 0]]) {
+    const parts = of(act, { k });
+    const maw = one(parts, 'mob.mimic.maw');
+    const lid = one(parts, 'mob.mimic.lid');
+    const hinge = [lid.x, lid.y];
+    const tip = at(lid, 29.2, 0.6);                              // передний нижний угол крышки
+    const [up, down] = [at(maw, 19, -5.35), at(maw, 19, 5.35)];
+    assert.ok(dist(up, hinge) < dist(tip, hinge) * 0.85 && dist(down, hinge) < dist(tip, hinge) * 0.85, `${act}: нутро пасти длиннее челюстей`);
+    const off = Math.abs((tip[0] - hinge[0]) * (up[1] - hinge[1]) - (tip[1] - hinge[1]) * (up[0] - hinge[0])) / dist(tip, hinge);
+    assert.ok(off < 1.5 && Math.abs(down[1] - hinge[1]) < 1.5, `${act}: нутро пасти не по челюстям (${off.toFixed(1)}, ${(down[1] - hinge[1]).toFixed(1)})`);
+  }
   // пробуждение: сперва закрыт, потом нараспашку, к концу — стойка
   assert.ok(gape(of('reveal', { k: 0 })) < 0.02);
   assert.ok(gape(of('reveal', { k: 0.4 })) > 0.9);
