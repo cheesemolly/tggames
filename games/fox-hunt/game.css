@@ -181,3 +181,541 @@
   [data-game="fox-hunt"] .fh-stick--hold .fh-stick-ring::before { animation: none; }
 }
 /* ---------- конец: стики ---------- */
+
+/* ---------- краски игры ---------- */
+/*
+ * Смысловые цвета (сердца, мана, монеты, редкость, опасность) — для обеих тем; панели, текст и кнопки — из темы
+ * Telegram. Мир на холсте от темы не зависит, поэтому плашки поверх него — тёмные полупрозрачные в любой теме
+ * (--fh-hud-bg / --fh-hud-ink), а окна — цвета темы.
+ */
+[data-game="fox-hunt"] {
+  --fh-heart: #e5484d;
+  --fh-shield: #4f9de8;
+  --fh-mana: #5b7bf0;
+  --fh-coin: #e8b21c;
+  --fh-dash: #f08a24;
+  --fh-good: #3fa65a;
+  --fh-danger: #d6403f;
+  --fh-r0: #8d949c;
+  --fh-r1: #3f8fe0;
+  --fh-r2: #a45fe0;
+  --fh-r3: #eb9a1c;
+  --fh-off: rgba(255, 255, 255, 0.22);
+  --fh-ghost: #9aa1a9;
+  --fh-hud-bg: rgba(18, 22, 20, 0.58);
+  --fh-hud-ink: #fff;
+  --fh-dim: rgba(0, 0, 0, 0.5);
+  --fh-line: color-mix(in srgb, var(--tg-theme-hint-color, #8a8f94) 38%, transparent);
+  --fh-panel: var(--tg-theme-secondary-bg-color, #f1f2f4);
+  --fh-slot: color-mix(in srgb, var(--tg-theme-text-color, #000) 7%, var(--tg-theme-bg-color, #fff));
+  --g2: rgba(255, 255, 255, 0.55);
+  --g3: rgba(0, 0, 0, 0.6);
+}
+:root[data-theme="dark"] [data-game="fox-hunt"] {
+  --fh-heart: #ef5b60;
+  --fh-shield: #62aef2;
+  --fh-mana: #7a95ff;
+  --fh-coin: #f2c13a;
+  --fh-dash: #f59a3c;
+  --fh-good: #52bd6d;
+  --fh-danger: #ee5a58;
+  --fh-r0: #a0a7af;
+  --fh-r1: #5aa2f0;
+  --fh-r2: #b97af0;
+  --fh-r3: #f5ac38;
+  --fh-ghost: #5d646c;
+  --fh-dim: rgba(0, 0, 0, 0.62);
+  --fh-slot: color-mix(in srgb, var(--tg-theme-text-color, #fff) 9%, var(--tg-theme-bg-color, #212121));
+}
+
+/* ---------- каркас ---------- */
+[data-game="fox-hunt"] { padding: 0; overflow: hidden; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+[data-game="fox-hunt"] .fh { position: relative; flex: 1; min-height: 0; isolation: isolate; overflow: hidden; touch-action: none; }
+[data-game="fox-hunt"] .fh-stage { position: absolute; inset: 0; touch-action: none; }
+[data-game="fox-hunt"] .fh-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+[data-game="fox-hunt"] .fh-probe { position: absolute; width: 0; height: 0; overflow: hidden; visibility: hidden; }
+[data-game="fox-hunt"] button { font: inherit; color: inherit; margin: 0; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+
+/* значки: рисунок игры (холст), запасной рисунок линиями или буква */
+[data-game="fox-hunt"] .fh-ic { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 1.4em; height: 1.4em; color: inherit; }
+[data-game="fox-hunt"] .fh-ic canvas { width: 100%; height: 100%; display: block; }
+[data-game="fox-hunt"] .fh-ic svg { width: 100%; height: 100%; fill: currentColor; }
+[data-game="fox-hunt"] .fh-ic .fh-ln { fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+[data-game="fox-hunt"] .fh-ic .fh-g2 { fill: var(--g2); }
+[data-game="fox-hunt"] .fh-ic .fh-g3 { fill: var(--g3); }
+[data-game="fox-hunt"] .fh-ic--letter { font-weight: 700; font-size: 0.9em; opacity: 0.75; }
+[data-game="fox-hunt"] .fh-ic--ghost { opacity: 0.7; }
+[data-game="fox-hunt"] .fh-ic--idle { opacity: 0.4; }
+[data-game="fox-hunt"] .fh-ic--heart { color: var(--fh-heart); }
+[data-game="fox-hunt"] .fh-ic--shield { color: var(--fh-shield); }
+[data-game="fox-hunt"] .fh-ic--mana { color: var(--fh-mana); }
+[data-game="fox-hunt"] .fh-ic--coin { color: var(--fh-coin); }
+[data-game="fox-hunt"] .fh-ic--dash { color: var(--fh-dash); }
+[data-game="fox-hunt"] .fh-ic--life { color: #f08a3c; }
+
+/* ---------- надписи поверх игры ---------- */
+/* размер надписей задают em: оболочка крупнит их на большом экране (--fh-hud-zoom) */
+[data-game="fox-hunt"] .fh-hud {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  box-sizing: border-box;
+  padding: calc(var(--ls-t, 0px) + 6px) calc(var(--ls-r, 0px) + 6px) calc(var(--ls-b, 0px) + 6px) calc(var(--ls-l, 0px) + 6px);
+  font-size: calc(12px * var(--fh-hud-zoom, 1));
+  line-height: 1.2;
+  color: var(--fh-hud-ink);
+  pointer-events: none;
+}
+[data-game="fox-hunt"] .fh-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.6em; }
+[data-game="fox-hunt"] .fh-side { display: flex; flex-direction: column; gap: 0.35em; flex: 0 0 auto; min-width: 0; }
+[data-game="fox-hunt"] .fh-side--l { align-items: flex-start; }
+[data-game="fox-hunt"] .fh-side--r { align-items: flex-end; }
+[data-game="fox-hunt"] .fh-row { display: flex; gap: 0.35em; align-items: center; }
+[data-game="fox-hunt"] .fh-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  padding: 0.18em 0.5em;
+  min-height: 1.6em;
+  box-sizing: border-box;
+  border-radius: 1em;
+  background: var(--fh-hud-bg);
+  font-weight: 700;
+  white-space: nowrap;
+}
+[data-game="fox-hunt"] .fh-chip:empty { display: none; }
+[data-game="fox-hunt"] .fh-num { font-variant-numeric: tabular-nums; min-width: 1ch; }
+[data-game="fox-hunt"] .fh-pips { display: inline-flex; gap: 0.1em; align-items: center; }
+[data-game="fox-hunt"] .fh-pips:empty { display: none; }
+[data-game="fox-hunt"] .fh-pip { width: 1.35em; height: 1.35em; transition: opacity 0.2s ease, scale 0.2s ease; }
+[data-game="fox-hunt"] .fh-pips--dash .fh-pip { width: 1.1em; height: 1.1em; }
+[data-game="fox-hunt"] .fh-pip.fh-off { opacity: 0.28; scale: 0.82; filter: grayscale(0.7); }
+[data-game="fox-hunt"] .fh-pips--shield { margin-left: 0.2em; }
+[data-game="fox-hunt"] .fh-lives .fh-pip { width: 1.1em; height: 1.1em; }
+[data-game="fox-hunt"] .fh-health:has(.fh-pips--shield:empty) .fh-pips--shield { margin: 0; }
+
+[data-game="fox-hunt"] .fh-bar {
+  position: relative;
+  display: inline-block;
+  width: 5.2em;
+  height: 0.7em;
+  border-radius: 0.4em;
+  background: var(--fh-off);
+  overflow: hidden;
+}
+[data-game="fox-hunt"] .fh-bar-fill {
+  position: absolute;
+  inset: 0;
+  transform-origin: left center;
+  transform: scaleX(0);
+  background: var(--fh-mana);
+  transition: transform 0.16s ease-out;
+}
+[data-game="fox-hunt"] .fh-mana--no { background: color-mix(in srgb, var(--fh-danger) 70%, var(--fh-hud-bg)); transition: background-color 0.1s ease; }
+[data-game="fox-hunt"] .fh-weapon-ic { display: inline-flex; width: 1.7em; height: 1.7em; }
+[data-game="fox-hunt"] .fh-weapon-ic .fh-ic { width: 100%; height: 100%; }
+[data-game="fox-hunt"] .fh-weapon-cost { font-size: 0.9em; color: var(--fh-mana); filter: brightness(1.5); }
+[data-game="fox-hunt"] .fh-weapon--none .fh-weapon-cost { display: none; }
+[data-game="fox-hunt"] .fh-fx { flex-wrap: wrap; }
+[data-game="fox-hunt"] .fh-fx-chip { font-size: 0.9em; padding: 0.1em 0.5em; gap: 0.4em; background: color-mix(in srgb, var(--fh-good) 55%, var(--fh-hud-bg)); }
+[data-game="fox-hunt"] .fh-fx-chip--bad { background: color-mix(in srgb, var(--fh-danger) 60%, var(--fh-hud-bg)); }
+
+/* середина: счёт и плашки; места им не жалко, но края свободны для джойстиков */
+[data-game="fox-hunt"] .fh-mid { display: flex; flex-direction: column; align-items: center; gap: 0.35em; flex: 1 1 0; min-width: 0; }
+[data-game="fox-hunt"] .fh-score { font-size: 1.2em; padding: 0.05em 0.8em; }
+[data-game="fox-hunt"] .fh-score-num { font-variant-numeric: tabular-nums; }
+[data-game="fox-hunt"] .fh-pane {
+  box-sizing: border-box;
+  max-width: 100%;
+  padding: 0.35em 0.8em;
+  border-radius: 0.8em;
+  background: var(--fh-hud-bg);
+  text-align: center;
+  /* плашки появляются и пропадают плавно: класс fh-on включает */
+  opacity: 0;
+  translate: 0 -0.4em;
+  scale: 0.96;
+  visibility: hidden;
+  transition: opacity 0.22s ease, translate 0.22s ease, scale 0.22s ease, visibility 0s linear 0.22s;
+}
+[data-game="fox-hunt"] .fh-pane.fh-on { opacity: 1; translate: 0 0; scale: 1; visibility: visible; transition: opacity 0.22s ease, translate 0.22s ease, scale 0.22s ease, visibility 0s; }
+[data-game="fox-hunt"] .fh-waves { display: flex; gap: 0.4em; padding: 0.35em 0.7em; }
+[data-game="fox-hunt"] .fh-wave { width: 0.7em; height: 0.7em; border-radius: 50%; background: var(--fh-off); transition: background-color 0.2s ease, scale 0.2s ease; }
+[data-game="fox-hunt"] .fh-wave--done { background: var(--fh-good); }
+[data-game="fox-hunt"] .fh-wave--now { background: var(--fh-dash); scale: 1.3; }
+[data-game="fox-hunt"] .fh-boss { width: 15em; }
+[data-game="fox-hunt"] .fh-boss-name { display: block; font-weight: 700; margin-bottom: 0.25em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+[data-game="fox-hunt"] .fh-boss .fh-bar { display: block; width: 100%; height: 0.6em; }
+[data-game="fox-hunt"] .fh-boss .fh-bar-fill { background: var(--fh-danger); }
+[data-game="fox-hunt"] .fh-task { width: 15em; }
+[data-game="fox-hunt"] .fh-task-head { display: flex; justify-content: space-between; gap: 0.6em; }
+[data-game="fox-hunt"] .fh-task-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+[data-game="fox-hunt"] .fh-task-count { font-variant-numeric: tabular-nums; color: var(--fh-coin); font-weight: 700; flex: none; }
+[data-game="fox-hunt"] .fh-task-text { display: block; font-size: 0.9em; opacity: 0.85; }
+[data-game="fox-hunt"] .fh-task-bar { display: block; width: 100%; height: 0.4em; margin-top: 0.3em; }
+[data-game="fox-hunt"] .fh-task-bar[hidden] { display: none; }
+[data-game="fox-hunt"] .fh-task-bar .fh-bar-fill { background: var(--fh-good); }
+[data-game="fox-hunt"] .fh-task--late .fh-task-bar .fh-bar-fill { background: var(--fh-danger); }
+
+[data-game="fox-hunt"] .fh-note { display: flex; align-items: center; gap: 0.6em; max-width: 20em; text-align: left; }
+[data-game="fox-hunt"] .fh-note-ic { display: inline-flex; width: 2.2em; height: 2.2em; flex: none; }
+[data-game="fox-hunt"] .fh-note-ic[hidden] { display: none; }
+[data-game="fox-hunt"] .fh-note-ic .fh-ic { width: 100%; height: 100%; }
+[data-game="fox-hunt"] .fh-note-text { display: flex; flex-direction: column; min-width: 0; }
+[data-game="fox-hunt"] .fh-note-title { font-size: 1.1em; }
+[data-game="fox-hunt"] .fh-note-sub { font-size: 0.9em; opacity: 0.85; }
+[data-game="fox-hunt"] .fh-note-sub[hidden] { display: none; }
+[data-game="fox-hunt"] .fh-note--ok .fh-note-title { color: var(--fh-good); filter: brightness(1.3); }
+[data-game="fox-hunt"] .fh-note--fail .fh-note-title { color: var(--fh-danger); filter: brightness(1.3); }
+[data-game="fox-hunt"] .fh-note.fh-r1 .fh-note-title { color: var(--fh-r1); filter: brightness(1.35); }
+[data-game="fox-hunt"] .fh-note.fh-r2 .fh-note-title { color: var(--fh-r2); filter: brightness(1.35); }
+[data-game="fox-hunt"] .fh-note.fh-r3 .fh-note-title { color: var(--fh-r3); filter: brightness(1.2); }
+
+/* пауза — единственная кнопка; касаться её надо с запасом, поэтому вокруг значка — невидимое поле */
+[data-game="fox-hunt"] .fh-pause-btn {
+  position: relative;
+  display: block;
+  width: 2.8em;
+  height: 2.8em;
+  padding: 0;
+  border: 0;
+  background: none;
+  pointer-events: auto;
+  cursor: pointer;
+  color: var(--fh-hud-ink);
+}
+[data-game="fox-hunt"] .fh-pause-face {
+  position: absolute;
+  inset: 0.2em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--fh-hud-bg);
+  transition: scale 0.12s ease, background-color 0.12s ease;
+}
+[data-game="fox-hunt"] .fh-pause-face svg { width: 60%; height: 60%; fill: currentColor; }
+[data-game="fox-hunt"] .fh-pause-btn.fh-down .fh-pause-face { scale: 0.88; background: rgba(18, 22, 20, 0.8); }
+[data-game="fox-hunt"] .fh-pause-btn:focus-visible { outline: 2px solid var(--tg-theme-button-color, #fff); outline-offset: 1px; border-radius: 50%; }
+
+/* мини-карта: клетки и двери ставит ui.js (em, translate) */
+[data-game="fox-hunt"] .fh-map { padding: 0.4em; border-radius: 0.6em; background: var(--fh-hud-bg); opacity: 0; scale: 0.96; visibility: hidden; transition: opacity 0.22s ease, scale 0.22s ease, visibility 0s linear 0.22s; }
+[data-game="fox-hunt"] .fh-map.fh-on { opacity: 0.9; scale: 1; visibility: visible; transition: opacity 0.22s ease, scale 0.22s ease, visibility 0s; }
+[data-game="fox-hunt"] .fh-map-in { position: relative; }
+[data-game="fox-hunt"] .fh-map-links, [data-game="fox-hunt"] .fh-map-rooms { position: absolute; inset: 0; }
+[data-game="fox-hunt"] .fh-room {
+  position: absolute;
+  left: 0;
+  top: 0;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--cw);
+  height: var(--ch);
+  border-radius: 0.2em;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  background: transparent;
+  color: #fff;
+  overflow: hidden;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+[data-game="fox-hunt"] .fh-room .fh-ic { width: 90%; height: 90%; }
+[data-game="fox-hunt"] .fh-room--near { border-style: dashed; border-color: rgba(255, 255, 255, 0.3); opacity: 0.7; }
+[data-game="fox-hunt"] .fh-room--seen { background: rgba(255, 255, 255, 0.28); }
+[data-game="fox-hunt"] .fh-room--done { background: color-mix(in srgb, var(--fh-good) 60%, transparent); border-color: color-mix(in srgb, var(--fh-good) 80%, #fff); }
+[data-game="fox-hunt"] .fh-room--cur { background: var(--fh-dash); border-color: #fff; }
+[data-game="fox-hunt"] .fh-room--boss { border-color: var(--fh-danger); filter: brightness(1.2); }
+[data-game="fox-hunt"] .fh-room--place { border-color: var(--fh-coin); }
+[data-game="fox-hunt"] .fh-link { position: absolute; left: 0; top: 0; background: rgba(255, 255, 255, 0.45); }
+[data-game="fox-hunt"] .fh-link--h { width: var(--gap); height: 1px; margin-top: -0.5px; }
+[data-game="fox-hunt"] .fh-link--v { width: 1px; height: var(--gap); margin-left: -0.5px; }
+
+/* подпись над предметом: место задаёт игра через transform на внешнем элементе, оживает внутренний */
+[data-game="fox-hunt"] .fh-prompt { position: absolute; left: 0; top: 0; width: 0; height: 0; will-change: transform; }
+[data-game="fox-hunt"] .fh-prompt-in {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  width: max-content;
+  max-width: 24em;
+  padding: 0.3em 0.8em;
+  border-radius: 1em;
+  background: var(--fh-hud-bg);
+  font-weight: 700;
+  white-space: nowrap;
+  translate: -50% 0.4em;
+  opacity: 0;
+  transition: opacity 0.16s ease, translate 0.16s ease;
+}
+[data-game="fox-hunt"] .fh-prompt.fh-on .fh-prompt-in { opacity: 1; translate: -50% 0; }
+[data-game="fox-hunt"] .fh-prompt-text { overflow: hidden; text-overflow: ellipsis; }
+[data-game="fox-hunt"] .fh-prompt-cost { display: inline-flex; align-items: center; gap: 0.25em; color: var(--fh-coin); filter: brightness(1.25); }
+[data-game="fox-hunt"] .fh-prompt-cost[hidden] { display: none; }
+[data-game="fox-hunt"] .fh-prompt--no .fh-prompt-in { background: color-mix(in srgb, var(--fh-danger) 45%, var(--fh-hud-bg)); }
+[data-game="fox-hunt"] .fh-prompt--sign .fh-prompt-in { font-weight: 400; background: rgba(18, 22, 20, 0.45); }
+
+/* подсказка первой локации: внизу посередине, между джойстиками */
+[data-game="fox-hunt"] .fh-hint {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--ls-b, 0px) + 10px);
+  width: max-content;
+  max-width: 55%;
+  padding: 0.4em 0.9em;
+  border-radius: 1em;
+  background: var(--fh-hud-bg);
+  text-align: center;
+  translate: -50% 0.4em;
+  opacity: 0;
+  transition: opacity 0.2s ease, translate 0.2s ease;
+}
+[data-game="fox-hunt"] .fh-hint.fh-on { opacity: 1; translate: -50% 0; }
+
+/* ---------- окна ---------- */
+/*
+ * Слой окон: затемнение и окно посередине. Окно свёрстано под рамку 454×284 и целиком растёт или сжимается
+ * свойством scale (--fh-zoom ставит ui.js): ни прокрутки, ни переносов, которых не ждали.
+ */
+[data-game="fox-hunt"] .fh-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--fh-dim);
+  font-size: 13px;
+  line-height: 1.25;
+  color: var(--tg-theme-text-color, #000);
+}
+[data-game="fox-hunt"] .fh-modal[hidden] { display: none; }
+[data-game="fox-hunt"] .fh-win {
+  position: relative;
+  box-sizing: border-box;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 454px;
+  height: 284px;
+  padding: 10px 12px 12px;
+  border-radius: 14px;
+  background: var(--tg-theme-bg-color, #fff);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35), 0 0 0 1px var(--fh-line);
+  scale: var(--fh-zoom, 1);
+  overflow: hidden;
+}
+[data-game="fox-hunt"] .fh-head { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 32px; flex: none; }
+[data-game="fox-hunt"] .fh-head--center { flex-direction: column; justify-content: center; gap: 2px; text-align: center; }
+[data-game="fox-hunt"] .fh-title { margin: 0; font-size: 20px; font-weight: 700; line-height: 1.1; }
+[data-game="fox-hunt"] .fh-sub { margin: 0; font-size: 12px; color: var(--tg-theme-hint-color, #707579); }
+[data-game="fox-hunt"] .fh-label { margin: 0; font-size: 11px; font-weight: 600; color: var(--tg-theme-hint-color, #707579); text-transform: uppercase; letter-spacing: 0.04em; }
+[data-game="fox-hunt"] .fh-none { margin: 0; font-size: 12px; color: var(--tg-theme-hint-color, #707579); }
+
+[data-game="fox-hunt"] .fh-btn {
+  box-sizing: border-box;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--fh-slot);
+  color: var(--tg-theme-text-color, #000);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: scale 0.1s ease, background-color 0.15s ease, opacity 0.15s ease;
+}
+[data-game="fox-hunt"] .fh-btn--main { background: var(--tg-theme-button-color, #3390ec); color: var(--tg-theme-button-text-color, #fff); }
+[data-game="fox-hunt"] .fh-btn--danger { background: var(--fh-danger); color: #fff; }
+[data-game="fox-hunt"] .fh-btn:disabled { opacity: 0.45; cursor: default; }
+[data-game="fox-hunt"] .fh-btn.fh-down, [data-game="fox-hunt"] .fh-x.fh-down, [data-game="fox-hunt"] .fh-slot.fh-down, [data-game="fox-hunt"] .fh-tab.fh-down, [data-game="fox-hunt"] .fh-gift-card.fh-down { scale: 0.95; }
+[data-game="fox-hunt"] .fh-btn:focus-visible, [data-game="fox-hunt"] .fh-x:focus-visible, [data-game="fox-hunt"] .fh-slot:focus-visible,
+[data-game="fox-hunt"] .fh-tab:focus-visible, [data-game="fox-hunt"] .fh-gift-card:focus-visible { outline: 2px solid var(--tg-theme-link-color, var(--tg-theme-button-color, #3390ec)); outline-offset: 2px; }
+
+/* закрыть и листать: круглые, 40×40 */
+[data-game="fox-hunt"] .fh-x {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  margin: -4px -6px -4px 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--tg-theme-hint-color, #707579);
+  cursor: pointer;
+  transition: scale 0.1s ease, background-color 0.15s ease;
+}
+[data-game="fox-hunt"] .fh-x svg { width: 22px; height: 22px; fill: none; }
+[data-game="fox-hunt"] .fh-x .fh-ln { fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+[data-game="fox-hunt"] .fh-x:disabled { opacity: 0.3; }
+[data-game="fox-hunt"] .fh-arrow { margin: 0; background: var(--fh-slot); }
+
+/* пауза */
+[data-game="fox-hunt"] .fh-pause { width: 360px; height: auto; max-height: 284px; gap: 10px; }
+[data-game="fox-hunt"] .fh-pause .fh-head { flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; }
+[data-game="fox-hunt"] .fh-pause-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 10px; }
+[data-game="fox-hunt"] .fh-col { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+[data-game="fox-hunt"] .fh-col .fh-btn { width: 100%; }
+[data-game="fox-hunt"] .fh-switch { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 0 10px 0 12px; font-size: 13px; text-align: left; }
+[data-game="fox-hunt"] .fh-switch-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+[data-game="fox-hunt"] .fh-switch-track { position: relative; flex: none; width: 34px; height: 20px; border-radius: 10px; background: var(--fh-line); transition: background-color 0.18s ease; }
+[data-game="fox-hunt"] .fh-switch-track::after {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  transition: translate 0.18s ease;
+}
+[data-game="fox-hunt"] .fh-switch[aria-checked="true"] .fh-switch-track { background: var(--tg-theme-button-color, #3390ec); }
+[data-game="fox-hunt"] .fh-switch[aria-checked="true"] .fh-switch-track::after { translate: 14px 0; }
+[data-game="fox-hunt"] .fh-foot { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+[data-game="fox-hunt"] .fh-foot .fh-btn { flex: 1 1 0; }
+[data-game="fox-hunt"] .fh-foot--ask .fh-btn { flex: 0 0 72px; }
+[data-game="fox-hunt"] .fh-ask { flex: 1 1 auto; font-weight: 600; }
+
+/* рюкзак: слева ячейки, справа карточка выбранного */
+[data-game="fox-hunt"] .fh-bag-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 206px minmax(0, 1fr); gap: 12px; }
+[data-game="fox-hunt"] .fh-bag-left { display: flex; flex-direction: column; gap: 3px; min-height: 0; }
+[data-game="fox-hunt"] .fh-bag-left .fh-label:not(:first-child) { margin-top: 5px; }
+[data-game="fox-hunt"] .fh-slots { display: grid; grid-template-columns: repeat(5, 38px); gap: 4px; }
+[data-game="fox-hunt"] .fh-slots--bag { grid-template-columns: repeat(4, 38px); }
+[data-game="fox-hunt"] .fh-slot {
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 9px;
+  background: var(--fh-slot);
+  color: var(--tg-theme-text-color, #000);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: scale 0.1s ease, border-color 0.15s ease, background-color 0.15s ease;
+}
+[data-game="fox-hunt"] .fh-slot .fh-ic { width: 28px; height: 28px; }
+[data-game="fox-hunt"] .fh-slot--empty { border-style: dashed; border-color: var(--fh-line); background: transparent; }
+[data-game="fox-hunt"] .fh-slot.fh-r0 { border-color: color-mix(in srgb, var(--fh-r0) 55%, transparent); }
+[data-game="fox-hunt"] .fh-slot.fh-r1 { border-color: color-mix(in srgb, var(--fh-r1) 80%, transparent); }
+[data-game="fox-hunt"] .fh-slot.fh-r2 { border-color: color-mix(in srgb, var(--fh-r2) 80%, transparent); }
+[data-game="fox-hunt"] .fh-slot.fh-r3 { border-color: var(--fh-r3); }
+[data-game="fox-hunt"] .fh-slot--sel { border-color: var(--tg-theme-button-color, #3390ec) !important; background: color-mix(in srgb, var(--tg-theme-button-color, #3390ec) 18%, var(--fh-slot)); }
+[data-game="fox-hunt"] .fh-slot--target { animation: fh-target 0.9s ease-in-out infinite; }
+@keyframes fh-target {
+  0%, 100% { scale: 1; }
+  50% { scale: 1.1; }
+}
+[data-game="fox-hunt"] .fh-slot--more { font-size: 13px; }
+[data-game="fox-hunt"] .fh-slot--more svg { width: 20px; height: 20px; }
+[data-game="fox-hunt"] .fh-slot--more .fh-ln { fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+[data-game="fox-hunt"] .fh-badge {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  min-width: 16px;
+  padding: 0 3px;
+  box-sizing: border-box;
+  border-radius: 8px;
+  background: var(--tg-theme-text-color, #000);
+  color: var(--tg-theme-bg-color, #fff);
+  font-size: 10px;
+  line-height: 15px;
+  text-align: center;
+}
+[data-game="fox-hunt"] .fh-slots--extra .fh-none { grid-column: 1 / -1; }
+
+[data-game="fox-hunt"] .fh-info { display: flex; flex-direction: column; gap: 6px; min-width: 0; min-height: 0; padding: 8px 10px; border-radius: 12px; background: var(--fh-panel); overflow: hidden; }
+[data-game="fox-hunt"] .fh-info-head { display: flex; align-items: center; gap: 8px; }
+[data-game="fox-hunt"] .fh-plate { flex: none; display: flex; align-items: center; justify-content: center; width: 48px; height: 48px; box-sizing: border-box; border-radius: 10px; border: 2px solid transparent; background: var(--fh-slot); }
+[data-game="fox-hunt"] .fh-plate .fh-ic { width: 40px; height: 40px; }
+[data-game="fox-hunt"] .fh-plate.fh-r0 { border-color: color-mix(in srgb, var(--fh-r0) 55%, transparent); }
+[data-game="fox-hunt"] .fh-plate.fh-r1 { border-color: var(--fh-r1); }
+[data-game="fox-hunt"] .fh-plate.fh-r2 { border-color: var(--fh-r2); }
+[data-game="fox-hunt"] .fh-plate.fh-r3 { border-color: var(--fh-r3); }
+[data-game="fox-hunt"] .fh-plate--empty { border-style: dashed; border-color: var(--fh-line); background: transparent; }
+[data-game="fox-hunt"] .fh-plate--gift { border-color: var(--fh-good); }
+[data-game="fox-hunt"] .fh-plate--pal { border-color: var(--fh-coin); }
+[data-game="fox-hunt"] .fh-info-names { display: flex; flex-direction: column; min-width: 0; }
+[data-game="fox-hunt"] .fh-info-name { font-size: 15px; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+[data-game="fox-hunt"] .fh-info-meta { font-size: 11px; color: var(--tg-theme-hint-color, #707579); }
+[data-game="fox-hunt"] .fh-info-lines { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 1px; font-size: 12px; font-weight: 600; }
+[data-game="fox-hunt"] .fh-info-lines li::before { content: "• "; color: var(--tg-theme-hint-color, #707579); }
+[data-game="fox-hunt"] .fh-info-text { margin: 0; font-size: 12px; color: var(--tg-theme-hint-color, #707579); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; }
+[data-game="fox-hunt"] .fh-info-ask { margin: 0; font-size: 12px; font-weight: 700; color: var(--tg-theme-button-color, #3390ec); }
+[data-game="fox-hunt"] .fh-info-actions { display: flex; gap: 6px; margin-top: auto; }
+[data-game="fox-hunt"] .fh-info-actions .fh-btn { flex: 1 1 0; min-width: 0; padding: 0 6px; font-size: 13px; }
+
+/* статистика */
+[data-game="fox-hunt"] .fh-stats .fh-head { padding-right: 0; }
+[data-game="fox-hunt"] .fh-tabs { display: flex; gap: 4px; min-width: 0; padding: 3px; border-radius: 11px; background: var(--fh-slot); }
+[data-game="fox-hunt"] .fh-tab { flex: none; min-height: 34px; padding: 0 10px; border: 0; border-radius: 9px; background: transparent; color: var(--tg-theme-hint-color, #707579); font-size: 13px; font-weight: 600; cursor: pointer; transition: scale 0.1s ease, background-color 0.15s ease, color 0.15s ease; }
+[data-game="fox-hunt"] .fh-tab[aria-selected="true"] { background: var(--tg-theme-button-color, #3390ec); color: var(--tg-theme-button-text-color, #fff); }
+[data-game="fox-hunt"] .fh-stats-body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+[data-game="fox-hunt"] .fh-tiles { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+[data-game="fox-hunt"] .fh-tiles--run { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+[data-game="fox-hunt"] .fh-tile { display: flex; flex-direction: column; justify-content: center; gap: 2px; min-width: 0; min-height: 56px; padding: 6px 8px; box-sizing: border-box; border-radius: 10px; background: var(--fh-panel); }
+[data-game="fox-hunt"] .fh-tiles--run .fh-tile { min-height: 82px; }
+[data-game="fox-hunt"] .fh-tile-num { font-size: 18px; line-height: 1.1; font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+[data-game="fox-hunt"] .fh-tiles--run .fh-tile-num { font-size: 22px; }
+[data-game="fox-hunt"] .fh-tile-label { font-size: 11px; color: var(--tg-theme-hint-color, #707579); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* блок «Очки в рейтинге» — общий для всех игр; здесь ужат под рамку без прокрутки */
+[data-game="fox-hunt"] .fh-stats-body .pts-info { margin: 0; padding: 6px 10px; font-size: 11px; line-height: 1.25; max-height: 84px; overflow: hidden; }
+[data-game="fox-hunt"] .fh-stats-body .pts-info p { margin: 2px 0 0; }
+[data-game="fox-hunt"] .fh-pager { display: flex; align-items: center; gap: 8px; flex: none; }
+[data-game="fox-hunt"] .fh-pager-text { flex: 1; min-width: 0; display: flex; flex-direction: column; text-align: center; }
+[data-game="fox-hunt"] .fh-pager-text b { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+[data-game="fox-hunt"] .fh-pager-text span { font-size: 11px; color: var(--tg-theme-hint-color, #707579); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+[data-game="fox-hunt"] .fh-seen { display: grid; grid-template-columns: repeat(10, 38px); justify-content: space-between; gap: 6px 4px; }
+[data-game="fox-hunt"] .fh-slot--unknown { background: transparent; border-color: var(--fh-line); border-style: dashed; }
+
+/* дар леса: три карточки, пока не выберешь — «Взять» не нажать */
+[data-game="fox-hunt"] .fh-gift { gap: 10px; }
+[data-game="fox-hunt"] .fh-gift-cards { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+[data-game="fox-hunt"] .fh-gift-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 0;
+  padding: 10px 8px;
+  box-sizing: border-box;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  background: var(--fh-panel);
+  color: var(--tg-theme-text-color, #000);
+  text-align: center;
+  overflow: hidden;
+  cursor: pointer;
+  transition: scale 0.12s ease, border-color 0.15s ease, background-color 0.15s ease;
+}
+[data-game="fox-hunt"] .fh-gift-card .fh-plate { width: 58px; height: 58px; }
+[data-game="fox-hunt"] .fh-gift-card .fh-plate .fh-ic { width: 48px; height: 48px; }
+[data-game="fox-hunt"] .fh-gift-name { font-size: 14px; line-height: 1.15; }
+[data-game="fox-hunt"] .fh-gift-desc { font-size: 12px; color: var(--tg-theme-hint-color, #707579); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; }
+[data-game="fox-hunt"] .fh-gift-card--sel { border-color: var(--tg-theme-button-color, #3390ec); background: color-mix(in srgb, var(--tg-theme-button-color, #3390ec) 14%, var(--fh-panel)); }
+[data-game="fox-hunt"] .fh-gift-take { flex: none; width: 100%; }
+
+@media (prefers-reduced-motion: reduce) {
+  [data-game="fox-hunt"] .fh-hud *, [data-game="fox-hunt"] .fh-hud *::before, [data-game="fox-hunt"] .fh-hud *::after,
+  [data-game="fox-hunt"] .fh-modal *, [data-game="fox-hunt"] .fh-modal *::before, [data-game="fox-hunt"] .fh-modal *::after { transition-duration: 0s !important; transition-delay: 0s !important; }
+  [data-game="fox-hunt"] .fh-slot--target { animation: none; }
+}
+/* ---------- конец: окна ---------- */
