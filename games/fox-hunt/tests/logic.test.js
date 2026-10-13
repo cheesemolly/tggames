@@ -176,7 +176,9 @@ test('карта локации: 300 зёрен — связна, двери п�
         assert.ok(dist[r.id] <= dist[boss.id], `зерно ${seed}: тупик ${r.id} дальше хозяина`);
       }
       assert.ok(Math.abs(r.gx) <= 4 && Math.abs(r.gy) <= 4, 'карта помещается на мини-карте 9×9');
-      assert.deepEqual([r.state, r.mod, r.data], ['new', null, {}]);
+      assert.deepEqual([r.state, r.data], ['new', {}]);
+      assert.ok(r.mod === null || Object.hasOwn(REG.MODS, r.mod), 'условие комнаты — из списка');
+      assert.ok(r.mod === null || (r.type === 'hunt' && floor >= 2), 'условия — только охотничьим комнатам со 2-й локации');
       assert.equal(r.seen, r.id === 0);
       const tpl = REG.ROOM_BY_ID[r.tpl];
       assert.equal(tpl.kind, tplKind(r.type));
@@ -236,11 +238,12 @@ test('шаблон комнаты подбирается по виду, мест
   const r = rngFrom(1);
   for (let k = 0; k < 50; k++) {
     assert.equal(REG.ROOM_BY_ID[pickTemplate('hunt', 'forest', 1, r)].kind, 'hunt');
-    assert.equal(REG.ROOM_BY_ID[pickTemplate('hunt', 'cave', 4, r)].kind, 'hunt', 'у пещер своих шаблонов пока нет — берутся лесные');
+    assert.equal(REG.ROOM_BY_ID[pickTemplate('hunt', 'cave', 4, r)].kind, 'hunt', 'у пещер свои шаблоны');
     assert.equal(pickTemplate('place', 'forest', 1, r, 'shop'), 'forest-shop');
     assert.equal(pickTemplate('place', 'forest', 1, r, 'treasure'), 'forest-nook');
-    assert.equal(pickTemplate('boss', 'taiga', 3, r), 'forest-arena');
-    assert.equal(pickTemplate('start', 'swamp', 2, r), 'forest-start');
+    assert.equal(pickTemplate('boss', 'taiga', 3, r), 'taiga-arena');
+    assert.equal(pickTemplate('start', 'swamp', 2, r), 'swamp-start');
+    assert.equal(pickTemplate('place', 'cave', 4, r, 'shop'), 'cave-shop');
   }
   assert.equal(pickTemplate('нет такого вида', 'forest', 1, r), null);
   const kinds = new Set(Array.from({ length: 200 }, () => pickTemplate('hunt', 'forest', 1, r)));
