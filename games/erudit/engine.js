@@ -8,8 +8,8 @@
 // клетки рядом с выложенной) — сначала левая часть из фишек с руки, потом вправо по дереву. Столбцы — те же
 // линии, только поле читается по столбцам.
 //
-// Уровни бота отличаются словарным запасом (частые слова или весь словарь) и тем, насколько строго он берёт
-// самый дорогой ход.
+// Уровни бота отличаются словарным запасом (простые слова, частые или весь словарь) и тем, насколько строго он
+// берёт самый дорогой ход.
 
 import { SIZE, CELLS, CENTER, RACK, BINGO, BLANK, LETTERS, PREMIUM, TILES, canSwap } from './logic.js';
 
@@ -20,6 +20,7 @@ const VALUES = [...LETTERS].map((ch) => TILES[ch][1]);
 const WORD = 1;                           // признаки конца слова в дереве
 const COMMON = 2;
 const AVOID = 4;
+const SIMPLE = 8;
 
 // Слова, которые бот сам не выкладывает (грубые, оскорбительные, мрачные). Игроку они не запрещены — они есть
 // в словаре.
@@ -31,6 +32,15 @@ const BOT_AVOID = ('жид жидовка жидомор кацап кацапк
   + 'сиська титька задница понос моча кал блевота блевотина рвота гонорея сифилис сифилитик сифилитичка триппер '
   + 'изнасилование насильник суицид самоубийство самоубийца холокост геноцид гестапо гестаповец эсэсовец нацизм '
   + 'нацист нацистка фашист фашистка расист расистка свастика концлагерь висельник виселица').split(' ');
+
+// Короткие слова, которые знает каждый: добавка к частым словам в запасе слабых уровней бота. Частые слова — банк
+// «Филворда», в нём нет двухбуквенных и мало трёхбуквенных, а без коротких слов на тесном поле слабый бот через
+// ход «не находит слова» и меняет фишки.
+export const SIMPLE_WORDS = ('ад ас еж ил ом па пи уж ум ус щи юг яд як до ре ми фа ля си '
+  + 'бас бич боб бор бук бум воз вой вол вяз гид гол дог док ель ерш жук зов зуд ива икс йод йог кит кок кол ком куб '
+  + 'лай лак лещ лис лов лог лом лот мак мел мим мох мул мыс ода оса паж пай пас пир пуд пух пыл рис риф ров рой рок '
+  + 'ром рык сев сет сом сор соя сыч тик тир туз тюк уха уют фен фея хан хит хна чад чан чек чиж чих чуб чум шах шик '
+  + 'шип щуп эму юла явь язь ярд арт кэш мод тег узы эго').split(' ');
 
 // ---------- словарь ----------
 
@@ -92,6 +102,7 @@ export function createDict(words, common = []) {
   };
   mark(common, COMMON);
   mark(BOT_AVOID, AVOID);
+  mark(SIMPLE_WORDS, SIMPLE);
 
   const has = (word, flag) => {
     const node = typeof word === 'string' && word.length > 1 ? find(word) : -1;
@@ -107,6 +118,7 @@ export function createDict(words, common = []) {
     child,
     isWord: (word) => has(word, WORD),
     isCommon: (word) => has(word, COMMON),
+    isSimple: (word) => has(word, COMMON | SIMPLE),
     isAvoided: (word) => has(word, AVOID),
   };
 }
@@ -118,7 +130,8 @@ const WORD_MULT = PREMIUM.map((p) => (p === '2' ? 2 : p === '3' ? 3 : 1));
 
 /**
  * Все ходы, которые можно сделать фишками rack на поле board:
- * [{ tiles: [{ i, ch, blank }], score, word, common }] — word — главное слово, common — оно из частых.
+ * [{ tiles: [{ i, ch, blank }], score, word, common, simple }] — word — главное слово, common — оно из частых,
+ * simple — из частых или из коротких общеизвестных (SIMPLE_WORDS).
  * polite — не предлагать слова из списка BOT_AVOID (ни главным, ни поперечным): так ходит бот.
  * Один и тот же ход дважды не встречается.
  */
@@ -307,7 +320,8 @@ export function generateMoves(dict, board, rack, { polite = false } = {}) {
       tiles.push({ i, ch: LETTERS[c], blank });
     }
     moves.push({
-      tiles, word, score: main * mult + cross + (placed === RACK ? BINGO : 0), common: (end[node] & COMMON) !== 0,
+      tiles, word, score: main * mult + cross + (placed === RACK ? BINGO : 0),
+      common: (end[node] & COMMON) !== 0, simple: (end[node] & (COMMON | SIMPLE)) !== 0,
     });
   }
 }
@@ -315,24 +329,26 @@ export function generateMoves(dict, board, rack, { polite = false } = {}) {
 // ---------- бот ----------
 
 /**
- * Уровни: vocab — словарный запас главного слова ('common' — частые слова, 'all' — весь словарь);
+ * Уровни: vocab — словарный запас главного слова: 'simple' — частые слова и короткие общеизвестные, 'common' — только
+ * частые, 'all' — весь словарь;
  * temp — «температура» выбора: 0 — всегда самый дорогой ход, больше — чаще ходы подешевле (вес хода —
  * exp((очки − лучшие) / temp), как Skill Level у шахматных движков), Infinity — любой ход наугад, меньше нуля —
  * наоборот, тянется к самым дешёвым (вес — exp((очки − худшие) / temp));
  * skip — как часто бот «не видит слова» и меняет фишки, хотя ход есть;
- * stuck — что делать, когда слов из своего запаса нет: 'swap' — менять фишки, 'any' — взять слово из всего словаря.
+ * stuck — что делать, когда слов из своего запаса нет: 'any' — взять слово из всего словаря, 'swap' — менять фишки,
+ * а когда менять нельзя (конец партии) — любое слово, 'wait' — менять фишки, а когда нельзя — пасовать.
  * Менять по своей воле бот перестаёт, когда уже два хода подряд прошли без слов: ещё два — и партия кончилась бы.
- * Подобрано партиями против сильнейшего уровня — очков за ход: ≈ 5 / 8 / 12 / 17 (лёгкий без слова в каждом третьем
- * ходу, средний — в каждом шестом).
+ * Подобрано партиями против сильнейшего уровня — очков за ход: ≈ 4 / 8 / 13 / 17 (лёгкий без слова в каждом
+ * четвёртом ходу, средний — в каждом шестом).
  */
 export const LEVELS = {
-  easy: { vocab: 'common', temp: -2, skip: 0.25, stuck: 'swap' },
-  medium: { vocab: 'common', temp: Infinity, stuck: 'swap' },
+  easy: { vocab: 'simple', temp: -2, skip: 0.15, stuck: 'wait' },
+  medium: { vocab: 'simple', temp: Infinity, stuck: 'swap' },
   hard: { vocab: 'all', temp: 6, stuck: 'any' },
   master: { vocab: 'all', temp: 0, stuck: 'any' },
 };
 
-// Прежние уровни (до беты 'erudit-bot') — очков за ход ≈ 8 / 11 / 15 / 17: лёгкий играл как нынешний средний
+// Прежние уровни (до беты 'erudit-bot') — очков за ход ≈ 8 / 11 / 15 / 17: лёгкий набирал как нынешний средний
 // и обыгрывал новичков.
 export const LEVELS_V1 = {
   easy: { vocab: 'common', temp: Infinity, stuck: 'swap' },
@@ -360,9 +376,14 @@ export function botMove(dict, game, level = game.level, rng = Math.random, level
     return { type: 'swap', picks: plain.slice(0, 3 + Math.floor(rng() * 4)) };
   }
   const all = generateMoves(dict, game.board, rack, { polite: true });
-  let pool = cfg.vocab === 'common' ? all.filter((m) => m.common) : all;
-  // слов из своего запаса нет: слабый бот меняет фишки, пока это можно и партия от этого не кончится; иначе — любое слово
-  if (!pool.length && !(cfg.stuck === 'swap' && canSwap(game) && game.idle < 2)) pool = all;
+  let pool = cfg.vocab === 'all' ? all : all.filter(cfg.vocab === 'simple' ? (m) => m.simple : (m) => m.common);
+  if (!pool.length && cfg.stuck !== 'any') {
+    // слов из своего запаса нет: слабый бот меняет фишки, пока это можно и партия от этого не кончится
+    if (canSwap(game) && game.idle < 2 && plain.length) return { type: 'swap', picks: plain };
+    // менять уже нельзя (конец партии): лёгкий пасует, а не достаёт редкое слово
+    if (cfg.stuck === 'wait' && !canSwap(game)) return { type: 'pass' };
+  }
+  if (!pool.length) pool = all;
   if (!pool.length) return canSwap(game) && plain.length ? { type: 'swap', picks: plain } : { type: 'pass' };
   const cheap = cfg.temp < 0;
   // последние фишки: звёздочку беречь уже не для чего; слабый (тянется к дешёвым) её не бережёт вовсе

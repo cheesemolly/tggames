@@ -1035,11 +1035,13 @@ function debugHooks() {
     play: onPlay,
     /** Доиграть партию ходами бота за обе стороны до конца мешка — проверить финал. */
     skipToEnd(leave = 10) {
-      while (game.bag.length > leave && !ending(game)) {
+      let stalled = 0;                                     // оба пасуют — мешок дальше не убудет
+      while (game.bag.length > leave && !ending(game) && stalled < 2) {
         const m = botMove(dict, game, 'master');
         if (m.type === 'play') play(game, m.tiles, checkMove(game.board, m.tiles, dict.isWord));
         else if (m.type === 'swap') swap(game, m.picks);
         else pass(game);
+        stalled = m.type === 'pass' ? stalled + 1 : 0;
         game.idle = 0;
       }
       if (game.turn === 1) pass(game);
