@@ -889,6 +889,13 @@ function debugHooks() {
     get settings() { return settings; },
     get scale() { return renderer.scale; },
     get quality() { return renderer.quality; },
+    /** Рендер целиком (кадр руками, toScreen, замеры темноты). */
+    get renderer() { return renderer; },
+    /** «Графика» 0/1/2 только для рендера (настройки не сохраняются); вернёт, что стоит. */
+    graphics(n) {
+      renderer.setGraphics(readGraphics(n));
+      return renderer.graphics;
+    },
     /** Ввод, с которым считается игра: джойстики, мышь и клавиши — или автомат. */
     get input() { return view.input; },
     /** Играет автомат (true) или игрок (false). */

@@ -1,4 +1,5 @@
-// Заготовки для рендера «Лисьей охоты», которые нельзя собрать в кадре: надписи (fillText) и виньетка (градиент).
+// Заготовки для рендера «Лисьей охоты», которые нельзя собрать в кадре: надписи (fillText), виньетка, пелена и клоки
+// тумана, пятно света «Ночи» (градиенты).
 // Всё здесь делается один раз и кладётся в кэш; render.js только ставит готовое через drawImage.
 
 const TEXTS = new Map();
@@ -107,7 +108,31 @@ export function bakePuff(color, makeCanvas = domCanvas) {
   return c;
 }
 
+let LIGHT = null;
+
+/**
+ * Пятно света для «Ночи»: белый круг, сплошной до середины, к краю мягко сходит на нет. render.js вырезает им
+ * темноту (destination-out на слое темноты) — цвет не важен, важна только прозрачность. Одно на всё.
+ */
+export function bakeLight(makeCanvas = domCanvas) {
+  if (LIGHT) return LIGHT;
+  const n = 128;
+  LIGHT = makeCanvas(n, n);
+  const g = LIGHT.getContext('2d');
+  const gr = g.createRadialGradient(n / 2, n / 2, 0, n / 2, n / 2, n / 2);
+  gr.addColorStop(0, 'rgba(255,255,255,1)');
+  gr.addColorStop(0.42, 'rgba(255,255,255,1)');
+  gr.addColorStop(0.6, 'rgba(255,255,255,0.8)');
+  gr.addColorStop(0.76, 'rgba(255,255,255,0.45)');
+  gr.addColorStop(0.9, 'rgba(255,255,255,0.14)');
+  gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr;
+  g.fillRect(0, 0, n, n);
+  return LIGHT;
+}
+
 export function clearBakes() {
+  LIGHT = null;
   TEXTS.clear();
   FOGS.clear();
 }

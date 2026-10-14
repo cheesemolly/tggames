@@ -3,25 +3,27 @@
 //
 // Слои, сзади вперёд: фон комнаты (запечён один раз) → метки на земле (норы, зоны, предупреждения, свечение
 // подбираемого) → тени → всё, что стоит на земле, по глубине (y) → то, что летит → то, что над головой (кроны) →
-// воздух (пыльца, листья, снег, виньетка) → надписи и стрелка рывка.
+// атмосфера комнаты (туман, ночь — по room.mod) → воздух (пыльца, листья, снег, виньетка) → надписи и стрелка рывка.
 // В кадре — только drawImage и простые заливки; надписи и градиенты готовит render-bake.js.
 
 import './art-all.js';
 import { createArt, hasSprite, spriteKeys, spriteDef } from './art.js';
 import { paintRoom, propsOf, ROOM_MARGIN } from './art-tiles.js';
-import { bakeText, bakeVignette, bakeFog, bakePuff } from './render-bake.js';
-import { T } from './core.js';
+import { bakeText, bakeVignette, bakeFog, bakePuff, bakeLight } from './render-bake.js';
+import { T, TILE, own } from './core.js';
 import { DASH } from './balance.js';
 
 export const QUALITY = [2, 1.5, 1.15];
 // «Графика» в настройках: 0 низкая, 1 средняя (по умолчанию), 2 высокая. step — ступень QUALITY, с которой начинаем
 // (она же задаёт потолок частиц PART_CAP и число пылинок воздуха), vig — рисовать ли виньетку, auto — может ли
 // игра сама опускать ступень, когда кадры не успевают (lowerQuality). Выбор игрока автоснижение не меняет и не поднимает.
-// puffs — сколько клоков дымки плывёт по туману (0 — туман ровный, без дрейфа).
+// puffs — сколько клоков дымки плывёт по туману (0 — туман ровный, без дрейфа). dark — во сколько раз слой темноты
+// «Ночи» меньше холста по каждой стороне (темнота мягкая — грубость слоя не видна, а смешивать его дешевле); glow —
+// цветные отсветы у светящихся вещей места; flies — сколько светлячков летает ночью.
 export const GRAPHICS = [
-  { step: 2, vig: false, auto: true, puffs: 0 },
-  { step: 0, vig: true, auto: true, puffs: 5 },
-  { step: 0, vig: true, auto: false, puffs: 9 },
+  { step: 2, vig: false, auto: true, puffs: 0, dark: 4, glow: false, flies: 0 },
+  { step: 0, vig: true, auto: true, puffs: 5, dark: 3, glow: true, flies: 4 },
+  { step: 0, vig: true, auto: false, puffs: 9, dark: 2, glow: true, flies: 7 },
 ];
 export const GRAPHICS_DEFAULT = 1;
 /** Сохранённое положение «Графики»: нет поля или что-то не то — средняя. */
@@ -59,6 +61,25 @@ const FOG_MAX = 0.66;
 const FOG_PUFF = 0.24;             // густота клока дымки вдали от лисы
 export const FOG_TINT = { forest: '#dfe8d2', swamp: '#c3d8c6', taiga: '#e2ebf5', cave: '#6f6a98', autumn: '#e8d0aa' };
 const FOG_PUFFS = 9;
+// ночь («Ночь», room.mod === 'night'): комнату накрывает темнота цвета места (не чёрная) густотой NIGHT_MAX — за
+// краем света видны очертания. Вокруг лисы пятно света NIGHT_R (сплошное до середины, край мягкий), у светящихся
+// вещей места (GLOWS; горячие трещины пещер) и светлячков — свои пятна. Каждый зверь, спутник, вещь и подбираемое
+// подсвечены слабым пятном силы NIGHT_SEEN: темнота над ним в 2,5 раза реже, видно и где он, и кто это — сам рисунок, а не
+// значок. Красные зоны, выстрелы и знаки появления ложатся поверх темноты (VEILS).
+const NIGHT_MAX = 0.8;
+const NIGHT_R = 125;
+const NIGHT_SEEN = 0.6;
+export const NIGHT_TINT = { forest: '#0b1834', swamp: '#0a1b2b', taiga: '#0f1d3d', cave: '#0d0a1f', autumn: '#151233' };
+// что светится: ключ картинки → [радиус, сила, высота середины над основанием, цвет, цвет у вариантов 1+]
+const GLOWS = {
+  'prop.cave.crystal': [72, 0.85, 26, '#7fe0ff', '#c79cff'],
+  'prop.cave.shrooms': [46, 0.7, 8, '#8dffb0', '#c8a8ff'],
+};
+const HOT_GLOW = '#ff8a3c';                  // горячая трещина пещеры: под ногами больно — ночью видна
+const NIGHT_LIGHTS = 48;                     // светящихся вещей места в комнате — не больше
+const DARK_TILE = 32;                        // плитка слоя темноты, точек слоя (makeDark, layDark)
+const FLY_GLOW = '#eaff8c';
+const FLY_BIOMES = new Set(['forest', 'swamp', 'autumn']);   // зимой и в пещере светлячков нет
 const PREY = new Set(['rabbit', 'hare', 'gold', 'fat']);
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -118,6 +139,17 @@ export function createRenderer({ canvas, probe }) {
   for (let i = 0; i < FOG_PUFFS; i++) {
     puffs.push({ x: (i * 0.618) % 1, y: (i * 0.382 + 0.13) % 1, sx: 0.006 + (i % 3) * 0.004, ph: i * 1.7, s: 0.8 + (i % 4) * 0.25 });
   }
+  // ночь: слой темноты { c, g, w, h, d } — меньше холста в d раз, заготавливается в setScale; светящиеся вещи комнаты
+  // (takeLights, при входе); светлячки — места в комнате и где они сейчас (X, Y, a — пишутся в кадре, не создаются)
+  let dark = null;
+  let nightT = 0;             // часы мерцания и полёта светлячков: при «уменьшить движение» стоят
+  let cuts = 0;               // сколько пятен вырезано и сколько отсветов нарисовано в прошлом кадре (для проверки)
+  let glows = 0;
+  let spot = null;
+  let flyImg = null;
+  const lights = [];
+  const flies = [];
+  for (let i = 0; i < GRAPHICS[2].flies; i++) flies.push({ x: 0, y: 0, ph: i * 2.3, sp: 0.6 + (i % 3) * 0.2, X: 0, Y: 0, a: 0 });
 
   const partCap = () => PART_CAP[qi] ?? 140;
 
@@ -209,7 +241,29 @@ export function createRenderer({ canvas, probe }) {
     art = createArt(k);
     warmed = null;
     vig = gfx.vig ? bakeVignette(0.5) : null;
+    makeDark();
     if (room) bake();
+  }
+
+  /**
+   * Слой темноты «Ночи» под нынешний холст (один холст на всё время, меняется только размер). Слой режется на плитки
+   * DARK_TILE точек: lit — до каких плиток в этом кадре дотянулся свет (остальные на кадре — сплошной заливкой).
+   */
+  function makeDark() {
+    if (!dark) {
+      const c = document.createElement('canvas');
+      dark = { c, g: c.getContext('2d'), w: 1, h: 1, d: 1, cols: 0, rows: 0, lit: null };
+    }
+    const d = gfx.dark;
+    const cols = Math.max(1, Math.ceil(canvas.width / d / DARK_TILE));
+    const rows = Math.max(1, Math.ceil(canvas.height / d / DARK_TILE));
+    dark.d = d;
+    dark.w = dark.c.width = cols * DARK_TILE;
+    dark.h = dark.c.height = rows * DARK_TILE;
+    if (!dark.lit || dark.lit.length < cols * rows) dark.lit = new Uint8Array(cols * rows);
+    dark.cols = cols;
+    dark.rows = rows;
+    spot = bakeLight();
   }
 
   function resize(w, h) {
@@ -273,10 +327,37 @@ export function createRenderer({ canvas, probe }) {
     over = all.filter((p) => p.over).sort((a, b) => a.y - b.y);
   }
 
+  /** Что светится в комнате сама по себе (для «Ночи»): кристаллы и грибы пещер, горячие трещины. */
+  function takeLights() {
+    lights.length = 0;
+    const add = (x, y, gl, v) => {
+      if (lights.length >= NIGHT_LIGHTS) return;
+      const c = v > 0 && gl[4] ? gl[4] : gl[3];
+      lights.push({ x, y: y - gl[2], r: gl[0], a: gl[1], img: bakePuff(c), ph: (x * 0.013 + y * 0.029) % TAU });
+    };
+    for (let i = 0; i < props.length; i++) {
+      const p = props[i];
+      if (GLOWS[p.key]) add(p.x, p.y, GLOWS[p.key], p.v ?? 0);
+    }
+    if (room.special === 'hot' && room.tiles) {
+      const hot = [30, 0.5, 0, HOT_GLOW];
+      for (let i = 0; i < room.tiles.length; i++) {
+        if (room.tiles[i] === TILE.SPECIAL) add(((i % room.w) + 0.5) * T, (Math.floor(i / room.w) + 0.5) * T, hot, 0);
+      }
+    }
+    // светлячки — где попало по комнате, подальше от стен
+    for (let i = 0; i < flies.length; i++) {
+      flies[i].x = (1.5 + Math.random() * (room.w - 3)) * T;
+      flies[i].y = (1.5 + Math.random() * (room.h - 3)) * T;
+    }
+    flyImg = bakePuff(FLY_GLOW);
+  }
+
   function enterRoom(G) {
     room = G.room;
     bake();
     takeProps();
+    takeLights();
     parts.length = 0;
     marks.length = 0;
     rings.length = 0;
@@ -750,19 +831,20 @@ export function createRenderer({ canvas, probe }) {
 
   function drawZones(G) {
     const zs = room.zones;
+    const zb = veil?.zoneA ?? 1;      // ночью под зоной тёмная земля — заливка гуще, чтобы зона не темнела
     for (let i = 0; i < zs.length; i++) {
       const z = zs[i];
       if (z.wait > 0) continue;
       const look = ZONE_LOOK[z.look] ?? ZONE_LOOK.red;
       const foe = z.from === 1;
       const prog = z.phase === 0 ? clamp(z.t / z.total, 0, 1) : 1;
-      const baseA = foe ? 0.2 : 0.12;
-      const hotA = z.phase === 1 ? 0.5 + 0.12 * Math.sin(t * 20) : 0.15 + 0.25 * prog;
+      const baseA = (foe ? 0.2 : 0.12) * zb;
+      const hotA = (z.phase === 1 ? 0.5 + 0.12 * Math.sin(t * 20) : 0.15 + 0.25 * prog) * zb;
       const fill = (a) => look[0].replace('A', clamp(a, 0, 1).toFixed(2));
       ctx.setTransform(k, 0, 0, k, -camPx, -camPy);
       ctx.lineWidth = 1.4;
       ctx.strokeStyle = look[1];
-      ctx.globalAlpha = foe ? 0.9 : 0.6;
+      ctx.globalAlpha = Math.min(1, (foe ? 0.9 : 0.6) * zb);
       if (z.sh === 0) {
         ctx.fillStyle = fill(baseA);
         ctx.beginPath();
@@ -841,14 +923,8 @@ export function createRenderer({ canvas, probe }) {
       ctx.ellipse(b.x, b.y, 11, 6.5, 0, 0, TAU);
       ctx.fill();
     }
-    // предупреждения о появлении
-    for (let i = 0; i < marks.length; i++) {
-      const m = marks[i];
-      const f = m.t / m.life;
-      const s = 0.8 + 0.25 * Math.sin(m.t * 18);
-      art.putX(ctx, 'fx.warn', px(m.x), py(m.y), 0, s, s, 1 - f * 0.4);
-    }
-    if (room.mod !== 'fog') drawZones(G);   // в тумане зоны рисуются поверх пелены (drawFog)
+    if (!veil?.marks) drawMarks();
+    if (!veil) drawZones(G);     // при пелене атмосферы зоны рисуются поверх неё (drawAbove)
     // свечение подбираемого
     for (let i = 0; i < room.picks.length; i++) {
       const p = room.picks[i];
@@ -866,9 +942,43 @@ export function createRenderer({ canvas, probe }) {
     }
   }
 
+  /** Знаки появления зверей (пульсирующий «!» на земле). */
+  function drawMarks() {
+    for (let i = 0; i < marks.length; i++) {
+      const m = marks[i];
+      const f = m.t / m.life;
+      const s = 0.8 + 0.25 * Math.sin(m.t * 18);
+      art.putX(ctx, 'fx.warn', px(m.x), py(m.y), 0, s, s, 1 - f * 0.4);
+    }
+  }
+
+  // ---------- атмосфера комнаты (room.mod) ----------
+
+  // Пелена условия комнаты ложится поверх всего, что стоит на земле (шаг 7 кадра). Чего она прятать не должна, рисуется
+  // после неё (drawAbove): красные зоны и выстрелы, ночью ещё и знаки появления (marks); воздух (листья, снег) ночью
+  // уходит под темноту (airUnder); zoneA — во сколько раз гуще заливка зон. Новое условие — строка здесь и своя draw
+  // рядом с drawFog / drawNight.
+  const VEILS = {
+    fog: { draw: drawFog, marks: false, airUnder: false, zoneA: 1 },
+    night: { draw: drawNight, marks: true, airUnder: true, zoneA: 1.5 },
+  };
+  let veil = null;            // пелена этого кадра или null
+  let ia = 1;                 // доля между шагами расчёта для lerp (как alpha кадра)
+  const lerp = (a, b) => a + (b - a) * ia;
+
+  /** Поверх пелены: то, что игрок должен видеть всегда. */
+  function drawAbove(G, v) {
+    if (v.marks) drawMarks();
+    drawZones(G);
+    for (let i = 0; i < room.shots.length; i++) {
+      const s = room.shots[i];
+      if (s.on && visible(s.x, s.y, 40)) drawShot(s);
+    }
+  }
+
   /**
-   * Туман: пелена с чистым кругом вокруг лисы, поверх — клоки дымки (дальше от лисы гуще), потом поверх пелены снова
-   * красные зоны и выстрелы — их туман не прячет. Лиса стоит в чистом круге, ей отдельно ничего не нужно.
+   * Туман: пелена с чистым кругом вокруг лисы, поверх — клоки дымки (дальше от лисы гуще); красные зоны и выстрелы
+   * туман не прячет (drawAbove). Лиса стоит в чистом круге, ей отдельно ничего не нужно.
    */
   function drawFog(G, alpha) {
     const P = G.player;
@@ -910,11 +1020,138 @@ export function createRenderer({ canvas, probe }) {
       }
     }
     ctx.globalAlpha = 1;
-    drawZones(G);
-    for (let i = 0; i < room.shots.length; i++) {
-      const s = room.shots[i];
-      if (s.on && visible(s.x, s.y, 40)) drawShot(s);
+  }
+
+  /** Вырезать в слое темноты пятно света: (x, y) — середина в единицах мира, r — радиус, a — сколько темноты снять. */
+  function cut(g, x, y, r, a) {
+    if (a <= 0.01 || !visible(x, y, r)) return;
+    const R = r * k;
+    const X = px(x);
+    const Y = py(y);
+    g.globalAlpha = a > 1 ? 1 : a;
+    g.drawImage(spot, X - R, Y - R, R * 2, R * 2);
+    cuts += 1;
+    // отметить плитки, которых коснулось пятно (за его квадратом свет уже ноль)
+    const D = dark;
+    const s = DARK_TILE * D.d;
+    const i0 = clamp(Math.floor((X - R) / s), 0, D.cols - 1);
+    const i1 = clamp(Math.floor((X + R) / s), 0, D.cols - 1);
+    const j0 = clamp(Math.floor((Y - R) / s), 0, D.rows - 1);
+    const j1 = clamp(Math.floor((Y + R) / s), 0, D.rows - 1);
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) D.lit[j * D.cols + i] = 1;
+  }
+
+  /**
+   * Положить темноту на кадр: по рядам плиток — куски, где есть свет, из слоя (растянуты в D.d раз), а сплошь тёмные —
+   * одной заливкой тем же цветом и той же густотой (выходит то же самое, но заливка в разы дешевле растянутой картинки).
+   * Соседние одинаковые плитки идут одним вызовом.
+   */
+  function layDark(D, tint) {
+    const S = DARK_TILE;
+    const s = S * D.d;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = NIGHT_MAX;
+    ctx.fillStyle = tint;
+    for (let j = 0; j < D.rows; j++) {
+      const row = j * D.cols;
+      let i = 0;
+      while (i < D.cols) {
+        const on = D.lit[row + i];
+        let e = i + 1;
+        while (e < D.cols && D.lit[row + e] === on) e += 1;
+        if (on) ctx.drawImage(D.c, i * S, j * S, (e - i) * S, S, i * s, j * s, (e - i) * s, s);
+        else ctx.fillRect(i * s, j * s, (e - i) * s, s);
+        i = e;
+      }
     }
+  }
+
+  /**
+   * Ночь: слой темноты (меньше холста в gfx.dark раз) заливается цветом места, в нём вырезаются пятна света
+   * (bakeLight, destination-out), и он ложится на кадр (layDark). Поверх — цветные отсветы светящихся вещей и
+   * точки светлячков, если позволяет «Графика». Свет у лисы чуть дышит, вещи места мерцают — при calm всё ровное.
+   */
+  function drawNight(G, alpha) {
+    if (!dark) makeDark();
+    const D = dark;
+    const g = D.g;
+    const P = G.player;
+    const live = !calmNow;
+    ia = alpha;
+    const tint = NIGHT_TINT[room.biome] ?? NIGHT_TINT.forest;
+    cuts = 0;
+    glows = 0;
+    D.lit.fill(0);
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.globalCompositeOperation = 'source-over';
+    g.globalAlpha = 1;
+    g.fillStyle = tint;
+    g.fillRect(0, 0, D.w, D.h);
+    g.globalCompositeOperation = 'destination-out';
+    g.setTransform(1 / D.d, 0, 0, 1 / D.d, 0, 0);    // дальше — в точках кадра
+    const breath = live ? 1 + 0.035 * Math.sin(nightT * 7.3) + 0.02 * Math.sin(nightT * 12.9 + 1) : 1;
+    cut(g, lerp(P.px, P.x), lerp(P.py, P.y) - 8, NIGHT_R * breath, 1);
+    for (let i = 0; i < lights.length; i++) {
+      const s = lights[i];
+      cut(g, s.x, s.y, s.r * (live ? 1 + 0.07 * Math.sin(nightT * 1.7 + s.ph) : 1), s.a);
+    }
+    // звери, спутники, вещи, подбираемое, напасти: слабое пятно на каждом (светлячок-спутник светит сам)
+    const mobs = room.mobs;
+    for (let i = 0; i < mobs.length; i++) {
+      const m = mobs[i];
+      if (m.dead || (m.hide && !boss(m))) continue;
+      const r = num(m.r, 10);
+      cut(g, lerp(m.px, m.x), lerp(m.py, m.y) - num(m.z) - r * 0.9, Math.max(18, r * 2.4), NIGHT_SEEN * look(m, calmNow).a);
+    }
+    for (let i = 0; i < room.pals.length; i++) {
+      const n = room.pals[i];
+      const r = num(n.r, 8);
+      if (n.id === 'firefly') cut(g, lerp(n.px, n.x), lerp(n.py, n.y) - num(n.z), 70, 0.9);
+      else cut(g, lerp(n.px, n.x), lerp(n.py, n.y) - num(n.z) - r * 0.9, Math.max(18, r * 2.4), NIGHT_SEEN);
+    }
+    for (let i = 0; i < room.things.length; i++) {
+      const th = room.things[i];
+      if (!(th.broken && th.kind === 'target')) cut(g, th.x, th.y - num(th.z) - th.r, Math.max(18, th.r * 2.2), NIGHT_SEEN);
+    }
+    for (let i = 0; i < room.picks.length; i++) {
+      const p = room.picks[i];
+      if (p.on) cut(g, p.x, p.y - 6, 18, NIGHT_SEEN);
+    }
+    for (let i = 0; i < room.actors.length; i++) cut(g, room.actors[i].x, room.actors[i].y - 20, 48, NIGHT_SEEN);
+    const nf = FLY_BIOMES.has(room.biome) ? Math.min(gfx.flies, flies.length) : 0;
+    for (let i = 0; i < nf; i++) {
+      const f = flies[i];
+      f.X = f.x + Math.sin(nightT * 0.5 * f.sp + f.ph) * 30;
+      f.Y = f.y + Math.sin(nightT * 0.37 * f.sp + f.ph * 1.7) * 20 - 14;
+      f.a = live ? 0.55 + 0.45 * Math.sin(nightT * 2.1 * f.sp + f.ph) : 1;
+      cut(g, f.X, f.Y, 34, 0.45 * f.a);
+    }
+    g.globalCompositeOperation = 'source-over';
+    g.globalAlpha = 1;
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    layDark(D, tint);
+    // цветные отсветы и светлячки — поверх темноты
+    if (gfx.glow) {
+      for (let i = 0; i < lights.length; i++) {
+        const s = lights[i];
+        if (!visible(s.x, s.y, s.r)) continue;
+        const R = s.r * k * (live ? 1 + 0.07 * Math.sin(nightT * 1.7 + s.ph) : 1);
+        ctx.globalAlpha = 0.22 * s.a;
+        ctx.drawImage(s.img, px(s.x) - R, py(s.y) - R * 0.8, R * 2, R * 1.6);
+        glows += 1;
+      }
+    }
+    for (let i = 0; i < nf; i++) {
+      const f = flies[i];
+      if (!visible(f.X, f.Y, 20)) continue;
+      const s = 3.2 * k;
+      ctx.globalAlpha = 0.9 * f.a;
+      ctx.drawImage(flyImg, px(f.X) - s, py(f.Y) - s, s * 2, s * 2);
+      ctx.globalAlpha = 0.16 * f.a;
+      ctx.drawImage(flyImg, px(f.X) - s * 5, py(f.Y) - s * 5, s * 10, s * 10);
+      glows += 1;
+    }
+    ctx.globalAlpha = 1;
   }
 
   function deepFill() {
@@ -1098,7 +1335,10 @@ export function createRenderer({ canvas, probe }) {
     const calm = Boolean(opts.calm);
     calmNow = calm;
     const alpha = clamp(num(opts.alpha, 1), 0, 1);
-    if (!calm) fogT += dt;
+    if (!calm) {
+      fogT += dt;
+      nightT += dt;
+    }
     if (!G || !G.room) {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.fillStyle = '#1f3a22';
@@ -1106,6 +1346,7 @@ export function createRenderer({ canvas, probe }) {
       return;
     }
     if (room !== G.room) enterRoom(G);
+    veil = own(VEILS, room.mod) ? VEILS[room.mod] : null;
     stepFx(dt, calm);
     const P = G.player;
 
@@ -1271,9 +1512,13 @@ export function createRenderer({ canvas, probe }) {
     // 6. над головой
     for (let i = 0; i < over.length; i++) putProp(over[i]);
 
-    // 7. туман, воздух, виньетка
-    if (room.mod === 'fog') drawFog(G, alpha);
-    if (!calm) drawAir();
+    // 7. атмосфера комнаты (туман, ночь) и то, что поверх неё; воздух, виньетка
+    if (veil?.airUnder && !calm) drawAir();
+    if (veil) {
+      veil.draw(G, alpha);
+      drawAbove(G, veil);
+    }
+    if (!veil?.airUnder && !calm) drawAir();
     if (vig) {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.drawImage(vig, 0, 0, canvas.width, canvas.height);
@@ -1318,6 +1563,8 @@ export function createRenderer({ canvas, probe }) {
     art.clear();
     bg = null;
     vig = null;
+    dark = null;
+    lights.length = 0;
   }
 
   void probe;
@@ -1329,6 +1576,17 @@ export function createRenderer({ canvas, probe }) {
     get quality() { return qi; },
     /** Часы дрейфа тумана (для проверки): при calm стоят. */
     get fogTime() { return fogT; },
+    /** Ночь (для проверки): размер слоя темноты, во сколько раз он меньше холста, плитки (сколько из них со светом),
+     * сколько пятен вырезано и отсветов нарисовано в прошлом кадре, светящихся вещей в комнате, часы мерцания. */
+    get nightInfo() {
+      if (!dark) return null;
+      let lit = 0;
+      for (let i = 0; i < dark.cols * dark.rows; i++) lit += dark.lit[i];
+      return {
+        w: dark.w, h: dark.h, d: dark.d, tile: DARK_TILE * dark.d, cols: dark.cols, rows: dark.rows, lit,
+        cuts, glows, lights: lights.length, t: nightT, layer: dark.c,
+      };
+    },
     get graphics() { return GRAPHICS.indexOf(gfx); },
     get scale() { return scale; },
     get view() { return view; },
