@@ -1329,16 +1329,16 @@ test('game.css: у каждого класса, который ставит иг
   assert.ok(!rules.replaceAll(radius, '').includes('--fh-stick-r'), 'запасной радиус в стилях разошёлся с STICK.radius');
 });
 
-test('game.css: цвета джойстиков — переменные с запасом из темы, без своих цветов', () => {
+test('game.css: цвета джойстиков — переменные с запасом из палитры игры, тема Telegram не участвует', () => {
   for (const name of ['--fh-stick', '--fh-stick-knob', '--fh-stick-aim']) {
     const uses = [...rules.matchAll(new RegExp(`var\\(${name}(?![\\w-])([^;]*)`, 'g'))];
     assert.ok(uses.length >= 1, name);
-    for (const m of uses) assert.match(m[1], /^, [^;]*var\(--tg-theme-[a-z-]+\)/, `${name}: запас из цветов темы`);
+    for (const m of uses) assert.match(m[1], /^, (?:var\(--fh-[a-z-]+\)|rgba\(255, 255, 255, 0\.\d+\))\)/, `${name}: запас из палитры игры`);
   }
   assert.doesNotMatch(rules, /#[0-9a-f]{3,8}\b/i, 'конкретный цвет');
-  // кроме переменных — только чёрный и белый с прозрачностью: кайма, тени и «разбавить белым» (кольцо светлое в любой теме)
+  // кроме переменных — только чёрный и белый с прозрачностью: кайма, тени и светлое кольцо
   for (const m of rules.matchAll(/rgba?\(([^)]*)\)/g)) assert.match(m[1], /^(?:0, 0, 0|255, 255, 255), 0\.\d+$/, m[0]);
-  assert.doesNotMatch(rules, /tg-theme-(?:text|bg|button-text)-color/, 'эти цвета в одной теме светлые, в другой тёмные — кольцу не годятся');
+  assert.doesNotMatch(rules, /tg-theme|data-theme/, 'от темы Telegram игра не зависит');
 });
 
 test('game.css: что оживает — на вложенных частях, свойствами scale и opacity; «уменьшить движение» — ровно 0s', () => {

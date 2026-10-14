@@ -1207,6 +1207,20 @@ mark('pause', (g) => {
   for (const x of [-5.2, 1.4]) plate(g, x, -5.6, x + 3.8, 5.6, 1.2, GLYPH);
 });
 
+// продолжить — треугольник со скруглёнными углами
+mark('play', (g) => blob(g, [[-4.4, -6, 1], [5.6, 0, 1], [-4.4, 6, 1]], GLYPH));
+
+// настройки — шестерёнка о восьми зубцах, ось вдавлена
+mark('gear', (g) => {
+  const pts = [];
+  for (let i = 0; i < 8; i++) {
+    const a = (i * TAU) / 8;
+    for (const [d, r] of [[-0.42, 4.9], [-0.2, 6.9], [0.2, 6.9], [0.42, 4.9]]) pts.push([Math.cos(a + d) * r, Math.sin(a + d) * r, 1]);
+  }
+  blob(g, pts, GLYPH);
+  ball(g, 0, 0, 2, 2, SOCKET);
+});
+
 // рюкзак
 mark('bag', (g) => {
   const hide = tone('#b9783c', { light: '#e6aa68', dark: '#74441c', line: '#3a2210', lw: 1.2 });

@@ -4,9 +4,8 @@
  * всё, что здесь оживает (нажатие, волна), сделано на вложенных частях свойствами scale и opacity: scale на самом
  * джойстике растянул бы и его сдвиг. Радиус кольца приходит из игры (--fh-stick-r, по умолчанию 46px).
  * Цвета — --fh-stick (кольцо), --fh-stick-knob (ручка), --fh-stick-aim (рывок заряжен). Пока палитра игры их не
- * задала, они берутся из темы: кольцо и ручка — цвет кнопок, почти целиком разбавленный белым (мир игры от темы
- * не зависит, и светлым кольцо должно быть в любой), рывок — сам цвет кнопок. Светлое кольцо с тонкой тёмной
- * каймой видно и на яркой траве, и на снегу, и на тёмном полу пещеры.
+ * задала: кольцо и ручка — белые с прозрачностью, рывок — цвет рывка --fh-dash. От темы Telegram игра не зависит
+ * совсем. Светлое кольцо с тонкой тёмной каймой видно и на яркой траве, и на снегу, и на тёмном полу пещеры.
  */
 [data-game="fox-hunt"] .fh-sticks {
   position: absolute;
@@ -39,7 +38,7 @@
   box-sizing: border-box;
   width: calc(var(--fh-stick-r, 46px) * 2);
   height: calc(var(--fh-stick-r, 46px) * 2);
-  border: 3px solid var(--fh-stick, color-mix(in srgb, var(--tg-theme-button-color) 8%, rgba(255, 255, 255, 0.92)));
+  border: 3px solid var(--fh-stick, rgba(255, 255, 255, 0.92));
   border-radius: 50%;
   background: rgba(0, 0, 0, 0.16);
   box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.44), inset 0 0 0 1.5px rgba(0, 0, 0, 0.32);
@@ -53,7 +52,7 @@
   content: "";
   position: absolute;
   inset: -3px;
-  border: 3px solid var(--fh-stick, color-mix(in srgb, var(--tg-theme-button-color) 8%, rgba(255, 255, 255, 0.92)));
+  border: 3px solid var(--fh-stick, rgba(255, 255, 255, 0.92));
   border-radius: 50%;
   opacity: 0;
   scale: 1;
@@ -69,7 +68,7 @@
   height: 5px;
   margin: -2.5px 0 0 -2.5px;
   border-radius: 50%;
-  color: var(--fh-stick, color-mix(in srgb, var(--tg-theme-button-color) 8%, rgba(255, 255, 255, 0.92)));
+  color: var(--fh-stick, rgba(255, 255, 255, 0.92));
   box-shadow:
     0 calc(var(--fh-stick-r, 46px) * -0.66) 0 0 currentColor,
     calc(var(--fh-stick-r, 46px) * 0.66) 0 0 0 currentColor,
@@ -94,7 +93,7 @@
   width: calc(var(--fh-stick-r, 46px) * 0.96);
   height: calc(var(--fh-stick-r, 46px) * 0.96);
   border-radius: 50%;
-  background: var(--fh-stick-knob, color-mix(in srgb, var(--tg-theme-button-color) 8%, rgba(255, 255, 255, 0.84)));
+  background: var(--fh-stick-knob, rgba(255, 255, 255, 0.84));
   /* кайма, тень под ручкой и чуть объёма: свет — слева сверху, как у всего в игре */
   box-shadow: 0 0 0 1.5px rgba(0, 0, 0, 0.44), 0 2px 5px rgba(0, 0, 0, 0.3), inset -2px -3px 0 rgba(0, 0, 0, 0.13), inset 2px 2px 0 rgba(255, 255, 255, 0.5);
   scale: 1;
@@ -157,7 +156,7 @@
 /* держат на месте — огонь или «взять»: ручка вдавлена, от кольца идёт волна */
 [data-game="fox-hunt"] .fh-stick--hold .fh-stick-knob::before {
   scale: 0.86;
-  background: var(--fh-stick, color-mix(in srgb, var(--tg-theme-button-color) 8%, rgba(255, 255, 255, 0.92)));
+  background: var(--fh-stick, rgba(255, 255, 255, 0.92));
 }
 [data-game="fox-hunt"] .fh-stick--hold .fh-stick-ring::before {
   opacity: 0.4;
@@ -170,10 +169,10 @@
 /* оттянули — рывок заряжен: кольцо и ручка в цвет рывка */
 [data-game="fox-hunt"] .fh-stick--aim .fh-stick-ring {
   scale: 1.05;
-  border-color: var(--fh-stick-aim, var(--tg-theme-button-color));
-  background: color-mix(in srgb, var(--fh-stick-aim, var(--tg-theme-button-color)) 24%, transparent);
+  border-color: var(--fh-stick-aim, var(--fh-dash));
+  background: color-mix(in srgb, var(--fh-stick-aim, var(--fh-dash)) 24%, transparent);
 }
-[data-game="fox-hunt"] .fh-stick--aim .fh-stick-knob::before { background: var(--fh-stick-aim, var(--tg-theme-button-color)); }
+[data-game="fox-hunt"] .fh-stick--aim .fh-stick-knob::before { background: var(--fh-stick-aim, var(--fh-dash)); }
 
 /*
  * Кнопка оружия (настройка «Отдельная кнопка для оружия»): круг над правым джойстиком. Корень — точка, которую двигает
@@ -197,16 +196,16 @@
   box-sizing: border-box;
   width: calc(var(--fh-btn-r, 32px) * 2);
   height: calc(var(--fh-btn-r, 32px) * 2);
-  border: 3px solid var(--fh-stick, color-mix(in srgb, var(--tg-theme-button-color) 8%, rgba(255, 255, 255, 0.92)));
+  border: 3px solid var(--fh-stick, rgba(255, 255, 255, 0.92));
   border-radius: 50%;
-  background: var(--fh-stick-knob, color-mix(in srgb, var(--tg-theme-button-color) 8%, rgba(255, 255, 255, 0.5)));
+  background: var(--fh-stick-knob, rgba(255, 255, 255, 0.5));
   box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.44), 0 2px 5px rgba(0, 0, 0, 0.3), inset -2px -3px 0 rgba(0, 0, 0, 0.13);
   scale: 1;
   transition: scale 0.12s ease, background-color 0.16s ease;
 }
 [data-game="fox-hunt"] .fh-stick-btn--on .fh-stick-btn-disc {
   scale: 0.9;
-  background: var(--fh-stick-aim, var(--tg-theme-button-color));
+  background: var(--fh-stick-aim, var(--fh-dash));
 }
 [data-game="fox-hunt"] .fh-stick-btn[data-action="fire"] .fh-stick-glyph--fire,
 [data-game="fox-hunt"] .fh-stick-btn[data-action="use"] .fh-stick-glyph--use { opacity: 1; scale: 1.3; }
@@ -220,36 +219,33 @@
 
 /* ---------- краски игры ---------- */
 /*
- * Смысловые цвета (сердца, мана, монеты, редкость, опасность) — для обеих тем; панели, текст и кнопки — из темы
- * Telegram. Мир на холсте от темы не зависит, поэтому плашки поверх него — тёмные полупрозрачные в любой теме
- * (--fh-hud-bg / --fh-hud-ink), а окна — дерево «Лесной вывески» (--fh-w-*), тоже одно в любой теме.
+ * Тема Telegram в игре не используется совсем (слово владельца): мир на холсте от неё не зависит, и всё поверх него —
+ * тоже. Одна палитра на обе темы: смысловые цвета (сердца, мана, монеты, редкость, опасность), плашки HUD —
+ * тёмные полупрозрачные (--fh-hud-bg / --fh-hud-ink), окна — дерево «Лесной вывески» (--fh-w-*).
  */
 [data-game="fox-hunt"] {
-  --fh-heart: #e5484d;
-  --fh-shield: #4f9de8;
-  --fh-mana: #5b7bf0;
-  --fh-coin: #e8b21c;
-  --fh-dash: #f08a24;
-  --fh-good: #3fa65a;
-  --fh-danger: #d6403f;
-  --fh-r0: #8d949c;
-  --fh-r1: #3f8fe0;
-  --fh-r2: #a45fe0;
-  --fh-r3: #eb9a1c;
+  --fh-heart: #ef5b60;
+  --fh-shield: #62aef2;
+  --fh-mana: #7a95ff;
+  --fh-coin: #f2c13a;
+  --fh-dash: #f59a3c;
+  --fh-good: #52bd6d;
+  --fh-danger: #ee5a58;
+  --fh-r0: #c9ced6;
+  --fh-r1: #4aa3ff;
+  --fh-r2: #b06cff;
+  --fh-r3: #ffb629;
   --fh-off: rgba(255, 255, 255, 0.22);
-  --fh-ghost: #9aa1a9;
+  --fh-ghost: rgba(30, 14, 4, 0.42);    /* силуэт неизвестного в коллекции — на тёмном дереве ячейки */
   --fh-hud-bg: rgba(18, 22, 20, 0.58);
   --fh-hud-ink: #fff;
-  --fh-dim: rgba(0, 0, 0, 0.5);
-  --fh-line: color-mix(in srgb, var(--tg-theme-hint-color, #8a8f94) 38%, transparent);
-  --fh-panel: var(--tg-theme-secondary-bg-color, #f1f2f4);
-  --fh-slot: color-mix(in srgb, var(--tg-theme-text-color, #000) 7%, var(--tg-theme-bg-color, #fff));
   --g2: rgba(255, 255, 255, 0.55);
   --g3: rgba(0, 0, 0, 0.6);
-  /* окна — дерево «Лесной вывески», одно в обеих темах: оно лежит поверх мира, а мир от темы не зависит */
+  /* окна — дерево «Лесной вывески» */
   --fh-w-line: #4e3426;             /* обводка дерева: краска, смешанная с тушью игры (как outline() в art-kit) */
   --fh-w-burn: #4a2c18;             /* выжженные буквы */
   --fh-w-ink2: #5e3a1e;             /* подписи помельче */
+  --fh-w-ink3: #7a4f2c;             /* совсем мелкие подписи */
   --fh-w-cream: #fff3da;
   --fh-w-moss-line: #2f4a22;
   --fh-w-red-line: #5c2a22;
@@ -258,27 +254,17 @@
   --fh-w-o-red: -1.5px 0 #5c2a22, 1.5px 0 #5c2a22, 0 -1.5px #5c2a22, 0 1.5px #5c2a22, -1px -1px #5c2a22, 1px -1px #5c2a22, -1px 1px #5c2a22, 1px 1px #5c2a22, 0 2.5px #5c2a22;
   --fh-w-grain: repeating-linear-gradient(177deg, transparent 0 4px, rgba(122, 72, 30, 0.16) 4px 5px, transparent 5px 10px, rgba(122, 72, 30, 0.08) 10px 12px, transparent 12px 17px);
   --fh-w-plank: var(--fh-w-grain), linear-gradient(180deg, #f3d39b, #ddb070);
-}
-:root[data-theme="dark"] [data-game="fox-hunt"] {
-  --fh-heart: #ef5b60;
-  --fh-shield: #62aef2;
-  --fh-mana: #7a95ff;
-  --fh-coin: #f2c13a;
-  --fh-dash: #f59a3c;
-  --fh-good: #52bd6d;
-  --fh-danger: #ee5a58;
-  --fh-r0: #a0a7af;
-  --fh-r1: #5aa2f0;
-  --fh-r2: #b97af0;
-  --fh-r3: #f5ac38;
-  --fh-ghost: #5d646c;
-  --fh-dim: rgba(0, 0, 0, 0.62);
-  --fh-slot: color-mix(in srgb, var(--tg-theme-text-color, #fff) 9%, var(--tg-theme-bg-color, #212121));
+  --fh-w-paper: var(--fh-w-grain), linear-gradient(180deg, rgba(252, 232, 192, 0.92), rgba(238, 206, 150, 0.92));
+  --fh-w-hole: var(--fh-w-grain), linear-gradient(180deg, #7b4b27, #976339);     /* ячейка — выемка в доске */
+  --fh-w-slice: repeating-radial-gradient(circle at 50% 50%, #ecca93 0 2px, #d8a96a 2px 4px);  /* спил бревна */
+  /* всплывающие сообщения (shared/toast.js) — табличкой тёмного дерева */
+  --toast-bg: #5a3418;
+  --toast-fg: #fff3da;
 }
 
 /* ---------- каркас ---------- */
 [data-game="fox-hunt"] { display: flex; flex-direction: column; padding: 0; overflow: hidden; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
-[data-game="fox-hunt"] .fh { position: relative; flex: 1; min-height: 0; isolation: isolate; overflow: hidden; touch-action: none; }
+[data-game="fox-hunt"] .fh { position: relative; flex: 1; min-height: 0; isolation: isolate; overflow: hidden; touch-action: none; color: var(--fh-hud-ink); }
 [data-game="fox-hunt"] .fh-stage { position: absolute; inset: 0; touch-action: none; }
 [data-game="fox-hunt"] .fh-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 [data-game="fox-hunt"] .fh-probe { position: absolute; width: 0; height: 0; overflow: hidden; visibility: hidden; }
@@ -447,7 +433,7 @@
 [data-game="fox-hunt"] .fh-pause-face .fh-ic { width: 62%; height: 62%; }
 [data-game="fox-hunt"] .fh-btns { gap: 0; }
 [data-game="fox-hunt"] .fh-pause-btn.fh-down .fh-pause-face { scale: 0.88; background: rgba(18, 22, 20, 0.8); }
-[data-game="fox-hunt"] .fh-pause-btn:focus-visible { outline: 2px solid var(--tg-theme-button-color, #fff); outline-offset: 1px; border-radius: 50%; }
+[data-game="fox-hunt"] .fh-pause-btn:focus-visible { outline: 2px solid #ffe08a; outline-offset: 1px; border-radius: 50%; }
 
 /* мини-карта: клетки и двери ставит ui.js (em, translate) */
 [data-game="fox-hunt"] .fh-map { padding: 0.4em; border-radius: 0.6em; background: var(--fh-hud-bg); opacity: 0; scale: 0.96; visibility: hidden; transition: opacity 0.22s ease, scale 0.22s ease, visibility 0s linear 0.22s; }
@@ -809,22 +795,25 @@
   width: 38px;
   height: 38px;
   padding: 0;
-  border: 2px solid transparent;
-  border-radius: 9px;
-  background: var(--fh-slot);
-  color: var(--tg-theme-text-color, #000);
+  border: 2px solid var(--fh-w-line);
+  border-radius: 8px;
+  background: radial-gradient(circle at 50% 46%, color-mix(in srgb, var(--rc, transparent) 60%, transparent) 0 32%, transparent 72%), var(--fh-w-hole);
+  box-shadow: inset 0 3px 4px rgba(30, 14, 4, 0.55), 0 1.5px 0 rgba(255, 236, 200, 0.45);
+  color: var(--fh-w-cream);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 800;
   cursor: pointer;
-  transition: scale 0.1s ease, border-color 0.15s ease, background-color 0.15s ease;
+  transition: scale 0.1s ease;
 }
 [data-game="fox-hunt"] .fh-slot .fh-ic { width: 28px; height: 28px; }
-[data-game="fox-hunt"] .fh-slot--empty { border-style: dashed; border-color: var(--fh-line); background: transparent; }
-[data-game="fox-hunt"] .fh-slot.fh-r0 { border-color: color-mix(in srgb, var(--fh-r0) 55%, transparent); }
-[data-game="fox-hunt"] .fh-slot.fh-r1 { border-color: color-mix(in srgb, var(--fh-r1) 80%, transparent); }
-[data-game="fox-hunt"] .fh-slot.fh-r2 { border-color: color-mix(in srgb, var(--fh-r2) 80%, transparent); }
-[data-game="fox-hunt"] .fh-slot.fh-r3 { border-color: var(--fh-r3); }
-[data-game="fox-hunt"] .fh-slot--sel { border-color: var(--tg-theme-button-color, #3390ec) !important; background: color-mix(in srgb, var(--tg-theme-button-color, #3390ec) 18%, var(--fh-slot)); }
+/* пустая ячейка — бледный знак того, что сюда кладут */
+[data-game="fox-hunt"] .fh-slot--empty { color: rgba(255, 228, 180, 0.38); }
+[data-game="fox-hunt"] :is(.fh-slot, .fh-plate).fh-r0 { --rc: var(--fh-r0); }
+[data-game="fox-hunt"] :is(.fh-slot, .fh-plate).fh-r1 { --rc: var(--fh-r1); }
+[data-game="fox-hunt"] :is(.fh-slot, .fh-plate).fh-r2 { --rc: var(--fh-r2); }
+[data-game="fox-hunt"] :is(.fh-slot, .fh-plate).fh-r3 { --rc: var(--fh-r3); }
+[data-game="fox-hunt"] .fh-slot:is(.fh-r0, .fh-r1, .fh-r2, .fh-r3) { box-shadow: inset 0 0 0 2px var(--rc), inset 0 3px 5px rgba(30, 14, 4, 0.5), 0 1.5px 0 rgba(255, 236, 200, 0.45); }
+[data-game="fox-hunt"] .fh-slot--sel { z-index: 1; box-shadow: inset 0 0 0 2px var(--rc, transparent), inset 0 3px 5px rgba(30, 14, 4, 0.5), 0 0 0 2px var(--fh-w-line), 0 0 0 4.5px #ffe08a, 0 0 0 6.5px var(--fh-w-line); }
 [data-game="fox-hunt"] .fh-slot--target { animation: fh-target 0.9s ease-in-out infinite; }
 @keyframes fh-target {
   0%, 100% { scale: 1; }
@@ -841,56 +830,74 @@
   padding: 0 3px;
   box-sizing: border-box;
   border-radius: 8px;
-  background: var(--tg-theme-text-color, #000);
-  color: var(--tg-theme-bg-color, #fff);
+  border: 1.5px solid var(--fh-w-moss-line);
+  background: linear-gradient(180deg, #98d35e, #5e9c34);
+  color: var(--fh-w-cream);
+  text-shadow: 0 1px 0 var(--fh-w-moss-line), 0 0 2px var(--fh-w-moss-line);
   font-size: 10px;
-  line-height: 15px;
+  font-weight: 800;
+  line-height: 13px;
   text-align: center;
 }
 [data-game="fox-hunt"] .fh-slots--extra .fh-none { grid-column: 1 / -1; }
 
-[data-game="fox-hunt"] .fh-info { display: flex; flex-direction: column; gap: 6px; min-width: 0; min-height: 0; padding: 8px 10px; border-radius: 12px; background: var(--fh-panel); overflow: hidden; }
+[data-game="fox-hunt"] .fh-info { display: flex; flex-direction: column; gap: 6px; min-width: 0; min-height: 0; padding: 8px 10px; border: 2.5px solid var(--fh-w-line); border-radius: 10px; background: var(--fh-w-paper); box-shadow: inset 0 2px 0 rgba(255, 250, 235, 0.7), 0 3px 0 var(--fh-w-line); overflow: hidden; }
 [data-game="fox-hunt"] .fh-info-head { display: flex; align-items: center; gap: 8px; }
-[data-game="fox-hunt"] .fh-plate { flex: none; display: flex; align-items: center; justify-content: center; width: 48px; height: 48px; box-sizing: border-box; border-radius: 10px; border: 2px solid transparent; background: var(--fh-slot); }
+[data-game="fox-hunt"] .fh-plate { flex: none; display: flex; align-items: center; justify-content: center; width: 48px; height: 48px; box-sizing: border-box; border-radius: 50%; border: 2.5px solid var(--fh-w-line); background: radial-gradient(circle, color-mix(in srgb, var(--rc, #e9c690) 55%, transparent) 0 30%, transparent 62%), var(--fh-w-slice); box-shadow: inset 0 0 0 3px #7a4a26, inset 0 0 0 4.5px var(--fh-w-line), 0 2.5px 0 var(--fh-w-line); }
 [data-game="fox-hunt"] .fh-plate .fh-ic { width: 40px; height: 40px; }
-[data-game="fox-hunt"] .fh-plate.fh-r0 { border-color: color-mix(in srgb, var(--fh-r0) 55%, transparent); }
-[data-game="fox-hunt"] .fh-plate.fh-r1 { border-color: var(--fh-r1); }
-[data-game="fox-hunt"] .fh-plate.fh-r2 { border-color: var(--fh-r2); }
-[data-game="fox-hunt"] .fh-plate.fh-r3 { border-color: var(--fh-r3); }
-[data-game="fox-hunt"] .fh-plate--empty { border-style: dashed; border-color: var(--fh-line); background: transparent; }
-[data-game="fox-hunt"] .fh-plate--gift { border-color: var(--fh-good); }
-[data-game="fox-hunt"] .fh-plate--pal { border-color: var(--fh-coin); }
+[data-game="fox-hunt"] .fh-plate--empty { opacity: 0.55; }
+[data-game="fox-hunt"] .fh-plate--gift { --rc: var(--fh-good); }
+[data-game="fox-hunt"] .fh-plate--pal { --rc: var(--fh-coin); }
 [data-game="fox-hunt"] .fh-info-names { display: flex; flex-direction: column; min-width: 0; }
-[data-game="fox-hunt"] .fh-info-name { font-size: 15px; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-[data-game="fox-hunt"] .fh-info-meta { font-size: 11px; color: var(--tg-theme-hint-color, #707579); }
-[data-game="fox-hunt"] .fh-info-lines { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 1px; font-size: 12px; font-weight: 600; }
-[data-game="fox-hunt"] .fh-info-lines li::before { content: "• "; color: var(--tg-theme-hint-color, #707579); }
-[data-game="fox-hunt"] .fh-info-text { margin: 0; font-size: 12px; color: var(--tg-theme-hint-color, #707579); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; }
-[data-game="fox-hunt"] .fh-info-ask { margin: 0; font-size: 12px; font-weight: 700; color: var(--tg-theme-button-color, #3390ec); }
+[data-game="fox-hunt"] .fh-info-name { font-size: 15px; line-height: 1.15; font-weight: 800; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+[data-game="fox-hunt"] .fh-info-meta { font-size: 11px; font-weight: 700; color: var(--fh-w-ink3); }
+[data-game="fox-hunt"] .fh-info-lines { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 1px; font-size: 12px; font-weight: 700; }
+[data-game="fox-hunt"] .fh-info-lines li::before { content: "• "; color: var(--fh-w-ink3); }
+[data-game="fox-hunt"] .fh-info-text { margin: 0; font-family: 'Golos Text', sans-serif; font-size: 12px; color: var(--fh-w-ink2); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; }
+[data-game="fox-hunt"] .fh-info-ask { margin: 0; font-size: 12px; font-weight: 800; color: #3f7a24; }
 [data-game="fox-hunt"] .fh-info-actions { display: flex; gap: 6px; margin-top: auto; }
-[data-game="fox-hunt"] .fh-info-actions .fh-btn { flex: 1 1 0; min-width: 0; padding: 0 6px; font-size: 13px; }
+[data-game="fox-hunt"] .fh-info-actions .fh-btn { flex: 1 1 0; min-width: 0; height: 34px; padding: 0 6px; font-size: 14px; }
 
 /* статистика */
-[data-game="fox-hunt"] .fh-tabs { display: flex; gap: 4px; min-width: 0; padding: 3px; border-radius: 11px; background: var(--fh-slot); }
-[data-game="fox-hunt"] .fh-tab { flex: none; min-height: 34px; padding: 0 10px; border: 0; border-radius: 9px; background: transparent; color: var(--tg-theme-hint-color, #707579); font-size: 13px; font-weight: 600; cursor: pointer; transition: scale 0.1s ease, background-color 0.15s ease, color 0.15s ease; }
-[data-game="fox-hunt"] .fh-tab[aria-selected="true"] { background: var(--tg-theme-button-color, #3390ec); color: var(--tg-theme-button-text-color, #fff); }
+[data-game="fox-hunt"] .fh-tabs { display: flex; gap: 6px; min-width: 0; }
+[data-game="fox-hunt"] .fh-tab {
+  flex: none;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  height: 30px;
+  padding: 0 12px;
+  white-space: nowrap;
+  border: 2.5px solid var(--fh-w-line);
+  border-radius: 8px;
+  background: var(--fh-w-grain), linear-gradient(180deg, #a06a3a, #7e4e2a);
+  box-shadow: inset 0 1.5px 0 rgba(255, 214, 160, 0.3), 0 2.5px 0 var(--fh-w-line);
+  color: var(--fh-w-cream);
+  text-shadow: var(--fh-w-o-wood);
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: scale 0.1s ease;
+}
+[data-game="fox-hunt"] .fh-tab[aria-selected="true"] { color: var(--fh-w-burn); text-shadow: none; background: var(--fh-w-plank); box-shadow: inset 0 2px 0 rgba(255, 248, 226, 0.7), 0 2.5px 0 var(--fh-w-line); }
 [data-game="fox-hunt"] .fh-stats-body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
 [data-game="fox-hunt"] .fh-tiles { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
 [data-game="fox-hunt"] .fh-tiles--run { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-[data-game="fox-hunt"] .fh-tile { display: flex; flex-direction: column; justify-content: center; gap: 2px; min-width: 0; min-height: 56px; padding: 6px 8px; box-sizing: border-box; border-radius: 10px; background: var(--fh-panel); }
+[data-game="fox-hunt"] .fh-tile { display: flex; flex-direction: column; justify-content: center; gap: 2px; min-width: 0; min-height: 56px; padding: 6px 8px; box-sizing: border-box; position: relative; border: 2.5px solid var(--fh-w-line); border-radius: 9px; background: var(--fh-w-plank); box-shadow: inset 0 2px 0 rgba(255, 248, 226, 0.65), inset 0 -3px 0 rgba(140, 84, 36, 0.2), 0 3px 0 var(--fh-w-line); }
 [data-game="fox-hunt"] .fh-tiles--run .fh-tile { min-height: 82px; }
-[data-game="fox-hunt"] .fh-tile-num { font-size: 18px; line-height: 1.1; font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+[data-game="fox-hunt"] .fh-tile-num { font-size: 18px; line-height: 1.1; font-weight: 800; font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 [data-game="fox-hunt"] .fh-tiles--run .fh-tile-num { font-size: 22px; }
-[data-game="fox-hunt"] .fh-tile-label { font-size: 11px; color: var(--tg-theme-hint-color, #707579); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+[data-game="fox-hunt"] .fh-tile-label { font-size: 11px; font-weight: 700; color: var(--fh-w-ink3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* блок «Очки в рейтинге» — общий для всех игр; здесь ужат под рамку без прокрутки */
-[data-game="fox-hunt"] .fh-stats-body .pts-info { margin: 0; padding: 6px 10px; font-size: 11px; line-height: 1.25; max-height: 84px; overflow: hidden; }
+[data-game="fox-hunt"] .fh-stats-body .pts-info { margin: 0; padding: 6px 10px; font-size: 11px; line-height: 1.25; max-height: 84px; overflow: hidden; border: 2px solid var(--fh-w-line); background: var(--fh-w-paper); color: var(--fh-w-burn); font-family: 'Golos Text', sans-serif; }
+[data-game="fox-hunt"] .fh-stats-body .pts-info .pts-info-note { color: var(--fh-w-ink2); }
 [data-game="fox-hunt"] .fh-stats-body .pts-info p { margin: 2px 0 0; }
 [data-game="fox-hunt"] .fh-pager { display: flex; align-items: center; gap: 8px; flex: none; }
 [data-game="fox-hunt"] .fh-pager-text { flex: 1; min-width: 0; display: flex; flex-direction: column; text-align: center; }
-[data-game="fox-hunt"] .fh-pager-text b { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-[data-game="fox-hunt"] .fh-pager-text span { font-size: 11px; color: var(--tg-theme-hint-color, #707579); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+[data-game="fox-hunt"] .fh-pager-text b { font-size: 14px; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+[data-game="fox-hunt"] .fh-pager-text span { font-size: 11px; font-weight: 700; color: var(--fh-w-ink3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 [data-game="fox-hunt"] .fh-seen { display: grid; grid-template-columns: repeat(10, 38px); justify-content: space-between; gap: 6px 4px; }
-[data-game="fox-hunt"] .fh-slot--unknown { background: transparent; border-color: var(--fh-line); border-style: dashed; }
+[data-game="fox-hunt"] .fh-slot--unknown { background: var(--fh-w-grain), linear-gradient(180deg, #6e4222, #845630); color: rgba(255, 228, 180, 0.38); }
 
 /* дар леса: три карточки, пока не выберешь — «Взять» не нажать */
 [data-game="fox-hunt"] .fh-gift { gap: 10px; }
@@ -904,20 +911,21 @@
   min-height: 0;
   padding: 10px 8px;
   box-sizing: border-box;
-  border: 2px solid transparent;
+  border: 2.5px solid var(--fh-w-line);
   border-radius: 12px;
-  background: var(--fh-panel);
-  color: var(--tg-theme-text-color, #000);
+  background: var(--fh-w-plank);
+  box-shadow: inset 0 2px 0 rgba(255, 248, 226, 0.7), inset 0 -3px 0 rgba(140, 84, 36, 0.24), 0 4px 0 var(--fh-w-line);
+  color: var(--fh-w-burn);
   text-align: center;
   overflow: hidden;
   cursor: pointer;
-  transition: scale 0.12s ease, border-color 0.15s ease, background-color 0.15s ease;
+  transition: scale 0.12s ease, translate 0.15s ease;
 }
 [data-game="fox-hunt"] .fh-gift-card .fh-plate { width: 58px; height: 58px; }
 [data-game="fox-hunt"] .fh-gift-card .fh-plate .fh-ic { width: 48px; height: 48px; }
-[data-game="fox-hunt"] .fh-gift-name { font-size: 14px; line-height: 1.15; }
-[data-game="fox-hunt"] .fh-gift-desc { font-size: 12px; color: var(--tg-theme-hint-color, #707579); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; }
-[data-game="fox-hunt"] .fh-gift-card--sel { border-color: var(--tg-theme-button-color, #3390ec); background: color-mix(in srgb, var(--tg-theme-button-color, #3390ec) 14%, var(--fh-panel)); }
+[data-game="fox-hunt"] .fh-gift-name { font-size: 14px; line-height: 1.15; font-weight: 800; }
+[data-game="fox-hunt"] .fh-gift-desc { font-family: 'Golos Text', sans-serif; font-size: 12px; color: var(--fh-w-ink2); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; }
+[data-game="fox-hunt"] .fh-gift-card--sel { translate: 0 -3px; border-color: var(--fh-w-moss-line); background: var(--fh-w-grain), linear-gradient(180deg, #fbe6b4, #ecc68a); box-shadow: inset 0 2px 0 rgba(255, 252, 240, 0.8), 0 4px 0 var(--fh-w-moss-line), 0 0 0 3px #a6dc6a, 0 0 0 5px var(--fh-w-moss-line); }
 [data-game="fox-hunt"] .fh-gift-take { flex: none; width: 100%; }
 
 @media (prefers-reduced-motion: reduce) {

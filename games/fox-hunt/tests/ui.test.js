@@ -242,3 +242,12 @@ test('шрифт окон Podkova лежит в репозитории и ука
     assert.match(readFileSync(new URL(`../../../${name}`, import.meta.url), 'utf8'), /styles\/fonts\/podkova-\*\.woff2/);
   }
 });
+
+test('тема Telegram в игре не используется: ни в стилях, ни в коде (одна палитра на обе темы)', () => {
+  const css = readFileSync(new URL('../game.css', import.meta.url), 'utf8');
+  assert.doesNotMatch(css, /tg-theme|data-theme|prefers-color-scheme/);
+  for (const name of ['ui.js', 'index.js', 'render.js', 'input.js']) {
+    const src = readFileSync(new URL(`../${name}`, import.meta.url), 'utf8');
+    assert.doesNotMatch(src, /tg-theme|colorScheme|data-theme/, name);
+  }
+});

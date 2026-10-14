@@ -20,7 +20,7 @@ const ITEMS = ['clover', 'rabbitfoot', 'fang', 'owlfeather', 'heartberry', 'crys
   'horseshoe', 'collar', 'bell', 'springpaws', 'hushbell', 'carrot', 'mirror', 'honey', 'whetstone', 'quickpaws', 'thrift', 'antler', 'bearcharm', 'phoenix', 'sporecap', 'silk', 'eagleeye',
   'greedacorn', 'goldcarrot', 'pocketwatch', 'glowbug'];
 const GIFTS = ['vigor', 'wisdom', 'swift', 'pounce', 'sharp', 'thickfur', 'frugal', 'bargain', 'pack', 'guard', 'bounty', 'fortune', 'antidote', 'surefoot', 'leech', 'tracker', 'spark', 'secondwind'];
-const UI = ['heart', 'heart.empty', 'shield', 'shield.empty', 'mana', 'life', 'life.empty', 'coin', 'score', 'dash', 'dash.empty', 'pause', 'bag', 'stats', 'music', 'sound', 'lefty', 'flip',
+const UI = ['heart', 'heart.empty', 'shield', 'shield.empty', 'mana', 'life', 'life.empty', 'coin', 'score', 'dash', 'dash.empty', 'pause', 'play', 'gear', 'bag', 'stats', 'music', 'sound', 'lefty', 'flip',
   'exit', 'restart', 'room.start', 'room.hunt', 'room.boss', 'room.treasure', 'room.shop', 'room.altar', 'room.well', 'room.camp', 'room.forge', 'room.spring', 'room.totem', 'room.gamble',
   'room.raven', 'room.unknown'];
 const WANT = [...ITEMS.map((id) => `item.${id}`), ...GIFTS.map((id) => `gift.${id}`), ...UI.map((name) => `ui.${name}`)];
@@ -260,10 +260,10 @@ test('файл загружается без браузера: ни DOM, ни с
   assert.equal(MOD.RIG_INFO, undefined);
 });
 
-test('все значки на месте: 36 украшений, 18 даров, 34 значка экрана и карты — и ничего лишнего', () => {
+test('все значки на месте: 36 украшений, 18 даров, 36 значков экрана и карты — и ничего лишнего', () => {
   assert.equal(ITEMS.length, 36);
   assert.equal(GIFTS.length, 18);
-  assert.equal(UI.length, 34);
+  assert.equal(UI.length, 36);
   assert.equal(new Set(WANT).size, WANT.length);
   for (const key of WANT) assert.ok(A.hasSprite(key), `нет картинки «${key}»`);
   assert.deepEqual([...OWN].sort(), [...WANT].sort());
