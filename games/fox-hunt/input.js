@@ -7,7 +7,9 @@
 // джойстиком, пока её держат, а сам джойстик только тянется для рывка; оттянул — прицел рывка, отпустил — рывок; вернул в середину — рывок отменён. «Режим левши»
 // меняет половины местами. Кольцо появляется там, куда лёг палец, и едет за ним, если палец ушёл дальше радиуса.
 // На компьютере: WASD / стрелки — ходьба, левая кнопка мыши — рывок к курсору (нажал — прицел, отпустил — прыжок),
-// правая кнопка или Shift — огонь в курсор, пробел — рывок по ходу, E — действие, Esc / P — пауза.
+// правая кнопка или Shift — огонь в курсор, пробел — рывок по ходу, E — действие, Esc / P — пауза. В полном экране
+// курсор пойман (Pointer Lock) и вместо него — нарисованный прицел; кнопки поверх сцены (пауза, рюкзак) он нажимает
+// сам: все нажатия тогда приходят сцене, и кнопку под прицелом обёртка ищет по их рамкам (опция hud).
 //
 // Все правила — в createStickCore: там нет ни страницы, ни событий, только числа, и тесты гоняют именно его.
 // createInput — тонкая обёртка: переводит события указателя в оси игры (экран бывает положен набок — api.screen),
@@ -25,6 +27,41 @@ export function stepCursor(cur, dx, dy, w, h) {
   cur.x = Math.min(Math.max(0, w), Math.max(0, nx));
   cur.y = Math.min(Math.max(0, h), Math.max(0, ny));
   return cur;
+}
+
+const spotAxes = { x: 0, y: 0 };
+
+/**
+ * Рамка элемента на странице (left, top, right, bottom в точках окна) → прямоугольник в осях игры: out.x0, y0, x1, y1.
+ * screen — api.screen: экран может лежать на боку, и рамка повёрнутого элемента «стоячая» — её два противоположных
+ * угла переводятся в оси игры. Без screen — как есть.
+ */
+export function boxInAxes(box, screen, out) {
+  if (!screen) {
+    out.x0 = box.left;
+    out.y0 = box.top;
+    out.x1 = box.right;
+    out.y1 = box.bottom;
+    return out;
+  }
+  let p = screen.toLocal(box.left, box.top, spotAxes) || spotAxes;
+  const ax = p.x;
+  const ay = p.y;
+  p = screen.toLocal(box.right, box.bottom, spotAxes) || spotAxes;
+  out.x0 = Math.min(ax, p.x);
+  out.y0 = Math.min(ay, p.y);
+  out.x1 = Math.max(ax, p.x);
+  out.y1 = Math.max(ay, p.y);
+  return out;
+}
+
+/** Первый прямоугольник списка (x0…y1, края включительно), в котором лежит точка; нет такого — null. */
+export function boxAt(list, x, y) {
+  for (let i = 0; i < list.length; i++) {
+    const b = list[i];
+    if (x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1) return b;
+  }
+  return null;
 }
 
 /** Все числа управления — в одном месте: крутить можно, не трогая правил. Размеры — в пикселях CSS. */
@@ -665,14 +702,15 @@ export function createStickCore({ w = 0, h = 0, insets = null, lefty = false, st
  *   stage — сцена (на ней ловятся касания), sticksEl — слой для джойстиков поверх холста;
  *   screen — api.screen (экран может лежать набок) или null; toWorld(x, y, out) → { x, y } — точка сцены в мире;
  *   onPause() — нажали Esc или P; lefty — сразу в режиме левши; tune — поправки к STICK (например, числа рывка
- *   из balance.js: { reachMin: DASH.minPower }).
+ *   из balance.js: { reachMin: DASH.minPower }); hud() → [{ el, press }] — кнопки поверх сцены, которые нажимает
+ *   прицел, пока курсор пойман (press — то же, что их нажатие пальцем).
  * Возвращает { frame(foxX, foxY, foxDir, reach) → объект ввода, state — он же, sticks — что нарисовано,
  * setLefty(on), setAction('fire' | 'use' | 'none') — значок на ручке, resize(), reset(), destroy() }.
  * frame() зовут раз в кадр перед шагами симуляции: он же двигает джойстики. Разовые команды (dash, act) живут один
  * вызов — в кадре, где шагов не будет (экран чаще 60 Гц), звать его не надо, иначе команда пропадёт; рендеру для
  * стрелки рывка хватит state.
  */
-export function createInput({ stage, sticksEl, screen = null, toWorld = null, onPause = null, lefty = false, stick = 'float', weaponBtn = false, tune = null, now = null } = {}) {
+export function createInput({ stage, sticksEl, screen = null, toWorld = null, onPause = null, lefty = false, stick = 'float', weaponBtn = false, tune = null, now = null, hud = null } = {}) {
   const doc = stage.ownerDocument;
   const win = doc.defaultView;
   const core = createStickCore({ lefty, stick, weaponBtn, toWorld, tune, now: now ?? (() => win.performance.now() / 1000) });
@@ -699,6 +737,13 @@ export function createInput({ stage, sticksEl, screen = null, toWorld = null, on
   let lockFails = 0;       // сколько раз браузер отказал подряд; два отказа — больше не мучаем
   let cross = null;        // нарисованный прицел (создаётся при первом захвате)
   let crossOn = false;
+  // кнопки поверх сцены под прицелом: рамки в осях сцены меряются один раз после захвата и после смены размера
+  const area = { x0: 0, y0: 0, x1: 0, y1: 0 };
+  const hudBoxes = [];     // { el, press, x0, y0, x1, y1 }
+  let hudStale = true;
+  let hudOver = null;      // рамка кнопки под прицелом
+  let hudDown = null;      // на ней нажали левую: отпустят на ней же — нажатие
+  let hudOwns = false;     // нажатие мыши началось на кнопке — игра его не видит, пока не отпущены все кнопки мыши
 
   const locked = () => doc.pointerLockElement === stage;
 
@@ -810,26 +855,103 @@ export function createInput({ stage, sticksEl, screen = null, toWorld = null, on
   }
 
   /**
-   * Запомнить, где сцена и какие у неё отступы. Единственное место, где читается раскладка: в обработчиках
-   * движения её трогать нельзя — каждое чтение там заставило бы браузер пересчитывать страницу по нескольку раз за кадр.
+   * Где элемент лежит в осях игры → out (x0…y1). Единственное место, где читается раскладка; зовут его только resize()
+   * и measureHud(): в обработчиках движения её трогать нельзя — каждое чтение там заставило бы браузер пересчитывать
+   * страницу по нескольку раз за кадр.
+   */
+  function measure(node, out) {
+    return boxInAxes(node.getBoundingClientRect(), screen, out);
+  }
+
+  /**
+   * Рамки кнопок поверх сцены (пауза, рюкзак) в осях сцены — для прицела при пойманном курсоре. Меряются один раз
+   * после захвата и после смены размера (hudStale), на первом движении мыши: к этому времени надписи успевают
+   * перестроиться под новый экран.
+   */
+  function measureHud() {
+    hudStale = false;
+    hudBoxes.length = 0;
+    const list = typeof hud === 'function' ? hud() : null;
+    if (!Array.isArray(list)) return;
+    for (const t of list) {
+      if (!t?.el || typeof t.press !== 'function') continue;
+      const b = measure(t.el, { el: t.el, press: t.press, x0: 0, y0: 0, x1: 0, y1: 0 });
+      b.x0 -= left;
+      b.x1 -= left;
+      b.y0 -= top;
+      b.y1 -= top;
+      if (b.x1 > b.x0 && b.y1 > b.y0) hudBoxes.push(b);  // спрятанная кнопка (нулевая рамка) не нажимается
+    }
+  }
+
+  /** Кнопка поверх сцены под точкой сцены (x, y) — её рамка или null. */
+  function hudAt(x, y) {
+    if (hudStale) measureHud();
+    return boxAt(hudBoxes, x, y);
+  }
+
+  /** Подсветка кнопки под прицелом и прицел «над кнопкой» — классами, только когда кнопка сменилась. */
+  function hoverHud(over) {
+    if ((over?.el ?? null) === (hudOver?.el ?? null)) {
+      hudOver = over;
+      return;
+    }
+    hudOver?.el.classList.toggle('fh-hover', false);
+    over?.el.classList.toggle('fh-hover', true);
+    hudOver = over;
+    cross?.classList.toggle('fh-cross--hud', over !== null);
+  }
+
+  /**
+   * Курсор пойман: все нажатия приходят сцене, даже когда прицел стоит на кнопке поверх неё. Кнопку под прицелом
+   * ищем сами; нажатие — как пальцем по tap() в ui.js: левая нажата на кнопке и отпущена на ней же (уехал с неё —
+   * отменено). Нажатие, начатое на кнопке (любой кнопкой мыши), игре не достаётся — ни огнём, ни рывком.
+   */
+  function aimHud(e) {
+    const over = hudAt(px, py);
+    hoverHud(over);
+    if (hudDown && over?.el !== hudDown.el) {
+      hudDown.el.classList.toggle('fh-down', false);
+      hudDown = null;
+    }
+    if (e.type === 'pointerdown') {
+      // pointerdown у мыши — первая кнопка из зажатых: с него начинается нажатие
+      hudOwns = over !== null;
+      if (over && e.button === 0 && !over.el.disabled) {
+        hudDown = over;
+        over.el.classList.toggle('fh-down', true);
+      }
+    } else if (e.type === 'pointerup' && hudDown) {
+      const b = hudDown;
+      b.el.classList.toggle('fh-down', false);
+      hudDown = null;
+      b.press();
+    }
+  }
+
+  /** Захват снят, окно потеряло фокус или всё сброшено: ни подсветки, ни начатого нажатия на кнопке. */
+  function dropHud() {
+    hoverHud(null);
+    hudDown?.el.classList.toggle('fh-down', false);
+    hudDown = null;
+    hudOwns = false;
+  }
+
+  /**
+   * Запомнить, где сцена и какие у неё отступы (раскладку читает measure).
    * Зовётся при смене размера, поворота и отступов (сама обёртка тоже следит, но index.js может позвать и явно).
    */
   function resize() {
     if (!alive) return;
-    const box = stage.getBoundingClientRect();
-    let w = box.width;
-    let h = box.height;
+    // экран может лежать на боку, и рамка повёрнутой сцены — «стоячая»: measure переводит её в оси игры
+    measure(stage, area);
+    left = area.x0;
+    top = area.y0;
+    const w = area.x1 - area.x0;
+    const h = area.y1 - area.y0;
     safe.top = safe.right = safe.bottom = safe.left = 0;
+    hudStale = true;
     if (screen) {
-      // экран может лежать на боку, и рамка повёрнутой сцены — «стоячая»: два её угла переводим в оси игры
-      let p = screen.toLocal(box.left, box.top, point) || point;
-      const ax = p.x;
-      const ay = p.y;
-      p = screen.toLocal(box.right, box.bottom, point) || point;
-      left = Math.min(ax, p.x);
-      top = Math.min(ay, p.y);
-      w = Math.abs(p.x - ax);
-      h = Math.abs(p.y - ay);
       // отступы экрана — в отступы сцены (обычно сцена и есть весь экран)
       const size = screen.size();
       const ins = screen.insets();
@@ -841,9 +963,6 @@ export function createInput({ stage, sticksEl, screen = null, toWorld = null, on
         turn = screen.turn;
         core.cancelAll();                            // экран перевернули — пальцы лежат уже не там
       }
-    } else {
-      left = box.left;
-      top = box.top;
     }
     sw = w;
     sh = h;
@@ -887,12 +1006,15 @@ export function createInput({ stage, sticksEl, screen = null, toWorld = null, on
       px = cur.x;
       py = cur.y;
       placeCross();
+      aimHud(e);
     } else {
       locate(e);
       cur.x = px;
       cur.y = py;
     }
-    core.mouse(e.buttons, px, py);
+    // нажатие на кнопке поверх сцены — не огонь и не рывок: ядро видит мышь с отпущенными кнопками
+    core.mouse(hudOwns ? 0 : e.buttons, px, py);
+    if (!e.buttons) hudOwns = false;                 // все кнопки мыши отпущены — нажатие кончилось
   }
 
   /** Прицел-спрайт: готовый элемент со стилями (без градиентов), в кадре двигается только translate. */
@@ -931,9 +1053,11 @@ export function createInput({ stage, sticksEl, screen = null, toWorld = null, on
       lockFails = 0;
       stepCursor(cur, 0, 0, sw, sh);
       showCross(true);
+      hudStale = true;
     } else {
       showCross(false);
       core.mouseDrop();
+      dropHud();
     }
   }
 
@@ -1011,8 +1135,10 @@ export function createInput({ stage, sticksEl, screen = null, toWorld = null, on
   }
 
   function onPointerCancel(e) {
-    if (e.pointerType === 'mouse') core.mouseDrop();
-    else core.cancel(e.pointerId);
+    if (e.pointerType === 'mouse') {
+      core.mouseDrop();
+      dropHud();
+    } else core.cancel(e.pointerId);
   }
 
   function onPointerLeave(e) {
@@ -1052,6 +1178,7 @@ export function createInput({ stage, sticksEl, screen = null, toWorld = null, on
 
   function onBlur() {
     core.blur();
+    dropHud();
   }
 
   function onVisibility() {
@@ -1066,6 +1193,7 @@ export function createInput({ stage, sticksEl, screen = null, toWorld = null, on
 
   function reset() {
     core.reset();
+    dropHud();
     paint();
   }
 
@@ -1151,6 +1279,8 @@ export function createInput({ stage, sticksEl, screen = null, toWorld = null, on
         // уже отпущен
       }
     }
+    dropHud();
+    hudBoxes.length = 0;
     cross?.remove();
     cross = null;
     offChange?.();

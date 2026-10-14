@@ -1010,6 +1010,8 @@ export default {
       weaponBtn: settings.weaponBtn,
       // сила рывка мышью считается теми же числами, что и сам рывок
       tune: { reach: BASE.dashDist, reachMin: DASH.minPower },
+      // пауза и рюкзак: их нажимает и нарисованный прицел, пока курсор пойман (полный экран на ПК)
+      hud: () => ui?.hudButtons ?? null,
     });
     view.input = input.state;
     if (isDesktop(desktopFacts(window, api.screen ?? null))) {

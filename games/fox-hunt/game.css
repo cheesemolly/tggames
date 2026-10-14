@@ -427,7 +427,7 @@
   justify-content: center;
   border-radius: 50%;
   background: var(--fh-hud-bg);
-  transition: scale 0.12s ease, background-color 0.12s ease;
+  transition: scale 0.12s ease, background-color 0.12s ease, filter 0.12s ease;
 }
 [data-game="fox-hunt"] .fh-pause-face svg { width: 60%; height: 60%; fill: currentColor; }
 [data-game="fox-hunt"] .fh-pause-face .fh-ic { width: 62%; height: 62%; }
@@ -823,12 +823,15 @@
 
 /* полный экран на компьютере: чёрные поля вокруг поля и прицел, пока курсор пойман */
 [data-game="fox-hunt"]:fullscreen { background: #000; }
-[data-game="fox-hunt"] .fh-cross { position: absolute; left: 0; top: 0; width: 0; height: 0; pointer-events: none; opacity: 0; transition: opacity 0.12s; }
+/* прицел — над надписями и кнопками (.fh-hud, z-index 2), под окнами (.fh-modal, 8): им же нажимают паузу и рюкзак */
+[data-game="fox-hunt"] .fh-cross { position: absolute; left: 0; top: 0; z-index: 3; width: 0; height: 0; pointer-events: none; opacity: 0; transition: opacity 0.12s; }
 [data-game="fox-hunt"] .fh-cross--on { opacity: 1; }
-[data-game="fox-hunt"] .fh-cross::before { content: ''; position: absolute; left: -11px; top: -11px; width: 18px; height: 18px; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.65), inset 0 0 0 1px rgba(0, 0, 0, 0.65); }
+[data-game="fox-hunt"] .fh-cross::before { content: ''; position: absolute; left: -11px; top: -11px; width: 18px; height: 18px; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.65), inset 0 0 0 1px rgba(0, 0, 0, 0.65); transition: scale 0.12s ease; }
+/* прицел на кнопке: кольцо сжимается — нажатие пойдёт кнопке, а не в игру */
+[data-game="fox-hunt"] .fh-cross--hud::before { scale: 0.6; }
 [data-game="fox-hunt"] .fh-cross::after { content: ''; position: absolute; left: -2px; top: -2px; width: 4px; height: 4px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.65); }
 @media (prefers-reduced-motion: reduce) {
-  [data-game="fox-hunt"] .fh-cross { transition-duration: 0s; }
+  [data-game="fox-hunt"] .fh-cross, [data-game="fox-hunt"] .fh-cross::before { transition-duration: 0s; }
 }
 
 /* рюкзак: слева ячейки, справа карточка выбранного; окно выше остальных на BAG_H, а швы досок сдвинуты (--fh-seam) так,
@@ -1006,6 +1009,11 @@
   color: var(--fh-w-burn);
   box-shadow: inset 0 0 0 2.5px #7a4a26, inset 0 0 0 4px var(--fh-w-line), 0 2px 0 var(--fh-w-line);
 }
+/* наведение: обычная мышь (:hover) и прицел, пока курсор пойман (.fh-hover ставит input.js), — спил светлеет */
+@media (hover: hover) {
+  [data-game="fox-hunt"] .fh-pause-btn:hover .fh-pause-face { filter: brightness(1.12); }
+}
+[data-game="fox-hunt"] .fh-pause-btn.fh-hover .fh-pause-face { filter: brightness(1.12); }
 [data-game="fox-hunt"] .fh-pause-btn.fh-down .fh-pause-face { background: var(--fh-w-slice); filter: brightness(0.9); }
 [data-game="fox-hunt"] .fh-stick-btn-disc {
   border-color: var(--fh-w-line);

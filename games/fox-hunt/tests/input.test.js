@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { STICK, KEY_FREE, KEY_TAKEN, KEY_PAUSE, createStickCore, createInput } from '../input.js';
+import { STICK, KEY_FREE, KEY_TAKEN, KEY_PAUSE, createStickCore, createInput, boxInAxes, boxAt } from '../input.js';
 
 const src = readFileSync(new URL('../input.js', import.meta.url), 'utf8');
 const css = readFileSync(new URL('../game.css', import.meta.url), 'utf8');
@@ -818,7 +818,7 @@ function fakeEl(tag, doc) {
  * на боку (формулы — из shell/landscape.js). screen: false — без api.screen. offset — где экран стоит в окне;
  * pad — поля между краями экрана и сценой в осях игры [лево, верх, право, низ] (обычно сцена — весь экран).
  */
-function page({ turn = 0, screen = true, insets = { top: 0, right: 0, bottom: 0, left: 0 }, mouse = false, offset = [0, 0], pad = [0, 0, 0, 0], tune = null, weaponBtn = false } = {}) {
+function page({ turn = 0, screen = true, insets = { top: 0, right: 0, bottom: 0, left: 0 }, mouse = false, offset = [0, 0], pad = [0, 0, 0, 0], tune = null, weaponBtn = false, hud = null } = {}) {
   const clock = { t: 10 };
   const doc = fakeEl('#document', null);
   const win = fakeEl('#window', null);
@@ -879,7 +879,7 @@ function page({ turn = 0, screen = true, insets = { top: 0, right: 0, bottom: 0,
   };
   const input = createInput({
     stage, sticksEl, screen: screen ? api : null, toWorld: (x, y, out) => Object.assign(out, { x, y }),
-    onPause: () => { stat.pauses += 1; }, now: () => clock.t, tune, weaponBtn,
+    onPause: () => { stat.pauses += 1; }, now: () => clock.t, tune, weaponBtn, hud,
   });
   const frame = (dt = DT, ...fox) => {
     clock.t += dt;
@@ -1217,6 +1217,328 @@ test('обёртка: значок действия, режим левши, rese
   p.input.resize();
 });
 
+// ---------- прицел при пойманном курсоре: кнопки поверх сцены ----------
+// В полном экране на ПК курсор пойман (Pointer Lock): все события мыши приходят сцене, места под курсором нет —
+// только сдвиги. Пауза и рюкзак лежат поверх сцены, и их нажатие обёртка находит сама — по рамкам кнопок.
+
+/**
+ * Страница с захватом курсора и двумя кнопками у правого верхнего угла сцены, как в HUD: рюкзак слева от паузы.
+ * size — сторона кнопки (44 — мелкий экран, 66 — надписи увеличены в полтора раза); остальное — как у page().
+ * Кнопки стоят в осях сцены; их рамка на странице «стоячая», если экран на боку (те же формулы, что у сцены).
+ */
+function lockPage({ size = 44, ...opts } = {}) {
+  const pad = opts.pad ?? [0, 0, 0, 0];
+  const sw = W - pad[0] - pad[2];
+  const boxes = {};                                         // [x, y, w, h] в осях сцены
+  const place = (s) => {
+    boxes.pause = [sw - 6 - s, 6, s, s];
+    boxes.bag = [sw - 6 - 2 * s, 6, s, s];
+  };
+  place(size);
+  const pressed = [];
+  const reads = { n: 0 };
+  let list = [];
+  const p = page({ ...opts, mouse: true, hud: () => list });
+  const button = (name) => {
+    const el = fakeEl('button', p.doc);
+    el.getBoundingClientRect = () => {
+      reads.n += 1;
+      const [x, y, w, h] = boxes[name];
+      const a = p.at(x, y);
+      const b = p.at(x + w, y + h);
+      const [left, top, right, bottom] = [Math.min(a.clientX, b.clientX), Math.min(a.clientY, b.clientY), Math.max(a.clientX, b.clientX), Math.max(a.clientY, b.clientY)];
+      return { left, top, right, bottom, width: right - left, height: bottom - top };
+    };
+    return el;
+  };
+  const bag = button('bag');
+  const pause = button('pause');
+  list = [{ el: bag, press: () => pressed.push('bag') }, { el: pause, press: () => pressed.push('pause') }];
+  // захват курсора — как в браузере: pointerLockElement и событие pointerlockchange
+  p.stage.requestPointerLock = () => {
+    p.doc.pointerLockElement = p.stage;
+    p.doc.fire('pointerlockchange');
+  };
+  p.doc.exitPointerLock = () => {
+    p.doc.pointerLockElement = null;
+    p.doc.fire('pointerlockchange');
+  };
+  p.input.setLock(true, true);
+  const cross = p.stage.children.find((k) => k.className.split(' ').includes('fh-cross'));
+  /** Событие мыши при захвате: clientX/Y стоят на месте, есть только сдвиги; цель — сама сцена. */
+  const mouse = (type, buttons, button = 0, dx = 0, dy = 0) => p.stage.fire(type, { pointerType: 'mouse', pointerId: 1, buttons, button, movementX: dx, movementY: dy, clientX: 3, clientY: 3 });
+  /** Подвести прицел к точке сцены (x, y) сдвигами (кнопки мыши buttons при этом зажаты); где он сейчас — по спрайту. */
+  const to = (x, y, buttons = 0) => {
+    const [cx, cy] = translate(cross);
+    mouse('pointermove', buttons, 0, x - cx, y - cy);
+  };
+  const mid = (name) => [boxes[name][0] + boxes[name][2] / 2, boxes[name][1] + boxes[name][3] / 2];
+  const lit = () => [bag, pause].filter((b) => b.classList.contains('fh-hover')).map((b) => (b === bag ? 'bag' : 'pause'));
+  const down = () => [bag, pause].filter((b) => b.classList.contains('fh-down')).map((b) => (b === bag ? 'bag' : 'pause'));
+  const fox = [300, 200];
+  const frame = () => p.frame(DT, ...fox);
+  return { p, bag, pause, cross, boxes, place, pressed, reads, mouse, to, mid, lit, down, frame };
+}
+const quiet = (i) => [i.aim, i.fire, i.dash, i.hasT];
+
+test('рамка на странице → оси игры (прямо, на боку, со сдвигом); попадание: края включительно, первая рамка', () => {
+  const out = { x0: 0, y0: 0, x1: 0, y1: 0 };
+  assert.equal(boxInAxes({ left: 10, top: 20, right: 54, bottom: 64 }, null, out), out);
+  assert.deepEqual(out, { x0: 10, y0: 20, x1: 54, y1: 64 });
+  for (const turn of [0, 90, -90]) {
+    const p = page({ turn, offset: [5, 7] });
+    // прямоугольник в осях игры → его «стоячая» рамка на странице → обратно в оси игры
+    const a = p.at(700, 10);
+    const b = p.at(744, 54);
+    const box = { left: Math.min(a.clientX, b.clientX), top: Math.min(a.clientY, b.clientY), right: Math.max(a.clientX, b.clientX), bottom: Math.max(a.clientY, b.clientY) };
+    assert.deepEqual(boxInAxes(box, p.api, out), { x0: 700, y0: 10, x1: 744, y1: 54 }, `поворот ${turn}`);
+  }
+  const list = [{ id: 'a', x0: 0, y0: 0, x1: 10, y1: 10 }, { id: 'b', x0: 5, y0: 5, x1: 20, y1: 20 }];
+  assert.equal(boxAt(list, 0, 0).id, 'a');
+  assert.equal(boxAt(list, 10, 10).id, 'a', 'край — ещё рамка, и первая из двух');
+  assert.equal(boxAt(list, 20, 5).id, 'b');
+  assert.equal(boxAt(list, 20.5, 5), null);
+  assert.equal(boxAt(list, -0.5, 3), null);
+  assert.equal(boxAt([], 0, 0), null);
+});
+
+const CASES = [
+  // поворот, левша, сторона кнопки, поля вокруг сцены [лево, верх, право, низ]
+  [0, false, 44, [0, 0, 0, 0]],
+  [0, true, 66, [20, 50, 30, 40]],
+  [90, false, 66, [0, 0, 0, 0]],
+  [90, true, 44, [20, 50, 30, 40]],
+  [-90, false, 44, [20, 50, 30, 40]],
+  [-90, true, 66, [0, 0, 0, 0]],
+];
+for (const [turn, lefty, size, pad] of CASES) {
+  test(`прицел (поворот ${turn}${lefty ? ', левша' : ''}, кнопка ${size}, поля ${pad.join('/')}): наведение подсвечивает кнопку, нажатие — её действие, не рывок и не огонь`, () => {
+    const L = lockPage({ turn, size, pad, offset: [5, 7] });
+    L.p.input.setLefty(lefty);                               // левша меняет местами джойстики, а не надписи
+    assert.equal(L.p.input.locked, true);
+    assert.equal(L.cross.classList.contains('fh-cross--on'), true);
+    L.to(...L.mid('pause'));
+    assert.deepEqual(L.lit(), ['pause']);
+    assert.equal(L.cross.classList.contains('fh-cross--hud'), true, 'прицел над кнопкой');
+    const e = L.mouse('pointerdown', 1);
+    assert.equal(e.defaultPrevented, true);
+    assert.deepEqual(L.down(), ['pause']);
+    assert.deepEqual(quiet(L.frame()), [false, false, false, false], 'нажатие на кнопке игра не видит');
+    L.mouse('pointerup', 0);
+    assert.deepEqual(L.pressed, ['pause']);
+    assert.deepEqual(L.down(), []);
+    assert.deepEqual(quiet(L.frame()), [false, false, false, false], 'и отпускание — не рывок');
+    // соседняя кнопка
+    L.to(...L.mid('bag'));
+    assert.deepEqual(L.lit(), ['bag']);
+    L.mouse('pointerdown', 1);
+    L.mouse('pointerup', 0);
+    assert.deepEqual(L.pressed, ['pause', 'bag']);
+    // край кнопки — ещё кнопка, рядом — уже поле
+    const [x, y, w, h] = L.boxes.pause;
+    L.to(x + w, y + h);
+    assert.deepEqual(L.lit(), ['pause']);
+    L.to(x + w / 2, y + h + 1);
+    assert.deepEqual(L.lit(), []);
+    assert.equal(L.cross.classList.contains('fh-cross--hud'), false);
+    // на поле левая — снова прицел и рывок к прицелу, как раньше
+    L.to(500, 250);
+    L.mouse('pointerdown', 1);
+    assert.equal(L.frame().aim, true);
+    L.mouse('pointerup', 0);
+    const i = L.frame();
+    assert.equal(i.dash, true);
+    close(i.dx, 200 / Math.sqrt(200 ** 2 + 50 ** 2), 1e-6);
+    assert.deepEqual(L.pressed, ['pause', 'bag']);
+  });
+}
+
+test('прицел: уехал с кнопки — нажатие отменено; правая на кнопке — не огонь; начатое на поле — игры, не кнопки', () => {
+  const L = lockPage();
+  const [cx, cy] = L.mid('pause');
+  // нажал на кнопке, уехал на поле и отпустил: ни нажатия, ни рывка
+  L.to(cx, cy);
+  L.mouse('pointerdown', 1);
+  L.to(500, 250, 1);
+  assert.deepEqual(L.down(), []);
+  assert.deepEqual(quiet(L.frame()), [false, false, false, false]);
+  L.mouse('pointerup', 0);
+  assert.deepEqual(L.pressed, []);
+  assert.deepEqual(quiet(L.frame()), [false, false, false, false]);
+  // вернулся на кнопку, не отпуская, — как палец: отменённое нажатие не оживает
+  L.to(cx, cy);
+  L.mouse('pointerdown', 1);
+  L.to(500, 250, 1);
+  L.to(cx, cy, 1);
+  L.mouse('pointerup', 0);
+  assert.deepEqual(L.pressed, []);
+  // правая кнопка на кнопке: не нажатие и не огонь
+  L.mouse('pointerdown', 2, 2);
+  assert.deepEqual(quiet(L.frame()), [false, false, false, false]);
+  L.mouse('pointerup', 0, 2);
+  assert.deepEqual(L.pressed, []);
+  // левая на кнопке, к ней добавили правую: огня нет; всё отпустили на кнопке — нажатие (как tap)
+  L.mouse('pointerdown', 1);
+  L.mouse('pointermove', 3, 2);
+  assert.deepEqual(quiet(L.frame()), [false, false, false, false]);
+  L.mouse('pointerup', 0, 2);
+  assert.deepEqual(L.pressed, ['pause']);
+  // нажал на поле, отпустил на кнопке: это рывок (к кнопке), кнопка не нажата и не «прижата»
+  L.to(500, 250);
+  L.mouse('pointerdown', 1);
+  L.to(cx, cy, 1);
+  assert.deepEqual(L.down(), []);
+  assert.equal(L.frame().aim, true);
+  L.mouse('pointerup', 0);
+  assert.equal(L.frame().dash, true);
+  assert.deepEqual(L.pressed, ['pause']);
+  // правая зажата на поле (огонь) и прицел проехал по кнопке — огонь идёт дальше
+  L.to(500, 250);
+  L.mouse('pointerdown', 2, 2);
+  L.to(cx, cy, 2);
+  assert.deepEqual([L.frame().fire, L.p.input.state.hasT], [true, true]);
+  L.mouse('pointerup', 0, 2);
+  assert.deepEqual(L.pressed, ['pause']);
+});
+
+test('прицел: рамки кнопок меряются один раз после захвата и после смены размера — не на каждое движение', () => {
+  const L = lockPage({ size: 44 });
+  assert.equal(L.reads.n, 0, 'до первого движения не меряли');
+  L.to(100, 100);
+  assert.equal(L.reads.n, 2);
+  for (let k = 0; k < 50; k++) {
+    L.to(100 + k, 100 + (k % 7));
+    L.frame();
+  }
+  L.mouse('pointerdown', 1);
+  L.mouse('pointerup', 0);
+  assert.equal(L.reads.n, 2);
+  // надписи выросли в полтора раза: после resize новые рамки берутся на следующем движении — один раз
+  const was = L.boxes.bag[0];
+  L.place(66);
+  L.p.input.resize();
+  L.to(...L.mid('bag'));
+  assert.ok(L.mid('bag')[0] < was, 'середина нового рюкзака — там, где раньше было поле');
+  assert.equal(L.reads.n, 4);
+  assert.deepEqual(L.lit(), ['bag']);
+  const [x] = L.boxes.bag;
+  L.to(x - 10, 30);                                        // левее рюкзака — поле
+  assert.deepEqual(L.lit(), []);
+  assert.equal(L.reads.n, 4);
+  // спрятанная кнопка (нулевая рамка) не нажимается
+  L.boxes.bag = [L.boxes.bag[0], 6, 0, 0];
+  L.p.input.resize();
+  L.to(...L.mid('pause'));
+  L.to(L.boxes.bag[0], 6);
+  assert.deepEqual(L.lit(), []);
+  L.mouse('pointerdown', 1);
+  L.mouse('pointerup', 0);
+  assert.deepEqual(L.pressed, []);
+  // захват отпустили и поймали снова — рамки меряются заново
+  const n = L.reads.n;
+  L.p.input.setLock(false);
+  L.p.input.setLock(true);
+  L.to(...L.mid('pause'));
+  assert.equal(L.reads.n, n + 2);
+  assert.deepEqual(L.lit(), ['pause']);
+});
+
+test('прицел: захват сняли (окно открылось) — подсветка и начатое нажатие сброшены; поймали снова — кнопки работают', () => {
+  const L = lockPage();
+  L.to(...L.mid('pause'));
+  L.mouse('pointerdown', 1);
+  assert.deepEqual([L.lit(), L.down()], [['pause'], ['pause']]);
+  L.p.input.setLock(false);
+  assert.equal(L.p.input.locked, false);
+  assert.deepEqual([L.lit(), L.down()], [[], []]);
+  assert.equal(L.cross.classList.contains('fh-cross--on'), false);
+  assert.equal(L.cross.classList.contains('fh-cross--hud'), false);
+  L.mouse('pointerup', 0);                                 // отпускание пришло уже без захвата — не нажатие
+  assert.deepEqual(L.pressed, []);
+  // окно закрыли — курсор снова пойман, прицел на прежнем месте и нажимает
+  L.p.input.setLock(true);
+  assert.equal(L.p.input.locked, true);
+  L.to(...L.mid('bag'));
+  L.mouse('pointerdown', 1);
+  L.mouse('pointerup', 0);
+  assert.deepEqual(L.pressed, ['bag']);
+  // окно потеряло фокус посреди нажатия — отменено, без рывка
+  L.to(...L.mid('pause'));
+  L.mouse('pointerdown', 1);
+  L.p.win.fire('blur');
+  assert.deepEqual([L.lit(), L.down()], [[], []]);
+  L.mouse('pointerup', 0);
+  assert.deepEqual(L.pressed, ['bag']);
+  assert.equal(L.frame().dash, false);
+  // pointercancel и reset — так же
+  L.to(...L.mid('pause'));
+  L.mouse('pointerdown', 1);
+  L.p.stage.fire('pointercancel', { pointerType: 'mouse', pointerId: 1 });
+  L.mouse('pointerup', 0);
+  L.to(...L.mid('pause'));
+  L.mouse('pointerdown', 1);
+  L.p.input.reset();
+  L.mouse('pointerup', 0);
+  assert.deepEqual(L.pressed, ['bag']);
+  // destroy снимает подсветку
+  L.to(...L.mid('bag'));
+  assert.deepEqual(L.lit(), ['bag']);
+  L.p.input.destroy();
+  assert.deepEqual([L.lit(), L.down()], [[], []]);
+});
+
+test('без захвата всё как раньше: мышь целит и прыгает по месту под курсором, палец — джойстики, кнопки свои', () => {
+  const L = lockPage();
+  L.p.input.setLock(false);
+  const at = (gx, gy) => L.p.at(gx, gy);
+  const [cx, cy] = L.mid('pause');
+  // обычная мышь: события над кнопкой получает сама кнопка; сцена рамки не меряет и ничего не подсвечивает
+  L.p.canvas.fire('pointermove', { pointerType: 'mouse', pointerId: 1, buttons: 0, ...at(cx, cy) });
+  assert.deepEqual([L.lit(), L.reads.n], [[], 0]);
+  L.p.canvas.fire('pointerdown', { pointerType: 'mouse', pointerId: 1, buttons: 1, button: 0, ...at(500, 250) });
+  assert.equal(L.frame().aim, true);
+  L.p.canvas.fire('pointerup', { pointerType: 'mouse', pointerId: 1, buttons: 0, button: 0, ...at(500, 250) });
+  assert.equal(L.frame().dash, true);
+  // палец у кнопки — это джойстик действия (на деле палец по кнопке получает кнопка)
+  L.p.touch('pointerdown', 5, cx - 60, cy + 120);
+  for (let t = 0; t < HOLD; t += DT) L.frame();
+  assert.equal(L.p.input.state.fire, true);
+  L.p.touch('pointerup', 5, cx - 60, cy + 120);
+  assert.deepEqual([L.pressed, L.lit(), L.reads.n], [[], [], 0]);
+  // «хочу захват», а браузер ещё не поймал: первое нажатие ловит курсор и игре не достаётся (как было)
+  L.p.stage.requestPointerLock = () => {};
+  L.p.input.setLock(true, true);
+  L.p.canvas.fire('pointerdown', { pointerType: 'mouse', pointerId: 1, buttons: 1, button: 0, ...at(500, 250) });
+  assert.equal(L.frame().aim, false);
+});
+
+test('прицел: кривой список кнопок от игры не ломает ввод', () => {
+  for (const hud of [() => null, () => 'нет', () => [null, { el: null, press() {} }, { el: { getBoundingClientRect: () => ({ left: 0, top: 0, right: 9, bottom: 9 }) }, press: 'нет' }]]) {
+    const p = page({ mouse: true, hud });
+    p.stage.requestPointerLock = () => {
+      p.doc.pointerLockElement = p.stage;
+      p.doc.fire('pointerlockchange');
+    };
+    p.input.setLock(true, true);
+    p.stage.fire('pointerdown', { pointerType: 'mouse', pointerId: 1, buttons: 1, button: 0, movementX: 5, movementY: 5 });
+    p.stage.fire('pointerup', { pointerType: 'mouse', pointerId: 1, buttons: 0, button: 0, movementX: 400, movementY: 100 });
+    assert.equal(p.frame(DT, 0, 0).dash, true);
+  }
+});
+
+test('game.css и сборка: прицел над надписями и под окнами; подсветка наведения; index.js отдаёт вводу кнопки ui', () => {
+  const zOf = (sel) => Number(new RegExp(`\\[data-game="fox-hunt"\\] \\${sel} \\{[^}]*?z-index: (\\d+)`).exec(css)?.[1]);
+  assert.ok(zOf('.fh-hud') < zOf('.fh-cross') && zOf('.fh-cross') < zOf('.fh-modal'), 'прицел между надписями и окнами');
+  assert.match(css, /\.fh-pause-btn\.fh-hover \.fh-pause-face \{[^}]*filter/);
+  assert.match(css, /@media \(hover: hover\) \{\s*\[data-game="fox-hunt"\] \.fh-pause-btn:hover \.fh-pause-face/);
+  assert.match(css, /\.fh-cross--hud::before \{/);
+  assert.match(css, /prefers-reduced-motion: reduce\) \{\s*\[data-game="fox-hunt"\] \.fh-cross, \[data-game="fox-hunt"\] \.fh-cross::before \{ transition-duration: 0s; \}/);
+  // нажатие прицелом приходит после .fh-down: в стилях наведение объявлено раньше нажатия
+  assert.ok(css.indexOf('.fh-pause-btn.fh-hover .fh-pause-face') < css.lastIndexOf('.fh-pause-btn.fh-down .fh-pause-face'));
+  const index = readFileSync(new URL('../index.js', import.meta.url), 'utf8');
+  assert.match(index, /hud: \(\) => ui\?\.hudButtons \?\? null/);
+});
+
 // ---------- исходник: кадр без мусора, раскладка — только в resize ----------
 
 /** Тела вложенных функций с таким именем (в ядре и в обёртке): от заголовка до скобки с тем же отступом. */
@@ -1247,7 +1569,7 @@ test('в кадре ничего не создаётся: ни объектов,
   const frames = bodies('frame');
   assert.equal(frames.length, 2, 'frame() — в ядре и в обёртке');
   // всё, что зовётся каждый кадр и на каждое движение указателя
-  const hot = ['frame', 'sync', 'move', 'world', 'origin', 'mouseAim', 'mouseAt', 'paintStick', 'paint', 'locate', 'onMouse', 'onPointerMove', 'hide'];
+  const hot = ['frame', 'sync', 'move', 'world', 'origin', 'mouseAim', 'mouseAt', 'paintStick', 'paint', 'locate', 'onMouse', 'onPointerMove', 'hide', 'aimHud', 'hoverHud', 'hudAt'];
   for (const name of hot) {
     const list = bodies(name);
     assert.ok(list.length >= 1, `нет функции ${name}`);
@@ -1261,12 +1583,20 @@ test('в кадре ничего не создаётся: ни объектов,
   }
 });
 
-test('раскладку читает только resize(); в обработчике движения её нет — ни прямо, ни через вызовы', () => {
+test('раскладку читает только measure() — из resize() и разового замера кнопок; в обработчике движения её нет', () => {
   const LAYOUT = /getBoundingClientRect|getComputedStyle|offset(?:Width|Height|Left|Top|Parent)|client(?:Width|Height|Left|Top)\b|scroll(?:Width|Height|Left|Top)|getClientRects|inner(?:Width|Height)/;
   assert.equal(src.match(new RegExp(LAYOUT.source, 'g')).length, 1, 'раскладка читается в одном месте');
-  assert.match(bodies('resize').join('\n'), /getBoundingClientRect/);
+  assert.match(bodies('measure').join('\n'), /getBoundingClientRect/);
+  // measure зовут только resize() (сцена) и measureHud() (кнопки поверх сцены)
+  const callers = (name) => [...new Set([...src.matchAll(/^ +function (\w+)\(/gm)].map((m) => m[1]))]
+    .filter((fn) => fn !== name && bodies(fn).some((b) => new RegExp(`(?<![.\\w])${name}\\(`).test(b)));
+  assert.deepEqual(callers('measure').sort(), ['measureHud', 'resize']);
+  // а measureHud — только hudAt, и только когда рамки устарели (после захвата и смены размера): один раз, не на каждое движение
+  assert.deepEqual(callers('measureHud'), ['hudAt']);
+  assert.match(bodies('hudAt')[0], /if \(hudStale\) measureHud\(\);/);
+  assert.match(bodies('measureHud')[0], /^\s*hudStale = false;/);
   const [onMove] = bodies('onPointerMove');
-  for (const name of ['onPointerMove', 'onPointerUp', 'onPointerCancel', 'onPointerLeave', 'onMouse', 'locate', 'frame', 'paint', 'paintStick', 'hide']) {
+  for (const name of ['onPointerMove', 'onPointerUp', 'onPointerCancel', 'onPointerLeave', 'onMouse', 'locate', 'frame', 'paint', 'paintStick', 'hide', 'aimHud', 'hoverHud', 'hudAt', 'dropHud']) {
     for (const body of bodies(name)) {
       assert.doesNotMatch(body, LAYOUT, name);
       assert.doesNotMatch(body, /\bresize\(/, `${name} зовёт resize()`);

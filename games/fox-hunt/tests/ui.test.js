@@ -69,6 +69,25 @@ test('кнопка рюкзака открывает рюкзак, закрыт�
   assert.deepEqual(calls, ['pause', 'resume']);
 });
 
+test('кнопки для прицела при пойманном курсоре: рюкзак и пауза, их действие — то же, что у нажатия пальцем', () => {
+  const { ui, root, calls } = make();
+  const [bag, pause] = root.byClass('fh-pause-btn');
+  assert.deepEqual(ui.hudButtons.map((b) => b.el), [bag, pause]);
+  assert.ok(Object.isFrozen(ui.hudButtons) && ui.hudButtons.every((b) => typeof b.press === 'function'));
+  ui.hudButtons[1].press();
+  assert.equal(ui.top.name, 'pause');
+  ui.hudButtons[0].press();                                // поверх паузы рюкзак не открывается — как пальцем
+  assert.equal(ui.top.name, 'pause');
+  ui.back();
+  assert.equal(ui.isOpen, false);
+  ui.hudButtons[0].press();
+  assert.equal(ui.top.name, 'bag');
+  ui.back();
+  assert.deepEqual(calls, ['pause', 'resume', 'pause', 'resume']);
+  // плашки и мини-карта нажатий не ловят — прицелу там нажимать нечего
+  assert.equal(root.byClass('fh-map')[0].getAttribute('aria-hidden'), 'true');
+});
+
 test('рюкзака в паузе больше нет; пауза: ровно четыре кнопки и «Настройки»', () => {
   const { ui, labels } = make();
   ui.open('pause');

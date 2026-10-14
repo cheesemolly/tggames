@@ -468,17 +468,22 @@ export function createUi({ root, api, actions, get }) {
   // справа: две кнопки (рюкзак слева от паузы) и мини-карта
   const pauseBtn = el('button', { class: 'fh-pause-btn', 'aria-label': T.pauseBtn, title: T.pauseBtn });
   pauseBtn.innerHTML = `<span class="fh-pause-face">${svg('pause')}</span>`;
-  tap(pauseBtn, () => {
+  const pausePress = () => {
     say('tap');
     openPause(false);
-  });
+  };
+  tap(pauseBtn, pausePress);
   const bagBtn = el('button', { class: 'fh-pause-btn fh-bag-btn', 'aria-label': T.bagBtn, title: T.bagBtn });
   bagBtn.append(el('span', { class: 'fh-pause-face' }, sign('bag', 26)));
-  tap(bagBtn, () => {
+  const bagPress = () => {
     say('tap');
     openBag();
-  });
+  };
+  tap(bagBtn, bagPress);
   const btnRow = el('div', { class: 'fh-row fh-btns' }, bagBtn, pauseBtn);
+  // их же нажимает прицел, пока курсор пойман в полном экране (input.js, опция hud): нажатия тогда приходят сцене.
+  // Остальное поверх игры (плашки, мини-карта) нажатий не ловит
+  const hudButtons = Object.freeze([Object.freeze({ el: bagBtn, press: bagPress }), Object.freeze({ el: pauseBtn, press: pausePress })]);
   const mapLinks = el('div', { class: 'fh-map-links' });
   const mapRooms = el('div', { class: 'fh-map-rooms' });
   const mapIn = el('div', { class: 'fh-map-in' }, mapLinks, mapRooms);
@@ -1848,6 +1853,8 @@ export function createUi({ root, api, actions, get }) {
     get top() {
       return top();
     },
+    /** Кнопки поверх игры для прицела при пойманном курсоре: [{ el, press }] (пауза и рюкзак). */
+    hudButtons,
     layout,
   };
 }
