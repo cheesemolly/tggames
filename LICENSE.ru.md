@@ -73,6 +73,8 @@ Copyright (c) 2026 cheesemolly (https://github.com/cheesemolly). Все прав
   Project Authors), SIL Open Font License 1.1, см. `styles/fonts/OFL-press-start-2p.txt`;
 - `styles/fonts/golos-text-*.woff2` — шрифт «Golos Text» (Copyright 2019 The Golos Text Project Authors,
   https://github.com/googlefonts/golos-text), SIL Open Font License 1.1, см. `styles/fonts/OFL-golos-text.txt`;
+- `styles/fonts/podkova-*.woff2` — шрифт «Podkova» (Copyright 2011 The Podkova Project Authors,
+  https://github.com/cyrealtype/Podkova), SIL Open Font License 1.1, см. `styles/fonts/OFL-podkova.txt`;
 - `games/nonogram/levels.js` — картинки уровней «Вкусное» сделаны из набора «16x16 Food»
   (ARoachIFoundOnMyPillow, https://opengameart.org/content/16x16-food), CC0 1.0; «Зверята» — из «Tiny Creatures»
   (Clint Bellanger, https://clintbellanger.net), CC0 1.0; «Эмодзи» и «Большие картинки» — из Microsoft Fluent Emoji

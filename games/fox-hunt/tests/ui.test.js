@@ -8,7 +8,7 @@ import { arena } from './helpers.js';
 const page = miniPage();
 globalThis.document = page.doc;
 globalThis.matchMedia = () => ({ matches: true, addEventListener() {} });
-const { createUi, T } = await import('../ui.js');
+const { createUi, T, BOX } = await import('../ui.js');
 
 /** Окно открыто, партия идёт; вернуть всё, что нужно проверять. rotated — экран лежит на боку. */
 function make({ rotated = false, over = false } = {}) {
@@ -181,17 +181,18 @@ test('нет окон — «Назад» открывает паузу; коне
   assert.equal(done.ui.isOpen, false);
 });
 
-test('стили: обе кнопки HUD не меньше 44×44, окна без прокрутки и в 568×320', () => {
+test('стили: обе кнопки HUD не меньше 44×44, окна — рамка BOX без прокрутки', () => {
   const css = readFileSync(new URL('../game.css', import.meta.url), 'utf8');
   const rule = css.match(/\.fh-pause-btn \{[^}]*\}/)[0];
   assert.match(rule, /width: max\(44px, /);
   assert.match(rule, /height: max\(44px, /);
-  assert.doesNotMatch(css.match(/\.fh-pause \{[^}]*\}/)[0], /overflow[^;]*(auto|scroll)/);
-  assert.doesNotMatch(css.match(/\.fh-settings \{[^}]*\}/)[0], /overflow[^;]*(auto|scroll)/);
-  for (const sel of ['fh-pause', 'fh-settings']) {
-    const h = Number(css.match(new RegExp(`\\.${sel} \\{[^}]*max-height: (\\d+)px`))[1]);
-    assert.ok(h <= 284 && h + 36 <= 320, `${sel}: ${h}`);
-  }
+  // все окна — одна рамка BOX, растёт целиком (scale): ни прокрутки, ни своих размеров у паузы и настроек
+  const win = css.match(/\[data-game="fox-hunt"\] \.fh-win \{[^}]*\}/)[0];
+  assert.match(win, new RegExp(`width: ${BOX.w}px;`));
+  assert.match(win, new RegExp(`height: ${BOX.h}px;`));
+  assert.match(win, /scale: var\(--fh-zoom/);
+  assert.doesNotMatch(css, /\.fh-(win|pause|settings|pause-body|set-list) \{[^}]*overflow[^;]*(auto|scroll)/);
+  assert.doesNotMatch(css, /\.fh-(pause|settings) \{[^}]*(width|height)/);
 });
 
 test('HUD: кнопки не выходят за безопасные отступы (правый край идёт от ls-r)', () => {
@@ -213,4 +214,31 @@ test('«Отдельная кнопка для оружия»: по умолча
   press(sw);
   assert.equal(settings.weaponBtn, false);
   assert.equal(sw.getAttribute('aria-checked'), 'false');
+});
+
+test('пауза: у кнопок значок слева, надпись — отдельно; пока рисунка нет, окошко пустое', () => {
+  const { ui, btn } = make();
+  ui.open('pause');
+  for (const text of [SIDE.resume, SIDE.stats, SIDE.settings, SIDE.restart, SIDE.exit]) {
+    const b = btn(text);
+    assert.ok(b, text);
+    const kids = b.children.filter((c) => typeof c !== 'string' && c.localName);
+    assert.ok(kids[0].classList.contains('fh-ic'), `${text}: значок первым`);
+    assert.ok(kids[1].classList.contains('fh-btn-text'), `${text}: надпись вторым`);
+    assert.equal(kids[1].textContent, text);
+    assert.equal(b.textContent, text, `${text}: заглушка значка без буквы`);
+  }
+});
+
+test('шрифт окон Podkova лежит в репозитории и указан в лицензиях', () => {
+  const css = readFileSync(new URL('../game.css', import.meta.url), 'utf8');
+  for (const part of ['cyrillic', 'latin']) {
+    assert.ok(css.includes(`url(../../styles/fonts/podkova-${part}.woff2)`), part);
+    const font = readFileSync(new URL(`../../../styles/fonts/podkova-${part}.woff2`, import.meta.url));
+    assert.equal(font.subarray(0, 4).toString('latin1'), 'wOF2');
+  }
+  readFileSync(new URL('../../../styles/fonts/OFL-podkova.txt', import.meta.url));
+  for (const name of ['LICENSE', 'LICENSE.ru.md']) {
+    assert.match(readFileSync(new URL(`../../../${name}`, import.meta.url), 'utf8'), /styles\/fonts\/podkova-\*\.woff2/);
+  }
 });

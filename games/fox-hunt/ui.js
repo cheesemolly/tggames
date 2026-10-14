@@ -1119,6 +1119,13 @@ export function createUi({ root, api, actions, get }) {
     return b;
   }
 
+  /** Кнопка со значком слева. Пока рисунка нет, на его месте пустое окошко того же размера — надпись не прыгнет. */
+  function iconButton(key, text, cls, fn) {
+    const b = button('', cls, fn);
+    b.append(icon(key, 22, { letter: '' }), el('span', { class: 'fh-btn-text' }, text));
+    return b;
+  }
+
   function closeButton() {
     const b = el('button', { class: 'fh-x', 'aria-label': T.close, title: T.close });
     b.innerHTML = svg('close');
@@ -1134,7 +1141,7 @@ export function createUi({ root, api, actions, get }) {
   function pauseWin(resumed) {
     const G = get.game();
     const title = resumed ? T.pause.resumed : T.pause.title;
-    const resume = button(T.pause.resume, 'fh-btn--main', closeAll);
+    const resume = iconButton('ui.play', T.pause.resume, 'fh-btn--main', closeAll);
 
     // «Заново» переспрашивает тут же, в этом окне: случайное нажатие партию не сотрёт
     const body = el('div', { class: 'fh-pause-body' });
@@ -1162,15 +1169,15 @@ export function createUi({ root, api, actions, get }) {
         body.replaceChildren(
           el('div', { class: 'fh-col' },
             resume,
-            button(T.pause.stats, '', () => pushWin(statsWin())),
-            button(T.pause.settings, '', () => pushWin(settingsWin())),
+            iconButton('ui.stats', T.pause.stats, '', () => pushWin(statsWin())),
+            iconButton('ui.gear', T.pause.settings, '', () => pushWin(settingsWin())),
           ),
           el('div', { class: 'fh-col' },
-            button(T.pause.restart, 'fh-btn--danger', () => {
+            iconButton('ui.restart', T.pause.restart, 'fh-btn--danger', () => {
               asking = true;
               drawBody(true);
             }),
-            button(T.pause.exit, '', () => actions.exit?.()),
+            iconButton('ui.exit', T.pause.exit, '', () => actions.exit?.()),
           ),
         );
       }
@@ -1470,7 +1477,7 @@ export function createUi({ root, api, actions, get }) {
     }
 
     const card = el('div', { class: 'fh-win fh-bag', role: 'dialog', 'aria-label': T.bag.title },
-      el('div', { class: 'fh-head' }, el('h2', { class: 'fh-title' }, T.bag.title), closeButton()),
+      el('div', { class: 'fh-head fh-head--row' }, el('h2', { class: 'fh-title' }, T.bag.title), closeButton()),
       el('div', { class: 'fh-bag-body' }, leftPane, info),
     );
     return {
@@ -1598,7 +1605,7 @@ export function createUi({ root, api, actions, get }) {
     }
 
     const card = el('div', { class: 'fh-win fh-stats', role: 'dialog', 'aria-label': T.stats.title },
-      el('div', { class: 'fh-head' }, el('div', { class: 'fh-tabs', role: 'tablist' }, tabs), closeButton()),
+      el('div', { class: 'fh-head fh-head--tabs' }, el('div', { class: 'fh-tabs', role: 'tablist' }, tabs), closeButton()),
       body,
     );
     return {
