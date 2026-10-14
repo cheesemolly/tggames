@@ -70,10 +70,11 @@ export const T = {
   pause: {
     title: 'Пауза', resumed: 'Охота продолжается',
     where: (floor, place) => `Локация ${floor} · ${place}`,
-    resume: 'Продолжить', bag: 'Рюкзак', stats: 'Статистика', restart: 'Заново', exit: 'В меню',
-    ask: 'Начать заново?', yes: 'Да', no: 'Нет',
+    resume: 'Продолжить', stats: 'Статистика', settings: 'Настройки', restart: 'Заново', exit: 'В главное меню',
+    ask: 'Начать заново? Охота пропадёт', yes: 'Да, заново', no: 'Отмена',
   },
-  set: { music: 'Музыка', sound: 'Звуки', lefty: 'Режим левши', flip: 'Перевернуть экран' },
+  bagBtn: 'Рюкзак',
+  set: { title: 'Настройки', music: 'Музыка', sound: 'Звуки', lefty: 'Режим левши', flip: 'Перевернуть экран' },
   bag: {
     title: 'Рюкзак', worn: 'Надето', pack: (n, of) => `В рюкзаке · ${n} из ${of}`, extra: 'Дары и спутники', noExtra: 'пока нет',
     slot: { weapon: 'Оружие', armor: 'Броня', acc: 'Украшение', bag: 'Ячейка рюкзака' },
@@ -141,6 +142,8 @@ const GLYPH = {
   weapon: '<path class="fh-ln" d="M7 4v4.6a5 5 0 0 0 10 0V4M12 13.6v6.9"/>',
   armor: '<path class="fh-ln" d="M12 3.6 5.6 6v5.4c0 4 2.6 7.3 6.4 8.8 3.8-1.5 6.4-4.8 6.4-8.8V6L12 3.6Z"/>',
   acc: '<circle class="fh-ln" cx="12" cy="14.2" r="5.8"/><path d="M12 2.6l2.9 3.4L12 9.4 9.1 6 12 2.6Z"/>',
+  // запасной рюкзак для кнопки в HUD: ручка, клапан, карман
+  bag: '<path d="M9 5.6a3 3 0 0 1 6 0v1h-1.8v-1a1.2 1.2 0 0 0-2.4 0v1H9v-1Z"/><path d="M6.4 7.8h11.2a1.6 1.6 0 0 1 1.6 1.6v9a2 2 0 0 1-2 2H6.8a2 2 0 0 1-2-2v-9a1.6 1.6 0 0 1 1.6-1.6Z"/><path class="fh-g2" d="M8 14.2h8v4.4H8z"/>',
   // комнаты на мини-карте: корона хозяина, камень сундука, монета торговца, звезда прочих мест
   boss: '<path d="M4.6 18.5 3.2 7.4l5 3.9L12 5l3.8 6.3 5-3.9-1.4 11.1H4.6Z"/>',
   treasure: '<path d="M12 3.5 20.5 12 12 20.5 3.5 12 12 3.5Z"/>',
@@ -159,6 +162,7 @@ const ICON = {
   weapon: [['ui.slot.weapon', 'ui.weapon'], 'weapon'],
   armor: [['ui.slot.armor', 'ui.armor'], 'armor'],
   acc: [['ui.slot.acc', 'ui.acc'], 'acc'],
+  bag: [['ui.bag'], 'bag'],
 };
 
 // ---------- чистые помощники (их проверяют тесты) ----------
@@ -452,18 +456,25 @@ export function createUi({ root, api, actions, get }) {
   const notePane = el('div', { class: 'fh-pane fh-note', role: 'status' }, noteIc, el('span', { class: 'fh-note-text' }, noteTitle, noteSub));
   const mid = el('div', { class: 'fh-mid' }, scoreChip, wavesBox, bossPane, taskPane, notePane);
 
-  // справа: пауза — единственная кнопка на экране — и мини-карта
+  // справа: две кнопки (рюкзак слева от паузы) и мини-карта
   const pauseBtn = el('button', { class: 'fh-pause-btn', 'aria-label': T.pauseBtn, title: T.pauseBtn });
   pauseBtn.innerHTML = `<span class="fh-pause-face">${svg('pause')}</span>`;
   tap(pauseBtn, () => {
     say('tap');
     openPause(false);
   });
+  const bagBtn = el('button', { class: 'fh-pause-btn fh-bag-btn', 'aria-label': T.bagBtn, title: T.bagBtn });
+  bagBtn.append(el('span', { class: 'fh-pause-face' }, sign('bag', 26)));
+  tap(bagBtn, () => {
+    say('tap');
+    openBag();
+  });
+  const btnRow = el('div', { class: 'fh-row fh-btns' }, bagBtn, pauseBtn);
   const mapLinks = el('div', { class: 'fh-map-links' });
   const mapRooms = el('div', { class: 'fh-map-rooms' });
   const mapIn = el('div', { class: 'fh-map-in' }, mapLinks, mapRooms);
   const mapChip = el('div', { class: 'fh-map', 'aria-hidden': 'true' }, mapIn);
-  const right = el('div', { class: 'fh-side fh-side--r' }, pauseBtn, mapChip);
+  const right = el('div', { class: 'fh-side fh-side--r' }, btnRow, mapChip);
 
   // подпись над предметом, с которым лиса может что-то сделать: место ей задаёт place() через transform
   const promptLabel = el('span', { class: 'fh-prompt-text' });
@@ -1124,6 +1135,88 @@ export function createUi({ root, api, actions, get }) {
     const G = get.game();
     const title = resumed ? T.pause.resumed : T.pause.title;
     const resume = button(T.pause.resume, 'fh-btn--main', closeAll);
+
+    // «Заново» переспрашивает тут же, в этом окне: случайное нажатие партию не сотрёт
+    const body = el('div', { class: 'fh-pause-body' });
+    let asking = false;
+    function drawBody(moved) {
+      if (asking) {
+        body.replaceChildren(
+          el('div', { class: 'fh-ask-box' },
+            el('p', { class: 'fh-ask' }, T.pause.ask),
+            el('div', { class: 'fh-foot fh-foot--ask' },
+              button(T.pause.yes, 'fh-btn--danger', () => {
+                wins.length = 0;
+                shut();
+                actions.restart?.();
+                actions.resume?.();
+              }),
+              button(T.pause.no, '', () => {
+                asking = false;
+                drawBody(true);
+              }),
+            ),
+          ),
+        );
+      } else {
+        body.replaceChildren(
+          el('div', { class: 'fh-col' },
+            resume,
+            button(T.pause.stats, '', () => pushWin(statsWin())),
+            button(T.pause.settings, '', () => pushWin(settingsWin())),
+          ),
+          el('div', { class: 'fh-col' },
+            button(T.pause.restart, 'fh-btn--danger', () => {
+              asking = true;
+              drawBody(true);
+            }),
+            button(T.pause.exit, '', () => actions.exit?.()),
+          ),
+        );
+      }
+      body.classList.toggle('fh-pause-body--ask', asking);
+      if (moved) animate(body, [{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }], { duration: 180, easing: EASE_OUT });
+    }
+    drawBody(false);
+
+    const card = el('div', { class: 'fh-win fh-pause', role: 'dialog', 'aria-label': title },
+      el('div', { class: 'fh-head' },
+        el('h2', { class: 'fh-title' }, title),
+        el('p', { class: 'fh-sub' }, G ? T.pause.where(G.floor, BIOME_NAMES[G.biome] ?? '') : ''),
+      ),
+      body,
+    );
+    return {
+      name: 'pause',
+      el: card,
+      focus: resume,
+      back() {
+        if (!asking) return false;
+        asking = false;
+        drawBody(true);
+        return true;
+      },
+    };
+  }
+
+  /** Открыть паузу. resumed — партию только что продолжили с сохранения: окно говорит об этом. */
+  function openPause(resumed = false) {
+    const G = get.game();
+    if (!alive || !G || G.over || hasWin('pause')) return;
+    pushWin(pauseWin(Boolean(resumed)));
+  }
+
+  /** Рюкзак — своё окно из HUD, не из паузы: игра на это время стоит, как в паузе. */
+  function openBag() {
+    const G = get.game();
+    if (!alive || !G || G.over || wins.length) return;
+    pushWin(bagWin());
+  }
+
+  // ---------- настройки ----------
+  // Вложены в паузу: «Назад» снимает их и возвращает в неё.
+
+  function settingsWin() {
     const values = {
       music: () => get.settings?.()?.music !== false,
       sound: () => get.sound?.() !== false,
@@ -1133,6 +1226,7 @@ export function createUi({ root, api, actions, get }) {
     const keys = ['music', 'sound', 'lefty'];
     // перевернуть на другой бок можно только экран, который лежит на боку (телефон держат стоя)
     if (screenOf()?.rotated) keys.push('flip');
+    // сюда же встанут новые переключатели (сетка в два столбца, места на три ряда)
     const switches = keys.map((key) => {
       const b = el('button', { class: 'fh-btn fh-switch', role: 'switch', 'aria-checked': String(values[key]()) },
         el('span', { class: 'fh-switch-label' }, T.set[key]), el('i', { class: 'fh-switch-track' }));
@@ -1148,72 +1242,13 @@ export function createUi({ root, api, actions, get }) {
       });
       return b;
     });
-
-    // «Заново» переспрашивает тут же, на месте кнопок: случайное нажатие партию не сотрёт
-    const foot = el('div', { class: 'fh-foot' });
-    let asking = false;
-    function drawFoot(moved) {
-      if (asking) {
-        foot.replaceChildren(
-          el('span', { class: 'fh-ask' }, T.pause.ask),
-          button(T.pause.yes, 'fh-btn--danger', () => {
-            wins.length = 0;
-            shut();
-            actions.restart?.();
-            actions.resume?.();
-          }),
-          button(T.pause.no, '', () => {
-            asking = false;
-            drawFoot(true);
-          }),
-        );
-      } else {
-        foot.replaceChildren(
-          button(T.pause.restart, '', () => {
-            asking = true;
-            drawFoot(true);
-          }),
-          button(T.pause.exit, '', () => actions.exit?.()),
-        );
-      }
-      foot.classList.toggle('fh-foot--ask', asking);
-      if (moved) animate(foot, [{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }], { duration: 180, easing: EASE_OUT });
-    }
-    drawFoot(false);
-
-    const card = el('div', { class: 'fh-win fh-pause', role: 'dialog', 'aria-label': title },
-      el('div', { class: 'fh-head' },
-        el('h2', { class: 'fh-title' }, title),
-        el('p', { class: 'fh-sub' }, G ? T.pause.where(G.floor, BIOME_NAMES[G.biome] ?? '') : ''),
-      ),
-      el('div', { class: 'fh-pause-body' },
-        el('div', { class: 'fh-col' },
-          resume,
-          button(T.pause.bag, '', () => pushWin(bagWin())),
-          button(T.pause.stats, '', () => pushWin(statsWin())),
-        ),
-        el('div', { class: 'fh-col fh-col--switches' }, switches),
-      ),
-      foot,
+    const backBtn = button(T.back, 'fh-btn--main', closeTop);
+    const card = el('div', { class: 'fh-win fh-settings', role: 'dialog', 'aria-label': T.set.title },
+      el('div', { class: 'fh-head' }, el('h2', { class: 'fh-title' }, T.set.title)),
+      el('div', { class: 'fh-set-list' }, switches),
+      el('div', { class: 'fh-foot' }, backBtn),
     );
-    return {
-      name: 'pause',
-      el: card,
-      focus: resume,
-      back() {
-        if (!asking) return false;
-        asking = false;
-        drawFoot(true);
-        return true;
-      },
-    };
-  }
-
-  /** Открыть паузу. resumed — партию только что продолжили с сохранения: окно говорит об этом. */
-  function openPause(resumed = false) {
-    const G = get.game();
-    if (!alive || !G || G.over || hasWin('pause')) return;
-    pushWin(pauseWin(Boolean(resumed)));
+    return { name: 'settings', el: card, focus: backBtn };
   }
 
   // ---------- рюкзак ----------
@@ -1703,10 +1738,11 @@ export function createUi({ root, api, actions, get }) {
       return wins.length > 0;
     },
     destroy,
-    /** Сверх договора — для проверочной страницы и отладки: открыть окно по имени ('pause' | 'bag' | 'stats'). */
+    /** Сверх договора — для проверочной страницы и отладки: открыть окно по имени ('pause' | 'bag' | 'stats' | 'settings'). */
     open(name, arg) {
       if (name === 'pause') openPause(Boolean(arg));
       else if (name === 'bag' && !hasWin('bag')) pushWin(bagWin());
+      else if (name === 'settings' && !hasWin('settings')) pushWin(settingsWin());
       else if (name === 'stats' && !hasWin('stats')) pushWin(statsWin(arg));
       return top();
     },
