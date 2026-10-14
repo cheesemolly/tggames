@@ -778,7 +778,18 @@
 
 /* настройки: переключатели в два столбца, на три ряда хватает места */
 [data-game="fox-hunt"] .fh-set-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px 10px; }
+[data-game="fox-hunt"] .fh-set-hint { margin: 6px 0 0; font-size: 11px; line-height: 1.2; text-align: center; opacity: 0.75; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 [data-game="fox-hunt"] .fh-ask { flex: 1 1 auto; font-weight: 600; }
+
+/* полный экран на компьютере: чёрные поля вокруг поля и прицел, пока курсор пойман */
+[data-game="fox-hunt"]:fullscreen { background: #000; }
+[data-game="fox-hunt"] .fh-cross { position: absolute; left: 0; top: 0; width: 0; height: 0; pointer-events: none; opacity: 0; transition: opacity 0.12s; }
+[data-game="fox-hunt"] .fh-cross--on { opacity: 1; }
+[data-game="fox-hunt"] .fh-cross::before { content: ''; position: absolute; left: -11px; top: -11px; width: 18px; height: 18px; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.65), inset 0 0 0 1px rgba(0, 0, 0, 0.65); }
+[data-game="fox-hunt"] .fh-cross::after { content: ''; position: absolute; left: -2px; top: -2px; width: 4px; height: 4px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.65); }
+@media (prefers-reduced-motion: reduce) {
+  [data-game="fox-hunt"] .fh-cross { transition-duration: 0s; }
+}
 
 /* рюкзак: слева ячейки, справа карточка выбранного */
 [data-game="fox-hunt"] .fh-bag-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 206px minmax(0, 1fr); gap: 12px; }

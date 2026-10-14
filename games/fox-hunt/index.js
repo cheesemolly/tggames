@@ -20,6 +20,7 @@ import { createSounds } from './sounds.js';
 import { createRenderer } from './render.js';
 import { createUi } from './ui.js';
 import { createInput } from './input.js';
+import { createFullscreen, isDesktop, desktopFacts, readFullscreen } from './fullscreen.js';
 import { F_WALK, F_LEAP, emit, kindOf } from './core.js';
 import { BASE, DASH } from './balance.js';
 import { SIDES, DIR, dangerAt, escapeDir, fieldTo, fieldDir, castRay, entryPoint } from './world.js';
@@ -69,6 +70,9 @@ let root = null;
 let dom = null;                      // { stage, canvas, sticks, probe, observer, offScreen }
 let renderer = null;
 let input = null;
+let fs = null;                       // полный экран — только на компьютере, иначе null
+let lockWant = false;                // что последний раз сказано input.setLock
+let armed = null;                    // ждём первого нажатия, чтобы вернуть полный экран из сохранения
 let ui = null;
 let G = null;                        // идущая партия — состояние расчёта
 let stats = emptyStats();
@@ -152,7 +156,7 @@ function readSettings(v) {
     }
   }
   // джойстики: нет поля (старое сохранение) или что-то не то — «статичные»
-  return { lefty: v?.lefty === true, flip: v?.flip === true, music: v?.music !== false, stick: v?.stick === 'float' ? 'float' : 'static', weaponBtn: v?.weaponBtn === true, hints };
+  return { lefty: v?.lefty === true, flip: v?.flip === true, music: v?.music !== false, stick: v?.stick === 'float' ? 'float' : 'static', weaponBtn: v?.weaponBtn === true, fullscreen: readFullscreen(v), hints };
 }
 
 /** Сохранённая «коллекция»: только строки, без повторов и не длиннее положенного. */
@@ -200,12 +204,83 @@ function setOption(key, value) {
     settings.weaponBtn = on;
     input?.setWeaponBtn(on);
   }
+  else if (key === 'fullscreen') {
+    if (!fs) return;                 // не компьютер: ничего не меняем
+    settings.fullscreen = on;
+    if (on) enterFullscreen();       // это нажатие переключателя — браузер разрешает
+    else {
+      fs.leave();
+      syncLock(true);
+    }
+  }
   else if (key.startsWith('hint:') && HINT_ID.test(key.slice(5))) {
     // подсказка показана (true) — больше не нужна; false — показать снова
     if (on && Object.keys(settings.hints).length < HINTS_MAX) settings.hints[key.slice(5)] = true;
     else delete settings.hints[key.slice(5)];
   } else return;
   api.storage.set('settings', settings);
+}
+
+// ---------- полный экран и захват курсора (только компьютер) ----------
+
+/** Включить полный экран. Отказ — тихо: переключатель возвращается в «выключено», игра как раньше. */
+function enterFullscreen() {
+  const promise = fs.enter();
+  promise.then((ok) => {
+    if (!fs || !api) return;
+    if (ok) syncLock(true);
+    else if (settings.fullscreen) {
+      settings.fullscreen = false;
+      api.storage.set('settings', settings);
+      ui?.refreshSettings();
+    }
+  });
+}
+
+/** Курсор держим пойманным, пока открыт полный экран и идёт игра; любое окно или выбор дара — отпускаем. */
+function wantLock() {
+  return Boolean(fs?.active) && settings.fullscreen && running() && !ui?.isOpen && !G.pending && !document.hidden;
+}
+
+/** Сказать вводу, ловить ли курсор. Только при смене (fresh — всегда и с забытыми отказами). */
+function syncLock(fresh = false) {
+  if (!input) return;
+  const want = wantLock();
+  if (want === lockWant && !fresh) return;
+  lockWant = want;
+  input.setLock(want, fresh);
+}
+
+/** Полный экран кончился не по нашей воле (Esc без захвата клавиши, жест браузера): пауза, переключатель «выключено». */
+function onFullscreenLost() {
+  if (!api || !settings.fullscreen) return;
+  settings.fullscreen = false;
+  api.storage.set('settings', settings);
+  syncLock(true);
+  if (ui && running() && !ui.isOpen && !G.pending) ui.openPause(false);
+  ui?.refreshSettings();
+  dirty = true;
+  kick();
+}
+
+/** Полный экран из сохранения нельзя включить без нажатия: ждём первого и пробуем (Esc не считается). */
+function armFullscreen() {
+  if (!fs || !settings.fullscreen) return;
+  const go = (e) => {
+    if (e.type === 'keydown' && e.code === 'Escape') return;
+    disarmFullscreen();
+    if (fs && settings.fullscreen && !fs.active) enterFullscreen();
+  };
+  document.addEventListener('pointerup', go, true);
+  document.addEventListener('keydown', go, true);
+  armed = go;
+}
+
+function disarmFullscreen() {
+  if (!armed) return;
+  document.removeEventListener('pointerup', armed, true);
+  document.removeEventListener('keydown', armed, true);
+  armed = null;
 }
 
 // ---------- звук и отклик ----------
@@ -363,6 +438,7 @@ function loop(now) {
   const gap = Math.max(0, (now - lastFrame) / 1000);
   lastFrame = now;
   try {
+    syncLock();
     if (frozen()) idle(Math.min(gap, MAX_GAP));
     else advance(gap);
   } catch (err) {
@@ -560,6 +636,8 @@ const actions = {
   /** «В меню»: партию сохранит оболочка (getState). */
   exit() {
     if (!api) return;
+    fs?.leave();                     // из полного экрана выходим сразу, не дожидаясь destroy
+    syncLock(true);
     if (finished) handOver();
     else api.exit?.();
   },
@@ -580,6 +658,8 @@ const get = {
   seen: () => seen,
   toScreen: (wx, wy, out) => renderer?.toScreen(wx, wy, out) ?? out,
   screen: () => api?.screen ?? null,
+  /** Есть ли переключатель «Полный экран» (компьютер). */
+  fullscreen: () => Boolean(fs),
   /** Блок «Очки в рейтинге» для окна статистики (или null). */
   pointsInfo: () => pointsInfo(api, 'fox-hunt'),
 };
@@ -907,6 +987,9 @@ export default {
       tune: { reach: BASE.dashDist, reachMin: DASH.minPower },
     });
     view.input = input.state;
+    if (isDesktop(desktopFacts(window, api.screen ?? null))) {
+      fs = createFullscreen({ doc: document, nav: navigator, host: container, onLost: onFullscreenLost });
+    }
     ui = createUi({ root, api, actions, get });
 
     // размер: у альбомного экрана его знает оболочка (и говорит, когда он сменился), без неё — сама сцена;
@@ -922,6 +1005,7 @@ export default {
     document.addEventListener('visibilitychange', onVisibility);
     document.addEventListener('pointerdown', onPress, true);
     document.addEventListener('keydown', onPress, true);
+    armFullscreen();
 
     // начатая партия ждёт на паузе
     if (resumed) ui.openPause(true);
@@ -956,6 +1040,13 @@ export default {
     document.removeEventListener('visibilitychange', onVisibility);
     document.removeEventListener('pointerdown', onPress, true);
     document.removeEventListener('keydown', onPress, true);
+    disarmFullscreen();
+    // из полного экрана выйти и клавишу вернуть; курсор отпустит input.destroy
+    try {
+      fs?.destroy();
+    } catch (err) {
+      console.error('лисья охота: полный экран не закрылся', err);
+    }
     dom?.observer?.disconnect();
     dom?.offScreen?.();
     // части закрываются по одной: сбой в одной не должен оставить остальные (и состояние модуля) неубранными
@@ -968,7 +1059,8 @@ export default {
     }
     root?.remove();
     if (globalThis.__foxHunt) delete globalThis.__foxHunt;
-    api = root = dom = renderer = input = ui = G = bot = box = offered = mood = null;
+    api = root = dom = renderer = input = ui = G = bot = box = offered = mood = fs = null;
+    lockWant = false;
     stats = emptyStats();
     settings = readSettings(null);
     seen = [];

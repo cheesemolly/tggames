@@ -11,7 +11,7 @@ globalThis.matchMedia = () => ({ matches: true, addEventListener() {} });
 const { createUi, T, BOX } = await import('../ui.js');
 
 /** Окно открыто, партия идёт; вернуть всё, что нужно проверять. rotated — экран лежит на боку. */
-function make({ rotated = false, over = false } = {}) {
+function make({ rotated = false, over = false, pc = false } = {}) {
   const root = page.doc.createElement('div');
   root.ownerDocument = page.doc;
   const G = arena();
@@ -36,6 +36,7 @@ function make({ rotated = false, over = false } = {}) {
     sound: () => true,
     seen: () => ({}),
     toScreen: (x, y, out) => out,
+    fullscreen: () => pc,
     screen: () => (rotated ? { rotated: true, insets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }) } : null),
   };
   const ui = createUi({ root, api: { screen: get.screen() }, actions, get });
@@ -284,4 +285,25 @@ test('окна: z-index не больше 10, при «уменьшить дви
   assert.match(modal, /var\(--fh-w-/);
   assert.match(css, /--fh-w-plank:/);
   assert.match(css, /--fh-danger:/);
+});
+
+test('настройки: «Полный экран» и подсказка — только на ПК, ответ игры виден после refreshSettings', () => {
+  const phone = make();
+  phone.ui.open('settings');
+  assert.equal(phone.ui.top.el.byText(T.set.fullscreen).length, 0);
+  assert.equal(phone.ui.top.el.byClass('fh-set-hint').length, 0);
+  const { ui, settings, calls } = make({ pc: true });
+  settings.fullscreen = false;
+  ui.open('settings');
+  const sw = ui.top.el.byText(T.set.fullscreen)[0];
+  assert.ok(sw);
+  assert.equal(ui.top.el.byClass('fh-set-hint')[0].textContent, T.set.fullscreenHint);
+  const row = () => ui.top.el.find((n) => n.localName === 'button' && n.textContent.includes(T.set.fullscreen))[0];
+  assert.equal(row().getAttribute('aria-checked'), 'false');
+  press(row());
+  assert.ok(calls.includes('set:fullscreen:true'));
+  assert.equal(row().getAttribute('aria-checked'), 'true');
+  settings.fullscreen = false;           // игра: браузер отказал или вышли по Esc
+  ui.refreshSettings();
+  assert.equal(row().getAttribute('aria-checked'), 'false');
 });

@@ -1281,7 +1281,7 @@ test('джойстики двигаются только через transform (t
   const sets = [...src.matchAll(/\.style\.([a-zA-Z]+)\s*=(?!=)/g)].map((m) => m[1]);
   assert.deepEqual([...new Set(sets)].sort(), ['touchAction', 'transform']);
   for (const m of src.matchAll(/\.style\.transform = (.*);/g)) assert.match(m[1], /^`translate3d\(\$\{\w+\}px, \$\{\w+\}px, 0\)`$/);
-  assert.equal(src.match(/\.style\.transform = /g).length, 3, 'кольцо, ручка и кнопка оружия');
+  assert.equal(src.match(/\.style\.transform = /g).length, 4, 'кольцо, ручка, кнопка оружия и прицел');
   assert.doesNotMatch(src, /\.style\.(?:left|top|width|height|opacity)\b/);
   assert.doesNotMatch(src, /^import /m, 'без зависимостей: модуль грузится и в Node');
   assert.doesNotMatch(src, /\bwindow\.|\bdocument\./, 'страница — только через stage.ownerDocument');

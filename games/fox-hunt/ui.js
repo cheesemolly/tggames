@@ -74,7 +74,7 @@ export const T = {
     ask: 'Начать заново? Охота пропадёт', yes: 'Да, заново', no: 'Отмена',
   },
   bagBtn: 'Рюкзак',
-  set: { title: 'Настройки', music: 'Музыка', sound: 'Звуки', lefty: 'Режим левши', stick: 'Джойстики', weaponBtn: 'Отдельная кнопка для оружия', stickStatic: 'Статичные', stickFloat: 'Плавающие', flip: 'Перевернуть экран' },
+  set: { title: 'Настройки', music: 'Музыка', sound: 'Звуки', lefty: 'Режим левши', stick: 'Джойстики', weaponBtn: 'Отдельная кнопка для оружия', stickStatic: 'Статичные', stickFloat: 'Плавающие', flip: 'Перевернуть экран', fullscreen: 'Полный экран', fullscreenHint: 'Esc — пауза. Чтобы выйти из полного экрана, зажми Esc' },
   bag: {
     title: 'Рюкзак', worn: 'Надето', pack: (n, of) => `В рюкзаке · ${n} из ${of}`, extra: 'Дары и спутники', noExtra: 'пока нет',
     slot: { weapon: 'Оружие', armor: 'Броня', acc: 'Украшение', bag: 'Ячейка рюкзака' },
@@ -1223,6 +1223,8 @@ export function createUi({ root, api, actions, get }) {
   // ---------- настройки ----------
   // Вложены в паузу: «Назад» снимает их и возвращает в неё.
 
+  let settingsRefresh = null;
+
   function settingsWin() {
     const values = {
       music: () => get.settings?.()?.music !== false,
@@ -1231,8 +1233,12 @@ export function createUi({ root, api, actions, get }) {
       stick: () => get.settings?.()?.stick === 'float',
       weaponBtn: () => get.settings?.()?.weaponBtn === true,
       flip: () => Boolean(get.settings?.()?.flip),
+      fullscreen: () => get.settings?.()?.fullscreen === true,
     };
     const keys = ['music', 'sound', 'lefty', 'stick', 'weaponBtn'];
+    // полный экран — только на компьютере (игра сама знает, где он есть)
+    const hasFull = Boolean(get.fullscreen?.());
+    if (hasFull) keys.push('fullscreen');
     // перевернуть на другой бок можно только экран, который лежит на боку (телефон держат стоя)
     if (screenOf()?.rotated) keys.push('flip');
     // сюда же встанут новые переключатели (сетка в два столбца, места на три ряда)
@@ -1255,10 +1261,13 @@ export function createUi({ root, api, actions, get }) {
       });
       return b;
     });
+    // игра могла ответить позже (полный экран не дали, вышли по Esc) — переключатели показывают её ответ
+    settingsRefresh = () => keys.forEach((key, i) => switches[i].setAttribute('aria-checked', String(values[key]())));
     const backBtn = button(T.back, 'fh-btn--main', closeTop);
     const card = el('div', { class: 'fh-win fh-settings', role: 'dialog', 'aria-label': T.set.title },
       el('div', { class: 'fh-head' }, el('h2', { class: 'fh-title' }, T.set.title)),
       el('div', { class: 'fh-set-list' }, switches),
+      hasFull ? el('p', { class: 'fh-set-hint' }, T.set.fullscreenHint) : null,
       el('div', { class: 'fh-foot' }, backBtn),
     );
     return { name: 'settings', el: card, focus: backBtn };
@@ -1725,6 +1734,7 @@ export function createUi({ root, api, actions, get }) {
   function destroy() {
     if (!alive) return;
     alive = false;
+    settingsRefresh = null;
     for (const id of timers) clearTimeout(id);
     timers.clear();
     if (typeof offChange === 'function') offChange();
@@ -1752,6 +1762,10 @@ export function createUi({ root, api, actions, get }) {
       return wins.length > 0;
     },
     destroy,
+    /** Окно настроек открыто — переставить переключатели по ответу игры. */
+    refreshSettings() {
+      settingsRefresh?.();
+    },
     /** Сверх договора — для проверочной страницы и отладки: открыть окно по имени ('pause' | 'bag' | 'stats' | 'settings'). */
     open(name, arg) {
       if (name === 'pause') openPause(Boolean(arg));

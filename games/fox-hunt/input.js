@@ -18,6 +18,14 @@
 //   mx, my — куда идти (длина до 1) · fire — огонь держат · act — разовое «действие» (клавиша E)
 //   aim + ax, ay, ap — рывок прицеливают: направление (длина 1) и сила 0…1
 //   dash + dx, dy, dp — разовая команда «рывок» · hasT + tx, ty — точка мира, куда стрелять (мышь)
+/** Прицел сдвинулся на (dx, dy): новое место, не дальше краёв поля w × h (захват курсора в полном экране). */
+export function stepCursor(cur, dx, dy, w, h) {
+  const nx = cur.x + (Number.isFinite(dx) ? dx : 0);
+  const ny = cur.y + (Number.isFinite(dy) ? dy : 0);
+  cur.x = Math.min(Math.max(0, w), Math.max(0, nx));
+  cur.y = Math.min(Math.max(0, h), Math.max(0, ny));
+  return cur;
+}
 
 /** Все числа управления — в одном месте: крутить можно, не трогая правил. Размеры — в пикселях CSS. */
 export const STICK = {
@@ -683,6 +691,16 @@ export function createInput({ stage, sticksEl, screen = null, toWorld = null, on
   let lifted = false;      // touch-события сказали: на экране не осталось ни одного пальца
   let action = 'none';
   let alive = true;
+  // захват курсора (полный экран на компьютере): прицел — нарисованная точка, её двигают сдвиги мыши
+  const cur = { x: 0, y: 0 };
+  let sw = 0;              // размер сцены в осях игры (обновляет resize)
+  let sh = 0;
+  let wantLock = false;    // игра хочет, чтобы курсор был пойман
+  let lockFails = 0;       // сколько раз браузер отказал подряд; два отказа — больше не мучаем
+  let cross = null;        // нарисованный прицел (создаётся при первом захвате)
+  let crossOn = false;
+
+  const locked = () => doc.pointerLockElement === stage;
 
   function makeStick(kind) {
     const root = doc.createElement('div');
@@ -827,6 +845,9 @@ export function createInput({ stage, sticksEl, screen = null, toWorld = null, on
       left = box.left;
       top = box.top;
     }
+    sw = w;
+    sh = h;
+    if (locked()) stepCursor(cur, 0, 0, sw, sh);
     core.resize(w, h, safe);
     paint();
     if (!mounted && w > 0 && h > 0) {
@@ -860,8 +881,85 @@ export function createInput({ stage, sticksEl, screen = null, toWorld = null, on
 
   function onMouse(e) {
     hide(true);
-    locate(e);
+    if (locked()) {
+      // курсор пойман: места под ним нет, есть только сдвиги — прицел едет по ним и за поле не выходит
+      stepCursor(cur, e.movementX, e.movementY, sw, sh);
+      px = cur.x;
+      py = cur.y;
+      placeCross();
+    } else {
+      locate(e);
+      cur.x = px;
+      cur.y = py;
+    }
     core.mouse(e.buttons, px, py);
+  }
+
+  /** Прицел-спрайт: готовый элемент со стилями (без градиентов), в кадре двигается только translate. */
+  function placeCross() {
+    if (!cross) return;
+    const x = Math.round(cur.x);
+    const y = Math.round(cur.y);
+    cross.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+  }
+
+  function showCross(on) {
+    if (on && !cross) {
+      cross = doc.createElement('div');
+      cross.className = 'fh-cross';
+      cross.setAttribute('aria-hidden', 'true');
+      stage.append(cross);
+    }
+    if (!cross || on === crossOn) return;
+    crossOn = on;
+    if (on) placeCross();
+    cross.classList.toggle('fh-cross--on', on);
+  }
+
+  function requestLock() {
+    try {
+      const r = stage.requestPointerLock?.();
+      if (r && typeof r.catch === 'function') r.catch(() => {});
+    } catch {
+      lockFails += 1;
+    }
+  }
+
+  function onLockChange() {
+    if (!alive) return;
+    if (locked()) {
+      lockFails = 0;
+      stepCursor(cur, 0, 0, sw, sh);
+      showCross(true);
+    } else {
+      showCross(false);
+      core.mouseDrop();
+    }
+  }
+
+  function onLockError() {
+    lockFails += 1;
+  }
+
+  /**
+   * Игра хочет (true) или не хочет (false) держать курсор пойманным. Звать при смене условий (окно открылось и
+   * закрылось, полный экран включился). fresh — после нового включения: прежние отказы забыты.
+   * Захват браузер даёт только по нажатию (или вскоре после него): не вышло — следующее нажатие на поле попробует
+   * ещё раз и ни во что не превратится; после двух отказов подряд — обычный курсор, без мучений.
+   */
+  function setLock(want, fresh = false) {
+    if (!alive) return;
+    if (fresh) lockFails = 0;
+    wantLock = Boolean(want);
+    if (wantLock) {
+      if (!locked() && lockFails < 2) requestLock();
+    } else if (locked()) {
+      try {
+        doc.exitPointerLock?.();
+      } catch {
+        // уже отпущен
+      }
+    }
   }
 
   function onPointerDown(e) {
@@ -870,8 +968,13 @@ export function createInput({ stage, sticksEl, screen = null, toWorld = null, on
     if (t !== stage && t !== sticksEl && t?.localName !== 'canvas') return;
     e.preventDefault();
     if (e.pointerType === 'mouse') {
+      if (wantLock && !locked() && lockFails < 2) {
+        // это нажатие нужно браузеру, чтобы поймать курсор, — игре оно не достаётся
+        requestLock();
+        return;
+      }
       onMouse(e);
-      capture(e);
+      if (!locked()) capture(e);
       return;
     }
     hide(false);
@@ -1012,6 +1115,8 @@ export function createInput({ stage, sticksEl, screen = null, toWorld = null, on
   doc.addEventListener('keydown', onKeyDown);
   doc.addEventListener('keyup', onKeyUp);
   doc.addEventListener('visibilitychange', onVisibility);
+  doc.addEventListener('pointerlockchange', onLockChange);
+  doc.addEventListener('pointerlockerror', onLockError);
   win.addEventListener('blur', onBlur);
   const offChange = screen?.onChange?.(resize);
   const observer = typeof win.ResizeObserver === 'function' ? new win.ResizeObserver(resize) : null;
@@ -1035,7 +1140,19 @@ export function createInput({ stage, sticksEl, screen = null, toWorld = null, on
     doc.removeEventListener('keydown', onKeyDown);
     doc.removeEventListener('keyup', onKeyUp);
     doc.removeEventListener('visibilitychange', onVisibility);
+    doc.removeEventListener('pointerlockchange', onLockChange);
+    doc.removeEventListener('pointerlockerror', onLockError);
     win.removeEventListener('blur', onBlur);
+    wantLock = false;
+    if (locked()) {
+      try {
+        doc.exitPointerLock?.();
+      } catch {
+        // уже отпущен
+      }
+    }
+    cross?.remove();
+    cross = null;
     offChange?.();
     observer?.disconnect();
     core.reset();
@@ -1047,5 +1164,5 @@ export function createInput({ stage, sticksEl, screen = null, toWorld = null, on
     stage.style.touchAction = touchAction;
   }
 
-  return { frame, state: input, sticks: core.sticks, setLefty, setStick, setWeaponBtn, setAction, resize, reset, destroy };
+  return { frame, state: input, sticks: core.sticks, setLefty, setStick, setWeaponBtn, setAction, setLock, get locked() { return locked(); }, resize, reset, destroy };
 }
