@@ -45,12 +45,11 @@ function make({ noFs = false, denyFs = false, noKeyboard = false, denyKey = fals
   return { fs, doc, log, lost, handlers, browserExit };
 }
 
-test('настройка: нет поля или не true — выключено', () => {
-  assert.equal(readFullscreen(undefined), false);
-  assert.equal(readFullscreen(null), false);
-  assert.equal(readFullscreen({ music: true }), false, 'старое сохранение');
-  assert.equal(readFullscreen({ fullscreen: 1 }), false);
-  assert.equal(readFullscreen({ fullscreen: 'true' }), false);
+test('настройка: по умолчанию включено, выключает только явное false', () => {
+  assert.equal(readFullscreen(undefined), true);
+  assert.equal(readFullscreen(null), true);
+  assert.equal(readFullscreen({ music: true }), true, 'старое сохранение');
+  assert.equal(readFullscreen({ fullscreen: 'x' }), true);
   assert.equal(readFullscreen({ fullscreen: false }), false);
   assert.equal(readFullscreen({ fullscreen: true }), true);
 });

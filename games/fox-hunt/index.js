@@ -72,6 +72,7 @@ let renderer = null;
 let input = null;
 let fs = null;                       // полный экран — только на компьютере, иначе null
 let lockWant = false;                // что последний раз сказано input.setLock
+let autoTries = 0;                   // сколько раз полный экран «по умолчанию» уже не дали
 let armed = null;                    // ждём первого нажатия, чтобы вернуть полный экран из сохранения
 let ui = null;
 let G = null;                        // идущая партия — состояние расчёта
@@ -224,12 +225,16 @@ function setOption(key, value) {
 // ---------- полный экран и захват курсора (только компьютер) ----------
 
 /** Включить полный экран. Отказ — тихо: переключатель возвращается в «выключено», игра как раньше. */
-function enterFullscreen() {
+function enterFullscreen(auto = false) {
   const promise = fs.enter();
   promise.then((ok) => {
     if (!fs || !api) return;
     if (ok) syncLock(true);
-    else if (settings.fullscreen) {
+    else if (auto) {
+      // по умолчанию включено, а браузер сам по себе не даёт: не выключаем — пробуем на следующем нажатии (до трёх раз)
+      autoTries += 1;
+      if (autoTries < 3) armFullscreen();
+    } else if (settings.fullscreen) {
       settings.fullscreen = false;
       api.storage.set('settings', settings);
       ui?.refreshSettings();
@@ -263,13 +268,13 @@ function onFullscreenLost() {
   kick();
 }
 
-/** Полный экран из сохранения нельзя включить без нажатия: ждём первого и пробуем (Esc не считается). */
+/** Полный экран (по умолчанию он включён) нельзя включить без нажатия: ждём первого и пробуем (Esc не считается). */
 function armFullscreen() {
   if (!fs || !settings.fullscreen) return;
   const go = (e) => {
     if (e.type === 'keydown' && e.code === 'Escape') return;
     disarmFullscreen();
-    if (fs && settings.fullscreen && !fs.active) enterFullscreen();
+    if (fs && settings.fullscreen && !fs.active) enterFullscreen(true);
   };
   document.addEventListener('pointerup', go, true);
   document.addEventListener('keydown', go, true);
@@ -1061,6 +1066,7 @@ export default {
     if (globalThis.__foxHunt) delete globalThis.__foxHunt;
     api = root = dom = renderer = input = ui = G = bot = box = offered = mood = fs = null;
     lockWant = false;
+    autoTries = 0;
     stats = emptyStats();
     settings = readSettings(null);
     seen = [];
