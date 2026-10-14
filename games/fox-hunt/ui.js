@@ -18,6 +18,7 @@
 //
 // Правила игры окна не знают: вещи надевает и снимает движок (actions), окно после этого заново читает партию.
 
+import { stripOf } from './field.js';
 import './art-all.js';
 import { el } from '../../shared/dom.js';
 import { showLayer, hideLayer, animate, EASE_OUT } from '../../shared/motion.js';
@@ -1656,7 +1657,11 @@ export function createUi({ root, api, actions, get }) {
     const w = root.offsetWidth;
     const h = root.offsetHeight;
     if (!w || !h) return;
-    const ins = screenOf()?.insets?.() ?? NO_INSETS;
+    // полоса Telegram — не поле (field.js): root уже начинается после неё, со своей стороны отступа нет
+    const raw = screenOf()?.insets?.() ?? NO_INSETS;
+    const ins = { ...raw };
+    const strip = stripOf(raw);
+    if (strip.side) ins[strip.side] = 0;
     root.style.setProperty('--fh-zoom', String(Math.round(zoomFor(w, h, ins) * 1000) / 1000));
     root.style.setProperty('--fh-hud-zoom', String(Math.round(hudZoomFor(w, h) * 1000) / 1000));
     safe.l = ins.left + 6;

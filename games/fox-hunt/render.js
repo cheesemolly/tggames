@@ -42,6 +42,7 @@ export function createRenderer({ canvas, probe }) {
   const ctx = canvas.getContext('2d', { alpha: false }) ?? canvas.getContext('2d');
   const dpr = () => Math.max(1, Math.min(3, (typeof window !== 'undefined' && window.devicePixelRatio) || 1));
 
+  let baseSide = 0;                  // короткая сторона всего экрана; 0 — по самому холсту
   let cssW = 320;
   let cssH = 180;
   let scale = 1;
@@ -131,7 +132,7 @@ export function createRenderer({ canvas, probe }) {
   // ---------- размеры ----------
 
   function setScale() {
-    scale = Math.max(0.2, Math.min(cssW, cssH) / VIEW_UNITS);
+    scale = Math.max(0.2, (baseSide || Math.min(cssW, cssH)) / VIEW_UNITS);   // base — короткая сторона всего экрана, полоса Telegram в счёт не идёт
     const density = Math.min(QUALITY[qi], dpr());
     k = Math.min(K_MAX, scale * density);
     const rate = k / scale;
@@ -144,9 +145,10 @@ export function createRenderer({ canvas, probe }) {
     if (room) bake();
   }
 
-  function resize(w, h) {
+  function resize(w, h, base) {
     cssW = Math.max(1, num(w, 320));
     cssH = Math.max(1, num(h, 180));
+    baseSide = base > 0 ? base : 0;
     setScale();
   }
 
