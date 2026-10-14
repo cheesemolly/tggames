@@ -818,7 +818,7 @@ function fakeEl(tag, doc) {
  * на боку (формулы — из shell/landscape.js). screen: false — без api.screen. offset — где экран стоит в окне;
  * pad — поля между краями экрана и сценой в осях игры [лево, верх, право, низ] (обычно сцена — весь экран).
  */
-function page({ turn = 0, screen = true, insets = { top: 0, right: 0, bottom: 0, left: 0 }, mouse = false, offset = [0, 0], pad = [0, 0, 0, 0], tune = null } = {}) {
+function page({ turn = 0, screen = true, insets = { top: 0, right: 0, bottom: 0, left: 0 }, mouse = false, offset = [0, 0], pad = [0, 0, 0, 0], tune = null, weaponBtn = false } = {}) {
   const clock = { t: 10 };
   const doc = fakeEl('#document', null);
   const win = fakeEl('#window', null);
@@ -879,7 +879,7 @@ function page({ turn = 0, screen = true, insets = { top: 0, right: 0, bottom: 0,
   };
   const input = createInput({
     stage, sticksEl, screen: screen ? api : null, toWorld: (x, y, out) => Object.assign(out, { x, y }),
-    onPause: () => { stat.pauses += 1; }, now: () => clock.t, tune,
+    onPause: () => { stat.pauses += 1; }, now: () => clock.t, tune, weaponBtn,
   });
   const frame = (dt = DT, ...fox) => {
     clock.t += dt;
@@ -1281,7 +1281,7 @@ test('джойстики двигаются только через transform (t
   const sets = [...src.matchAll(/\.style\.([a-zA-Z]+)\s*=(?!=)/g)].map((m) => m[1]);
   assert.deepEqual([...new Set(sets)].sort(), ['touchAction', 'transform']);
   for (const m of src.matchAll(/\.style\.transform = (.*);/g)) assert.match(m[1], /^`translate3d\(\$\{\w+\}px, \$\{\w+\}px, 0\)`$/);
-  assert.equal(src.match(/\.style\.transform = /g).length, 2, 'кольцо и ручка');
+  assert.equal(src.match(/\.style\.transform = /g).length, 3, 'кольцо, ручка и кнопка оружия');
   assert.doesNotMatch(src, /\.style\.(?:left|top|width|height|opacity)\b/);
   assert.doesNotMatch(src, /^import /m, 'без зависимостей: модуль грузится и в Node');
   assert.doesNotMatch(src, /\bwindow\.|\bdocument\./, 'страница — только через stage.ownerDocument');
@@ -1449,4 +1449,237 @@ test('«float» не изменился: кольцо там, где лёг па
   const input = tick();
   assert.equal(sticks.move.x, X + R * 2);                 // кольцо уехало за пальцем
   close(input.mx, 1, 1e-6);
+});
+
+// ---------- кнопка оружия (настройка weaponBtn) ----------
+
+/** Где кнопка: середина в осях игры. */
+const btnAt = (core) => ({ x: core.sticks.btn.x, y: core.sticks.btn.y });
+/** Где ручка стика действия ждёт палец (кнопка оружия стоит выше и левее, так что не мешает). */
+const actAt = (core) => ({ x: core.sticks.act.x, y: core.sticks.act.y });
+
+test('кнопка оружия: выключена по умолчанию — ни кнопки, ни касаний, всё как раньше', () => {
+  const { core, tick, wait } = make();
+  assert.equal(core.weaponBtn, false);
+  assert.equal(core.sticks.btn.shown, false);
+  const b = btnAt(core);
+  assert.notEqual(core.down(1, b.x, b.y), 2, 'касание там — не кнопка');
+  core.cancelAll();
+  core.down(2, RIGHT, Y);
+  assert.equal(wait(HOLD).fire, true, 'удержание на стике стреляет');
+  tick();
+});
+
+test('кнопка оружия: круглая, не меньше 56×56, над правым джойстиком слева, целиком в безопасных отступах', () => {
+  const { core } = make({ weaponBtn: true });
+  const v = core.sticks.btn;
+  assert.equal(v.shown, true);
+  assert.ok(v.r * 2 >= 56, 'не меньше 56×56');
+  assert.ok(v.x < core.sticks.act.x && v.y < core.sticks.act.y, 'над стиком и левее');
+  assert.ok(Math.hypot(v.x - core.sticks.act.x, v.y - core.sticks.act.y) > v.r + R, 'кольцо стика не закрыто');
+  assert.ok(v.x - v.r >= STICK.edge && v.y - v.r >= STICK.edge && v.x + v.r <= W - STICK.edge && v.y + v.r <= H - STICK.edge);
+  // тесный экран с большими отступами: кнопка всё равно внутри
+  const ins = { top: 40, right: 60, bottom: 30, left: 50 };
+  const t = make({ weaponBtn: true, insets: ins }).core.sticks.btn;
+  assert.ok(t.x - t.r >= ins.left && t.x + t.r <= W - ins.right && t.y - t.r >= ins.top && t.y + t.r <= H - ins.bottom);
+});
+
+test('кнопка оружия: огонь, пока держат — и при зажатом левом джойстике', () => {
+  const { core, wait } = make({ weaponBtn: true });
+  core.down(1, LEFT, Y);
+  core.move(1, LEFT + R, Y);
+  const b = btnAt(core);
+  assert.equal(core.down(2, b.x, b.y), 2);
+  assert.equal(core.holds(2), true);
+  const i = wait(DT * 5);
+  assert.equal(core.sticks.btn.on, true);
+  assert.equal(i.fire, true, 'огонь с кнопки');
+  close(i.mx, 1);                                          // ходьба продолжается
+  core.up(2);
+  assert.equal(core.holds(2), false);
+  const off = wait(STICK.tapFire + DT * 3);
+  assert.equal(off.fire, false, 'отпустили — огонь кончился');
+  close(off.mx, 1);
+});
+
+test('кнопка оружия: нажал и отпустил между кадрами — огонь не теряется', () => {
+  const { core, tick, wait } = make({ weaponBtn: true });
+  const b = btnAt(core);
+  core.down(1, b.x, b.y);
+  core.up(1);
+  assert.equal(tick().fire, true);
+  assert.equal(wait(STICK.tapFire + DT * 3).fire, false);
+});
+
+test('кнопка оружия: стик действия не стреляет — ни удержанием, ни коротким нажатием; рывок работает', () => {
+  const { core, tick, wait, sticks } = make({ weaponBtn: true });
+  const A = actAt(core);
+  core.down(1, A.x, A.y);
+  assert.equal(wait(HOLD * 3).fire, false, 'держу на месте — огня нет');
+  assert.equal(sticks.act.state, 'on');
+  core.up(1);
+  assert.equal(wait(STICK.tapFire + DT * 3).fire, false, 'и импульса после отпускания нет');
+  core.down(2, A.x, A.y);
+  core.up(2);
+  assert.equal(tick().fire, false, 'короткое нажатие на стик — не огонь');
+  // рывок как прежде
+  core.down(3, A.x, A.y);
+  core.move(3, A.x, A.y - FAR);
+  const a = tick();
+  assert.equal(a.aim, true);
+  assert.equal(a.fire, false);
+  core.up(3);
+  const d = tick();
+  assert.equal(d.dash, true);
+  close(d.dy, -1);
+});
+
+test('кнопка оружия и стик действия — разными пальцами: тянешь рывок, кнопка держится', () => {
+  const { core, tick, wait } = make({ weaponBtn: true });
+  const b = btnAt(core);
+  const A = actAt(core);
+  core.down(1, b.x, b.y);
+  core.down(2, A.x, A.y);
+  core.move(2, A.x, A.y - FAR);
+  const i = wait(DT * 3);
+  assert.deepEqual([i.fire, i.aim], [true, true]);
+  core.up(2);
+  const d = tick();
+  assert.deepEqual([d.dash, d.fire], [true, true]);
+  core.up(1);
+  assert.equal(wait(STICK.tapFire + DT * 3).fire, false);
+});
+
+test('кнопка оружия: «взять» — тот же огонь (что делать, решает расчёт по предмету рядом), разового act нет', () => {
+  const { core, wait } = make({ weaponBtn: true });
+  const b = btnAt(core);
+  core.down(1, b.x, b.y);
+  const i = wait(DT * 4, 100, 100, 0);
+  assert.equal(i.fire, true);
+  assert.equal(i.aim, false);
+  assert.equal(i.act, false, 'разовое «действие» — только клавиша E');
+});
+
+test('кнопка оружия: режим левши — зеркально, над левым джойстиком справа', () => {
+  const a = make({ weaponBtn: true }).core;
+  const l = make({ weaponBtn: true, lefty: true }).core;
+  const bl = l.sticks.btn;
+  assert.ok(bl.x > l.sticks.act.x && bl.y < l.sticks.act.y, 'правее стика действия (он слева) и выше');
+  assert.ok(bl.x - bl.r >= STICK.edge && bl.x + bl.r <= W - STICK.edge);
+  assert.ok(Math.abs(bl.x + a.sticks.btn.x - W) < 40, 'зеркало с точностью до отступов');
+  close(bl.y, a.sticks.btn.y);
+  // касание у левши берёт кнопку
+  const { core, wait } = make({ weaponBtn: true, lefty: true });
+  assert.equal(core.down(1, bl.x, bl.y), 2);
+  assert.equal(wait(DT * 3).fire, true);
+  // а переключение руки на лету переставляет кнопку и отпускает пальцы
+  const s = make({ weaponBtn: true });
+  const before = btnAt(s.core);
+  s.core.down(1, before.x, before.y);
+  s.core.setLefty(true);
+  assert.equal(s.core.holds(1), false);
+  assert.equal(s.tick().fire, false);
+  assert.ok(s.core.sticks.btn.x < before.x, 'теперь у левого края');
+});
+
+test('кнопка оружия: потеря пальца (pointercancel) — отпущено без огня и без импульса', () => {
+  const { core, tick, wait } = make({ weaponBtn: true });
+  const b = btnAt(core);
+  core.down(1, b.x, b.y);
+  assert.equal(wait(DT * 3).fire, true);
+  core.cancel(1);
+  assert.equal(core.holds(1), false);
+  assert.equal(wait(STICK.tapFire + DT * 3).fire, false);
+  assert.equal(core.sticks.btn.on, false);
+  // оборванное нажатие, которого кадр не видел, — тоже не огонь
+  core.down(2, b.x, b.y);
+  core.cancel(2);
+  assert.equal(tick().fire, false);
+  // чужой номер и повторный cancel ничего не ломают
+  core.cancel(99);
+  core.cancel(2);
+  assert.equal(tick().fire, false);
+});
+
+test('кнопка оружия: второй палец на кнопке лишний; тот же номер лёг снова — прошлое касание отпущено', () => {
+  const { core, tick } = make({ weaponBtn: true });
+  const b = btnAt(core);
+  assert.equal(core.down(1, b.x, b.y), 2);
+  assert.notEqual(core.down(2, b.x, b.y), 2, 'кнопка занята');
+  core.cancelAll();
+  core.down(5, b.x, b.y);
+  core.down(5, b.x, b.y);
+  core.up(5);
+  tick();
+  assert.equal(core.holds(5), false);
+});
+
+test('кнопка оружия: включение и выключение на лету отпускает пальцы; reset и смена размера — тоже', () => {
+  const { core, tick, wait } = make();
+  core.setWeaponBtn(true);
+  assert.equal(core.weaponBtn, true);
+  const b = btnAt(core);
+  core.down(1, b.x, b.y);
+  wait(DT * 2);
+  core.setWeaponBtn(false);
+  assert.equal(core.holds(1), false);
+  assert.equal(core.sticks.btn.shown, false);
+  assert.equal(wait(STICK.tapFire + DT * 3).fire, false);
+  core.setWeaponBtn(true);
+  core.down(2, b.x, b.y);
+  core.reset();
+  assert.equal(core.holds(2), false);
+  core.down(3, b.x, b.y);
+  core.resize(W + 10, H);
+  assert.equal(core.holds(3), false);
+  assert.equal(tick().fire, false);
+});
+
+test('кнопка оружия, обёртка: pointerdown/pointerup на экране, мультитач, pointercancel, значок', () => {
+  const p = page({ weaponBtn: true });
+  assert.equal(p.sticksEl.children.length, 3);
+  const el = p.sticksEl.children[2];
+  assert.match(el.className, /^fh-stick-btn$/);
+  assert.equal(el.attrs['aria-hidden'], 'true');
+  const b = p.input.sticks.btn;
+  const [tx, ty] = translate(el);
+  assert.ok(Math.abs(tx - b.x) <= 0.25 && Math.abs(ty - b.y) <= 0.25, 'кнопка нарисована на своём месте (до полпикселя)');
+  // левый стик тянут, второй рукой держат кнопку
+  p.touch('pointerdown', 1, LEFT, Y);
+  p.touch('pointermove', 1, LEFT + R, Y);
+  p.touch('pointerdown', 2, b.x, b.y);
+  assert.ok(p.stat.captured.includes(2));
+  p.frame(DT);
+  assert.match(el.className, /fh-stick-btn--on/);
+  const i = p.frame(DT * 3);
+  assert.equal(i.fire, true);
+  close(i.mx, 1);
+  p.touch('pointerup', 2, b.x, b.y);
+  p.frame(DT);
+  assert.doesNotMatch(el.className, /fh-stick-btn--on/);
+  p.frame(STICK.tapFire + DT * 3);
+  assert.equal(p.frame().fire, false);
+  // pointercancel
+  p.touch('pointerdown', 3, b.x, b.y);
+  assert.equal(p.frame().fire, true);
+  p.touch('pointercancel', 3, b.x, b.y);
+  assert.equal(p.frame(STICK.tapFire + DT * 3).fire, false);
+  // значок «огонь» / «взять» — на кнопке, а не на стике
+  p.input.setAction('use');
+  assert.equal(el.dataset.action, 'use');
+  assert.equal(p.sticksEl.children[1].dataset.action, 'none');
+  // выключили — кнопки на странице нет, значок вернулся на стик
+  p.input.setWeaponBtn(false);
+  assert.equal(p.sticksEl.children.length, 2);
+  assert.equal(p.sticksEl.children[1].dataset.action, 'use');
+  p.input.setWeaponBtn(true);
+  assert.equal(p.sticksEl.children.length, 3);
+  p.input.destroy();
+  assert.equal(p.sticksEl.children.length, 0);
+});
+
+test('game.css: у кнопки оружия есть стили и своих цветов нет', () => {
+  assert.match(rules, /\.fh-stick-btn\s*\{/);
+  assert.match(rules, /\.fh-stick-btn--on/);
+  assert.doesNotMatch(rules, /#[0-9a-fA-F]{3,8}\b/);
 });

@@ -74,7 +74,7 @@ export const T = {
     ask: 'Начать заново? Охота пропадёт', yes: 'Да, заново', no: 'Отмена',
   },
   bagBtn: 'Рюкзак',
-  set: { title: 'Настройки', music: 'Музыка', sound: 'Звуки', lefty: 'Режим левши', stick: 'Джойстики', stickStatic: 'Статичные', stickFloat: 'Плавающие', flip: 'Перевернуть экран' },
+  set: { title: 'Настройки', music: 'Музыка', sound: 'Звуки', lefty: 'Режим левши', stick: 'Джойстики', weaponBtn: 'Отдельная кнопка для оружия', stickStatic: 'Статичные', stickFloat: 'Плавающие', flip: 'Перевернуть экран' },
   bag: {
     title: 'Рюкзак', worn: 'Надето', pack: (n, of) => `В рюкзаке · ${n} из ${of}`, extra: 'Дары и спутники', noExtra: 'пока нет',
     slot: { weapon: 'Оружие', armor: 'Броня', acc: 'Украшение', bag: 'Ячейка рюкзака' },
@@ -115,8 +115,8 @@ export const T = {
   hint: {
     move: (m) => (m.mouse ? 'Клавиши WASD или стрелки — идти' : `${m.walk} стик — идти`),
     dash: (m) => (m.mouse ? 'Зажми левую кнопку мыши и отпусти — рывок к курсору' : `Потяни ${m.act} стик и отпусти — рывок. Так ловят добычу`),
-    fire: (m) => (m.mouse ? 'Правая кнопка мыши или Shift — выстрел. Он тратит ману' : `Держи ${m.act} стик на месте — выстрел. Он тратит ману`),
-    use: (m) => (m.mouse ? 'Клавиша E у находки — взять или открыть' : `Нажми ${m.act} стик у находки — возьмёшь или откроешь`),
+    fire: (m) => (m.mouse ? 'Правая кнопка мыши или Shift — выстрел. Он тратит ману' : m.btn ? 'Держи кнопку оружия — выстрел. Он тратит ману' : `Держи ${m.act} стик на месте — выстрел. Он тратит ману`),
+    use: (m) => (m.mouse ? 'Клавиша E у находки — взять или открыть' : m.btn ? 'Нажми кнопку оружия у находки — возьмёшь или откроешь' : `Нажми ${m.act} стик у находки — возьмёшь или откроешь`),
     zone: () => 'Красное — опасно. Уйди или перепрыгни рывком',
   },
 };
@@ -297,7 +297,7 @@ const initial = (name) => (name ? String(name).trim().charAt(0).toUpperCase() : 
  * Надписи и окна в root (div.fh): слой .fh-hud с кнопкой паузы, слой окон .fh-modal и всплывающее сообщение.
  *   api — от оболочки (нужен подсказке «Очки в рейтинге»);
  *   actions — что окна просят у игры: resume(), restart(), exit(), equip(i, accIndex), unequip(slot, index),
- *     drop(slot, index), usePotion(i), chooseGift(i), set(key, value) — 'lefty' | 'stick' (true — плавающие) | 'flip' | 'music' | 'sound' |
+ *     drop(slot, index), usePotion(i), chooseGift(i), set(key, value) — 'lefty' | 'stick' (true — плавающие) | 'weaponBtn' | 'flip' | 'music' | 'sound' |
  *     'hint:<id>', sfx(name); по желанию pause() — окно открылось само (кнопка паузы, выбор дара);
  *   get — что окна читают: game(), stats(), settings(), sound(), seen(), toScreen(wx, wy, out), screen();
  *     по желанию points() — готовый блок «Очки в рейтинге».
@@ -905,7 +905,7 @@ export function createUi({ root, api, actions, get }) {
       if (token !== hint.token || !hint.id) return;
       const lefty = Boolean(get.settings?.()?.lefty);
       const mouse = Boolean(view.matchMedia?.('(hover: hover) and (pointer: fine)').matches);
-      hintEl.textContent = T.hint[hint.id]({ mouse, walk: lefty ? 'Правый' : 'Левый', act: lefty ? 'левый' : 'правый' });
+      hintEl.textContent = T.hint[hint.id]({ mouse, walk: lefty ? 'Правый' : 'Левый', act: lefty ? 'левый' : 'правый', btn: get.settings?.()?.weaponBtn === true });
       turn(hintEl, true);
     };
     turn(hintEl, false);
@@ -1222,9 +1222,10 @@ export function createUi({ root, api, actions, get }) {
       sound: () => get.sound?.() !== false,
       lefty: () => Boolean(get.settings?.()?.lefty),
       stick: () => get.settings?.()?.stick === 'float',
+      weaponBtn: () => get.settings?.()?.weaponBtn === true,
       flip: () => Boolean(get.settings?.()?.flip),
     };
-    const keys = ['music', 'sound', 'lefty', 'stick'];
+    const keys = ['music', 'sound', 'lefty', 'stick', 'weaponBtn'];
     // перевернуть на другой бок можно только экран, который лежит на боку (телефон держат стоя)
     if (screenOf()?.rotated) keys.push('flip');
     // сюда же встанут новые переключатели (сетка в два столбца, места на три ряда)

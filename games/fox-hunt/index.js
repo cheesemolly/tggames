@@ -152,7 +152,7 @@ function readSettings(v) {
     }
   }
   // джойстики: нет поля (старое сохранение) или что-то не то — «статичные»
-  return { lefty: v?.lefty === true, flip: v?.flip === true, music: v?.music !== false, stick: v?.stick === 'float' ? 'float' : 'static', hints };
+  return { lefty: v?.lefty === true, flip: v?.flip === true, music: v?.music !== false, stick: v?.stick === 'float' ? 'float' : 'static', weaponBtn: v?.weaponBtn === true, hints };
 }
 
 /** Сохранённая «коллекция»: только строки, без повторов и не длиннее положенного. */
@@ -195,6 +195,10 @@ function setOption(key, value) {
     // здесь не логический переключатель: on — «плавающие»
     settings.stick = on ? 'float' : 'static';
     input?.setStick(settings.stick);
+  }
+  else if (key === 'weaponBtn') {
+    settings.weaponBtn = on;
+    input?.setWeaponBtn(on);
   }
   else if (key.startsWith('hint:') && HINT_ID.test(key.slice(5))) {
     // подсказка показана (true) — больше не нужна; false — показать снова
@@ -896,6 +900,7 @@ export default {
       onPause: back,
       lefty: settings.lefty,
       stick: settings.stick,
+      weaponBtn: settings.weaponBtn,
       // сила рывка мышью считается теми же числами, что и сам рывок
       tune: { reach: BASE.dashDist, reachMin: DASH.minPower },
     });

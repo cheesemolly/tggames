@@ -143,10 +143,10 @@ test('«Настройки» вложены в паузу; «Назад» воз
 test('настройки: музыка, звуки, левша; «Перевернуть» — только у повёрнутого экрана', () => {
   const flat = make();
   flat.ui.open('settings');
-  assert.deepEqual(flat.labels(), [T.set.music, T.set.sound, T.set.lefty, `${T.set.stick}: ${T.set.stickStatic}`, T.back]);
+  assert.deepEqual(flat.labels(), [T.set.music, T.set.sound, T.set.lefty, `${T.set.stick}: ${T.set.stickStatic}`, T.set.weaponBtn, T.back]);
   const turned = make({ rotated: true });
   turned.ui.open('settings');
-  assert.deepEqual(turned.labels(), [T.set.music, T.set.sound, T.set.lefty, `${T.set.stick}: ${T.set.stickStatic}`, T.set.flip, T.back]);
+  assert.deepEqual(turned.labels(), [T.set.music, T.set.sound, T.set.lefty, `${T.set.stick}: ${T.set.stickStatic}`, T.set.weaponBtn, T.set.flip, T.back]);
 });
 
 test('переключатель в настройках зовёт игру и показывает её ответ', () => {
@@ -198,4 +198,19 @@ test('HUD: кнопки не выходят за безопасные отсту
   const css = readFileSync(new URL('../game.css', import.meta.url), 'utf8');
   assert.match(css.match(/\.fh-hud \{[^}]*\}/)[0], /var\(--ls-r, 0px\)/);
   assert.match(css.match(/\.fh-hud \{[^}]*\}/)[0], /var\(--ls-t, 0px\)/);
+});
+
+test('«Отдельная кнопка для оружия»: по умолчанию выключена, переключатель зовёт игру и показывает её ответ', () => {
+  const { ui, btn, calls, settings } = make();
+  ui.open('settings');
+  const sw = btn(T.set.weaponBtn);
+  assert.equal(T.set.weaponBtn, 'Отдельная кнопка для оружия');
+  assert.equal(sw.getAttribute('aria-checked'), 'false');
+  press(sw);
+  assert.deepEqual(calls, ['pause', 'set:weaponBtn:true']);
+  assert.equal(settings.weaponBtn, true);
+  assert.equal(sw.getAttribute('aria-checked'), 'true');
+  press(sw);
+  assert.equal(settings.weaponBtn, false);
+  assert.equal(sw.getAttribute('aria-checked'), 'false');
 });

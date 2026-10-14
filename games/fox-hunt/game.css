@@ -175,6 +175,42 @@
 }
 [data-game="fox-hunt"] .fh-stick--aim .fh-stick-knob::before { background: var(--fh-stick-aim, var(--tg-theme-button-color)); }
 
+/*
+ * Кнопка оружия (настройка «Отдельная кнопка для оружия»): круг над правым джойстиком. Корень — точка, которую двигает
+ * игра (transform); круг и значок — на вложенных частях, нажатие — scale. Касания ловит сцена, сама кнопка их не берёт.
+ */
+[data-game="fox-hunt"] .fh-stick-btn {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  opacity: 0.8;
+  will-change: transform, opacity;
+  transition: opacity 0.12s ease;
+}
+[data-game="fox-hunt"] .fh-stick-btn--on { opacity: 1; }
+[data-game="fox-hunt"] .fh-stick-btn-disc {
+  position: absolute;
+  left: calc(var(--fh-btn-r, 32px) * -1);
+  top: calc(var(--fh-btn-r, 32px) * -1);
+  box-sizing: border-box;
+  width: calc(var(--fh-btn-r, 32px) * 2);
+  height: calc(var(--fh-btn-r, 32px) * 2);
+  border: 3px solid var(--fh-stick, color-mix(in srgb, var(--tg-theme-button-color) 8%, rgba(255, 255, 255, 0.92)));
+  border-radius: 50%;
+  background: var(--fh-stick-knob, color-mix(in srgb, var(--tg-theme-button-color) 8%, rgba(255, 255, 255, 0.5)));
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.44), 0 2px 5px rgba(0, 0, 0, 0.3), inset -2px -3px 0 rgba(0, 0, 0, 0.13);
+  scale: 1;
+  transition: scale 0.12s ease, background-color 0.16s ease;
+}
+[data-game="fox-hunt"] .fh-stick-btn--on .fh-stick-btn-disc {
+  scale: 0.9;
+  background: var(--fh-stick-aim, var(--tg-theme-button-color));
+}
+[data-game="fox-hunt"] .fh-stick-btn[data-action="fire"] .fh-stick-glyph--fire,
+[data-game="fox-hunt"] .fh-stick-btn[data-action="use"] .fh-stick-glyph--use { opacity: 1; scale: 1.3; }
+
 @media (prefers-reduced-motion: reduce) {
   [data-game="fox-hunt"] .fh-sticks, [data-game="fox-hunt"] .fh-sticks *,
   [data-game="fox-hunt"] .fh-sticks *::before, [data-game="fox-hunt"] .fh-sticks *::after { transition-duration: 0s !important; }

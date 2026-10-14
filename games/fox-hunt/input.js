@@ -3,7 +3,8 @@
 // (настройка stick; про «плавающие» — всё ниже).
 //
 // Левая половина экрана — ходьба, правая — действие. Палец на правой лежит на месте — огонь (или «взять», «купить»:
-// что окажется рядом); оттянул — прицел рывка, отпустил — рывок; вернул в середину — рывок отменён. «Режим левши»
+// что окажется рядом); с настройкой weaponBtn («Отдельная кнопка для оружия») то же делает круглая кнопка над правым
+// джойстиком, пока её держат, а сам джойстик только тянется для рывка; оттянул — прицел рывка, отпустил — рывок; вернул в середину — рывок отменён. «Режим левши»
 // меняет половины местами. Кольцо появляется там, куда лёг палец, и едет за ним, если палец ушёл дальше радиуса.
 // На компьютере: WASD / стрелки — ходьба, левая кнопка мыши — рывок к курсору (нажал — прицел, отпустил — прыжок),
 // правая кнопка или Shift — огонь в курсор, пробел — рывок по ходу, E — действие, Esc / P — пауза.
@@ -36,6 +37,10 @@ export const STICK = {
   reachMin: 0.45,      // какую долю длины даёт самый слабый рывок (оба числа — как в balance.js: BASE.dashDist, DASH.minPower)
   catchK: 1.6,         // «статичные» джойстики: касание берёт джойстик, лёгши не дальше этой доли радиуса от его центра
   mouseDead: 10,       // единиц мира: курсор на самой лисе — рывка нет
+  btnR: 32,            // кнопка оружия (настройка weaponBtn): радиус, 64 px поперёк — не меньше 56
+  btnCatch: 1.25,      // касание берёт кнопку, лёгши не дальше этой доли её радиуса от середины
+  btnGapX: 1.5,        // середина кнопки от середины правого джойстика: по горизонтали в радиусах кольца (в сторону ходьбы),
+  btnGapY: 1.9,        // и вверх
 };
 
 /** Что ядро ответило на клавишу: не наша · наша (страницу не трогать) · просят паузу. */
@@ -70,14 +75,15 @@ const hyp = (x, y) => Math.sqrt(x * x + y * y);
  * Правила управления без страницы. Координаты — пиксели сцены в осях игры (0, 0 — левый верхний угол).
  *   w, h, insets — размер сцены и отступы { top, right, bottom, left }, куда кольца не ставятся;
  *   lefty — ходьба справа; stick — 'static' (основания стоят на местах, касание берётся внутри круга около них) или
- *   'float' (кольцо встаёт туда, где лёг палец; так было сначала); toWorld(x, y, out) → { x, y } — точка сцены в мире (нужна только мыши);
+ *   'float' (кольцо встаёт туда, где лёг палец; так было сначала); weaponBtn — отдельная кнопка оружия (огонь и «взять»
+ *   только с неё, стик действия не стреляет); toWorld(x, y, out) → { x, y } — точка сцены в мире (нужна только мыши);
  *   now() — часы в секундах (в тестах — свои); tune — поправки к STICK.
  * Пальцы: down / move / up / cancel по номеру указателя. Мышь: mouse(buttons, x, y). Клавиши: key(code, down, repeat).
  * frame(foxX, foxY, foxDir, reach) — раз в кадр: возвращает объект ввода (всегда один и тот же) и обновляет sticks —
  * что рисовать. Место лисы в мире нужно мыши (рывок — от лисы к курсору), куда она смотрит (радианы) — пробелу,
  * reach — длина её полного рывка (по умолчанию STICK.reach).
  */
-export function createStickCore({ w = 0, h = 0, insets = null, lefty = false, stick = 'float', toWorld = null, now = null, tune = null } = {}) {
+export function createStickCore({ w = 0, h = 0, insets = null, lefty = false, stick = 'float', weaponBtn = false, toWorld = null, now = null, tune = null } = {}) {
   const C = { ...STICK, ...tune };
   const clock = now ?? (() => performance.now() / 1000);
   const input = { mx: 0, my: 0, fire: false, act: false, aim: false, ax: 0, ay: 0, ap: 0, dash: false, dx: 0, dy: 0, dp: 0, hasT: false, tx: 0, ty: 0 };
@@ -87,7 +93,9 @@ export function createStickCore({ w = 0, h = 0, insets = null, lefty = false, st
   const pads = [pad(), pad()];
   // что рисовать: середина кольца (уже внутри безопасной зоны), сдвиг ручки и состояние idle | on | hold | aim
   const view = () => ({ on: false, x: 0, y: 0, kx: 0, ky: 0, state: 'idle' });
-  const sticks = { move: view(), act: view() };
+  // кнопка оружия: палец на ней (id, fired — огонь хоть один кадр видел) и что рисовать (shown — настройка включена)
+  const btn = { on: false, id: 0, fired: false };
+  const sticks = { move: view(), act: view(), btn: { shown: false, on: false, x: 0, y: 0, r: 0 } };
   const views = [sticks.move, sticks.act];
   const mouse = { seen: false, x: 0, y: 0, left: false, right: false, go: false, gx: 0, gy: 0 };
   const spot = { x: 0, y: 0 };
@@ -100,6 +108,9 @@ export function createStickCore({ w = 0, h = 0, insets = null, lefty = false, st
   let inL = 0;
   let isLefty = Boolean(lefty);
   let fixed = stick === 'static';
+  let useBtn = Boolean(weaponBtn);
+  let btnX = 0;
+  let btnY = 0;
   // где может стоять середина кольца и где джойстики ждут палец
   let minX = 0;
   let maxX = 0;
@@ -130,11 +141,18 @@ export function createStickCore({ w = 0, h = 0, insets = null, lefty = false, st
   let aimP = 0;
   let warned = false;
 
+  const onBtn = (id) => btn.on && btn.id === id;
   const byId = (id) => (pads[MOVE].on && pads[MOVE].id === id ? pads[MOVE] : pads[ACT].on && pads[ACT].id === id ? pads[ACT] : null);
   const power = (d) => Math.max(0, Math.min(1, (d - C.aim) / (C.radius - C.aim)));
 
   /** Что рисовать: занятый джойстик — под пальцем (но в безопасной зоне), свободный — на своём месте покоя. */
   function sync() {
+    const b = sticks.btn;
+    b.shown = useBtn;
+    b.on = btn.on;
+    b.x = btnX;
+    b.y = btnY;
+    b.r = C.btnR;
     for (let i = 0; i < 2; i++) {
       const p = pads[i];
       const v = views[i];
@@ -181,6 +199,14 @@ export function createStickCore({ w = 0, h = 0, insets = null, lefty = false, st
     homeX[MOVE] = isLefty ? rightX : leftX;
     homeX[ACT] = isLefty ? leftX : rightX;
     homeY[MOVE] = homeY[ACT] = Math.max(maxY - C.padY, minY);
+    // кнопка оружия: над правым джойстиком, в сторону ходьбы (у левши зеркально), целиком в безопасной зоне
+    const bR = C.btnR;
+    const bMinX = Math.max(inL, C.edge) + bR;
+    const bMaxX = Math.max(bMinX, W - Math.max(inR, C.edge) - bR);
+    const bMinY = Math.max(inT, C.edge) + bR;
+    const bMaxY = Math.max(bMinY, H - Math.max(inB, C.edge) - bR);
+    btnX = Math.max(bMinX, Math.min(bMaxX, homeX[ACT] + (isLefty ? 1 : -1) * r * C.btnGapX));
+    btnY = Math.max(bMinY, Math.min(bMaxY, homeY[ACT] - r * C.btnGapY));
     sync();
   }
 
@@ -200,6 +226,14 @@ export function createStickCore({ w = 0, h = 0, insets = null, lefty = false, st
     isLefty = Boolean(on);
     cancelAll();
     layout();
+  }
+
+  /** Кнопка оружия на лету. Пальцы отпускаются: у стика действия правила другие. */
+  function setWeaponBtn(on) {
+    if (Boolean(on) === useBtn) return;
+    useBtn = Boolean(on);
+    cancelAll();
+    sync();
   }
 
   /** Джойстики на лету: 'static' | 'float'. Пальцы отпускаются (точки отсчёта у режимов разные). */
@@ -248,10 +282,17 @@ export function createStickCore({ w = 0, h = 0, insets = null, lefty = false, st
     p.t0 = clock();
   }
 
-  /** Палец лёг. Возвращает 0 — взял джойстик ходьбы, 1 — действия, −1 — палец лишний. */
+  /** Палец лёг. Возвращает 0 — взял джойстик ходьбы, 1 — действия, 2 — кнопку оружия, −1 — палец лишний. */
   function down(id, x, y) {
     const old = byId(id);
     if (old) old.on = false;                         // тот же номер лёг снова — прошлое отпускание потерялось
+    if (onBtn(id)) btn.on = false;
+    if (useBtn && !btn.on && hyp(x - btnX, y - btnY) <= C.btnR * C.btnCatch) {
+      btn.on = true;
+      btn.id = id;
+      btn.fired = false;
+      return 2;
+    }
     const i = fixed ? pickFixed(x, y) : pick(x);
     if (i < 0) return -1;
     const p = pads[i];
@@ -305,6 +346,14 @@ export function createStickCore({ w = 0, h = 0, insets = null, lefty = false, st
 
   /** Палец поднят: с прицела — рывок, после короткого нажатия — импульс огня. */
   function up(id) {
+    if (onBtn(id)) {
+      btn.on = false;
+      if (!btn.fired) {
+        pulse = true;                                // нажал и отпустил между кадрами — огонь импульсом
+        pulseEnd = clock() + C.tapFire;
+      }
+      return;
+    }
     const p = byId(id);
     if (!p) return;
     p.on = false;
@@ -319,7 +368,7 @@ export function createStickCore({ w = 0, h = 0, insets = null, lefty = false, st
         dashY = oy / d;
         dashP = power(d);
       }
-    } else if (p.mode === PRESS || (p.mode === HOLD && !p.fired)) {
+    } else if (!useBtn && (p.mode === PRESS || (p.mode === HOLD && !p.fired))) {
       // нажал и отпустил, а огня ещё ни один кадр не видел — отдаём его импульсом
       pulse = true;
       pulseEnd = clock() + C.tapFire;
@@ -328,6 +377,7 @@ export function createStickCore({ w = 0, h = 0, insets = null, lefty = false, st
 
   /** Касание оборвалось (система забрала палец): отпустить без рывка и без огня. */
   function cancel(id) {
+    if (onBtn(id)) btn.on = false;
     const p = byId(id);
     if (p) p.on = false;
   }
@@ -335,9 +385,10 @@ export function createStickCore({ w = 0, h = 0, insets = null, lefty = false, st
   function cancelAll() {
     pads[MOVE].on = false;
     pads[ACT].on = false;
+    btn.on = false;
   }
 
-  const holds = (id) => byId(id) !== null;
+  const holds = (id) => byId(id) !== null || onBtn(id);
 
   /** Мышь: какие кнопки зажаты (биты MouseEvent.buttons) и где курсор. Отпустил левую — рывок. */
   function mouseAt(buttons, x, y) {
@@ -474,7 +525,8 @@ export function createStickCore({ w = 0, h = 0, insets = null, lefty = false, st
     let ap = 0;
     const a = pads[ACT];
     if (a.on) {
-      if ((a.mode === PRESS || a.mode === BACK) && t - a.t0 >= C.holdDelay) a.mode = HOLD;
+      // с отдельной кнопкой оружия стик действия только тянется для рывка: «держу на месте» огня не даёт
+      if (!useBtn && (a.mode === PRESS || a.mode === BACK) && t - a.t0 >= C.holdDelay) a.mode = HOLD;
       if (a.mode === HOLD) {
         fire = true;
         a.fired = true;
@@ -489,6 +541,10 @@ export function createStickCore({ w = 0, h = 0, insets = null, lefty = false, st
           ap = power(d);
         }
       }
+    }
+    if (useBtn && btn.on) {
+      fire = true;
+      btn.fired = true;
     }
     if (pulse) {
       fire = true;
@@ -589,9 +645,10 @@ export function createStickCore({ w = 0, h = 0, insets = null, lefty = false, st
   resize(W, H, insets ?? NO_INSETS);
 
   return {
-    input, sticks, resize, setLefty, setStick, down, move, up, cancel, cancelAll, holds, mouse: mouseAt, mouseOut, mouseDrop, key, blur, frame, reset,
+    input, sticks, resize, setLefty, setStick, setWeaponBtn, down, move, up, cancel, cancelAll, holds, mouse: mouseAt, mouseOut, mouseDrop, key, blur, frame, reset,
     get lefty() { return isLefty; },
     get stick() { return fixed ? 'static' : 'float'; },
+    get weaponBtn() { return useBtn; },
   };
 }
 
@@ -607,10 +664,10 @@ export function createStickCore({ w = 0, h = 0, insets = null, lefty = false, st
  * вызов — в кадре, где шагов не будет (экран чаще 60 Гц), звать его не надо, иначе команда пропадёт; рендеру для
  * стрелки рывка хватит state.
  */
-export function createInput({ stage, sticksEl, screen = null, toWorld = null, onPause = null, lefty = false, stick = 'float', tune = null, now = null } = {}) {
+export function createInput({ stage, sticksEl, screen = null, toWorld = null, onPause = null, lefty = false, stick = 'float', weaponBtn = false, tune = null, now = null } = {}) {
   const doc = stage.ownerDocument;
   const win = doc.defaultView;
-  const core = createStickCore({ lefty, stick, toWorld, tune, now: now ?? (() => win.performance.now() / 1000) });
+  const core = createStickCore({ lefty, stick, weaponBtn, toWorld, tune, now: now ?? (() => win.performance.now() / 1000) });
   const input = core.input;
 
   // где сцена лежит в осях игры (обновляет resize) и точка под указателем — числа, без новых объектов на событие
@@ -650,6 +707,22 @@ export function createInput({ stage, sticksEl, screen = null, toWorld = null, on
   }
   const drawn = [makeStick('move'), makeStick('act')];
 
+  // кнопка оружия: круг с теми же значками «огонь» / «взять»; на страницу встаёт, только пока настройка включена
+  const wb = doc.createElement('div');
+  wb.className = 'fh-stick-btn';
+  wb.setAttribute('aria-hidden', 'true');
+  const wbDisc = doc.createElement('div');
+  wbDisc.className = 'fh-stick-btn-disc';
+  wb.append(wbDisc);
+  for (const what of ['fire', 'use']) {
+    const glyph = doc.createElement('span');
+    glyph.className = `fh-stick-glyph fh-stick-glyph--${what}`;
+    wb.append(glyph);
+  }
+  wb.dataset.action = action;
+  const wbDraw = { x: NaN, y: NaN, on: false };
+  let wbMounted = false;
+
   /** Поставить кольцо и ручку: только transform, и только если сдвинулись хотя бы на полпикселя. */
   function paintStick(d, v) {
     const x = Math.round(v.x * 2) / 2;
@@ -674,9 +747,41 @@ export function createInput({ stage, sticksEl, screen = null, toWorld = null, on
     }
   }
 
+  function paintBtn() {
+    const v = core.sticks.btn;
+    if (!v.shown || !mounted) return;
+    const x = Math.round(v.x * 2) / 2;
+    const y = Math.round(v.y * 2) / 2;
+    if (x !== wbDraw.x || y !== wbDraw.y) {
+      wbDraw.x = x;
+      wbDraw.y = y;
+      wb.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+    }
+    if (v.on !== wbDraw.on) {
+      wbDraw.on = v.on;
+      wb.classList.toggle('fh-stick-btn--on', v.on);
+    }
+  }
+
+  /** Кнопка оружия — на страницу или с неё, по настройке; значок «огонь» / «взять» — у неё, а не у стика. */
+  function mountBtn() {
+    const want = core.weaponBtn && mounted;
+    if (want && !wbMounted) {
+      wbMounted = true;
+      wb.style.setProperty('--fh-btn-r', `${core.sticks.btn.r}px`);
+      sticksEl.append(wb);
+    } else if (!want && wbMounted) {
+      wbMounted = false;
+      wb.remove();
+    }
+    wb.dataset.action = action;
+    drawn[ACT].root.dataset.action = core.weaponBtn ? 'none' : action;
+  }
+
   function paint() {
     paintStick(drawn[MOVE], core.sticks.move);
     paintStick(drawn[ACT], core.sticks.act);
+    paintBtn();
   }
 
   /** Мышь в деле — джойстики убираются; коснулись пальцем — возвращаются. */
@@ -728,6 +833,8 @@ export function createInput({ stage, sticksEl, screen = null, toWorld = null, on
       // на страницу — уже на своих местах: иначе джойстики на глазах приезжали бы из угла
       mounted = true;
       sticksEl.append(drawn[MOVE].root, drawn[ACT].root);
+      mountBtn();
+      paint();
     }
   }
 
@@ -869,12 +976,19 @@ export function createInput({ stage, sticksEl, screen = null, toWorld = null, on
     paint();
   }
 
+  function setWeaponBtn(on) {
+    core.setWeaponBtn(on);
+    mountBtn();
+    paint();
+  }
+
   /** Что сейчас сделает нажатие без движения: значок на ручке джойстика действия. */
   function setAction(kind) {
     const next = kind === 'fire' || kind === 'use' ? kind : 'none';
     if (next === action) return;
     action = next;
-    drawn[ACT].root.dataset.action = next;
+    wb.dataset.action = next;
+    drawn[ACT].root.dataset.action = core.weaponBtn ? 'none' : next;
   }
 
   // без этого браузер забирал бы палец под свою прокрутку и обрывал касание
@@ -927,10 +1041,11 @@ export function createInput({ stage, sticksEl, screen = null, toWorld = null, on
     core.reset();
     drawn[MOVE].root.remove();
     drawn[ACT].root.remove();
+    wb.remove();
     sticksEl.classList.remove('fh-sticks--off');
     sticksEl.style.removeProperty('--fh-stick-r');
     stage.style.touchAction = touchAction;
   }
 
-  return { frame, state: input, sticks: core.sticks, setLefty, setStick, setAction, resize, reset, destroy };
+  return { frame, state: input, sticks: core.sticks, setLefty, setStick, setWeaponBtn, setAction, resize, reset, destroy };
 }
