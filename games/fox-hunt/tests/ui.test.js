@@ -251,3 +251,37 @@ test('тема Telegram в игре не используется: ни в ст�
     assert.doesNotMatch(src, /tg-theme|colorScheme|data-theme/, name);
   }
 });
+
+test('статистика: на плитках и в подписях страниц нет многоточий, у чисел нет обрезки', () => {
+  const css = readFileSync(new URL('../game.css', import.meta.url), 'utf8');
+  const block = css.slice(css.indexOf('/* статистика */'), css.indexOf('/* дар леса'));
+  assert.doesNotMatch(block, /text-overflow/);
+  assert.doesNotMatch(block, /line-clamp/);
+  // числа не переносятся и не режутся; длинное «Локация 15 · Осенняя чаща» — на широкой плитке и переносится
+  assert.match(block, /\.fh-tile-num \{[^}]*white-space: nowrap/);
+  assert.doesNotMatch(block.match(/\.fh-tile-num \{[^}]*\}/)[0], /overflow/);
+  assert.match(block, /\.fh-tiles--run \.fh-tile--wide \{ grid-column: span 3/);
+});
+
+test('статистика: самые длинные значения целиком в плитках; «Локация» — число и место отдельно', () => {
+  const { ui } = make();
+  const win = ui.open('stats', 'run');
+  const tiles = win.el.byClass('fh-tile');
+  assert.equal(tiles.length, 8);
+  const floor = tiles.find((t) => t.textContent.includes(T.stats.run.floor));
+  assert.ok(floor.className.includes('fh-tile--wide'));
+  assert.match(floor.textContent, /^\d+ · .+Локация$/);
+  ui.destroy();
+});
+
+test('окна: z-index не больше 10, при «уменьшить движение» переходы ровно 0s, цвета — переменные --fh-*', () => {
+  const css = readFileSync(new URL('../game.css', import.meta.url), 'utf8');
+  for (const m of css.matchAll(/z-index:\s*(-?\d+)/g)) assert.ok(Number(m[1]) <= 10, `z-index ${m[1]}`);
+  const reduced = css.slice(css.indexOf('prefers-reduced-motion'));
+  assert.match(reduced, /transition(-duration)?: (none|0s)/);
+  assert.doesNotMatch(reduced, /\b1ms\b/);
+  const modal = css.match(/\.fh-modal \{[^}]*\}/)[0];
+  assert.match(modal, /var\(--fh-w-/);
+  assert.match(css, /--fh-w-plank:/);
+  assert.match(css, /--fh-danger:/);
+});

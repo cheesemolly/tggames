@@ -839,6 +839,8 @@ function debugHooks() {
       if (running() && !ui.isOpen) ui.openPause(false);
       kick();
     },
+    /** Открыть окно по имени ('pause' | 'bag' | 'stats' | 'settings' | 'gift'), для проверки окон. */
+    win: (name, arg) => ui.open(name, arg),
     /** Закрыть все окна и играть дальше. */
     resume() {
       for (let k = 0; k < 6 && ui.isOpen; k++) ui.back();

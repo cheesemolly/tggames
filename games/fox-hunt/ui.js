@@ -1522,20 +1522,21 @@ export function createUi({ root, api, actions, get }) {
     });
 
     const slide = (dir) => animate(body, [{ opacity: 0, transform: `translateX(${dir * 12}px)` }, { opacity: 1, transform: 'none' }], { duration: 180, easing: EASE_OUT });
-    const tile = (label, value) => el('div', { class: 'fh-tile' }, el('b', { class: 'fh-tile-num' }, value), el('span', { class: 'fh-tile-label' }, label));
+    const tile = (label, value, mod = '') => el('div', { class: `fh-tile${mod ? ` fh-tile--${mod}` : ''}` }, el('b', { class: 'fh-tile-num' }, value), el('span', { class: 'fh-tile-label' }, label));
 
     function runPage(G) {
       const s = runSummary(G);
+      // название места — мелко рядом с числом и переносится на вторую строку, а не обрезается
       const value = {
-        score: digits(s.score), floor: `${s.floor} · ${BIOME_NAMES[s.biome] ?? ''}`, time: clock(s.time), rabbits: digits(s.rabbits),
+        score: digits(s.score), floor: [String(s.floor), el('small', {}, ` · ${BIOME_NAMES[s.biome] ?? ''}`)], time: clock(s.time), rabbits: digits(s.rabbits),
         kills: digits(s.kills), bosses: digits(s.bosses), tasks: digits(s.tasks), coins: digits(s.coins),
       };
-      return [el('div', { class: 'fh-tiles fh-tiles--run' }, Object.keys(T.stats.run).map((k) => tile(T.stats.run[k], value[k])))];
+      return [el('div', { class: 'fh-tiles fh-tiles--run' }, Object.keys(T.stats.run).map((k) => tile(T.stats.run[k], value[k], k === 'score' || k === 'floor' ? 'wide' : '')))];
     }
 
     function allPage() {
       const st = get.stats?.() ?? {};
-      const kids = [el('div', { class: 'fh-tiles' }, Object.keys(T.stats.all).map((k) => tile(T.stats.all[k], digits(Number.isFinite(st[k]) ? st[k] : 0))))];
+      const kids = [el('div', { class: 'fh-tiles fh-tiles--all' }, Object.keys(T.stats.all).map((k) => tile(T.stats.all[k], digits(Number.isFinite(st[k]) ? st[k] : 0), 'row')))];
       // «Очки в рейтинге» — общий блок всех игр; его может не быть (подсказка ещё закрыта)
       const points = get.points ? get.points() : pointsInfo(api, 'fox-hunt');
       if (points) kids.push(points);
@@ -1757,6 +1758,7 @@ export function createUi({ root, api, actions, get }) {
       else if (name === 'bag' && !hasWin('bag')) pushWin(bagWin());
       else if (name === 'settings' && !hasWin('settings')) pushWin(settingsWin());
       else if (name === 'stats' && !hasWin('stats')) pushWin(statsWin(arg));
+      else if (name === 'gift' && !hasWin('gift')) openGift(arg);
       return top();
     },
     /** Верхнее окно (или null). */
