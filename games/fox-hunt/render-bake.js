@@ -59,6 +59,55 @@ export function bakeVignette(strength = 0.5, makeCanvas = domCanvas) {
   return c;
 }
 
+const FOGS = new Map();
+
+function hexA(hex, a) {
+  const v = parseInt(hex.slice(1), 16);
+  return `rgba(${(v >> 16) & 255},${(v >> 8) & 255},${v & 255},${a})`;
+}
+
+/**
+ * Пелена тумана: квадрат, у которого середина прозрачная, а к краю цвет сгущается до сплошного (альфа 1 — потолок
+ * ставит render.js через globalAlpha). Один на цвет места.
+ */
+export function bakeFog(color, makeCanvas = domCanvas) {
+  const key = `fog|${color}`;
+  let c = FOGS.get(key);
+  if (c) return c;
+  const n = 96;
+  c = makeCanvas(n, n);
+  const g = c.getContext('2d');
+  const gr = g.createRadialGradient(n / 2, n / 2, 0, n / 2, n / 2, n / 2);
+  gr.addColorStop(0, hexA(color, 0));
+  gr.addColorStop(0.4, hexA(color, 0));
+  gr.addColorStop(0.58, hexA(color, 0.3));
+  gr.addColorStop(0.8, hexA(color, 0.75));
+  gr.addColorStop(1, hexA(color, 1));
+  g.fillStyle = gr;
+  g.fillRect(0, 0, n, n);
+  FOGS.set(key, c);
+  return c;
+}
+
+/** Клок дымки, что плывёт по туману: мягкое пятно без краёв. Один на цвет. */
+export function bakePuff(color, makeCanvas = domCanvas) {
+  const key = `puff|${color}`;
+  let c = FOGS.get(key);
+  if (c) return c;
+  const n = 64;
+  c = makeCanvas(n, n);
+  const g = c.getContext('2d');
+  const gr = g.createRadialGradient(n / 2, n / 2, 0, n / 2, n / 2, n / 2);
+  gr.addColorStop(0, hexA(color, 1));
+  gr.addColorStop(0.5, hexA(color, 0.5));
+  gr.addColorStop(1, hexA(color, 0));
+  g.fillStyle = gr;
+  g.fillRect(0, 0, n, n);
+  FOGS.set(key, c);
+  return c;
+}
+
 export function clearBakes() {
   TEXTS.clear();
+  FOGS.clear();
 }

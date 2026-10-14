@@ -9,7 +9,7 @@
 import './art-all.js';
 import { createArt, hasSprite, spriteKeys, spriteDef } from './art.js';
 import { paintRoom, propsOf, ROOM_MARGIN } from './art-tiles.js';
-import { bakeText, bakeVignette } from './render-bake.js';
+import { bakeText, bakeVignette, bakeFog, bakePuff } from './render-bake.js';
 import { T } from './core.js';
 import { DASH } from './balance.js';
 
@@ -17,10 +17,11 @@ export const QUALITY = [2, 1.5, 1.15];
 // «Графика» в настройках: 0 низкая, 1 средняя (по умолчанию), 2 высокая. step — ступень QUALITY, с которой начинаем
 // (она же задаёт потолок частиц PART_CAP и число пылинок воздуха), vig — рисовать ли виньетку, auto — может ли
 // игра сама опускать ступень, когда кадры не успевают (lowerQuality). Выбор игрока автоснижение не меняет и не поднимает.
+// puffs — сколько клоков дымки плывёт по туману (0 — туман ровный, без дрейфа).
 export const GRAPHICS = [
-  { step: 2, vig: false, auto: true },
-  { step: 0, vig: true, auto: true },
-  { step: 0, vig: true, auto: false },
+  { step: 2, vig: false, auto: true, puffs: 0 },
+  { step: 0, vig: true, auto: true, puffs: 5 },
+  { step: 0, vig: true, auto: false, puffs: 9 },
 ];
 export const GRAPHICS_DEFAULT = 1;
 /** Сохранённое положение «Графики»: нет поля или что-то не то — средняя. */
@@ -50,6 +51,14 @@ const SWING_INK = [['#ffffff', '#ff9a3c'], ['#e6f6ff', '#6ec0ff'], ['#eef2f8', '
 const SWING_FADE = 0.12;           // след дотаивает после взмаха
 const ICON_AXIS = -0.8;            // значки оружия нарисованы наискось: рукоять внизу слева, конец вверху справа
 const ICON_SIZE = 1.25;            // оружие в лапах чуть крупнее значка в рюкзаке
+// туман («Туман», room.mod === 'fog'): вокруг лисы чисто до FOG_CLEAR единиц, к FOG_FAR пелена густеет до потолка
+// FOG_MAX — зверь за краем виден силуэтом, не пропадает. Цвет — по месту.
+const FOG_CLEAR = 62;
+const FOG_FAR = 150;
+const FOG_MAX = 0.66;
+const FOG_PUFF = 0.24;             // густота клока дымки вдали от лисы
+export const FOG_TINT = { forest: '#dfe8d2', swamp: '#c3d8c6', taiga: '#e2ebf5', cave: '#6f6a98', autumn: '#e8d0aa' };
+const FOG_PUFFS = 9;
 const PREY = new Set(['rabbit', 'hare', 'gold', 'fat']);
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -103,6 +112,12 @@ export function createRenderer({ canvas, probe }) {
   // взмах ближнего оружия: один на лису, новый удар сменяет старый; dir — в какую сторону ведёт дугу (через раз)
   const swing = { on: false, key: '', icon: false, look: 0, a: 0, r: 0, arc: 0, dir: -1, t: 0, life: 0.2 };
   let calmNow = false;
+  let fogT = 0;               // часы дрейфа тумана: при «уменьшить движение» стоят
+  // клоки дымки: доли экрана, скорость, размер — готовые числа, в кадре ничего не создаётся
+  const puffs = [];
+  for (let i = 0; i < FOG_PUFFS; i++) {
+    puffs.push({ x: (i * 0.618) % 1, y: (i * 0.382 + 0.13) % 1, sx: 0.006 + (i % 3) * 0.004, ph: i * 1.7, s: 0.8 + (i % 4) * 0.25 });
+  }
 
   const partCap = () => PART_CAP[qi] ?? 140;
 
@@ -833,7 +848,7 @@ export function createRenderer({ canvas, probe }) {
       const s = 0.8 + 0.25 * Math.sin(m.t * 18);
       art.putX(ctx, 'fx.warn', px(m.x), py(m.y), 0, s, s, 1 - f * 0.4);
     }
-    drawZones(G);
+    if (room.mod !== 'fog') drawZones(G);   // в тумане зоны рисуются поверх пелены (drawFog)
     // свечение подбираемого
     for (let i = 0; i < room.picks.length; i++) {
       const p = room.picks[i];
@@ -848,6 +863,57 @@ export function createRenderer({ canvas, probe }) {
       const f = r.t / r.life;
       const s = (r.r * (0.35 + 0.65 * f)) / 20;
       art.putX(ctx, 'fx.ring', px(r.x), py(r.y), 0, s, s * 0.7, 1 - f, 0);
+    }
+  }
+
+  /**
+   * Туман: пелена с чистым кругом вокруг лисы, поверх — клоки дымки (дальше от лисы гуще), потом поверх пелены снова
+   * красные зоны и выстрелы — их туман не прячет. Лиса стоит в чистом круге, ей отдельно ничего не нужно.
+   */
+  function drawFog(G, alpha) {
+    const P = G.player;
+    const col = FOG_TINT[room.biome] ?? FOG_TINT.forest;
+    const W = canvas.width;
+    const H = canvas.height;
+    const fx = px(P.px + (P.x - P.px) * alpha);
+    const fy = py(P.py + (P.y - P.py) * alpha);
+    const R = FOG_FAR * k;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = FOG_MAX;
+    ctx.fillStyle = col;
+    const x0 = Math.round(fx - R);
+    const x1 = Math.round(fx + R);
+    const y0 = Math.round(fy - R);
+    const y1 = Math.round(fy + R);
+    if (y0 > 0) ctx.fillRect(0, 0, W, Math.min(H, y0));
+    if (y1 < H) ctx.fillRect(0, Math.max(0, y1), W, H - Math.max(0, y1));
+    const top = Math.max(0, y0);
+    const bot = Math.min(H, y1);
+    if (bot > top) {
+      if (x0 > 0) ctx.fillRect(0, top, Math.min(W, x0), bot - top);
+      if (x1 < W) ctx.fillRect(Math.max(0, x1), top, W - Math.max(0, x1), bot - top);
+    }
+    ctx.drawImage(bakeFog(col), x0, y0, x1 - x0, y1 - y0);
+    // клоки дымки: плывут по экрану, возле лисы тают
+    const n = Math.min(gfx.puffs, puffs.length);
+    if (n > 0) {
+      const pf = bakePuff(col);
+      for (let i = 0; i < n; i++) {
+        const p = puffs[i];
+        const X = ((((p.x + fogT * p.sx) % 1.4) + 1.4) % 1.4 - 0.2) * W;
+        const Y = (p.y + Math.sin(fogT * 0.12 + p.ph) * 0.04) * H;
+        const f = smooth((Math.hypot(X - fx, Y - fy) / k - FOG_CLEAR) / (FOG_FAR - FOG_CLEAR));
+        if (f <= 0.01) continue;
+        const s = 110 * p.s * k;
+        ctx.globalAlpha = FOG_PUFF * f;
+        ctx.drawImage(pf, X - s / 2, Y - s * 0.35, s, s * 0.7);
+      }
+    }
+    ctx.globalAlpha = 1;
+    drawZones(G);
+    for (let i = 0; i < room.shots.length; i++) {
+      const s = room.shots[i];
+      if (s.on && visible(s.x, s.y, 40)) drawShot(s);
     }
   }
 
@@ -1032,6 +1098,7 @@ export function createRenderer({ canvas, probe }) {
     const calm = Boolean(opts.calm);
     calmNow = calm;
     const alpha = clamp(num(opts.alpha, 1), 0, 1);
+    if (!calm) fogT += dt;
     if (!G || !G.room) {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.fillStyle = '#1f3a22';
@@ -1204,7 +1271,8 @@ export function createRenderer({ canvas, probe }) {
     // 6. над головой
     for (let i = 0; i < over.length; i++) putProp(over[i]);
 
-    // 7. воздух, виньетка
+    // 7. туман, воздух, виньетка
+    if (room.mod === 'fog') drawFog(G, alpha);
     if (!calm) drawAir();
     if (vig) {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -1259,6 +1327,8 @@ export function createRenderer({ canvas, probe }) {
     /** Как рисуется хозяин сейчас (прозрачность, масштаб, тень, нить) — для проверки; копия. */
     bossLook: (m, calm = false) => ({ ...look(m, calm) }),
     get quality() { return qi; },
+    /** Часы дрейфа тумана (для проверки): при calm стоят. */
+    get fogTime() { return fogT; },
     get graphics() { return GRAPHICS.indexOf(gfx); },
     get scale() { return scale; },
     get view() { return view; },
