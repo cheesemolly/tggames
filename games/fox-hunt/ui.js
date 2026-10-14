@@ -30,6 +30,7 @@ import { BIOME_NAMES } from './tiles.js';
 
 /** Рамка, под которую свёрстано каждое окно (px), и поле вокруг него: экран 568×320 без 98×20 под вырезы и кнопки. */
 export const BOX = { w: 454, h: 284, gap: 8 };
+export const BAG_H = 306;           // рюкзак выше остальных: ряд «Дары и спутники» должен целиком лечь в рамку
 export const SET_H = 372;           // окно настроек выше остальных: под переключателями — ползунок «Графика»
 /** Экран, под который свёрстаны надписи поверх игры: на большем они крупнее. */
 export const HUD_BASE = { w: 568, h: 320 };
@@ -1780,6 +1781,7 @@ export function createUi({ root, api, actions, get }) {
     if (!w || !h) return;
     const ins = screenOf()?.insets?.() ?? NO_INSETS;
     root.style.setProperty('--fh-zoom', String(Math.round(zoomFor(w, h, ins) * 1000) / 1000));
+    root.style.setProperty('--fh-zoom-bag', String(Math.round(zoomFor(w, h, ins, BAG_H) * 1000) / 1000));
     root.style.setProperty('--fh-zoom-set', String(Math.round(zoomFor(w, h, ins, SET_H) * 1000) / 1000));
     root.style.setProperty('--fh-hud-zoom', String(Math.round(hudZoomFor(w, h) * 1000) / 1000));
     safe.l = ins.left + 6;
@@ -1808,6 +1810,7 @@ export function createUi({ root, api, actions, get }) {
     hud.remove();
     modal.remove();
     root.style.removeProperty('--fh-zoom');
+    root.style.removeProperty('--fh-zoom-bag');
     root.style.removeProperty('--fh-zoom-set');
     root.style.removeProperty('--fh-hud-zoom');
     wins.length = 0;

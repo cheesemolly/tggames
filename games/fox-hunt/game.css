@@ -565,7 +565,7 @@
     radial-gradient(ellipse 20px 6px at 21% 63%, rgba(110, 62, 26, 0.42), transparent 70%),
     radial-gradient(ellipse 15px 5px at 79% 31%, rgba(110, 62, 26, 0.38), transparent 70%),
     radial-gradient(ellipse 12px 4px at 56% 86%, rgba(110, 62, 26, 0.32), transparent 70%),
-    repeating-linear-gradient(180deg, transparent 0 40px, rgba(90, 52, 24, 0.55) 40px 42px, rgba(255, 236, 190, 0.32) 42px 43px, transparent 43px 44px),
+    repeating-linear-gradient(180deg, transparent 0 calc(40px + var(--fh-seam, 0px)), rgba(90, 52, 24, 0.55) calc(40px + var(--fh-seam, 0px)) calc(42px + var(--fh-seam, 0px)), rgba(255, 236, 190, 0.32) calc(42px + var(--fh-seam, 0px)) calc(43px + var(--fh-seam, 0px)), transparent calc(43px + var(--fh-seam, 0px)) 44px),
     var(--fh-w-grain),
     linear-gradient(180deg, #e6bd7e, #d3a160 60%, #bf8a4c);
   box-shadow: inset 0 0 0 10.5px var(--fh-w-line), inset 0 16px 10px -6px rgba(60, 30, 10, 0.32), 0 5px 0 #2e1c12, 0 14px 28px rgba(0, 0, 0, 0.45);
@@ -831,7 +831,9 @@
   [data-game="fox-hunt"] .fh-cross { transition-duration: 0s; }
 }
 
-/* рюкзак: слева ячейки, справа карточка выбранного */
+/* рюкзак: слева ячейки, справа карточка выбранного; окно выше остальных на BAG_H, а швы досок сдвинуты (--fh-seam) так,
+   чтобы ложиться в промежутки между рядами, а не поперёк подписей «Надето», «В рюкзаке», «Дары и спутники» */
+[data-game="fox-hunt"] .fh-win.fh-bag { height: 306px; --fh-seam: -11px; scale: var(--fh-zoom-bag, var(--fh-zoom, 1)); }
 [data-game="fox-hunt"] .fh-bag-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 206px minmax(0, 1fr); gap: 12px; }
 [data-game="fox-hunt"] .fh-bag-left { display: flex; flex-direction: column; gap: 3px; min-height: 0; }
 [data-game="fox-hunt"] .fh-bag-left .fh-label:not(:first-child) { margin-top: 5px; }
@@ -891,6 +893,8 @@
   text-align: center;
 }
 [data-game="fox-hunt"] .fh-slots--extra .fh-none { grid-column: 1 / -1; }
+/* «пока нет» занимает высоту ряда и стоит посередине — шов досок проходит над строкой, а не по ней */
+[data-game="fox-hunt"] .fh-bag-left > .fh-none { display: flex; align-items: center; height: 38px; }
 
 [data-game="fox-hunt"] .fh-info { display: flex; flex-direction: column; gap: 6px; min-width: 0; min-height: 0; padding: 8px 10px; border: 2.5px solid var(--fh-w-line); border-radius: 10px; background: var(--fh-w-paper); box-shadow: inset 0 2px 0 rgba(255, 250, 235, 0.7), 0 3px 0 var(--fh-w-line); overflow: hidden; }
 [data-game="fox-hunt"] .fh-info-head { display: flex; align-items: center; gap: 8px; }

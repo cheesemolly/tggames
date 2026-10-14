@@ -8,7 +8,7 @@ import { arena } from './helpers.js';
 const page = miniPage();
 globalThis.document = page.doc;
 globalThis.matchMedia = () => ({ matches: true, addEventListener() {} });
-const { createUi, T, BOX, SET_H, zoomFor, stopAt } = await import('../ui.js');
+const { createUi, T, BOX, SET_H, BAG_H, zoomFor, stopAt } = await import('../ui.js');
 
 /** Окно открыто, партия идёт; вернуть всё, что нужно проверять. rotated — экран лежит на боку. */
 function make({ rotated = false, over = false, pc = false } = {}) {
@@ -198,6 +198,10 @@ test('стили: обе кнопки HUD не меньше 44×44, окна —
   const set = css.match(/\.fh-win\.fh-settings \{[^}]*\}/)[0];
   assert.match(set, new RegExp(`height: ${SET_H}px;`));
   assert.match(set, /scale: var\(--fh-zoom-set/);
+  // рюкзак выше остальных ровно на BAG_H и растёт по своему масштабу
+  const bag = css.match(/\.fh-win\.fh-bag \{[^}]*\}/)[0];
+  assert.match(bag, new RegExp(`height: ${BAG_H}px;`));
+  assert.match(bag, /scale: var\(--fh-zoom-bag/);
 });
 
 test('HUD: кнопки не выходят за безопасные отступы (правый край идёт от ls-r)', () => {
@@ -349,5 +353,9 @@ test('настройки: ползунок «Графика» — стрелки
     const k = zoomFor(w, h, undefined, SET_H);
     assert.ok(SET_H * k <= h - BOX.gap * 2 + 1e-6 || k === 0.5, `${w}×${h}`);
     assert.ok(BOX.w * k <= w - BOX.gap * 2 + 1e-6 || k === 0.5, `${w}×${h}`);
+  }
+  for (const [w, h] of [[454, 284], [320, 180], [568, 320], [360, 640]]) {
+    const k = zoomFor(w, h, undefined, BAG_H);
+    assert.ok(BAG_H * k <= h - BOX.gap * 2 + 1e-6 || k === 0.5, `рюкзак ${w}×${h}`);
   }
 });
