@@ -31,7 +31,10 @@ export function desktopFacts(win, screen = null) {
  * клавиши, жест браузера), не по нашему leave().
  * Возвращает { enter() → Promise<bool>, leave(), destroy(), get active, get keyLocked }.
  */
-export function createFullscreen({ doc, nav, host, onLost = null } = {}) {
+export function createFullscreen({ doc, nav, host, tg = null, onLost = null } = {}) {
+  // В Telegram окно мини-приложения разворачивает только его собственный полный экран (platform.fullscreen):
+  // обычный requestFullscreen растянул бы страницу лишь внутри маленького окна.
+  if (tg?.supported) return createTelegramFullscreen(tg, onLost);
   let entered = false;
   let keyLocked = false;
   let leaving = false;
@@ -140,6 +143,95 @@ export function createFullscreen({ doc, nav, host, onLost = null } = {}) {
     },
     get keyLocked() {
       return keyLocked;
+    },
+  };
+}
+
+/** Полный экран Telegram (Bot API 8.0): запрос, ответ приходит событием; Esc здесь решает сам клиент. */
+function createTelegramFullscreen(tg, onLost) {
+  let entered = false;
+  let leaving = false;
+  let alive = true;
+  let waiting = null;                // { done, timer } — включение ещё не подтверждено
+
+  function settle(ok) {
+    if (!waiting) return;
+    clearTimeout(waiting.timer);
+    const { done } = waiting;
+    waiting = null;
+    done(ok);
+  }
+
+  function onChange() {
+    if (!alive) return;
+    if (tg.isActive) {
+      entered = true;
+      settle(true);
+      return;
+    }
+    if (waiting) {
+      settle(false);                 // fullscreenFailed
+      return;
+    }
+    if (!entered) return;
+    entered = false;
+    if (leaving) {
+      leaving = false;
+      return;
+    }
+    onLost?.();
+  }
+
+  tg.onChange?.(onChange);
+
+  function enter() {
+    if (!alive) return Promise.resolve(false);
+    if (tg.isActive) {
+      entered = true;
+      return Promise.resolve(true);
+    }
+    settle(false);
+    return new Promise((resolve) => {
+      waiting = { done: resolve, timer: setTimeout(() => settle(Boolean(tg.isActive) && (entered = true)), 1500) };
+      try {
+        tg.request();
+      } catch {
+        settle(false);
+      }
+    });
+  }
+
+  function leave() {
+    settle(false);
+    if (!tg.isActive) {
+      entered = false;
+      return;
+    }
+    leaving = true;
+    try {
+      tg.exit();
+    } catch {
+      // уже вышли
+    }
+  }
+
+  function destroy() {
+    if (!alive) return;
+    leave();
+    alive = false;
+    tg.offChange?.(onChange);
+    onLost = null;
+  }
+
+  return {
+    enter,
+    leave,
+    destroy,
+    get active() {
+      return alive && entered && Boolean(tg.isActive);
+    },
+    get keyLocked() {
+      return false;
     },
   };
 }

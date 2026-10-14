@@ -201,3 +201,60 @@ test('input.js: захват курсора снимается в destroy вме
   assert.match(src, /removeEventListener\('pointerlockerror'/);
   assert.match(src, /exitPointerLock/);
 });
+
+// ---------- полный экран Telegram (окно мини-приложения на компьютере) ----------
+
+function makeTg({ supported = true, answer = 'ok' } = {}) {
+  const log = [];
+  const subs = [];
+  const tg = {
+    supported,
+    isActive: false,
+    request() {
+      log.push('request');
+      if (answer === 'ok') { tg.isActive = true; subs.forEach((f) => f()); }
+      else if (answer === 'fail') subs.forEach((f) => f());
+    },
+    exit() { log.push('exit'); tg.isActive = false; subs.forEach((f) => f()); },
+    onChange: (f) => subs.push(f),
+    offChange: (f) => subs.splice(subs.indexOf(f), 1),
+  };
+  const lost = [];
+  const fs = createFullscreen({ doc: { addEventListener() {}, removeEventListener() {} }, nav: {}, host: {}, tg, onLost: () => lost.push('lost') });
+  return { tg, fs, log, lost, subs };
+}
+
+test('Telegram: полный экран — через платформу, а не через requestFullscreen страницы', async () => {
+  const { tg, fs, log, lost } = makeTg();
+  assert.equal(await fs.enter(), true);
+  assert.equal(fs.active, true);
+  assert.deepEqual(log, ['request']);
+  fs.leave();
+  assert.deepEqual(log, ['request', 'exit']);
+  assert.equal(fs.active, false);
+  assert.deepEqual(lost, []);
+  assert.equal(tg.isActive, false);
+});
+
+test('Telegram: отказ клиента — false; нет поддержки — прежний путь через страницу', async () => {
+  const { fs, lost } = makeTg({ answer: 'fail' });
+  assert.equal(await fs.enter(), false);
+  assert.equal(fs.active, false);
+  assert.deepEqual(lost, []);
+  const plain = make();
+  const viaTg = createFullscreen({ doc: plain.doc, nav: {}, host: {}, tg: { supported: false } });
+  assert.equal(await viaTg.enter(), false, 'у поддельного host нет requestFullscreen');
+});
+
+test('Telegram: вышли сами (клиент закрыл полный экран) — onLost; destroy выходит и отписывается', async () => {
+  const { tg, fs, lost, subs, log } = makeTg();
+  await fs.enter();
+  tg.isActive = false;
+  subs.forEach((f) => f());
+  assert.deepEqual(lost, ['lost']);
+  await fs.enter();
+  fs.destroy();
+  assert.equal(log.at(-1), 'exit');
+  assert.equal(subs.length, 0);
+  assert.equal(lost.length, 1, 'свой выход — не потеря');
+});

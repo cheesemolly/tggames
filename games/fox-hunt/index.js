@@ -988,7 +988,7 @@ export default {
     });
     view.input = input.state;
     if (isDesktop(desktopFacts(window, api.screen ?? null))) {
-      fs = createFullscreen({ doc: document, nav: navigator, host: container, onLost: onFullscreenLost });
+      fs = createFullscreen({ doc: document, nav: navigator, host: container, tg: api.platform?.fullscreen ?? null, onLost: onFullscreenLost });
     }
     ui = createUi({ root, api, actions, get });
 

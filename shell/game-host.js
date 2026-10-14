@@ -399,6 +399,10 @@ function muteNextClick() {
 function createScopedPlatform(platform) {
   const handlers = new Set();
   const { mainButton } = platform;
+  const full = platform.fullscreen;
+  const fullListeners = new Set();
+  let live = true;
+  let fullHooked = false;
 
   return {
     api: {
@@ -406,6 +410,20 @@ function createScopedPlatform(platform) {
       user: platform.user,
       get colorScheme() { return platform.colorScheme; },
       haptic: platform.haptic,
+      // Полный экран самого Telegram (Bot API 8.0): окно мини-приложения на компьютере разворачивает только он
+      fullscreen: {
+        get supported() { return Boolean(platform.isTelegram && full?.supported); },
+        get isActive() { return Boolean(full?.isActive); },
+        request: () => full?.request(),
+        exit: () => full?.exit(),
+        onChange(cb) {
+          fullListeners.add(cb);
+          if (fullHooked || !full) return;
+          fullHooked = true;
+          full.onChange(() => { if (live) fullListeners.forEach((fn) => fn()); });
+        },
+        offChange: (cb) => fullListeners.delete(cb),
+      },
       mainButton: {
         show: () => mainButton.show(),
         hide: () => mainButton.hide(),
@@ -421,6 +439,8 @@ function createScopedPlatform(platform) {
       },
     },
     dispose() {
+      live = false;
+      fullListeners.clear();
       handlers.forEach((cb) => mainButton.offClick(cb));
       handlers.clear();
       mainButton.hide();
