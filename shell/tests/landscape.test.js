@@ -158,9 +158,9 @@ function fakeEl() {
   };
 }
 
-/** Окно w × h; рамка #app — всё окно без шапки высотой top; body — всё окно. */
-function world({ w = 390, h = 844, top = 0, desktop = false, calm = false } = {}) {
-  const state = { w, h, top, insets: { top: 0, right: 0, bottom: 0, left: 0 }, calls: [] };
+/** Окно w × h; рамка #app — всё окно без шапки высотой top; body — всё окно (или bodyH: высота, названная Telegram). */
+function world({ w = 390, h = 844, top = 0, desktop = false, calm = false, bodyH = 0 } = {}) {
+  const state = { w, h, top, bodyH, insets: { top: 0, right: 0, bottom: 0, left: 0 }, calls: [] };
   const handlers = new Map();
   const subs = { insets: new Set(), activated: new Set() };
   let frames = [];
@@ -185,9 +185,9 @@ function world({ w = 390, h = 844, top = 0, desktop = false, calm = false } = {}
       classList: { contains: () => false },
       style: { setProperty: (k, v) => rootCss.set(k, v), removeProperty: (k) => rootCss.delete(k) },
     },
-    body: { getBoundingClientRect: () => rect(0, 0, state.w, state.h) },
+    body: { getBoundingClientRect: () => rect(0, 0, state.w, state.bodyH || state.h) },
   };
-  const app = { getBoundingClientRect: () => rect(0, state.top, state.w, state.h - state.top) };
+  const app = { getBoundingClientRect: () => rect(0, state.top, state.w, (state.bodyH || state.h) - state.top) };
   const platform = {
     isDesktop: desktop,
     insets: () => state.insets,
@@ -249,6 +249,40 @@ test('помощник: полный экран Telegram — рамка весь
   assert.equal(el.css.get('transform'), 'translate(0, 844px) rotate(-90deg)');
   assert.deepEqual(land.api.insets(), { left: 34, top: 0, right: 105, bottom: 0 }, 'на другом боку часы — справа');
   assert.equal(land.api.flipped, true);
+});
+
+test('помощник: Telegram назвал высоту больше окна — рамка игры не выходит за окно (баг: пауза и карта за краем)', () => {
+  // Xiaomi владельца: body высотой «от Telegram» уходил за низ окна, и правый край игры (низ телефона) — вместе с ним
+  for (const fullscreen of ['on', 'off']) {
+    const W = world({ w: 393, h: 800, bodyH: 851, top: fullscreen === 'on' ? 0 : 48 });
+    W.doc.documentElement.dataset.fullscreen = fullscreen;
+    W.state.insets = fullscreen === 'on' ? { top: 76, right: 0, bottom: 0, left: 0 } : W.state.insets;
+    const el = fakeEl();
+    const land = createLandscape(el, W);
+    const top = fullscreen === 'on' ? 0 : 48;
+    assert.deepEqual(land.api.size(), { w: 800 - top, h: 393 }, `ширина игры — до низа окна (${fullscreen})`);
+    assert.equal(el.css.get('width'), `${800 - top}px`);
+    assert.deepEqual(land.api.toLocal(0, 800), { x: 800 - top, y: 393 }, 'левый нижний угол окна — правый нижний угол игры');
+    for (const turn of [90, -90]) {
+      land.api.flip(turn === -90);
+      const { w, h } = land.api.size();
+      // каждый угол игры — внутри окна
+      for (const [gx, gy] of [[0, 0], [w, 0], [0, h], [w, h]]) {
+        const dev = turn === 90 ? { x: 393 - gy, y: top + gx } : { x: gy, y: top + (w - gx) };
+        assert.ok(dev.x >= 0 && dev.x <= 393 && dev.y >= 0 && dev.y <= 800, `угол игры ${gx},${gy} в окне (поворот ${turn})`);
+      }
+    }
+    // окно подросло (Telegram досчитал) — рамка следом
+    W.state.h = 851;
+    W.fire('resize');
+    assert.deepEqual(land.api.size(), { w: 851 - top, h: 393 });
+    land.dispose();
+  }
+  // окно шире рамки — рамка своя, как раньше
+  const W = world({ w: 390, h: 844, top: 48 });
+  const land = createLandscape(fakeEl(), W);
+  assert.deepEqual(land.api.size(), { w: 796, h: 390 });
+  land.dispose();
 });
 
 test('помощник: сообщениям оболочки (они вне экрана игры) — поворот и верхний отступ игры на <html>', () => {

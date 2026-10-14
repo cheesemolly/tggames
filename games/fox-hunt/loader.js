@@ -19,7 +19,7 @@ export const FILES = [
   'art-tiles3.js', 'art-mobs.js', 'art-mobs2.js', 'art-mobs3.js', 'art-items.js', 'art-items2.js', 'render-bake.js',
   'content.js', 'tiles.js', 'player.js', 'inventory.js', 'ai.js', 'combat.js', 'director.js', 'floor.js', 'mobs.js',
   'mobs2.js', 'mobs3.js', 'bosses.js', 'hazards.js', 'weapons.js', 'items.js', 'rooms.js', 'quests.js', 'places.js',
-  'minions.js', 'patterns.js',
+  'minions.js', 'patterns.js', 'diag.js',
 ];
 
 /** Сколько полосы — файлы; остальное — подготовка в init. */

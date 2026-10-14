@@ -22,6 +22,7 @@ import { createUi } from './ui.js';
 import { createInput } from './input.js';
 import { createFullscreen, isDesktop, desktopFacts, readFullscreen } from './fullscreen.js';
 import { loading } from './loader.js';
+import { collectDiag, diagLines } from './diag.js';
 import { F_WALK, F_LEAP, emit, kindOf } from './core.js';
 import { BASE, DASH } from './balance.js';
 import { SIDES, DIR, dangerAt, escapeDir, fieldTo, fieldDir, castRay, entryPoint } from './world.js';
@@ -81,6 +82,7 @@ let stats = emptyStats();
 let settings = readSettings(null);
 let seen = [];                       // id вещей, встреченных за все партии, — «коллекция»
 let soundOn = true;
+let diagOn = false;                  // окно «Диагностика» в паузе: ?fhdebug или ссылка t.me/<бот>?startapp=fhdebug
 let pressed = false;                 // было нажатие (палец, кнопка мыши, клавиша) — можно звучать
 let mood = null;                     // какая музыка сейчас заказана (null — тишина)
 let finished = false;                // партия окончена: расчёт стоит, идёт последняя анимация
@@ -675,6 +677,9 @@ const get = {
   screen: () => api?.screen ?? null,
   /** Есть ли переключатель «Полный экран» (компьютер). */
   fullscreen: () => Boolean(fs),
+  /** Есть ли в паузе «Диагностика» — и её числа (diag.js). */
+  diagOn: () => diagOn,
+  diag: () => (diagOn && root ? collectDiag({ root, screen: api?.screen ?? null }) : null),
   /** Блок «Очки в рейтинге» для окна статистики (или null). */
   pointsInfo: () => pointsInfo(api, 'fox-hunt'),
 };
@@ -947,7 +952,12 @@ function debugHooks() {
       if (running() && !ui.isOpen) ui.openPause(false);
       kick();
     },
-    /** Открыть окно по имени ('pause' | 'bag' | 'stats' | 'settings' | 'gift'), для проверки окон. */
+    /** Числа о рамке игры, отступах и HUD (то же, что окно «Диагностика»): { facts, lines }. */
+    diag() {
+      const facts = collectDiag({ root, screen: api.screen ?? null });
+      return { facts, lines: diagLines(facts) };
+    },
+    /** Открыть окно по имени ('pause' | 'bag' | 'stats' | 'settings' | 'gift' | 'diag'), для проверки окон. */
     win: (name, arg) => ui.open(name, arg),
     /** Закрыть все окна и играть дальше. */
     resume() {
@@ -988,6 +998,8 @@ export default {
     stats = isValidStats(savedStats) ? savedStats : emptyStats();
     settings = readSettings(savedSettings);
     seen = readSeen(savedSeen);
+    // в Telegram адрес не задать: там та же отладка экрана — по ссылке t.me/<бот>?startapp=fhdebug
+    diagOn = new URLSearchParams(location.search).has('fhdebug') || api.platform?.startParam === 'fhdebug';
 
     dom = {
       canvas: el('canvas', { class: 'fh-canvas' }),
@@ -1115,7 +1127,7 @@ export default {
     settings = readSettings(null);
     seen = [];
     soundOn = true;
-    pressed = finished = handed = record = cold = dirty = false;
+    pressed = finished = handed = record = cold = dirty = diagOn = false;
     raf = lastFrame = acc = offeredAt = sizeW = sizeH = buzzAt = buzzRank = frames = slowFrames = faults = 0;
     view.alpha = 0;
     view.calm = false;

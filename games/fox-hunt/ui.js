@@ -27,12 +27,13 @@ import { createArt } from './art.js';
 import { WEAPONS, ARMOR, ACCESSORIES, POTIONS, GIFTS, MINIONS, EFFECTS, TASKS } from './content.js';
 import { itemInfo, runSummary } from './logic.js';
 import { BIOME_NAMES } from './tiles.js';
+import { diagLines } from './diag.js';
 
 /** Рамка, под которую свёрстано каждое окно (px), и поле вокруг него: экран 568×320 без 98×20 под вырезы и кнопки. */
 export const BOX = { w: 454, h: 284, gap: 8 };
 export const BAG_H = 306;           // рюкзак выше остальных: ряд «Дары и спутники» должен целиком лечь в рамку
 export const SET_H = 372;           // окно настроек выше остальных: под переключателями — ползунок «Графика»
-/** Экран, под который свёрстаны надписи поверх игры: на большем они крупнее. */
+/** Экран, под который свёрстаны надписи поверх игры (без отступов): на большем они крупнее, на меньшем — мельче. */
 export const HUD_BASE = { w: 568, h: 320 };
 
 const ZOOM = [0.5, 1.5];              // во сколько раз окно может сжаться и вырасти
@@ -76,6 +77,8 @@ export const T = {
     ask: 'Начать заново? Охота пропадёт', yes: 'Да, заново', no: 'Отмена',
   },
   bagBtn: 'Рюкзак',
+  // только при ?fhdebug или ссылке ?startapp=fhdebug
+  diag: { btn: 'Диагностика', title: 'Диагностика экрана', again: 'Обновить' },
   set: { title: 'Настройки', music: 'Музыка', sound: 'Звуки', lefty: 'Режим левши', stick: 'Джойстики', weaponBtn: 'Отдельная кнопка для оружия', stickStatic: 'Статичные', stickFloat: 'Плавающие', flip: 'Перевернуть экран', fullscreen: 'Полный экран', graphics: 'Графика', gfx: ['низкая', 'средняя', 'высокая'], fullscreenHint: 'Esc — пауза. Чтобы выйти из полного экрана, зажми Esc' },
   bag: {
     title: 'Рюкзак', worn: 'Надето', pack: (n, of) => `В рюкзаке · ${n} из ${of}`, extra: 'Дары и спутники', noExtra: 'пока нет',
@@ -290,9 +293,12 @@ export function zoomFor(w, h, ins = NO_INSETS, boxH = BOX.h) {
   return clamp(Number.isFinite(k) ? k : 1, ZOOM[0], ZOOM[1]);
 }
 
-/** Во сколько раз увеличить надписи поверх игры на экране w×h. */
-export function hudZoomFor(w, h) {
-  const k = Math.min(w / HUD_BASE.w, h / HUD_BASE.h);
+/**
+ * Во сколько раз увеличить надписи поверх игры на экране w×h. Считается по месту внутри отступов ins: на узком экране
+ * с большими вырезами надписи сжимаются, а не выезжают за край.
+ */
+export function hudZoomFor(w, h, ins = NO_INSETS) {
+  const k = Math.min((w - ins.left - ins.right) / HUD_BASE.w, (h - ins.top - ins.bottom) / HUD_BASE.h);
   return clamp(Number.isFinite(k) ? k : 1, HUD_ZOOM[0], HUD_ZOOM[1]);
 }
 
@@ -1192,6 +1198,8 @@ export function createUi({ root, api, actions, get }) {
               drawBody(true);
             }),
             iconButton('ui.exit', T.pause.exit, '', () => actions.exit?.()),
+            // отладка экрана на телефоне: третье место второго столбца было пустым
+            get.diagOn?.() && iconButton('ui.diag', T.diag.btn, '', () => pushWin(diagWin())),
           ),
         );
       }
@@ -1756,6 +1764,35 @@ export function createUi({ root, api, actions, get }) {
     else pushWin(w);
   }
 
+  // ---------- диагностика экрана (?fhdebug или ссылка ?startapp=fhdebug) ----------
+
+  /**
+   * Числа о рамке игры, отступах и HUD (diag.js) — текстом поверх всей игры, чтобы сфотографировать на телефоне.
+   * Красная рамка — край экрана игры, зелёный пунктир — граница отступов: что из них не видно на стекле, то и обрезано.
+   */
+  function diagWin() {
+    const text = el('div', { class: 'fh-diag-text' });
+    const fill = () => {
+      let lines;
+      try {
+        lines = diagLines(get.diag?.());
+      } catch (err) {
+        lines = [`! не вышло: ${err?.message ?? err}`];
+      }
+      text.replaceChildren(...lines.map((line) => el('div', { class: line.startsWith('!') ? 'fh-diag-warn' : '' }, line)));
+    };
+    // числа снимаются при каждом показе окна (refresh) и по «Обновить»
+    const card = el('div', { class: 'fh-diag', role: 'dialog', 'aria-label': T.diag.title },
+      el('i', { class: 'fh-diag-edge' }),
+      el('i', { class: 'fh-diag-safe' }),
+      el('div', { class: 'fh-diag-box' },
+        el('div', { class: 'fh-diag-head' }, el('b', {}, T.diag.title), button(T.diag.again, '', fill), button(T.back, '', closeTop)),
+        text,
+      ),
+    );
+    return { name: 'diag', el: card, refresh: fill };
+  }
+
   // ---------- «Назад» ----------
 
   /** Нажали «Назад» (или Esc): снять верхнее окно, а нет окон — открыть паузу. true — разобрались сами. */
@@ -1788,7 +1825,7 @@ export function createUi({ root, api, actions, get }) {
     root.style.setProperty('--fh-zoom', String(Math.round(zoomFor(w, h, ins) * 1000) / 1000));
     root.style.setProperty('--fh-zoom-bag', String(Math.round(zoomFor(w, h, ins, BAG_H) * 1000) / 1000));
     root.style.setProperty('--fh-zoom-set', String(Math.round(zoomFor(w, h, ins, SET_H) * 1000) / 1000));
-    root.style.setProperty('--fh-hud-zoom', String(Math.round(hudZoomFor(w, h) * 1000) / 1000));
+    root.style.setProperty('--fh-hud-zoom', String(Math.round(hudZoomFor(w, h, ins) * 1000) / 1000));
     safe.l = ins.left + 6;
     safe.t = ins.top + 6;
     safe.r = w - ins.right - 6;
@@ -1840,13 +1877,14 @@ export function createUi({ root, api, actions, get }) {
     refreshSettings() {
       settingsRefresh?.();
     },
-    /** Сверх договора — для проверочной страницы и отладки: открыть окно по имени ('pause' | 'bag' | 'stats' | 'settings'). */
+    /** Сверх договора — для проверочной страницы и отладки: открыть окно по имени ('pause' | 'bag' | 'stats' | 'settings' | 'diag'). */
     open(name, arg) {
       if (name === 'pause') openPause(Boolean(arg));
       else if (name === 'bag' && !hasWin('bag')) pushWin(bagWin());
       else if (name === 'settings' && !hasWin('settings')) pushWin(settingsWin());
       else if (name === 'stats' && !hasWin('stats')) pushWin(statsWin(arg));
       else if (name === 'gift' && !hasWin('gift')) openGift(arg);
+      else if (name === 'diag' && !hasWin('diag')) pushWin(diagWin());
       return top();
     },
     /** Верхнее окно (или null). */

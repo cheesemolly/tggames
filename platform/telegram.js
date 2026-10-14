@@ -25,8 +25,9 @@
 // Для альбомных игр (shell/landscape.js) и защиты от случайного выхода (shell/game-host.js):
 //   orientation: supported, isLocked, lock(), unlock() — закрепить ориентацию (Bot API 8.0). lock() закрепляет ТЕКУЩУЮ:
 //                  повернуть экран Telegram не умеет, поэтому звать его можно, только когда телефон уже лежит на боку
-//   insets() → { top, right, bottom, left } — в px, от краёв окна: вырез и полоски устройства + кнопки Telegram
-//                  в полном экране (у кнопок клиенты шлют только top). Вне полного экрана и вне Telegram — нули
+//   insets() → { top, right, bottom, left } — в px, от краёв окна: вырез и полоски устройства (не меньше
+//                  env(safe-area-inset-*) веб-вида) + кнопки Telegram в полном экране (у кнопок клиенты шлют только
+//                  top). Вне Telegram — нули
 //   onInsets(cb) → отписка — отступы, размер окна или полный экран изменились. Клиент шлёт это и без изменений,
 //                  и раньше, чем значения устоятся, — сравнивать самим
 //   confirmClose(on) — переспрашивать перед закрытием мини-приложения (Bot API 6.2). Сворачивание и системное
@@ -57,6 +58,32 @@ function deviceCall(run, fallback) {
       resolve(fallback);
     }
   });
+}
+
+let envProbe = null;
+
+/**
+ * Отступы безопасной зоны, которые знает сам веб-вид: env(safe-area-inset-*) (страница с viewport-fit=cover), в px.
+ * Пробник — невидимый элемент с такими полями, создаётся при первом вопросе. Нет — нули.
+ */
+function envInsets() {
+  try {
+    if (!envProbe?.isConnected) {
+      envProbe = document.createElement('div');
+      const css = {
+        position: 'fixed', left: '0', top: '0', width: '0', height: '0', visibility: 'hidden', 'pointer-events': 'none',
+        'padding-top': 'env(safe-area-inset-top, 0px)', 'padding-right': 'env(safe-area-inset-right, 0px)',
+        'padding-bottom': 'env(safe-area-inset-bottom, 0px)', 'padding-left': 'env(safe-area-inset-left, 0px)',
+      };
+      for (const [name, value] of Object.entries(css)) envProbe.style.setProperty(name, value);
+      document.body.append(envProbe);
+    }
+    const cs = getComputedStyle(envProbe);
+    const px = (v) => Math.max(0, parseFloat(v) || 0);
+    return { top: px(cs.paddingTop), right: px(cs.paddingRight), bottom: px(cs.paddingBottom), left: px(cs.paddingLeft) };
+  } catch {
+    return { top: 0, right: 0, bottom: 0, left: 0 };
+  }
 }
 
 export const platform = inTelegram ? createTelegramPlatform(webApp) : createBrowserPlatform();
@@ -191,9 +218,11 @@ function createTelegramPlatform(tg) {
     },
 
     // Отступы в px от краёв окна: устройство (вырез, полоска жестов) + кнопки Telegram в полном экране — у кнопок
-    // клиенты шлют только top. На клиентах старее Bot API 8.0 этих полей нет — нули.
+    // клиенты шлют только top. На клиентах старее Bot API 8.0 этих полей нет — нули. Отступ устройства — не меньше,
+    // чем знает сам веб-вид (env(safe-area-inset-*)): клиент мог назвать меньше (вырез, панель навигации).
     insets() {
-      const sum = (side) => (Number(tg.safeAreaInset?.[side]) || 0) + (Number(tg.contentSafeAreaInset?.[side]) || 0);
+      const own = envInsets();
+      const sum = (side) => Math.max(Number(tg.safeAreaInset?.[side]) || 0, own[side]) + (Number(tg.contentSafeAreaInset?.[side]) || 0);
       return { top: sum('top'), right: sum('right'), bottom: sum('bottom'), left: sum('left') };
     },
     /** Отступы, размер окна или полный экран изменились; возвращает отписку. Клиент шлёт и без изменений — сравнивать самим. */

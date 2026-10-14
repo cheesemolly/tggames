@@ -10,7 +10,7 @@
 // Рамка экрана (в осях устройства): в полном экране Telegram — весь body вместе с полями под часы и кнопки
 // Telegram (игра рисует поле в край, а свои кнопки держит внутри отступов), иначе — #app (вне Telegram над ним
 // остаётся шапка заглушки). Размеры берутся из вёрстки в пикселях: vh/dvh и переменные Telegram о повёрнутом экране
-// ничего не знают.
+// ничего не знают; что за краем окна (innerWidth × innerHeight), в рамку не входит.
 //
 //   поворот   экран (transform-origin: 0 0)              точка устройства (x, y) → точка игры
 //   0         W × H, без поворота                        (x, y)
@@ -110,13 +110,19 @@ export function createLandscape(el, { platform, app = null, win = window, doc = 
   const calm = () => Boolean(win.matchMedia?.('(prefers-reduced-motion: reduce)').matches)
     || Boolean(root.classList?.contains('reduce-motion'));
 
-  /** Рамка в целых пикселях: дробная дала бы мыло на повёрнутом холсте. */
+  /**
+   * Рамка в целых пикселях (дробная дала бы мыло на повёрнутом холсте) и не больше окна. Высоту body задаёт число,
+   * которое сообщил Telegram (--tg-viewport-stable-height), и на части телефонов оно больше видимой области: body
+   * уходил за низ окна, а с ним и правый край игры с паузой и картой (баг владельца 2026-10-14, Xiaomi).
+   */
   function measure() {
     const host = root.dataset?.fullscreen === 'on' ? doc.body : (app ?? el.parentElement ?? doc.body);
     const r = host.getBoundingClientRect();
-    const x = Math.round(r.left);
-    const y = Math.round(r.top);
-    return { x, y, w: Math.round(r.right) - x, h: Math.round(r.bottom) - y };
+    const right = win.innerWidth > 0 ? Math.min(Math.round(r.right), win.innerWidth) : Math.round(r.right);
+    const bottom = win.innerHeight > 0 ? Math.min(Math.round(r.bottom), win.innerHeight) : Math.round(r.bottom);
+    const x = Math.max(0, Math.round(r.left));
+    const y = Math.max(0, Math.round(r.top));
+    return { x, y, w: right - x, h: bottom - y };
   }
 
   /**

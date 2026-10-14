@@ -15,6 +15,9 @@
                         onBack(), onHide(), карточка итога оболочки. ?host&portrait — та же игра без landscape,
                         ?host&noshare — карточка с двумя кнопками, ?host&slow=мс — подольше «Загрузка…», ?host&err —
                         экран ошибки
+       ?host&game=fox-hunt — вместо пустышки настоящая игра из реестра (с ней работают и её ?fhdebug и т. п.)
+       ?vh=900        — высота окна, которую «сообщил Telegram» (--tg-viewport-stable-height, по ней высота body):
+                        больше окна — как телефон, где Telegram называет высоту больше видимой
      Сценариям — window.__land: screen (api.screen), touches, calls (что просили у платформы), changes, exits, backs,
      hides, menuClicks и события Telegram: fullscreen(отступы | null), activate(), deactivate(), back(); toast(текст) —
      сообщение оболочки; с хостом — ещё pause() и finish(). -->
@@ -110,6 +113,7 @@
 import { platform as stub } from '../platform/telegram.js';
 import { createLandscape } from '../shell/landscape.js';
 import { openGame } from '../shell/game-host.js';
+import { games } from '../shell/registry.js';
 import { el } from '../shared/dom.js';
 import { createToast } from '../shared/toast.js';
 
@@ -309,7 +313,18 @@ function runHost() {
     delete game.onHide;
   }
 
-  const entry = {
+  // настоящая игра: её api.screen — сценариям в __land.screen, как у пустышки
+  const real = games.find((g) => g.id === Q.get('game'));
+  const entry = real ? {
+    ...real,
+    async load() {
+      const { default: mod } = await real.load();
+      return { default: { ...mod, init(host, gameApi) {
+        land.screen = gameApi.screen;
+        return mod.init(host, gameApi);
+      } } };
+    },
+  } : {
     id: GAME_ID,
     title: game.title,
     landscape: !Q.has('portrait'),
@@ -366,6 +381,7 @@ if (Q.has('fs')) {
   const [top = 0, right = 0, bottom = 0, left = 0] = Q.get('fs').split(',').map(Number);
   fullscreen({ top, right, bottom, left });
 }
+if (Number(Q.get('vh')) > 0) root.style.setProperty('--tg-viewport-stable-height', `${Number(Q.get('vh'))}px`);
 if (land.mode === 'host') runHost();
 else runHelper();
 // после обработчиков хоста: тот при закрытии страницы ещё сохраняет партию

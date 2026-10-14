@@ -288,22 +288,35 @@
 [data-game="fox-hunt"] .fh-ic--life { color: #f08a3c; }
 
 /* ---------- надписи поверх игры ---------- */
-/* размер надписей задают em: оболочка крупнит их на большом экране (--fh-hud-zoom) */
+/* размер надписей задают em: ui.js крупнит их на большом экране и сжимает на узком (--fh-hud-zoom).
+   От края — отступ безопасной зоны (--ls-*) + 6px, но не ближе --fh-corner к краю экрана: скругление углов телефона
+   Telegram в отступах не сообщает, а в углах HUD — пауза и сердца */
 [data-game="fox-hunt"] .fh-hud {
+  --fh-corner: 0px;
   position: absolute;
   inset: 0;
   z-index: 2;
   box-sizing: border-box;
-  padding: calc(var(--ls-t, 0px) + 6px) calc(var(--ls-r, 0px) + 6px) calc(var(--ls-b, 0px) + 6px) calc(var(--ls-l, 0px) + 6px);
+  padding:
+    max(calc(var(--ls-t, 0px) + 6px), var(--fh-corner)) max(calc(var(--ls-r, 0px) + 6px), var(--fh-corner))
+    max(calc(var(--ls-b, 0px) + 6px), var(--fh-corner)) max(calc(var(--ls-l, 0px) + 6px), var(--fh-corner));
   font-size: calc(12px * var(--fh-hud-zoom, 1));
   line-height: 1.2;
   color: var(--fh-hud-ink);
   pointer-events: none;
 }
+/* скруглённые углы — у телефона (палец), у окна на компьютере их нет */
+@media (pointer: coarse) {
+  [data-game="fox-hunt"] .fh-hud { --fh-corner: 14px; }
+}
 [data-game="fox-hunt"] .fh-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.6em; }
 [data-game="fox-hunt"] .fh-side { display: flex; flex-direction: column; gap: 0.35em; flex: 0 0 auto; min-width: 0; }
-[data-game="fox-hunt"] .fh-side--l { align-items: flex-start; }
-[data-game="fox-hunt"] .fh-side--r { align-items: flex-end; }
+/* тесно (узкий экран, большие вырезы, много сердец) — сжимается левая колонка и переносит значки на вторую строку,
+   а пауза, рюкзак и карта справа стоят у своего края */
+[data-game="fox-hunt"] .fh-side--l { align-items: flex-start; flex-shrink: 1; }
+[data-game="fox-hunt"] .fh-side--l > *, [data-game="fox-hunt"] .fh-side--l .fh-chip { max-width: 100%; }
+[data-game="fox-hunt"] :is(.fh-side--l .fh-row, .fh-side--l .fh-chip, .fh-side--l .fh-pips) { flex-wrap: wrap; }
+[data-game="fox-hunt"] .fh-side--r { align-items: flex-end; flex-shrink: 0; margin-left: auto; }
 [data-game="fox-hunt"] .fh-row { display: flex; gap: 0.35em; align-items: center; }
 [data-game="fox-hunt"] .fh-chip {
   display: inline-flex;
@@ -355,7 +368,8 @@
 [data-game="fox-hunt"] .fh-fx-chip--bad { background: color-mix(in srgb, var(--fh-danger) 60%, var(--fh-hud-bg)); }
 
 /* середина: счёт и плашки; места им не жалко, но края свободны для джойстиков */
-[data-game="fox-hunt"] .fh-mid { display: flex; flex-direction: column; align-items: center; gap: 0.35em; flex: 1 1 0; min-width: 0; }
+/* место под счёт (6em — пять цифр) середина держит всегда: при тесноте уступает левая колонка */
+[data-game="fox-hunt"] .fh-mid { display: flex; flex-direction: column; align-items: center; gap: 0.35em; flex: 1 0 6em; min-width: 0; }
 [data-game="fox-hunt"] .fh-score { font-size: 1.2em; padding: 0.05em 0.8em; }
 [data-game="fox-hunt"] .fh-score-num { font-variant-numeric: tabular-nums; }
 [data-game="fox-hunt"] .fh-pane {
@@ -548,6 +562,40 @@
   -webkit-font-smoothing: antialiased;
 }
 [data-game="fox-hunt"] .fh-modal[hidden] { display: none; }
+/* диагностика экрана (только ?fhdebug или ссылка ?startapp=fhdebug): на всю игру, чтобы на снимке были видны края —
+   красная рамка по краю экрана игры, зелёный пунктир по отступам; числа — внутри отступов, в два столбца */
+[data-game="fox-hunt"] .fh-diag { position: absolute; inset: 0; }
+[data-game="fox-hunt"] .fh-diag-edge { position: absolute; inset: 0; border: 3px solid #ff4a3d; pointer-events: none; }
+[data-game="fox-hunt"] .fh-diag-safe {
+  position: absolute;
+  inset: var(--ls-t, 0px) var(--ls-r, 0px) var(--ls-b, 0px) var(--ls-l, 0px);
+  border: 2px dashed #4be07a;
+  pointer-events: none;
+}
+[data-game="fox-hunt"] .fh-diag-box {
+  position: absolute;
+  inset: calc(var(--ls-t, 0px) + 10px) calc(var(--ls-r, 0px) + 10px) calc(var(--ls-b, 0px) + 10px) calc(var(--ls-l, 0px) + 10px);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(12, 10, 8, 0.86);
+  color: #f4f1ea;
+  overflow: hidden;
+}
+[data-game="fox-hunt"] .fh-diag-head { display: flex; align-items: center; gap: 8px; flex: none; }
+[data-game="fox-hunt"] .fh-diag-head b { flex: 1; min-width: 0; font-size: 14px; }
+[data-game="fox-hunt"] .fh-diag-head .fh-btn { flex: none; }
+[data-game="fox-hunt"] .fh-diag-text {
+  min-height: 0;
+  columns: 2;
+  column-gap: 18px;
+  font: 11px/1.3 ui-monospace, Menlo, Consolas, 'Roboto Mono', monospace;
+  overflow-wrap: anywhere;
+}
+[data-game="fox-hunt"] .fh-diag-text > div { break-inside: avoid; }
+[data-game="fox-hunt"] .fh-diag-warn { color: #ffb02e; font-weight: 700; }
 /* рамка — scale создаёт свой слой, поэтому рама, гвозди и верёвки (z-index: -1) лежат под содержимым, но над затемнением */
 [data-game="fox-hunt"] .fh-win {
   position: relative;

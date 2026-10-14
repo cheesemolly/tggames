@@ -8,10 +8,13 @@ import { arena } from './helpers.js';
 const page = miniPage();
 globalThis.document = page.doc;
 globalThis.matchMedia = () => ({ matches: true, addEventListener() {} });
-const { createUi, T, BOX, SET_H, BAG_H, zoomFor, stopAt } = await import('../ui.js');
+const { createUi, T, BOX, SET_H, BAG_H, HUD_BASE, zoomFor, hudZoomFor, stopAt } = await import('../ui.js');
 
-/** Окно открыто, партия идёт; вернуть всё, что нужно проверять. rotated — экран лежит на боку. */
-function make({ rotated = false, over = false, pc = false } = {}) {
+/**
+ * Окно открыто, партия идёт; вернуть всё, что нужно проверять. rotated — экран лежит на боку; diag — числа окна
+ * «Диагностика» (есть — значит, отладка включена).
+ */
+function make({ rotated = false, over = false, pc = false, diag = null } = {}) {
   const root = page.doc.createElement('div');
   root.ownerDocument = page.doc;
   const G = arena();
@@ -37,6 +40,8 @@ function make({ rotated = false, over = false, pc = false } = {}) {
     seen: () => ({}),
     toScreen: (x, y, out) => out,
     fullscreen: () => pc,
+    diagOn: () => Boolean(diag),
+    diag: () => diag,
     screen: () => (rotated ? { rotated: true, insets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }) } : null),
   };
   const ui = createUi({ root, api: { screen: get.screen() }, actions, get });
@@ -227,6 +232,91 @@ test('HUD: кнопки не выходят за безопасные отсту
   const css = readFileSync(new URL('../game.css', import.meta.url), 'utf8');
   assert.match(css.match(/\.fh-hud \{[^}]*\}/)[0], /var\(--ls-r, 0px\)/);
   assert.match(css.match(/\.fh-hud \{[^}]*\}/)[0], /var\(--ls-t, 0px\)/);
+});
+
+/** Правило game.css для селектора sel (первое, в котором он стоит сразу за [data-game="fox-hunt"]). */
+const cssRule = (css, sel) => css.match(new RegExp(`\\] ${sel.replace(/[.-]/g, (c) => `\\${c}`)} \\{[^}]*\\}`))[0];
+
+test('HUD: от каждого края — отступ + 6px, но на телефоне не ближе 14px (скругление углов Telegram не сообщает)', () => {
+  const css = readFileSync(new URL('../game.css', import.meta.url), 'utf8');
+  const hud = cssRule(css, '.fh-hud');
+  for (const side of ['t', 'r', 'b', 'l']) {
+    assert.ok(hud.includes(`max(calc(var(--ls-${side}, 0px) + 6px), var(--fh-corner))`), `край ${side}`);
+  }
+  assert.match(hud, /--fh-corner: 0px;/, 'на компьютере углы не скруглены — как раньше');
+  const coarse = css.match(/@media \(pointer: coarse\) \{\s*\[data-game="fox-hunt"\] \.fh-hud \{ --fh-corner: (\d+)px; \}/);
+  assert.ok(coarse, 'на телефоне запас от углов есть');
+  assert.ok(Number(coarse[1]) >= 12, 'запас не меньше 12px');
+});
+
+test('HUD: тесно — сжимается левая колонка (значки переносятся), пауза и карта справа стоят у своего края', () => {
+  const css = readFileSync(new URL('../game.css', import.meta.url), 'utf8');
+  assert.match(cssRule(css, '.fh-side--r'), /flex-shrink: 0;/);
+  assert.match(cssRule(css, '.fh-side--r'), /margin-left: auto;/);
+  assert.match(cssRule(css, '.fh-side--l'), /flex-shrink: 1;/);
+  assert.ok(css.includes(':is(.fh-side--l .fh-row, .fh-side--l .fh-chip, .fh-side--l .fh-pips) { flex-wrap: wrap; }'));
+  // середина (счёт) своё место держит: меньше 6em не сжимается
+  assert.match(cssRule(css, '.fh-mid'), /flex: 1 0 6em;/);
+});
+
+test('hudZoomFor: надписи считаются по месту внутри отступов — на узком экране с вырезами сжимаются', () => {
+  assert.equal(hudZoomFor(HUD_BASE.w, HUD_BASE.h), 1, 'экран, под который свёрстано, без отступов');
+  assert.equal(hudZoomFor(1280, 720), 1.5, 'на большом — крупнее, до 1,5');
+  // 568×320 с чёлкой 48 и вырезом 40: места по ширине 480 из 568
+  const k = hudZoomFor(568, 320, { top: 0, right: 40, bottom: 0, left: 48 });
+  assert.ok(Math.abs(k - 480 / 568) < 1e-9, `сжалось: ${k}`);
+  // в другом повороте отступы меняются местами — места столько же
+  assert.equal(hudZoomFor(568, 320, { top: 10, right: 40, bottom: 10, left: 48 }), hudZoomFor(568, 320, { top: 10, right: 48, bottom: 10, left: 40 }));
+  // телефон 851×393 с часами и кнопками Telegram слева: решает высота — как было
+  assert.equal(hudZoomFor(851, 393, { top: 0, right: 0, bottom: 0, left: 76 }), hudZoomFor(851, 393));
+  // мельче 0,8 не бывает, кривые числа — 1
+  assert.equal(hudZoomFor(300, 200, { top: 0, right: 100, bottom: 0, left: 100 }), 0.8);
+  assert.equal(hudZoomFor(NaN, 320), 1);
+});
+
+test('«Диагностика»: в паузе только при отладке; окно с числами поверх всей игры, «Назад» — снова пауза', () => {
+  const plain = make();
+  plain.ui.open('pause');
+  assert.ok(!plain.labels().includes(T.diag.btn), 'без отладки кнопки нет');
+  const facts = {
+    win: { w: 393, h: 800, dpr: 2.75 }, device: { w: 393, h: 851, orient: '' }, vv: null, full: 'on',
+    tg: { vh: 851, stable: 851, safe: null, content: null }, env: { top: 0, right: 0, bottom: 0, left: 0 },
+    body: { l: 0, t: 0, r: 393, b: 851 }, frame: { l: 0, t: 0, r: 393, b: 800 }, ls: null, turn: 90, flipped: false,
+    size: { w: 800, h: 393 }, insets: { top: 0, right: 0, bottom: 0, left: 76 }, root: { w: 800, h: 393 }, zoom: 1.228, parts: [],
+  };
+  const { ui, btn, labels } = make({ diag: facts });
+  ui.open('pause');
+  assert.deepEqual(labels(), [SIDE.resume, SIDE.stats, SIDE.settings, SIDE.restart, SIDE.exit, T.diag.btn]);
+  const cols = ui.top.el.byClass('fh-col');
+  assert.equal(cols[1].children.filter((c) => c.localName === 'button').length, 3, 'второй столбец: «Заново», «В меню», «Диагностика»');
+  press(btn(T.diag.btn));
+  assert.equal(ui.top.name, 'diag');
+  const card = ui.top.el;
+  assert.ok(card.classList.contains('fh-diag'));
+  assert.equal(card.byClass('fh-diag-edge').length, 1, 'рамка по краю экрана игры');
+  assert.equal(card.byClass('fh-diag-safe').length, 1, 'пунктир по отступам');
+  assert.ok(card.textContent.includes('окно 393×800'), card.textContent);
+  assert.equal(card.byClass('fh-diag-warn').length, 1, 'тревога: body больше окна');
+  assert.ok(card.byClass('fh-diag-warn')[0].textContent.includes('body больше окна'));
+  // «Обновить» перечитывает числа
+  facts.win.h = 851;
+  press(card.byText(T.diag.again)[0]);
+  assert.equal(card.byClass('fh-diag-warn').length, 0, 'окно подросло — тревоги нет');
+  // «Назад» на экране и «Назад» Telegram — снова пауза
+  press(card.byText(T.back)[0]);
+  assert.equal(ui.top.name, 'pause');
+  ui.open('diag');
+  assert.equal(ui.top.name, 'diag');
+  assert.equal(ui.back(), true);
+  assert.equal(ui.top.name, 'pause');
+});
+
+test('«Диагностика»: стили — на всю игру, текст внутри отступов, без своей прокрутки', () => {
+  const css = readFileSync(new URL('../game.css', import.meta.url), 'utf8');
+  assert.match(cssRule(css, '.fh-diag'), /inset: 0;/);
+  assert.match(cssRule(css, '.fh-diag-safe'), /inset: var\(--ls-t, 0px\) var\(--ls-r, 0px\) var\(--ls-b, 0px\) var\(--ls-l, 0px\);/);
+  assert.match(cssRule(css, '.fh-diag-box'), /calc\(var\(--ls-t, 0px\) \+ 10px\)/);
+  assert.doesNotMatch(css.match(/\.fh-diag[^{]*\{[^}]*\}/g).join('\n'), /overflow(-y)?: (auto|scroll)/);
 });
 
 test('«Отдельная кнопка для оружия»: по умолчанию выключена, переключатель зовёт игру и показывает её ответ', () => {

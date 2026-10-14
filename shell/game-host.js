@@ -444,6 +444,8 @@ function createScopedPlatform(platform) {
     api: {
       isTelegram: platform.isTelegram,
       user: platform.user,
+      // параметр ссылки t.me/<бот>?startapp=… — для отладочных крючков игры (в Telegram своего ?…debug не задать)
+      startParam: platform.startParam ?? null,
       get colorScheme() { return platform.colorScheme; },
       haptic: platform.haptic,
       // Полный экран самого Telegram (Bot API 8.0): окно мини-приложения на компьютере разворачивает только он
