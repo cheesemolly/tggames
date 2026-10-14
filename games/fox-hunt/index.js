@@ -21,6 +21,7 @@ import { createRenderer } from './render.js';
 import { createUi } from './ui.js';
 import { createInput } from './input.js';
 import { createFullscreen, isDesktop, desktopFacts, readFullscreen } from './fullscreen.js';
+import { loading } from './loader.js';
 import { F_WALK, F_LEAP, emit, kindOf } from './core.js';
 import { BASE, DASH } from './balance.js';
 import { SIDES, DIR, dangerAt, escapeDir, fieldTo, fieldDir, castRay, entryPoint } from './world.js';
@@ -963,10 +964,13 @@ export default {
 
   async init(container, gameApi) {
     api = gameApi;
+    // заставка (loader.js) ещё лежит поверх: подготовка двигает её полосу; после каждого await — не закрыли ли игру
+    // (или оболочка уже запустила её заново)
+    const gone = () => api !== gameApi;
     const [savedStats, savedSettings, savedSound, savedSeen] = await Promise.all([
       api.storage.get('stats'), api.storage.get('settings'), api.storage.get('sound'), api.storage.get('seen'),
     ]);
-    if (!api) return;
+    if (gone()) return;
     soundOn = savedSound !== false;
     stats = isValidStats(savedStats) ? savedStats : emptyStats();
     settings = readSettings(savedSettings);
@@ -1005,6 +1009,8 @@ export default {
       fs = createFullscreen({ doc: document, nav: navigator, host: container, tg: api.platform?.fullscreen ?? null, onLost: onFullscreenLost });
     }
     ui = createUi({ root, api, actions, get });
+    await loading.step(0.2);
+    if (gone()) return;
 
     // размер: у альбомного экрана его знает оболочка (и говорит, когда он сменился), без неё — сама сцена;
     // input.js за сценой следит сам
@@ -1015,6 +1021,15 @@ export default {
 
     const resumed = startRun(api.savedState);
     if (new URLSearchParams(location.search).has('fhdebug')) debugHooks();
+    await loading.step(0.35);
+    if (gone()) return;
+    // картинки первой комнаты, лисы и добычи — заранее, кусками (иначе их рисуют первые кадры, и начало дёргается);
+    // кусок крупный: анимации заставки идут мимо основного потока, а каждая смена кадра на слабом телефоне — ~0,1 с
+    for (let f = 0; f < 1;) {
+      f = renderer.warm(30);
+      await loading.step(0.35 + f * 0.6);
+      if (gone()) return;
+    }
 
     document.addEventListener('visibilitychange', onVisibility);
     document.addEventListener('pointerdown', onPress, true);
@@ -1026,9 +1041,12 @@ export default {
     view.alpha = 1;
     draw();
     kick();
+    await loading.done();
   },
 
   getState() {
+    // игра ещё грузится (init не дошёл до партии), а её уже сворачивают или закрывают — сохранение не стирать
+    if (!G) return api?.savedState ?? null;
     return running() ? snapshot(G) : null;
   },
 

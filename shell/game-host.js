@@ -15,6 +15,7 @@
 //   api.exit()    → выйти в меню своей кнопкой — тем же путём, что «В меню» на карточке итога
 // Альбомная игра (landscape: true в реестре): экран маршрута кладётся набок (shell/landscape.js, игре — api.screen),
 // а Telegram, пока она открыта, переспрашивает перед закрытием.
+// Свой экран загрузки (loader в реестре): вместо «Загрузка…» и поверх игры, пока идёт init; уводит его сама игра.
 
 import { el, loadCss } from '../shared/dom.js';
 import { formatDuration } from '../shared/format.js';
@@ -29,6 +30,7 @@ const OUTCOMES = ['win', 'lose', 'draw', 'quit'];
 const HIDE_ONCE_MS = 500;      // «свернули» приходит пачкой (deactivated, visibilitychange, pagehide) — onHide() зовём раз
 const TAP_ECHO_MS = 400;       // click, который браузер шлёт вслед за касанием, уже обработанным по pointerup
 const RESULT_GRACE_MS = 400;   // карточка итога альбомной игры возникает под пальцами — первые мгновения нажатий не ждёт
+const COVER_WAIT_MS = 700;     // заставка игры не пришла за это время — пока она грузится, прежний текст «Загрузка…»
 
 const EYE_PATH = 'M12 5C6.5 5 2.7 9.3 1.5 12c1.2 2.7 5 7 10.5 7s9.3-4.3 10.5-7C21.3 9.3 17.5 5 12 5Zm0 11.5a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9Zm0-2.5a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z';
 const EYE_ICON = `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="currentColor"><path d="${EYE_PATH}"/></svg>`;
@@ -115,7 +117,9 @@ export function openGame(container, entry, {
 
   async function start() {
     const thisRun = ++run;
-    container.replaceChildren(el('div', { class: 'scroll' }, el('p', { class: 'hint' }, 'Загрузка…')));
+    const cover = entry.loader ? await showCover(thisRun) : null;
+    if (closed || thisRun !== run) return;
+    if (!cover) container.replaceChildren(loadingText());
 
     const [module, save] = await Promise.all([entry.load(), saves.get(entry.id)]);
     if (closed || thisRun !== run) return;
@@ -133,7 +137,7 @@ export function openGame(container, entry, {
     scoped = createScopedPlatform(platform);
 
     const gameRoot = el('div', { class: 'scroll game-root', 'data-game': entry.id });
-    container.replaceChildren(gameRoot);
+    container.replaceChildren(gameRoot, ...(cover ? [cover] : []));
 
     await game.init(gameRoot, {
       platform: scoped.api,
@@ -165,6 +169,36 @@ export function openGame(container, entry, {
       // Альбомный экран (shell/landscape.js): поворот, размер, касания и отступы в осях игры; у обычных игр — null.
       screen: land ? land.api : null,
     });
+    // заставку уводит игра (плавно, в конце init); забыла — не оставлять же её поверх
+    cover?.remove();
+  }
+
+  /**
+   * Заставка игры вместо «Загрузка…»: её модуль и стили игры грузятся вместе, экран пока пуст (дольше COVER_WAIT_MS —
+   * прежний текст). Возвращает элемент заставки, уже лежащий в экране, или null — тогда как было.
+   */
+  async function showCover(thisRun) {
+    const slow = setTimeout(() => {
+      if (!closed && thisRun === run) container.replaceChildren(loadingText());
+    }, COVER_WAIT_MS);
+    try {
+      const [module] = await Promise.all([
+        entry.loader(),
+        entry.css && !cssLink && loadCss(entry.css).then((link) => {
+          if (closed) link.remove();
+          else cssLink ??= link;
+        }),
+      ]);
+      if (closed || thisRun !== run) return null;
+      const cover = module.default.show();
+      container.replaceChildren(cover);
+      return cover;
+    } catch (err) {
+      console.error(`Игра "${entry.id}": заставка не открылась`, err);
+      return null;
+    } finally {
+      clearTimeout(slow);
+    }
   }
 
   async function onFinish(result) {
@@ -359,6 +393,8 @@ export function openGame(container, entry, {
     ));
   }
 }
+
+const loadingText = () => el('div', { class: 'scroll' }, el('p', { class: 'hint' }, 'Загрузка…'));
 
 function assertContract(game, entry) {
   if (!game || typeof game !== 'object') {

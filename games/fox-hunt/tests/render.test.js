@@ -208,3 +208,41 @@ test('рендер: хозяин в прыжке, под потолком и в 
     r.destroy();
   }
 });
+
+test('рендер: заготовка заранее (warm) доходит до конца, и первому кадру почти нечего печь', () => {
+  let made = 0;
+  const was = globalThis.document.createElement;
+  globalThis.document.createElement = () => {
+    made += 1;
+    return fakeCanvas();
+  };
+  const firstFrame = (warmFirst) => {
+    const r = createRenderer({ canvas: fakeCanvas(), probe: null });
+    r.resize(640, 360);
+    const G = newRun(7);
+    r.enterRoom(G);
+    for (const e of drain(G)) r.onEvent(e, G);
+    if (warmFirst) {
+      let last = 0;
+      for (let i = 0; i < 5000 && last < 1; i++) {
+        const f = r.warm(0.2);
+        assert.ok(f >= last && f <= 1, `доля не убывает: ${last} → ${f}`);
+        last = f;
+      }
+      assert.equal(last, 1, 'заготовка не дошла до конца');
+      assert.equal(r.warm(5), 1, 'повторный вызов — уже всё готово');
+    }
+    made = 0;
+    r.frame(G, 0.016, { alpha: 1, calm: false, input: null });
+    const baked = made;
+    r.destroy();
+    return baked;
+  };
+  try {
+    const cold = firstFrame(false);
+    const warm = firstFrame(true);
+    assert.ok(cold > 0 && warm < cold / 2, `первый кадр: без заготовки ${cold} холстов, после — ${warm}`);
+  } finally {
+    globalThis.document.createElement = was;
+  }
+});

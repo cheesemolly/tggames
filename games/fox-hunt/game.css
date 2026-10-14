@@ -972,3 +972,356 @@
 [data-game="fox-hunt"] .fh-stick-btn--on .fh-stick-btn-disc { background: repeating-radial-gradient(circle at 50% 50%, #b9e48a 0 2px, #8fcb55 2px 4px); }
 
 /* ---------- конец: окна ---------- */
+
+/* ---------- заставка ---------- */
+/*
+ * Экран загрузки (loader.js): опушка леса, вывеска на двух столбах, доска с жёлобом-полосой, по которой бежит лиса,
+ * записка с тем, что сейчас делается. Лежит поверх игры, пока идёт init. Опушка вписана «по низу» (SVG, slice),
+ * --fh-ls — её масштаб, --fh-sun-x / --fh-sun-y — где солнце, --fh-lz — масштаб вывески (всё ставит loader.js).
+ * Двигаются только transform и opacity: так анимации идут, даже когда init занимает поток.
+ */
+[data-game="fox-hunt"].fh-load {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: block;
+  overflow: hidden;
+  isolation: isolate;
+  background: #9fd3ec;
+  color: var(--fh-w-burn);
+  font-family: 'Podkova', 'Golos Text', serif;
+  -webkit-font-smoothing: antialiased;
+  animation: fh-load-in 0.28s ease-out;
+  transition: opacity 0.42s ease-in;
+}
+[data-game="fox-hunt"].fh-load--out { opacity: 0; pointer-events: none; }
+[data-game="fox-hunt"].fh-load > * { position: absolute; pointer-events: none; }
+[data-game="fox-hunt"] .fh-load-sky {
+  inset: 0;
+  background: linear-gradient(180deg, #6cbbe4 0%, #9ad1ee 28%, #cfeaf2 48%, #fbf0cf 60%, #ffe6a6 68%);
+}
+[data-game="fox-hunt"] .fh-load-sun {
+  left: var(--fh-sun-x, 82%);
+  top: var(--fh-sun-y, 18%);
+  width: calc(var(--fh-ls, 0.5) * 620px);
+  height: calc(var(--fh-ls, 0.5) * 620px);
+  margin: calc(var(--fh-ls, 0.5) * -310px) 0 0 calc(var(--fh-ls, 0.5) * -310px);
+  border-radius: 50%;
+  background: radial-gradient(circle, #fffdf2 0 7%, #fff3c2 8.4%, rgba(255, 236, 160, 0.6) 13%, rgba(255, 230, 150, 0.22) 28%, rgba(255, 230, 150, 0) 58%);
+}
+/* лучи медленно поворачиваются */
+[data-game="fox-hunt"] .fh-load-sun > i {
+  position: absolute;
+  inset: -40%;
+  border-radius: 50%;
+  background: repeating-conic-gradient(from 0deg, rgba(255, 248, 214, 0.26) 0deg 5deg, rgba(255, 248, 214, 0) 5deg 15deg);
+  -webkit-mask: radial-gradient(circle, #000 6%, rgba(0, 0, 0, 0.5) 22%, transparent 48%);
+  mask: radial-gradient(circle, #000 6%, rgba(0, 0, 0, 0.5) 22%, transparent 48%);
+  animation: fh-load-spin 140s linear infinite;
+}
+[data-game="fox-hunt"] .fh-load-cloud {
+  left: 0;
+  top: var(--y);
+  width: var(--w);
+  aspect-ratio: 220 / 90;
+  animation: fh-load-drift var(--t) linear var(--d) infinite;
+}
+[data-game="fox-hunt"] .fh-load-cloud svg { display: block; width: 100%; height: 100%; }
+[data-game="fox-hunt"] .fh-load-scene { inset: 0; width: 100%; height: 100%; }
+/* тёплый свет от солнца и чуть темнее по краям — взгляд к вывеске */
+[data-game="fox-hunt"] .fh-load-light {
+  inset: 0;
+  background:
+    radial-gradient(60% 70% at 80% 12%, rgba(255, 236, 170, 0.24), transparent 70%),
+    radial-gradient(130% 100% at 50% 44%, transparent 56%, rgba(22, 40, 18, 0.36) 100%);
+}
+/* пыльца поднимается и тает */
+[data-game="fox-hunt"] .fh-load-air { inset: 0; }
+[data-game="fox-hunt"] .fh-load-air i {
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+  width: calc(var(--fh-lz, 1) * 5px);
+  height: calc(var(--fh-lz, 1) * 5px);
+  border-radius: 50%;
+  background: radial-gradient(circle, #fffbe2 0 32%, rgba(255, 246, 196, 0) 72%);
+  opacity: 0;
+  animation: fh-load-float var(--t) ease-in-out var(--d) infinite;
+}
+/* бабочка: летит по петле, крылья машут; тельце — ::before */
+[data-game="fox-hunt"] .fh-load-bfly {
+  left: var(--x);
+  top: var(--y);
+  width: calc(var(--fh-lz, 1) * 22px);
+  height: calc(var(--fh-lz, 1) * 17px);
+  animation: fh-load-flit var(--t) ease-in-out var(--d) infinite alternate;
+}
+[data-game="fox-hunt"] .fh-load-bfly::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 18%;
+  width: 14%;
+  height: 66%;
+  margin-left: -7%;
+  border-radius: 99px;
+  background: #4a2a1c;
+}
+[data-game="fox-hunt"] .fh-load-bfly i {
+  position: absolute;
+  top: 0;
+  width: 50%;
+  height: 100%;
+  fill: var(--c);
+  animation: fh-load-flap 0.17s ease-in-out infinite alternate;
+}
+[data-game="fox-hunt"] .fh-load-bfly i:first-child { left: 0; transform-origin: 100% 50%; }
+[data-game="fox-hunt"] .fh-load-bfly i:last-child { right: 0; transform-origin: 0 50%; }
+[data-game="fox-hunt"] .fh-load-bfly i:last-child svg { scale: -1 1; }
+[data-game="fox-hunt"] .fh-load-bfly svg { display: block; width: 100%; height: 100%; }
+/* трава у нижнего края: две полосы качаются вразнобой */
+[data-game="fox-hunt"] .fh-load-grass {
+  left: -2%;
+  bottom: -1%;
+  width: 104%;
+  height: 23%;
+  transform-origin: 50% 100%;
+  animation: fh-load-sway 3.6s ease-in-out infinite alternate;
+}
+[data-game="fox-hunt"] .fh-load-grass--front { animation-duration: 4.4s; animation-delay: -1.7s; }
+
+/* вывеска на двух столбах: свёрстана под 420 px ширины и растёт или сжимается целиком (--fh-lz) */
+[data-game="fox-hunt"] .fh-load-stand {
+  left: 50%;
+  top: calc(47% + (var(--ls-t, 0px) - var(--ls-b, 0px)) / 2);
+  width: 420px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  translate: -50% -50%;
+  scale: var(--fh-lz, 1);
+  transition: translate 0.42s ease-in;
+}
+[data-game="fox-hunt"] .fh-load-pole {
+  position: absolute;
+  z-index: -1;
+  left: 70px;
+  top: -16px;
+  width: 24px;
+  height: 900px;
+  box-sizing: border-box;
+  border: 2.5px solid var(--fh-w-line);
+  border-bottom: 0;
+  border-radius: 10px 10px 0 0;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 5px, rgba(60, 30, 10, 0.16) 5px 6px, transparent 6px 11px),
+    linear-gradient(90deg, #6e4222, #a86f3e 32%, #8d5a30 64%, #5c3519);
+  box-shadow: 4px 0 8px rgba(20, 30, 10, 0.25);
+}
+[data-game="fox-hunt"] .fh-load-pole--r { left: auto; right: 70px; }
+/* срез столба сверху */
+[data-game="fox-hunt"] .fh-load-pole::before {
+  content: '';
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  top: 1px;
+  height: 7px;
+  border-radius: 8px 8px 50% 50%;
+  background: linear-gradient(180deg, #e1b77c, #c08a52);
+}
+[data-game="fox-hunt"] .fh-load-sign {
+  position: relative;
+  box-sizing: border-box;
+  width: 340px;
+  padding: 6px 20px 9px;
+  text-align: center;
+  white-space: nowrap;
+  font: 800 34px/1.15 'Podkova', 'Golos Text', serif;
+  color: var(--fh-w-cream);
+  text-shadow: -2px 0 #4e3426, 2px 0 #4e3426, 0 -2px #4e3426, 0 2px #4e3426, -1.5px -1.5px #4e3426, 1.5px -1.5px #4e3426, -1.5px 1.5px #4e3426, 1.5px 1.5px #4e3426, 0 3.5px #4e3426;
+  background:
+    repeating-linear-gradient(180deg, transparent 0 25px, rgba(60, 30, 10, 0.5) 25px 27px, rgba(255, 214, 160, 0.22) 27px 28px, transparent 28px),
+    var(--fh-w-grain),
+    linear-gradient(180deg, #b77945, #8c5830);
+  border: 3px solid var(--fh-w-line);
+  border-radius: 12px;
+  box-shadow: inset 0 2px 0 rgba(255, 214, 160, 0.38), inset 0 -4px 0 rgba(60, 30, 10, 0.32), 0 4px 0 var(--fh-w-line), 0 12px 20px rgba(20, 30, 10, 0.35);
+}
+/* гвозди на столбах и мох на углах */
+[data-game="fox-hunt"] .fh-load-sign::after {
+  content: '';
+  position: absolute;
+  inset: -9px;
+  pointer-events: none;
+  background:
+    radial-gradient(circle 8px at 13px 11px, #a6dc6a 0 2.4px, #64a038 4.6px 5.6px, #2f4a22 6px 7.6px, transparent 8px),
+    radial-gradient(circle 6px at 24px 7px, #a6dc6a 0 1.9px, #64a038 3.7px 4.1px, #2f4a22 4.5px 6px, transparent 6.4px),
+    radial-gradient(circle 6px at 8px 23px, #a6dc6a 0 1.9px, #64a038 3.7px 4.1px, #2f4a22 4.5px 6px, transparent 6.4px),
+    radial-gradient(circle 7px at calc(100% - 14px) calc(100% - 10px), #a6dc6a 0 2.2px, #64a038 4.3px 5.1px, #2f4a22 5.5px 7px, transparent 7.4px),
+    radial-gradient(circle 5px at calc(100% - 25px) calc(100% - 7px), #a6dc6a 0 1.6px, #64a038 3.1px 3.1px, #2f4a22 3.5px 5px, transparent 5.4px),
+    radial-gradient(circle 4.5px at 51px 50%, #f6e6c6 0 1.3px, #9a7a58 2.1px 2.8px, #3a2418 3px 4px, transparent 4.4px),
+    radial-gradient(circle 4.5px at calc(100% - 51px) 50%, #f6e6c6 0 1.3px, #9a7a58 2.1px 2.8px, #3a2418 3px 4px, transparent 4.4px);
+}
+[data-game="fox-hunt"] .fh-load-word { position: relative; display: inline-block; }
+/* доска с жёлобом: полоса — оранжевая, едет вместе с лисой (translateX ставит loader.js) */
+[data-game="fox-hunt"] .fh-load-plank {
+  position: relative;
+  box-sizing: border-box;
+  width: 420px;
+  height: 46px;
+  margin-top: 16px;
+  padding: 0 68px 0 30px;
+  display: flex;
+  align-items: center;
+  background: var(--fh-w-plank);
+  border: 2.5px solid var(--fh-w-line);
+  border-radius: 10px;
+  box-shadow: inset 0 2px 0 rgba(255, 248, 226, 0.7), inset 0 -3px 0 rgba(140, 84, 36, 0.26), 0 3.5px 0 var(--fh-w-line), 0 10px 16px rgba(20, 30, 10, 0.3);
+}
+[data-game="fox-hunt"] .fh-load-plank::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle 4px at 79.5px 50%, #f6e6c6 0 1.1px, #9a7a58 1.9px 2.5px, #3a2418 2.7px 3.6px, transparent 3.9px),
+    radial-gradient(circle 4px at calc(100% - 79.5px) 50%, #f6e6c6 0 1.1px, #9a7a58 1.9px 2.5px, #3a2418 2.7px 3.6px, transparent 3.9px);
+}
+[data-game="fox-hunt"] .fh-load-groove {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  height: 20px;
+  box-sizing: border-box;
+  overflow: hidden;
+  border: 2px solid var(--fh-w-line);
+  border-radius: 10px;
+  background: var(--fh-w-hole);
+  box-shadow: inset 0 3px 4px rgba(30, 14, 4, 0.55), 0 1px 0 rgba(255, 240, 200, 0.6);
+}
+[data-game="fox-hunt"] .fh-load-fill {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #ffd38f 0 16%, #ffb057 30%, #f0862b 64%, #c4601a);
+  box-shadow: inset -2px 0 0 #8a3e10, inset 0 -2px 0 rgba(120, 50, 10, 0.35);
+  transform: translateX(-100%);
+  transition: transform 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+/* бегущие полоски на заливке */
+[data-game="fox-hunt"] .fh-load-fill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -24px;
+  right: 0;
+  background: repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.24) 0 8px, rgba(255, 255, 255, 0) 8px 16px);
+  animation: fh-load-stripes 0.8s linear infinite;
+}
+[data-game="fox-hunt"] .fh-load-run {
+  position: absolute;
+  z-index: 2;
+  left: 32px;
+  right: 70px;
+  top: 50%;
+  height: 0;
+  transform: translateX(-100%);
+  transition: transform 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+[data-game="fox-hunt"] .fh-load-fox {
+  position: absolute;
+  right: -20px;
+  top: -24px;
+  width: 40px;
+  height: 40px;
+  overflow: visible;
+  filter: drop-shadow(0 2px 0 rgba(78, 52, 38, 0.45));
+  animation: fh-load-trot 0.3s ease-in-out infinite alternate;
+}
+[data-game="fox-hunt"] .fh-load-pct {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  translate: 0 -50%;
+  min-width: 46px;
+  text-align: right;
+  font: 800 18px/1 'Podkova', 'Golos Text', serif;
+  font-variant-numeric: tabular-nums;
+  color: var(--fh-w-burn);
+}
+/* записка на верёвочках под доской */
+[data-game="fox-hunt"] .fh-load-say {
+  position: relative;
+  min-width: 190px;
+  box-sizing: border-box;
+  margin: 15px 0 0;
+  padding: 3px 14px 5px;
+  text-align: center;
+  white-space: nowrap;
+  font: 700 15px/1.2 'Podkova', 'Golos Text', serif;
+  color: var(--fh-w-burn);
+  background: var(--fh-w-paper);
+  border: 2px solid var(--fh-w-line);
+  border-radius: 5px;
+  box-shadow: 0 2.5px 0 var(--fh-w-line), 0 6px 10px rgba(20, 30, 10, 0.25);
+  transform-origin: 50% -16px;
+  animation: fh-load-swing 2.8s ease-in-out infinite alternate;
+}
+[data-game="fox-hunt"] .fh-load-say::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  left: 22px;
+  right: 22px;
+  top: -18px;
+  height: 17px;
+  background:
+    linear-gradient(90deg, transparent 1px, #d8b47a 1px 3px, transparent 3px calc(100% - 3px), #d8b47a calc(100% - 3px) calc(100% - 1px), transparent calc(100% - 1px)),
+    linear-gradient(90deg, var(--fh-w-line) 0 4px, transparent 4px calc(100% - 4px), var(--fh-w-line) calc(100% - 4px));
+}
+/* надписи — шрифтом игры: пока он не пришёл, их не видно (без прыжка с запасного шрифта) */
+[data-game="fox-hunt"] :is(.fh-load-word, .fh-load-pct, .fh-load-say) { transition: opacity 0.25s ease-out; }
+[data-game="fox-hunt"].fh-load:not(.fh-load--font) :is(.fh-load-word, .fh-load-pct, .fh-load-say) { opacity: 0; }
+/* уходя, вывеска чуть приподнимается */
+[data-game="fox-hunt"].fh-load--out .fh-load-stand { translate: -50% -56%; }
+
+@keyframes fh-load-in { from { opacity: 0; } }
+@keyframes fh-load-spin { to { transform: rotate(360deg); } }
+@keyframes fh-load-drift { from { transform: translateX(-100%); } to { transform: translateX(var(--span)); } }
+@keyframes fh-load-float {
+  0% { opacity: 0; transform: translate(0, 0); }
+  25% { opacity: 0.9; }
+  75% { opacity: 0.7; }
+  100% { opacity: 0; transform: translate(calc(var(--fh-lz, 1) * 28px), calc(var(--fh-lz, 1) * -120px)); }
+}
+@keyframes fh-load-flit {
+  0% { transform: translate(0, 0) rotate(-8deg); }
+  22% { transform: translate(180%, -150%) rotate(10deg); }
+  48% { transform: translate(380%, 30%) rotate(-6deg); }
+  74% { transform: translate(160%, 120%) rotate(8deg); }
+  100% { transform: translate(-60%, -40%) rotate(-10deg); }
+}
+@keyframes fh-load-flap { to { transform: scaleX(0.28); } }
+@keyframes fh-load-sway { from { transform: skewX(-2.2deg); } to { transform: skewX(2.2deg); } }
+@keyframes fh-load-stripes { to { transform: translateX(22.63px); } }
+@keyframes fh-load-trot { from { transform: translateY(1px) rotate(-6deg); } to { transform: translateY(-3px) rotate(6deg); } }
+@keyframes fh-load-swing { from { transform: rotate(-2.2deg); } to { transform: rotate(2.2deg); } }
+
+/* «Уменьшить движение»: всё стоит (облака и бабочки — там, где их застали), полоса и уход — без переходов */
+@media (prefers-reduced-motion: reduce) {
+  [data-game="fox-hunt"].fh-load, [data-game="fox-hunt"].fh-load *, [data-game="fox-hunt"].fh-load *::before, [data-game="fox-hunt"].fh-load *::after {
+    animation-play-state: paused !important;
+    transition-duration: 0s !important;
+  }
+  [data-game="fox-hunt"].fh-load { animation: none; }
+}
+:root.reduce-motion [data-game="fox-hunt"].fh-load, :root.reduce-motion [data-game="fox-hunt"].fh-load *,
+:root.reduce-motion [data-game="fox-hunt"].fh-load *::before, :root.reduce-motion [data-game="fox-hunt"].fh-load *::after {
+  animation-play-state: paused !important;
+  transition-duration: 0s !important;
+}
+:root.reduce-motion [data-game="fox-hunt"].fh-load { animation: none; }
+/* ---------- конец: заставка ---------- */

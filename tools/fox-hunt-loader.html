@@ -1,0 +1,89 @@
+<!doctype html><meta charset="utf-8"><title>Лисья охота — заставка</title>
+<!-- Заставка «Лисьей охоты» (games/fox-hunt/loader.js): http://localhost:8000/tools/fox-hunt-loader.html (нужен npm start).
+     Рамка — экран телефона, лежащего боком (?w=844&h=390 или кнопки размеров). Полоса сама доходит до 80 % (файлы игры),
+     дальше — ползунок «подготовка»; «Готово» — полоса до конца и уход заставки; «Ещё раз» — показать заново.
+     ?reduce — как с «Меньше анимаций». window.__check() — числа для проверки: что где лежит, что вылезло. -->
+<link rel="stylesheet" href="../games/fox-hunt/game.css">
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; min-height: 100%; background: #14181c; color: #e8ecef; font: 14px/1.4 system-ui, sans-serif; }
+  .bar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 10px 12px; }
+  button { font: inherit; color: inherit; background: #26303a; border: 1px solid #3a4652; border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+  button.on { background: #3d6a4a; border-color: #5a9a6c; }
+  input[type=range] { width: 200px; }
+  #box { position: relative; margin: 0 12px 12px; overflow: hidden; background: #000; outline: 1px solid #3a4652; }
+</style>
+<div class="bar" id="sizes"></div>
+<div class="bar">
+  подготовка <input id="prep" type="range" min="0" max="100" value="0">
+  <button id="done">Готово</button>
+  <button id="again">Ещё раз</button>
+  <span id="state"></span>
+</div>
+<div id="box"></div>
+<script type="module">
+  const q = new URLSearchParams(location.search);
+  if (q.has('reduce')) document.documentElement.classList.add('reduce-motion');
+  const { show, loading } = await import('../games/fox-hunt/loader.js');
+  const box = document.getElementById('box');
+  const SIZES = [[844, 390], [568, 320], [932, 430], [740, 360], [1280, 720], [1024, 768]];
+  let size = [Number(q.get('w')) || 844, Number(q.get('h')) || 390];
+  const sizes = document.getElementById('sizes');
+  function resize() {
+    box.style.width = `${size[0]}px`;
+    box.style.height = `${size[1]}px`;
+    for (const b of sizes.children) b.classList.toggle('on', b.textContent === `${size[0]}×${size[1]}`);
+  }
+  for (const s of SIZES) {
+    const b = document.createElement('button');
+    b.textContent = `${s[0]}×${s[1]}`;
+    b.onclick = () => { size = s; resize(); };
+    sizes.append(b);
+  }
+  const state = document.getElementById('state');
+  function open() {
+    box.replaceChildren(show());
+    document.getElementById('prep').value = 0;
+  }
+  document.getElementById('prep').oninput = (e) => loading.step(e.target.value / 100);
+  document.getElementById('done').onclick = async () => {
+    state.textContent = 'уходит…';
+    await loading.done();
+    state.textContent = 'ушла';
+  };
+  document.getElementById('again').onclick = () => { state.textContent = ''; open(); };
+  resize();
+  open();
+
+  // числа для проверки без снимков: рамки частей (относительно экрана), вылезшие надписи
+  window.__check = () => {
+    const root = box.querySelector('.fh-load');
+    if (!root) return { gone: true };
+    const b = root.getBoundingClientRect();
+    const rect = (sel) => {
+      const el = root.querySelector(sel);
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return { x: Math.round(r.left - b.left), y: Math.round(r.top - b.top), w: Math.round(r.width), h: Math.round(r.height) };
+    };
+    // текст (Range по буквам) не выходит за свою доску или записку; мох и гвозди вывески выходят нарочно — их не меряем
+    const over = [['.fh-load-word', '.fh-load-sign'], ['.fh-load-say', '.fh-load-say'], ['.fh-load-pct', '.fh-load-plank']]
+      .filter(([text, holder]) => {
+        const range = document.createRange();
+        range.selectNodeContents(root.querySelector(text));
+        const t = range.getBoundingClientRect();
+        const h = root.querySelector(holder).getBoundingClientRect();
+        return t.left < h.left + 3 || t.right > h.right - 3 || t.top < h.top || t.bottom > h.bottom;
+      }).map(([text]) => text);
+    return {
+      size: [Math.round(b.width), Math.round(b.height)],
+      vars: ['--fh-ls', '--fh-lz', '--fh-sun-x', '--fh-sun-y'].map((v) => `${v}=${root.style.getPropertyValue(v)}`).join(' '),
+      font: root.classList.contains('fh-load--font'),
+      stand: rect('.fh-load-stand'), sign: rect('.fh-load-sign'), plank: rect('.fh-load-plank'), groove: rect('.fh-load-groove'),
+      fox: rect('.fh-load-fox'), say: rect('.fh-load-say'), grass: rect('.fh-load-grass--front'), sun: rect('.fh-load-sun'),
+      pct: root.querySelector('.fh-load-pct').textContent, sayText: root.querySelector('.fh-load-say').textContent,
+      value: root.getAttribute('aria-valuenow'), over,
+      fonts: document.fonts.check('800 34px Podkova', 'Лисья охота'),
+    };
+  };
+</script>

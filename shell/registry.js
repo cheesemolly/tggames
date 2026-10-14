@@ -315,6 +315,7 @@ export const games = [
     title: 'Лисья охота',
     load: () => import('../games/fox-hunt/index.js'),
     css: new URL('../games/fox-hunt/game.css', import.meta.url),
+    loader: () => import('../games/fox-hunt/loader.js'),   // заставка: опушка и полоса, пока грузится ~2 МБ игры
     landscape: true,
     // бесконечная охота, победить нельзя; экран альбомный; у начатой — «Локация 3 · очков: 41»
     menu: { wins: false, saveLine: (s) => (Number.isInteger(s.floor) ? `Локация ${s.floor} · очков: ${s.score ?? 0}` : null) },

@@ -7,7 +7,7 @@
 // В кадре — только drawImage и простые заливки; надписи и градиенты готовит render-bake.js.
 
 import './art-all.js';
-import { createArt, hasSprite } from './art.js';
+import { createArt, hasSprite, spriteKeys, spriteDef } from './art.js';
 import { paintRoom, propsOf, ROOM_MARGIN } from './art-tiles.js';
 import { bakeText, bakeVignette } from './render-bake.js';
 import { T } from './core.js';
@@ -53,6 +53,7 @@ export function createRenderer({ canvas, probe }) {
   let qi = 0;
   let k = 1;
   let art = createArt(1);
+  let warmed = null;          // заготовка заранее: { list: [[ключ, вариант]…], at } — что и докуда дошли (warm)
   let vig = null;
   let room = null;            // комната, фон которой запечён
   let bg = null;              // { c, ox, oy } запечённый фон
@@ -145,6 +146,7 @@ export function createRenderer({ canvas, probe }) {
     view.w = cssW / scale;
     view.h = cssH / scale;
     art = createArt(k);
+    warmed = null;
     vig = bakeVignette(0.5);
     if (room) bake();
   }
@@ -153,6 +155,33 @@ export function createRenderer({ canvas, probe }) {
     cssW = Math.max(1, num(w, 320));
     cssH = Math.max(1, num(h, 180));
     setScale();
+  }
+
+  // ---------- заготовка заранее ----------
+
+  // Пока игру закрывает заставка (loader.js), картинки комнаты, лисы, добычи и эффектов заготавливаются кусками —
+  // иначе их рисуют первые кадры, и начало игры дёргается. Враги и другие места — как раньше, по ходу.
+
+  /** Заготовить ещё картинок, пока не выйдет budget мс; вернуть долю готового (1 — всё). */
+  function warm(budget = 8) {
+    if (!warmed) {
+      const biome = room?.biome ?? 'forest';
+      const heads = [`prop.${biome}.`, `tile.${biome}.`, 'mob.fox.', 'mob.prey.', ...[...PREY].map((id) => `mob.${id}.`),
+        'fx.', 'pick.', 'shot.', 'thing.'];
+      const list = [];
+      for (const key of spriteKeys()) {
+        if (!heads.some((h) => key.startsWith(h))) continue;
+        for (let v = 0; v < spriteDef(key).variants; v++) list.push([key, v]);
+      }
+      warmed = { list, at: 0 };
+    }
+    const { list } = warmed;
+    const until = performance.now() + budget;
+    while (warmed.at < list.length && performance.now() < until) {
+      const [key, v] = list[warmed.at++];
+      art.sprite(key, v);
+    }
+    return list.length ? warmed.at / list.length : 1;
   }
 
   // ---------- комната ----------
@@ -1087,7 +1116,7 @@ export function createRenderer({ canvas, probe }) {
   void probe;
 
   return {
-    resize, enterRoom, refreshProps, onEvent, frame, toWorld, toScreen, lowerQuality, reset, destroy,
+    resize, enterRoom, refreshProps, onEvent, frame, toWorld, toScreen, lowerQuality, reset, destroy, warm,
     /** Как рисуется хозяин сейчас (прозрачность, масштаб, тень, нить) — для проверки; копия. */
     bossLook: (m, calm = false) => ({ ...look(m, calm) }),
     get quality() { return qi; },
