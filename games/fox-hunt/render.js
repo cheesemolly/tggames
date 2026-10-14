@@ -36,6 +36,11 @@ const BOOM_LOOK = { fire: 1, ice: 2, poison: 3, light: 4, dark: 5 };
 const PREY = new Set(['rabbit', 'hare', 'gold', 'fat']);
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+const smooth = (v) => {
+  const x = clamp(v, 0, 1);
+  return x * x * (3 - 2 * x);
+};
+const ALOFT = 260;                          // высота «под потолком» у паучьей королевы (bosses.js)
 const num = (v, d = 0) => (Number.isFinite(v) ? v : d);
 
 export function createRenderer({ canvas, probe }) {
@@ -379,6 +384,8 @@ export function createRenderer({ canvas, probe }) {
     POSE.elite = Boolean(elite);
     POSE.aim = num(aim);
     POSE.data = data ?? null;
+    POSE.sx = 1;
+    POSE.sy = 1;
     return POSE;
   }
 
@@ -409,11 +416,71 @@ export function createRenderer({ canvas, probe }) {
     ctx.fill();
   }
 
-  function drawCreature(id, m, x, y, aim) {
+  // Хозяева в прыжке, под потолком и в вихре: расчёт ставит им hide (не задеть), но рисовать их надо — иначе пропадут
+  // за один кадр. Здесь — как они выглядят в это время: прозрачность, масштаб, тень, нить.
+  const LOOK = { a: 1, sx: 1, sy: 1, sh: 1, sa: 1, th: 0 };
+  const hidAct = new WeakMap();              // хозяин → поза, в которой он спрятался (для пыли при приземлении)
+
+  const boss = (m) => m.def?.kind === 'boss';
+
+  function look(m, calm) {
+    LOOK.a = 1;
+    LOOK.sx = 1;
+    LOOK.sy = 1;
+    LOOK.sh = 1;
+    LOOK.sa = 1;
+    LOOK.th = 0;
+    if (!m.hide) return LOOK;
+    const z = num(m.z);
+    switch (m.act) {
+      case 'hop': {
+        // жаба в прыжке: тень на земле сжимается, пока она взлетает, и растёт к месту приземления
+        const h = clamp(z / Math.max(20, num(m.leapH, 60)), 0, 1);
+        LOOK.sh = 1 - 0.4 * h;
+        LOOK.sa = 1 - 0.3 * h;
+        if (!calm) LOOK.sx = LOOK.sy = 1 + 0.1 * h;
+        break;
+      }
+      case 'drop': {
+        // королева лезет по нити под потолок и падает обратно: чем выше, тем меньше и прозрачнее
+        const h = clamp(z / ALOFT, 0, 1);
+        LOOK.a = 1 - smooth((z - 30) / 150);
+        LOOK.sh = 1 - 0.65 * h;
+        LOOK.sa = 1 - 0.65 * h;
+        LOOK.th = z > 3 ? 1 : 0;
+        // место падения меняется, пока её не видно: тень старого места гаснет на подъёме, нового — проступает
+        if (m.state === 'climb') LOOK.sa *= 1 - smooth((h - 0.7) / 0.3);
+        else if (m.state === 'aloft') LOOK.sa *= smooth(num(m.t) / 0.15);
+        if (!calm) {
+          LOOK.sx = LOOK.sy = 1 - 0.3 * h;
+          if (m.state === 'climb' && m.t < 0.14) {
+            const q = Math.sin((Math.PI * m.t) / 0.14);
+            LOOK.sx *= 1 + 0.08 * q;
+            LOOK.sy *= 1 - 0.14 * q;
+          }
+        }
+        break;
+      }
+      case 'teleport': {
+        // филин в вихре перьев: сам рисунок тает и возвращается, тень — вместе с ним
+        const kk = clamp(num(m.k), 0, 1);
+        const gone = kk < 0.5 ? smooth(kk / 0.4) : 1 - smooth((kk - 0.6) / 0.4);
+        LOOK.sa = 1 - gone;
+        LOOK.sh = 1 - 0.4 * gone;
+        break;
+      }
+      default:
+    }
+    return LOOK;
+  }
+
+  function drawCreature(id, m, x, y, aim, sx = 1, sy = 1) {
     const def = m.def;
     const top = def?.speed || 100;
     const a = pose(m.act, m.k, Math.hypot(m.vx, m.vy) / top, m.vx, m.vy, m.z, m.flash,
       m.maxHp > 0 ? m.hp / m.maxHp : 1, m.elite, aim, m.data);
+    a.sx = sx;
+    a.sy = sy;
     const dir = m.face < 0 ? -1 : 1;
     if (art.hasRig(id)) {
       art.rig(ctx, id, px(x), py(y - num(m.z)), dir, a);
@@ -847,8 +914,31 @@ export function createRenderer({ canvas, probe }) {
     // 3. тени
     const mobs = room.mobs;
     for (let i = 0; i < mobs.length; i++) {
+      // хозяин ушёл в прыжок или под потолок — пыль из-под лап; вернулся — пыль и кольцо удара
       const m = mobs[i];
-      if (m.dead || m.hide || !visible(m.x, m.y, 60)) continue;
+      if (m.dead || !boss(m)) continue;
+      const was = hidAct.get(m);
+      if (m.hide && was === undefined) {
+        hidAct.set(m, m.act);
+        if (!calm && !m.flying && m.leapT > 0) {
+          burst('fx.dust', m.x, m.y, 4, { speed: 50, z: 2, vz: 12, g: 0, drag: 4, life: 0.4, s0: 0.8, s1: 1.4, a0: 0.8 });
+        }
+      } else if (!m.hide && was !== undefined) {
+        hidAct.delete(m);
+        if (!calm && (was === 'hop' || was === 'drop' || m.act === 'recover')) {
+          burst('fx.dust', m.x, m.y, 7, { speed: 90, z: 2, vz: 14, g: 0, drag: 5, life: 0.45, s0: 0.9, s1: 1.7, a0: 0.8 });
+          ring(m.x, m.y, (m.r ?? 20) * 1.2, 0, 0.3);
+        }
+      }
+    }
+    for (let i = 0; i < mobs.length; i++) {
+      const m = mobs[i];
+      if (m.dead || (m.hide && !boss(m)) || !visible(m.x, m.y, 60)) continue;
+      if (m.hide) {
+        const L = look(m, calm);
+        shadow(m.px + (m.x - m.px) * alpha, m.py + (m.y - m.py) * alpha, (m.r ?? 10) * 1.1 * L.sh, (m.flying ? 0.5 : 1) * L.sa);
+        continue;
+      }
       shadow(m.x, m.y, (m.r ?? 10) * 1.1, m.flying ? 0.5 : 1);
     }
     for (let i = 0; i < room.pals.length; i++) shadow(room.pals[i].x, room.pals[i].y, (room.pals[i].r ?? 8) * 1.1);
@@ -882,7 +972,12 @@ export function createRenderer({ canvas, probe }) {
     for (let i = 0; i < afters.length; i++) enqueue(afters[i].y - 0.2, 7, afters[i]);
     for (let i = 0; i < mobs.length; i++) {
       const m = mobs[i];
-      if (!m.dead && !m.hide && visible(m.x, m.y, 60)) enqueue(m.y, 1, m);
+      if (m.dead || !visible(m.x, m.y, 60)) continue;
+      if (!m.hide) enqueue(m.y, 1, m);
+      else if (boss(m)) {
+        // прыжок и уход с поля: рисуем, пока не растаял
+        if (look(m, calm).a > 0.02) enqueue(m.y, 1, m);
+      }
     }
     for (let i = 0; i < room.pals.length; i++) enqueue(room.pals[i].y, 1, room.pals[i]);
     for (let i = 0; i < room.things.length; i++) {
@@ -909,7 +1004,24 @@ export function createRenderer({ canvas, probe }) {
         case 1: {
           const m = q.ref;
           const a = Math.atan2(P.y - m.y, P.x - m.x);
-          drawCreature(m.id, m, m.px + (m.x - m.px) * alpha, m.py + (m.y - m.py) * alpha, a);
+          const mx = m.px + (m.x - m.px) * alpha;
+          const my = m.py + (m.y - m.py) * alpha;
+          if (!m.hide) {
+            drawCreature(m.id, m, mx, my, a);
+            break;
+          }
+          const L = look(m, calm);
+          if (L.th > 0) {
+            // нить, по которой королева ушла под потолок
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            ctx.globalAlpha = 0.5 * (0.35 + 0.65 * L.a);
+            ctx.fillStyle = '#e6e2f0';
+            const top = Math.round(py(my - num(m.z)) - 8 * k);
+            if (top > 0) ctx.fillRect(Math.round(px(mx) - 0.8 * k), 0, Math.max(1, Math.round(1.6 * k)), top);
+          }
+          ctx.globalAlpha = L.a;
+          drawCreature(m.id, m, mx, my, a, L.sx, L.sy);
+          ctx.globalAlpha = 1;
           break;
         }
         case 2: drawThing(q.ref); break;
@@ -976,6 +1088,8 @@ export function createRenderer({ canvas, probe }) {
 
   return {
     resize, enterRoom, refreshProps, onEvent, frame, toWorld, toScreen, lowerQuality, reset, destroy,
+    /** Как рисуется хозяин сейчас (прозрачность, масштаб, тень, нить) — для проверки; копия. */
+    bossLook: (m, calm = false) => ({ ...look(m, calm) }),
     get quality() { return qi; },
     get scale() { return scale; },
     get view() { return view; },

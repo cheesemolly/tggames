@@ -60,6 +60,8 @@ export function createArt(k, makeCanvas = domCanvas) {
   let cy = 0;
   let face = 1;
   let flash = 0;
+  let gx = 1;                               // общий масштаб фигуры (a.sx, a.sy) вокруг ступней: приседание, взлёт
+  let gy = 1;
 
   function bake(key, variant) {
     const def = SPRITES.get(key);
@@ -149,7 +151,7 @@ export function createArt(k, makeCanvas = domCanvas) {
     if (!s) return;
     const c = Math.cos(rot);
     const n = Math.sin(rot);
-    ctx.setTransform(k * face * c * sx, k * n * sx, -k * face * n * sy, k * c * sy, cx + k * face * x, cy + k * y);
+    ctx.setTransform(k * face * c * sx * gx, k * n * sx * gy, -k * face * n * sy * gx, k * c * sy * gy, cx + k * face * x * gx, cy + k * y * gy);
     if (alpha !== 1) ctx.globalAlpha = alpha;
     ctx.drawImage(s.c, -s.ox, -s.oy, s.w, s.h);
     if (flash > 0) {
@@ -164,7 +166,7 @@ export function createArt(k, makeCanvas = domCanvas) {
 
   /** Оси фигуры на холсте — для простых линий в кадре (лапы, усы): дальше рисовать в единицах мира. */
   function axes(ctx) {
-    ctx.setTransform(k * face, 0, 0, k, cx, cy);
+    ctx.setTransform(k * face * gx, 0, 0, k * gy, cx, cy);
   }
 
   const kit = { k, part, axes, sprite };
@@ -180,8 +182,12 @@ export function createArt(k, makeCanvas = domCanvas) {
     cy = y;
     face = dir < 0 ? -1 : 1;
     flash = a.flash > 0 ? a.flash : 0;
+    gx = a.sx > 0 ? a.sx : 1;
+    gy = a.sy > 0 ? a.sy : 1;
     def.draw(kit, ctx, a);
     flash = 0;
+    gx = 1;
+    gy = 1;
     return true;
   }
 

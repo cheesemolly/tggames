@@ -734,7 +734,10 @@ export const BOSSES = {
         case 'climb':
           // уходит по нити под потолок: там её не достать
           ai.stop(m);
-          if (m.t === 0) m.hide = true;
+          if (m.t === 0) {
+            m.hide = true;
+            ai.sfx(G, 'swing', m.x, m.y);
+          }
           m.z = ALOFT * Math.min(1, m.t / 0.45) ** 2;
           ai.pose(m, 'drop', 0);
           if (m.t >= 0.45) ai.go(m, 'aloft');

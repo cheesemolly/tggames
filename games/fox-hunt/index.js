@@ -436,11 +436,14 @@ function idle(dt) {
   draw();
 }
 
+// ?fhdebug: время идёт медленнее (для разглядывания движений), 1 — как обычно
+let debugSlow = 1;
+
 function loop(now) {
   raf = 0;
   if (!ui || !G) return;
   // метка кадра бывает раньше performance.now() из kick() — время не должно идти назад
-  const gap = Math.max(0, (now - lastFrame) / 1000);
+  const gap = Math.max(0, (now - lastFrame) / 1000) * debugSlow;
   lastFrame = now;
   try {
     syncLock();
@@ -888,6 +891,12 @@ function debugHooks() {
       view.input = input.state;
       kick();
     },
+    /** Медленное время: slow(0.2) — в пять раз медленнее, slow() — как обычно. */
+    slow(k = 1) {
+      debugSlow = Math.min(1, Math.max(0.05, Number(k) || 1));
+    },
+    /** Как рисуется хозяин комнаты (или данный зверь) сейчас: прозрачность, масштаб, тень, нить. */
+    look: (m = G.room.boss) => renderer.bossLook(m, view.calm),
     /** Неуязвимость лисы. */
     god(on = true) {
       cheat.god(G, on);
@@ -1064,6 +1073,7 @@ export default {
     }
     root?.remove();
     if (globalThis.__foxHunt) delete globalThis.__foxHunt;
+    debugSlow = 1;
     api = root = dom = renderer = input = ui = G = bot = box = offered = mood = fs = null;
     lockWant = false;
     autoTries = 0;

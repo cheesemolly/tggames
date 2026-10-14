@@ -164,3 +164,47 @@ test('рендер: летающая вещь (бабочка задания) п
   assert.ok(Math.abs(second[0][5] - (y - 12 * d)) < 0.01 && second[0][4] === x, 'бабочка поднята не на свою высоту');
   r.destroy();
 });
+
+
+// Хозяева, которых «не задеть» (прыжок жабы, нить паучьей королевы, вихрь филина), раньше пропадали за один кадр:
+// рендер не рисовал спрятанных. Теперь рисует — проверяем, что вид меняется плавно и нигде не прыгает.
+test('рендер: хозяин в прыжке, под потолком и в вихре не пропадает за один кадр', async () => {
+  const { spawnMob } = await import('../ai.js');
+  const { arena } = await import('./helpers.js');
+  const { T } = await import('../core.js');
+  for (const id of ['toad', 'spiderqueen', 'owl']) {
+    const canvas = fakeCanvas();
+    const r = createRenderer({ canvas, probe: null });
+    r.resize(640, 360);
+    const G = arena({ seed: 5 });
+    G.god = true;
+    const m = spawnMob(G, id, G.room.center.x + 3 * T, G.room.center.y, { warm: 0 });
+    const bot = createBot({ doors: false });
+    let prev = null;
+    let hid = 0;
+    let worst = 0;
+    for (let i = 0; i < 90 * 60 && !m.dead; i++) {
+      step(G, bot(G));
+      G.events.length = 0;
+      const L = r.bossLook(m, false);
+      const cur = [L.a, L.sx, L.sy];
+      if (m.hide) {
+        hid += 1;
+        for (const v of cur) assert.ok(Number.isFinite(v));
+        assert.ok(L.sa >= 0 && L.sa <= 1 && L.sh > 0);
+      }
+      if (prev) for (let j = 0; j < 3; j++) worst = Math.max(worst, Math.abs(cur[j] - prev[j]));
+      prev = cur;
+      assert.ok(worst < 0.25, `${id}: вид скачет на ${worst.toFixed(2)} за кадр (${m.state}, z=${m.z})`);
+    }
+    assert.ok(hid > 30, `${id}: за бой ни разу не спрятался (${hid})`);
+    // при «уменьшить движение» — без масштаба
+    m.hide = true;
+    m.act = 'drop';
+    m.z = 100;
+    const c = r.bossLook(m, true);
+    assert.equal(c.sx, 1);
+    assert.equal(c.sy, 1);
+    r.destroy();
+  }
+});

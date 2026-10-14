@@ -1,0 +1,99 @@
+<!doctype html><meta charset="utf-8"><title>Лисья охота — хозяева в прыжке и уходе</title>
+<!-- Проверка анимаций прыжка и ухода с поля у хозяев: http://localhost:8000/tools/fox-hunt-bosses.html (нужен npm start).
+     Игра открыта в рамке с ?owner&fhdebug. «Показать босса» — переносит в комнату хозяина (лиса неуязвима) и зовёт
+     выбранного; кнопки состояний включают нужное действие у него прямо сейчас; «Замедление» растягивает время, чтобы
+     разглядеть движение. Справа — как рисуется хозяин в этот миг (прозрачность, масштаб, тень, нить). -->
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; height: 100%; background: #14181c; color: #e8ecef; font: 14px/1.4 system-ui, sans-serif; }
+  body { display: grid; grid-template-columns: minmax(0, 1fr) 260px; grid-template-rows: 100%; }
+  iframe { width: 100%; height: 100%; border: 0; background: #000; }
+  aside { padding: 12px; overflow: auto; border-left: 1px solid #2a3138; }
+  h2 { margin: 14px 0 6px; font-size: 13px; color: #9fb0bd; font-weight: 600; }
+  button { font: inherit; color: inherit; background: #26303a; border: 1px solid #3a4652; border-radius: 6px; padding: 6px 10px; margin: 0 4px 6px 0; cursor: pointer; }
+  button.on { background: #3d6a4a; border-color: #5a9a6c; }
+  input[type=range] { width: 100%; }
+  pre { margin: 0; font: 12px/1.5 ui-monospace, Consolas, monospace; white-space: pre-wrap; color: #cfe3d2; }
+</style>
+<iframe id="g" src="../?owner&fhdebug#/game/fox-hunt" allow="fullscreen"></iframe>
+<aside>
+  <h2>Босс</h2>
+  <div id="who"></div>
+  <button id="show">Показать босса</button>
+  <h2>Состояние</h2>
+  <div id="states"></div>
+  <h2>Замедление</h2>
+  <input id="slow" type="range" min="5" max="100" value="100"><div id="slowv">×1</div>
+  <h2>Сейчас</h2>
+  <pre id="out">…</pre>
+</aside>
+<script>
+const BOSSES = {
+  toad: { name: 'Царь-жаба', states: [['crouch', 'прыжок'], ['lick', 'язык'], ['spit', 'пузыри'], ['croak', 'зов'], ['sit', 'сидит']] },
+  spiderqueen: { name: 'Паучья королева', states: [['climb', 'уход по нити и падение'], ['web', 'паутина'], ['fan', 'веер'], ['summon', 'зов'], ['walk', 'ходит']] },
+  owl: { name: 'Филин-чародей', states: [['blink', 'исчезает и появляется'], ['fan', 'веер'], ['eye', 'пике'], ['hover', 'парит']] },
+};
+let id = 'toad';
+const $ = (s) => document.querySelector(s);
+const fh = () => $('#g').contentWindow.__foxHunt;
+const boss = () => fh()?.game?.room?.mobs.find((m) => m.id === id && !m.dead);
+
+function fill() {
+  $('#who').replaceChildren(...Object.entries(BOSSES).map(([k, b]) => {
+    const e = document.createElement('button');
+    e.textContent = b.name;
+    e.className = k === id ? 'on' : '';
+    e.onclick = () => { id = k; fill(); };
+    return e;
+  }));
+  $('#states').replaceChildren(...BOSSES[id].states.map(([st, label]) => {
+    const e = document.createElement('button');
+    e.textContent = label;
+    e.onclick = () => force(st);
+    return e;
+  }));
+}
+
+function show() {
+  const h = fh();
+  if (!h) return alert('игра ещё грузится');
+  h.god(true);
+  h.warp('boss');
+  setTimeout(() => { if (!boss()) h.spawn(id); }, 600);
+}
+
+function force(st) {
+  const m = boss();
+  if (!m) return show();
+  // лису — сбоку от босса, чтобы прыжку было куда падать
+  const P = fh().game.player;
+  const R = fh().game.room;
+  P.x = m.x > R.w * 8 ? m.x - 150 : Math.min(R.w * 16 - 60, m.x + 150);
+  P.y = m.y;
+  P.px = P.x;
+  P.py = P.y;
+  m.state = st;
+  m.t = 0;
+  m.fresh = true;
+  if (m.data) m.data.n = m.data.ph || 1;
+}
+
+$('#show').onclick = show;
+$('#slow').oninput = (e) => {
+  const k = e.target.value / 100;
+  $('#slowv').textContent = `×${k}`;
+  fh()?.slow(k);
+};
+setInterval(() => {
+  const m = boss();
+  const h = fh();
+  if (!m || !h) { $('#out').textContent = 'босса нет'; return; }
+  const L = h.look(m);
+  $('#out').textContent = [
+    `состояние  ${m.state}`, `поза       ${m.act} ${(m.k ?? 0).toFixed(2)}`, `спрятан    ${m.hide ? 'да' : 'нет'}`,
+    `высота     ${(m.z || 0).toFixed(0)}`, `прозрачн.  ${L.a.toFixed(2)}`, `масштаб    ${L.sx.toFixed(2)} × ${L.sy.toFixed(2)}`,
+    `тень       ${L.sh.toFixed(2)} (${L.sa.toFixed(2)})`, `нить       ${L.th ? 'есть' : 'нет'}`,
+  ].join('\n');
+}, 100);
+fill();
+</script>
