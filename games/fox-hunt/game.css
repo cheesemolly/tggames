@@ -779,6 +779,46 @@
 /* настройки: переключатели в два столбца, на три ряда хватает места */
 [data-game="fox-hunt"] .fh-set-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px 10px; }
 [data-game="fox-hunt"] .fh-set-hint { margin: 6px 0 0; font-size: 11px; line-height: 1.2; text-align: center; opacity: 0.75; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* «Графика»: ползунок на три положения; окно настроек выше остальных (SET_H в ui.js) */
+[data-game="fox-hunt"] .fh-win.fh-settings { height: 372px; scale: var(--fh-zoom-set, var(--fh-zoom, 1)); }
+[data-game="fox-hunt"] .fh-gfx { margin-top: 4px; padding: 0 4px; }
+[data-game="fox-hunt"] .fh-gfx-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+[data-game="fox-hunt"] .fh-gfx-val { font-size: 13px; font-weight: 800; white-space: nowrap; color: var(--fh-w-burn); }
+[data-game="fox-hunt"] .fh-gfx-bar { position: relative; height: 30px; margin: 2px 8px 0; touch-action: none; cursor: pointer; outline: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+[data-game="fox-hunt"] .fh-gfx-rail {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 11px;
+  height: 8px;
+  box-sizing: border-box;
+  border-radius: 4px;
+  border: 2px solid var(--fh-w-line);
+  background: linear-gradient(180deg, #5e381c, #7a4a26);
+  box-shadow: inset 0 2px 3px rgba(0, 0, 0, 0.45);
+}
+[data-game="fox-hunt"] .fh-gfx-stop { position: absolute; top: 9px; width: 4px; height: 12px; margin-left: -2px; border-radius: 2px; background: var(--fh-w-line); }
+[data-game="fox-hunt"] .fh-gfx-stop:nth-of-type(2) { left: 0; margin-left: 0; }
+[data-game="fox-hunt"] .fh-gfx-stop:nth-of-type(3) { left: 50%; }
+[data-game="fox-hunt"] .fh-gfx-stop:nth-of-type(4) { left: 100%; margin-left: -4px; }
+[data-game="fox-hunt"] .fh-gfx-knob {
+  position: absolute;
+  left: calc(var(--i, 1) * 50%);
+  top: 4px;
+  box-sizing: border-box;
+  width: 22px;
+  height: 22px;
+  margin-left: -11px;
+  border-radius: 50%;
+  border: 2px solid var(--fh-w-line);
+  background: radial-gradient(circle at 35% 30%, #f8e2b8, #c98e4f 75%);
+  box-shadow: 0 2px 0 rgba(60, 30, 10, 0.4);
+  transition: left 0.15s ease;
+}
+[data-game="fox-hunt"] .fh-gfx-bar:focus-visible .fh-gfx-knob { box-shadow: 0 0 0 3px var(--fh-w-cream), 0 0 0 5px var(--fh-w-line); }
+@media (prefers-reduced-motion: reduce) {
+  [data-game="fox-hunt"] .fh-gfx-knob { transition-duration: 0s; }
+}
 [data-game="fox-hunt"] .fh-ask { flex: 1 1 auto; font-weight: 600; }
 
 /* полный экран на компьютере: чёрные поля вокруг поля и прицел, пока курсор пойман */

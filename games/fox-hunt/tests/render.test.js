@@ -324,3 +324,57 @@ test('рендер: удар ближним оружием виден — ору
 });
 
 const clampN = (v, a, b) => (v < a ? a : v > b ? b : v);
+
+test('график: три положения — ступень, частицы, воздух, виньетка и автоснижение', async () => {
+  const { GRAPHICS, GRAPHICS_DEFAULT, readGraphics } = await import('../render.js');
+  assert.equal(GRAPHICS_DEFAULT, 1);
+  for (const bad of [undefined, null, -1, 3, 1.5, '2', NaN, {}]) assert.equal(readGraphics(bad), 1, String(bad));
+  for (const v of [0, 1, 2]) assert.equal(readGraphics(v), v);
+  globalThis.window = { devicePixelRatio: 3 };      // у плотного экрана ступени чётко различаются
+  const make = () => {
+    const r = createRenderer({ canvas: fakeCanvas(), probe: null });
+    r.resize(360, 640);
+    return r;
+  };
+  const low = make();
+  low.setGraphics(0);
+  assert.equal(low.quality, 2, 'низкая — самая грубая ступень');
+  assert.equal(low.lowerQuality(), false, 'ниже низкой не бывает');
+  const mid = make();
+  assert.equal(mid.graphics, 1, 'по умолчанию — средняя');
+  assert.equal(mid.quality, 0, 'средняя — как раньше: с первой ступени');
+  const widthMid = mid.view.w;
+  assert.equal(mid.lowerQuality(), true, 'средняя опускается сама');
+  const high = make();
+  high.setGraphics(2);
+  assert.equal(high.quality, 0);
+  assert.equal(high.lowerQuality(), false, 'высокая сама не опускается');
+  assert.equal(high.quality, 0);
+  // выбор игрока не ломается автоснижением: переключение снова ставит ступень выбранного положения
+  mid.setGraphics(2);
+  assert.equal(mid.quality, 0);
+  mid.setGraphics(1);
+  mid.lowerQuality();
+  mid.lowerQuality();
+  assert.ok(mid.quality > 0);
+  mid.setGraphics(1);
+  assert.equal(mid.quality, 0);
+  assert.equal(mid.view.w, widthMid, 'поле в единицах мира то же');
+  // числа по положениям
+  assert.deepEqual(GRAPHICS.map((g) => g.step), [2, 0, 0]);
+  assert.deepEqual(GRAPHICS.map((g) => g.vig), [false, true, true]);
+  assert.ok(QUALITY[GRAPHICS[0].step] < QUALITY[GRAPHICS[1].step]);
+  low.setGraphics(7);                                // мусор — средняя
+  assert.equal(low.graphics, 1);
+  // грубее — меньше точек холста: у низкой в 2/1,15 раза меньше, чем у высокой
+  const cv = (level) => {
+    const canvas = fakeCanvas();
+    const r = createRenderer({ canvas, probe: null });
+    r.setGraphics(level);
+    r.resize(360, 640);
+    return canvas.width;
+  };
+  assert.ok(Math.abs(cv(0) / cv(2) - QUALITY[2] / QUALITY[0]) < 0.01, 'ширина холста по ступеням');
+  assert.equal(cv(1), cv(2));
+  delete globalThis.window;
+});

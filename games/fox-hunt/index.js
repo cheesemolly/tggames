@@ -17,7 +17,7 @@ import { reducedMotion } from '../../shared/motion.js';
 import { createAudio } from '../../shared/sfx.js';
 import { pointsInfo } from '../../shared/points-info.js';
 import { createSounds } from './sounds.js';
-import { createRenderer } from './render.js';
+import { createRenderer, readGraphics } from './render.js';
 import { createUi } from './ui.js';
 import { createInput } from './input.js';
 import { createFullscreen, isDesktop, desktopFacts, readFullscreen } from './fullscreen.js';
@@ -158,7 +158,7 @@ function readSettings(v) {
     }
   }
   // джойстики: нет поля (старое сохранение) или что-то не то — «статичные»
-  return { lefty: v?.lefty === true, flip: v?.flip === true, music: v?.music !== false, stick: v?.stick === 'float' ? 'float' : 'static', weaponBtn: v?.weaponBtn === true, fullscreen: readFullscreen(v), hints };
+  return { lefty: v?.lefty === true, flip: v?.flip === true, music: v?.music !== false, stick: v?.stick === 'float' ? 'float' : 'static', weaponBtn: v?.weaponBtn === true, graphics: readGraphics(v?.graphics), fullscreen: readFullscreen(v), hints };
 }
 
 /** Сохранённая «коллекция»: только строки, без повторов и не длиннее положенного. */
@@ -184,6 +184,12 @@ function sawItems(ids) {
 
 function setOption(key, value) {
   if (!api || typeof key !== 'string') return;
+  if (key === 'graphics') {
+    settings.graphics = readGraphics(value);
+    renderer?.setGraphics(settings.graphics);
+    api.storage.set('settings', settings);
+    return;
+  }
   const on = Boolean(value);
   if (key === 'sound') {
     soundOn = on;
@@ -994,6 +1000,7 @@ export default {
     api.screen?.flip(settings.flip);
 
     renderer = createRenderer({ canvas: dom.canvas, probe: dom.probe });
+    renderer.setGraphics(settings.graphics);
     input = createInput({
       stage: dom.stage, sticksEl: dom.sticks, screen: api.screen ?? null,
       toWorld: (x, y, out) => renderer.toWorld(x, y, out),

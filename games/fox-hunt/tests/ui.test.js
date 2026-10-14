@@ -8,7 +8,7 @@ import { arena } from './helpers.js';
 const page = miniPage();
 globalThis.document = page.doc;
 globalThis.matchMedia = () => ({ matches: true, addEventListener() {} });
-const { createUi, T, BOX } = await import('../ui.js');
+const { createUi, T, BOX, SET_H, zoomFor, stopAt } = await import('../ui.js');
 
 /** Окно открыто, партия идёт; вернуть всё, что нужно проверять. rotated — экран лежит на боку. */
 function make({ rotated = false, over = false, pc = false } = {}) {
@@ -193,7 +193,11 @@ test('стили: обе кнопки HUD не меньше 44×44, окна —
   assert.match(win, new RegExp(`height: ${BOX.h}px;`));
   assert.match(win, /scale: var\(--fh-zoom/);
   assert.doesNotMatch(css, /\.fh-(win|pause|settings|pause-body|set-list) \{[^}]*overflow[^;]*(auto|scroll)/);
-  assert.doesNotMatch(css, /\.fh-(pause|settings) \{[^}]*(width|height)/);
+  assert.doesNotMatch(css, /\] \.fh-(pause|settings) \{[^}]*(width|height)/);
+  // настройки выше остальных ровно на SET_H и растут по своему масштабу
+  const set = css.match(/\.fh-win\.fh-settings \{[^}]*\}/)[0];
+  assert.match(set, new RegExp(`height: ${SET_H}px;`));
+  assert.match(set, /scale: var\(--fh-zoom-set/);
 });
 
 test('HUD: кнопки не выходят за безопасные отступы (правый край идёт от ls-r)', () => {
@@ -306,4 +310,44 @@ test('настройки: «Полный экран» и подсказка — 
   settings.fullscreen = false;           // игра: браузер отказал или вышли по Esc
   ui.refreshSettings();
   assert.equal(row().getAttribute('aria-checked'), 'false');
+});
+
+test('настройки: ползунок «Графика» — стрелки, касание, подпись, окно влезает в рамки', () => {
+  const { ui, calls, settings } = make();
+  ui.open('settings');
+  const bar = ui.top.el.byClass('fh-gfx-bar')[0];
+  assert.ok(bar, 'ползунок есть');
+  assert.equal(bar.getAttribute('role'), 'slider');
+  const val = () => ui.top.el.byClass('fh-gfx-val')[0].textContent;
+  assert.equal(val(), T.set.gfx[1], 'нет поля — средняя');
+  const key = (k) => bar.fire('keydown', { key: k, stopPropagation() {} });
+  assert.equal(key('ArrowLeft').defaultPrevented, true);
+  assert.equal(settings.graphics, 0);
+  assert.equal(val(), T.set.gfx[0]);
+  key('ArrowLeft');                                  // ниже низкой не бывает
+  assert.equal(settings.graphics, 0);
+  key('End');
+  assert.equal(settings.graphics, 2);
+  assert.equal(bar.getAttribute('aria-valuenow'), '2');
+  assert.equal(bar.getAttribute('aria-valuetext'), T.set.gfx[2]);
+  key('ArrowUp');
+  assert.equal(settings.graphics, 2);
+  assert.equal(calls.filter((c) => c.startsWith('set:graphics')).length, 2, 'без перемены — без записи');
+  // касание: полоса 100 пикселей, x=50 — середина, x=-20 и 400 — края
+  bar.getBoundingClientRect = () => ({ left: 0, width: 100 });
+  bar.fire('pointerdown', { pointerId: 1, button: 0, clientX: 50 });
+  assert.equal(settings.graphics, 1);
+  bar.fire('pointermove', { pointerId: 1, clientX: -20 });
+  assert.equal(settings.graphics, 0);
+  bar.fire('pointerup', { pointerId: 1 });
+  bar.fire('pointermove', { pointerId: 1, clientX: 400 });
+  assert.equal(settings.graphics, 0, 'после отпускания палец не тянет');
+  assert.equal(stopAt(49, { left: 0, width: 100 }), 1);
+  assert.equal(stopAt(10, { left: 0, width: 0 }), null);
+  // окно настроек влезает в рамку 454×284 и меньше: масштаб считается от его высоты
+  for (const [w, h] of [[454, 284], [320, 180], [568, 320], [360, 640]]) {
+    const k = zoomFor(w, h, undefined, SET_H);
+    assert.ok(SET_H * k <= h - BOX.gap * 2 + 1e-6 || k === 0.5, `${w}×${h}`);
+    assert.ok(BOX.w * k <= w - BOX.gap * 2 + 1e-6 || k === 0.5, `${w}×${h}`);
+  }
 });

@@ -14,6 +14,17 @@ import { T } from './core.js';
 import { DASH } from './balance.js';
 
 export const QUALITY = [2, 1.5, 1.15];
+// «Графика» в настройках: 0 низкая, 1 средняя (по умолчанию), 2 высокая. step — ступень QUALITY, с которой начинаем
+// (она же задаёт потолок частиц PART_CAP и число пылинок воздуха), vig — рисовать ли виньетку, auto — может ли
+// игра сама опускать ступень, когда кадры не успевают (lowerQuality). Выбор игрока автоснижение не меняет и не поднимает.
+export const GRAPHICS = [
+  { step: 2, vig: false, auto: true },
+  { step: 0, vig: true, auto: true },
+  { step: 0, vig: true, auto: false },
+];
+export const GRAPHICS_DEFAULT = 1;
+/** Сохранённое положение «Графики»: нет поля или что-то не то — средняя. */
+export const readGraphics = (v) => (Number.isInteger(v) && v >= 0 && v < GRAPHICS.length ? v : GRAPHICS_DEFAULT);
 
 const TAU = Math.PI * 2;
 const VIEW_UNITS = 320;            // короткая сторона экрана — столько единиц мира
@@ -57,6 +68,7 @@ export function createRenderer({ canvas, probe }) {
   let cssH = 180;
   let scale = 1;
   let qi = 0;
+  let gfx = GRAPHICS[GRAPHICS_DEFAULT];
   let k = 1;
   let art = createArt(1);
   let warmed = null;          // заготовка заранее: { list: [[ключ, вариант]…], at } — что и докуда дошли (warm)
@@ -181,7 +193,7 @@ export function createRenderer({ canvas, probe }) {
     view.h = cssH / scale;
     art = createArt(k);
     warmed = null;
-    vig = bakeVignette(0.5);
+    vig = gfx.vig ? bakeVignette(0.5) : null;
     if (room) bake();
   }
 
@@ -1210,7 +1222,19 @@ export function createRenderer({ canvas, probe }) {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
   }
 
+  /** Положение «Графики»: ступень чёткости, воздух и виньетка — заново; частицы сверх потолка убираются. */
+  function setGraphics(level) {
+    const g = GRAPHICS[level] ?? GRAPHICS[GRAPHICS_DEFAULT];
+    if (g === gfx && qi === g.step) return;
+    gfx = g;
+    qi = g.step;
+    airFor = '';
+    while (parts.length > partCap()) spare.push(parts.pop());
+    setScale();
+  }
+
   function lowerQuality() {
+    if (!gfx.auto) return false;
     const now = Math.min(QUALITY[qi], dpr());
     let next = qi + 1;
     while (next < QUALITY.length && Math.min(QUALITY[next], dpr()) >= now) next += 1;
@@ -1231,10 +1255,11 @@ export function createRenderer({ canvas, probe }) {
   void probe;
 
   return {
-    resize, enterRoom, refreshProps, onEvent, frame, toWorld, toScreen, lowerQuality, reset, destroy, warm,
+    resize, enterRoom, refreshProps, onEvent, frame, toWorld, toScreen, lowerQuality, setGraphics, reset, destroy, warm,
     /** Как рисуется хозяин сейчас (прозрачность, масштаб, тень, нить) — для проверки; копия. */
     bossLook: (m, calm = false) => ({ ...look(m, calm) }),
     get quality() { return qi; },
+    get graphics() { return GRAPHICS.indexOf(gfx); },
     get scale() { return scale; },
     get view() { return view; },
   };

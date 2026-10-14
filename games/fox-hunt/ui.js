@@ -30,6 +30,7 @@ import { BIOME_NAMES } from './tiles.js';
 
 /** Рамка, под которую свёрстано каждое окно (px), и поле вокруг него: экран 568×320 без 98×20 под вырезы и кнопки. */
 export const BOX = { w: 454, h: 284, gap: 8 };
+export const SET_H = 372;           // окно настроек выше остальных: под переключателями — ползунок «Графика»
 /** Экран, под который свёрстаны надписи поверх игры: на большем они крупнее. */
 export const HUD_BASE = { w: 568, h: 320 };
 
@@ -74,7 +75,7 @@ export const T = {
     ask: 'Начать заново? Охота пропадёт', yes: 'Да, заново', no: 'Отмена',
   },
   bagBtn: 'Рюкзак',
-  set: { title: 'Настройки', music: 'Музыка', sound: 'Звуки', lefty: 'Режим левши', stick: 'Джойстики', weaponBtn: 'Отдельная кнопка для оружия', stickStatic: 'Статичные', stickFloat: 'Плавающие', flip: 'Перевернуть экран', fullscreen: 'Полный экран', fullscreenHint: 'Esc — пауза. Чтобы выйти из полного экрана, зажми Esc' },
+  set: { title: 'Настройки', music: 'Музыка', sound: 'Звуки', lefty: 'Режим левши', stick: 'Джойстики', weaponBtn: 'Отдельная кнопка для оружия', stickStatic: 'Статичные', stickFloat: 'Плавающие', flip: 'Перевернуть экран', fullscreen: 'Полный экран', graphics: 'Графика', gfx: ['низкая', 'средняя', 'высокая'], fullscreenHint: 'Esc — пауза. Чтобы выйти из полного экрана, зажми Esc' },
   bag: {
     title: 'Рюкзак', worn: 'Надето', pack: (n, of) => `В рюкзаке · ${n} из ${of}`, extra: 'Дары и спутники', noExtra: 'пока нет',
     slot: { weapon: 'Оружие', armor: 'Броня', acc: 'Украшение', bag: 'Ячейка рюкзака' },
@@ -202,6 +203,13 @@ export function tap(node, fn) {
   return node;
 }
 
+/** Какое из трёх положений ползунка под точкой x (rect — полоса ползунка); без размеров — null. */
+export function stopAt(x, rect) {
+  const w = rect?.width;
+  if (!(w > 0) || !Number.isFinite(x)) return null;
+  return Math.max(0, Math.min(2, Math.round(((x - rect.left) / w) * 2)));
+}
+
 /** Подпись к действию у предмета: «Взять: Лук охотника», «Купить: Сердце» и цена отдельно (0 — даром). */
 export function promptText(F) {
   if (!F) return { text: '', cost: 0, ok: true, sign: false };
@@ -276,8 +284,8 @@ export function collectionPages(found, per = PER_PAGE) {
 }
 
 /** Во сколько раз увеличить окно, чтобы рамка BOX с полями влезла в экран w×h без отступов ins. */
-export function zoomFor(w, h, ins = NO_INSETS) {
-  const k = Math.min((w - ins.left - ins.right - BOX.gap * 2) / BOX.w, (h - ins.top - ins.bottom - BOX.gap * 2) / BOX.h);
+export function zoomFor(w, h, ins = NO_INSETS, boxH = BOX.h) {
+  const k = Math.min((w - ins.left - ins.right - BOX.gap * 2) / BOX.w, (h - ins.top - ins.bottom - BOX.gap * 2) / boxH);
   return clamp(Number.isFinite(k) ? k : 1, ZOOM[0], ZOOM[1]);
 }
 
@@ -1263,11 +1271,67 @@ export function createUi({ root, api, actions, get }) {
     });
     // игра могла ответить позже (полный экран не дали, вышли по Esc) — переключатели показывают её ответ
     settingsRefresh = () => keys.forEach((key, i) => switches[i].setAttribute('aria-checked', String(values[key]())));
+    // «Графика»: ползунок на три положения (палец, мышь, стрелки); что вышло на самом деле, решает игра
+    const gfxValue = () => {
+      const v = get.settings?.()?.graphics;
+      return Number.isInteger(v) && v >= 0 && v <= 2 ? v : 1;
+    };
+    const gfxText = el('span', { class: 'fh-gfx-val' });
+    const knob = el('i', { class: 'fh-gfx-knob' });
+    const bar = el('div', { class: 'fh-gfx-bar', role: 'slider', tabindex: '0', 'aria-label': T.set.graphics, 'aria-valuemin': '0', 'aria-valuemax': '2' },
+      el('i', { class: 'fh-gfx-rail' }), el('i', { class: 'fh-gfx-stop' }), el('i', { class: 'fh-gfx-stop' }), el('i', { class: 'fh-gfx-stop' }), knob);
+    const showGfx = () => {
+      const v = gfxValue();
+      knob.style.setProperty('--i', String(v));
+      gfxText.textContent = T.set.gfx[v];
+      bar.setAttribute('aria-valuenow', String(v));
+      bar.setAttribute('aria-valuetext', T.set.gfx[v]);
+    };
+    const setGfx = (v) => {
+      if (v === null || v === gfxValue()) return;
+      try {
+        actions.set?.('graphics', v);
+      } catch (err) {
+        console.error('лисья охота: настройка graphics', err);
+      }
+      showGfx();
+      say('tap');
+    };
+    let gfxId = null;
+    const gfxAt = (e) => stopAt(e.clientX, bar.getBoundingClientRect());
+    bar.addEventListener('pointerdown', (e) => {
+      if (e.button) return;
+      gfxId = e.pointerId;
+      try { bar.setPointerCapture?.(e.pointerId); } catch { /* уже отпущен */ }
+      e.preventDefault();
+      setGfx(gfxAt(e));
+    });
+    bar.addEventListener('pointermove', (e) => {
+      if (gfxId !== null && e.pointerId === gfxId) setGfx(gfxAt(e));
+    });
+    const gfxEnd = (e) => {
+      if (e.pointerId === gfxId) gfxId = null;
+    };
+    bar.addEventListener('pointerup', gfxEnd);
+    bar.addEventListener('pointercancel', gfxEnd);
+    bar.addEventListener('keydown', (e) => {
+      const to = e.key === 'ArrowLeft' || e.key === 'ArrowDown' ? gfxValue() - 1
+        : e.key === 'ArrowRight' || e.key === 'ArrowUp' ? gfxValue() + 1
+          : e.key === 'Home' ? 0 : e.key === 'End' ? 2 : null;
+      if (to === null) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setGfx(Math.max(0, Math.min(2, to)));
+    });
+    showGfx();
+    const gfx = el('div', { class: 'fh-gfx' },
+      el('div', { class: 'fh-gfx-head' }, el('span', { class: 'fh-label' }, T.set.graphics), gfxText), bar);
     const backBtn = button(T.back, 'fh-btn--main', closeTop);
     const card = el('div', { class: 'fh-win fh-settings', role: 'dialog', 'aria-label': T.set.title },
       el('div', { class: 'fh-head' }, el('h2', { class: 'fh-title' }, T.set.title)),
       el('div', { class: 'fh-set-list' }, switches),
       hasFull ? el('p', { class: 'fh-set-hint' }, T.set.fullscreenHint) : null,
+      gfx,
       el('div', { class: 'fh-foot' }, backBtn),
     );
     return { name: 'settings', el: card, focus: backBtn };
@@ -1716,6 +1780,7 @@ export function createUi({ root, api, actions, get }) {
     if (!w || !h) return;
     const ins = screenOf()?.insets?.() ?? NO_INSETS;
     root.style.setProperty('--fh-zoom', String(Math.round(zoomFor(w, h, ins) * 1000) / 1000));
+    root.style.setProperty('--fh-zoom-set', String(Math.round(zoomFor(w, h, ins, SET_H) * 1000) / 1000));
     root.style.setProperty('--fh-hud-zoom', String(Math.round(hudZoomFor(w, h) * 1000) / 1000));
     safe.l = ins.left + 6;
     safe.t = ins.top + 6;
@@ -1743,6 +1808,7 @@ export function createUi({ root, api, actions, get }) {
     hud.remove();
     modal.remove();
     root.style.removeProperty('--fh-zoom');
+    root.style.removeProperty('--fh-zoom-set');
     root.style.removeProperty('--fh-hud-zoom');
     wins.length = 0;
     notes.length = 0;
