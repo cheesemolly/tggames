@@ -74,7 +74,7 @@ export const T = {
     ask: 'Начать заново? Охота пропадёт', yes: 'Да, заново', no: 'Отмена',
   },
   bagBtn: 'Рюкзак',
-  set: { title: 'Настройки', music: 'Музыка', sound: 'Звуки', lefty: 'Режим левши', flip: 'Перевернуть экран' },
+  set: { title: 'Настройки', music: 'Музыка', sound: 'Звуки', lefty: 'Режим левши', stick: 'Джойстики', stickStatic: 'Статичные', stickFloat: 'Плавающие', flip: 'Перевернуть экран' },
   bag: {
     title: 'Рюкзак', worn: 'Надето', pack: (n, of) => `В рюкзаке · ${n} из ${of}`, extra: 'Дары и спутники', noExtra: 'пока нет',
     slot: { weapon: 'Оружие', armor: 'Броня', acc: 'Украшение', bag: 'Ячейка рюкзака' },
@@ -297,7 +297,7 @@ const initial = (name) => (name ? String(name).trim().charAt(0).toUpperCase() : 
  * Надписи и окна в root (div.fh): слой .fh-hud с кнопкой паузы, слой окон .fh-modal и всплывающее сообщение.
  *   api — от оболочки (нужен подсказке «Очки в рейтинге»);
  *   actions — что окна просят у игры: resume(), restart(), exit(), equip(i, accIndex), unequip(slot, index),
- *     drop(slot, index), usePotion(i), chooseGift(i), set(key, value) — 'lefty' | 'flip' | 'music' | 'sound' |
+ *     drop(slot, index), usePotion(i), chooseGift(i), set(key, value) — 'lefty' | 'stick' (true — плавающие) | 'flip' | 'music' | 'sound' |
  *     'hint:<id>', sfx(name); по желанию pause() — окно открылось само (кнопка паузы, выбор дара);
  *   get — что окна читают: game(), stats(), settings(), sound(), seen(), toScreen(wx, wy, out), screen();
  *     по желанию points() — готовый блок «Очки в рейтинге».
@@ -1221,15 +1221,19 @@ export function createUi({ root, api, actions, get }) {
       music: () => get.settings?.()?.music !== false,
       sound: () => get.sound?.() !== false,
       lefty: () => Boolean(get.settings?.()?.lefty),
+      stick: () => get.settings?.()?.stick === 'float',
       flip: () => Boolean(get.settings?.()?.flip),
     };
-    const keys = ['music', 'sound', 'lefty'];
+    const keys = ['music', 'sound', 'lefty', 'stick'];
     // перевернуть на другой бок можно только экран, который лежит на боку (телефон держат стоя)
     if (screenOf()?.rotated) keys.push('flip');
     // сюда же встанут новые переключатели (сетка в два столбца, места на три ряда)
+    // «Джойстики: Статичные / Плавающие» — переключатель с названием выбранного
+    const labelOf = (key) => (key === 'stick' ? `${T.set.stick}: ${values.stick() ? T.set.stickFloat : T.set.stickStatic}` : T.set[key]);
     const switches = keys.map((key) => {
+      const label = el('span', { class: 'fh-switch-label' }, labelOf(key));
       const b = el('button', { class: 'fh-btn fh-switch', role: 'switch', 'aria-checked': String(values[key]()) },
-        el('span', { class: 'fh-switch-label' }, T.set[key]), el('i', { class: 'fh-switch-track' }));
+        label, el('i', { class: 'fh-switch-track' }));
       tap(b, () => {
         try {
           actions.set?.(key, !values[key]());
@@ -1238,6 +1242,7 @@ export function createUi({ root, api, actions, get }) {
         }
         // что вышло на самом деле, решает игра — показываем её ответ
         b.setAttribute('aria-checked', String(values[key]()));
+        label.textContent = labelOf(key);
         say('tap');
       });
       return b;

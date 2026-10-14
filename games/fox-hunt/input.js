@@ -1,4 +1,6 @@
-// Управление «Лисьей охоты»: два «плавающих» джойстика под большими пальцами, мышь и клавиши.
+// Управление «Лисьей охоты»: два джойстика под большими пальцами, мышь и клавиши. Джойстики бывают «статичными» (по
+// умолчанию: основания всегда на местах, касание берётся в круге радиуса catchK около основания) и «плавающими»
+// (настройка stick; про «плавающие» — всё ниже).
 //
 // Левая половина экрана — ходьба, правая — действие. Палец на правой лежит на месте — огонь (или «взять», «купить»:
 // что окажется рядом); оттянул — прицел рывка, отпустил — рывок; вернул в середину — рывок отменён. «Режим левши»
@@ -32,6 +34,7 @@ export const STICK = {
   stale: 0.4,          // с: кадров не было дольше — игра стояла (пауза, свернули); разовые команды за это время не в счёт
   reach: 148,          // единиц мира: длина полного рывка — по ней мышь считает силу, чтобы лиса прыгала до курсора
   reachMin: 0.45,      // какую долю длины даёт самый слабый рывок (оба числа — как в balance.js: BASE.dashDist, DASH.minPower)
+  catchK: 1.6,         // «статичные» джойстики: касание берёт джойстик, лёгши не дальше этой доли радиуса от его центра
   mouseDead: 10,       // единиц мира: курсор на самой лисе — рывка нет
 };
 
@@ -66,14 +69,15 @@ const hyp = (x, y) => Math.sqrt(x * x + y * y);
 /**
  * Правила управления без страницы. Координаты — пиксели сцены в осях игры (0, 0 — левый верхний угол).
  *   w, h, insets — размер сцены и отступы { top, right, bottom, left }, куда кольца не ставятся;
- *   lefty — ходьба справа; toWorld(x, y, out) → { x, y } — точка сцены в мире (нужна только мыши);
+ *   lefty — ходьба справа; stick — 'static' (основания стоят на местах, касание берётся внутри круга около них) или
+ *   'float' (кольцо встаёт туда, где лёг палец; так было сначала); toWorld(x, y, out) → { x, y } — точка сцены в мире (нужна только мыши);
  *   now() — часы в секундах (в тестах — свои); tune — поправки к STICK.
  * Пальцы: down / move / up / cancel по номеру указателя. Мышь: mouse(buttons, x, y). Клавиши: key(code, down, repeat).
  * frame(foxX, foxY, foxDir, reach) — раз в кадр: возвращает объект ввода (всегда один и тот же) и обновляет sticks —
  * что рисовать. Место лисы в мире нужно мыши (рывок — от лисы к курсору), куда она смотрит (радианы) — пробелу,
  * reach — длина её полного рывка (по умолчанию STICK.reach).
  */
-export function createStickCore({ w = 0, h = 0, insets = null, lefty = false, toWorld = null, now = null, tune = null } = {}) {
+export function createStickCore({ w = 0, h = 0, insets = null, lefty = false, stick = 'float', toWorld = null, now = null, tune = null } = {}) {
   const C = { ...STICK, ...tune };
   const clock = now ?? (() => performance.now() / 1000);
   const input = { mx: 0, my: 0, fire: false, act: false, aim: false, ax: 0, ay: 0, ap: 0, dash: false, dx: 0, dy: 0, dp: 0, hasT: false, tx: 0, ty: 0 };
@@ -95,6 +99,7 @@ export function createStickCore({ w = 0, h = 0, insets = null, lefty = false, to
   let inB = 0;
   let inL = 0;
   let isLefty = Boolean(lefty);
+  let fixed = stick === 'static';
   // где может стоять середина кольца и где джойстики ждут палец
   let minX = 0;
   let maxX = 0;
@@ -134,6 +139,15 @@ export function createStickCore({ w = 0, h = 0, insets = null, lefty = false, to
       const p = pads[i];
       const v = views[i];
       v.on = p.on;
+      if (fixed) {
+        // основание не двигается; ручка идёт за пальцем (move держит её в круге)
+        v.x = homeX[i];
+        v.y = homeY[i];
+        v.kx = p.on ? p.x - p.ox : 0;
+        v.ky = p.on ? p.y - p.oy : 0;
+        v.state = !p.on ? 'idle' : i === MOVE || p.mode === PRESS || p.mode === BACK ? 'on' : p.mode === HOLD ? 'hold' : 'aim';
+        continue;
+      }
       if (!p.on) {
         v.x = homeX[i];
         v.y = homeY[i];
@@ -188,6 +202,31 @@ export function createStickCore({ w = 0, h = 0, insets = null, lefty = false, to
     layout();
   }
 
+  /** Джойстики на лету: 'static' | 'float'. Пальцы отпускаются (точки отсчёта у режимов разные). */
+  function setStick(mode) {
+    const next = mode === 'static';
+    if (next === fixed) return;
+    fixed = next;
+    cancelAll();
+    sync();
+  }
+
+  /** «Статичные»: ближайший свободный джойстик, в чьём круге лёг палец, или −1. */
+  function pickFixed(x, y) {
+    const reach = C.radius * C.catchK;
+    let best = -1;
+    let bestD = Infinity;
+    for (let i = 0; i < 2; i++) {
+      if (pads[i].on) continue;
+      const d = hyp(x - homeX[i], y - homeY[i]);
+      if (d <= reach && d < bestD) {
+        best = i;
+        bestD = d;
+      }
+    }
+    return best;
+  }
+
   /** Какому джойстику достанется палец, лёгший в x: MOVE, ACT или −1 (половина занята, третий палец). */
   function pick(x) {
     const onLeft = isLefty ? ACT : MOVE;
@@ -213,16 +252,31 @@ export function createStickCore({ w = 0, h = 0, insets = null, lefty = false, to
   function down(id, x, y) {
     const old = byId(id);
     if (old) old.on = false;                         // тот же номер лёг снова — прошлое отпускание потерялось
-    const i = pick(x);
+    const i = fixed ? pickFixed(x, y) : pick(x);
     if (i < 0) return -1;
     const p = pads[i];
     p.on = true;
     p.id = id;
-    p.ox = p.x = x;
-    p.oy = p.y = y;
+    p.x = x;
+    p.y = y;
+    // у статичного отсчёт — от основания, а не от места касания
+    p.ox = fixed ? homeX[i] : x;
+    p.oy = fixed ? homeY[i] : y;
+    if (fixed) clampKnob(p);
     p.fired = false;
     rest(p, PRESS);
     return i;
+  }
+
+  /** Ручка статичного не выходит за край круга (основание на месте). */
+  function clampKnob(p) {
+    const ox = p.x - p.ox;
+    const oy = p.y - p.oy;
+    const d = hyp(ox, oy);
+    if (d > C.radius) {
+      p.x = p.ox + (ox * C.radius) / d;
+      p.y = p.oy + (oy * C.radius) / d;
+    }
   }
 
   function move(id, x, y) {
@@ -230,10 +284,11 @@ export function createStickCore({ w = 0, h = 0, insets = null, lefty = false, to
     if (!p) return;
     p.x = x;
     p.y = y;
-    const ox = x - p.ox;
-    const oy = y - p.oy;
+    if (fixed) clampKnob(p);
+    const ox = p.x - p.ox;
+    const oy = p.y - p.oy;
     let d = hyp(ox, oy);
-    if (d > C.radius) {
+    if (!fixed && d > C.radius) {
       // палец убежал за кольцо — точка отсчёта едет следом: назад всегда один и тот же короткий путь
       const k = (d - C.radius) / d;
       p.ox += ox * k;
@@ -534,8 +589,9 @@ export function createStickCore({ w = 0, h = 0, insets = null, lefty = false, to
   resize(W, H, insets ?? NO_INSETS);
 
   return {
-    input, sticks, resize, setLefty, down, move, up, cancel, cancelAll, holds, mouse: mouseAt, mouseOut, mouseDrop, key, blur, frame, reset,
+    input, sticks, resize, setLefty, setStick, down, move, up, cancel, cancelAll, holds, mouse: mouseAt, mouseOut, mouseDrop, key, blur, frame, reset,
     get lefty() { return isLefty; },
+    get stick() { return fixed ? 'static' : 'float'; },
   };
 }
 
@@ -551,10 +607,10 @@ export function createStickCore({ w = 0, h = 0, insets = null, lefty = false, to
  * вызов — в кадре, где шагов не будет (экран чаще 60 Гц), звать его не надо, иначе команда пропадёт; рендеру для
  * стрелки рывка хватит state.
  */
-export function createInput({ stage, sticksEl, screen = null, toWorld = null, onPause = null, lefty = false, tune = null, now = null } = {}) {
+export function createInput({ stage, sticksEl, screen = null, toWorld = null, onPause = null, lefty = false, stick = 'float', tune = null, now = null } = {}) {
   const doc = stage.ownerDocument;
   const win = doc.defaultView;
-  const core = createStickCore({ lefty, toWorld, tune, now: now ?? (() => win.performance.now() / 1000) });
+  const core = createStickCore({ lefty, stick, toWorld, tune, now: now ?? (() => win.performance.now() / 1000) });
   const input = core.input;
 
   // где сцена лежит в осях игры (обновляет resize) и точка под указателем — числа, без новых объектов на событие
@@ -808,6 +864,11 @@ export function createInput({ stage, sticksEl, screen = null, toWorld = null, on
     paint();
   }
 
+  function setStick(mode) {
+    core.setStick(mode);
+    paint();
+  }
+
   /** Что сейчас сделает нажатие без движения: значок на ручке джойстика действия. */
   function setAction(kind) {
     const next = kind === 'fire' || kind === 'use' ? kind : 'none';
@@ -871,5 +932,5 @@ export function createInput({ stage, sticksEl, screen = null, toWorld = null, on
     stage.style.touchAction = touchAction;
   }
 
-  return { frame, state: input, sticks: core.sticks, setLefty, setAction, resize, reset, destroy };
+  return { frame, state: input, sticks: core.sticks, setLefty, setStick, setAction, resize, reset, destroy };
 }

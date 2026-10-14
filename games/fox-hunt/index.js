@@ -151,7 +151,8 @@ function readSettings(v) {
       }
     }
   }
-  return { lefty: v?.lefty === true, flip: v?.flip === true, music: v?.music !== false, hints };
+  // джойстики: нет поля (старое сохранение) или что-то не то — «статичные»
+  return { lefty: v?.lefty === true, flip: v?.flip === true, music: v?.music !== false, stick: v?.stick === 'float' ? 'float' : 'static', hints };
 }
 
 /** Сохранённая «коллекция»: только строки, без повторов и не длиннее положенного. */
@@ -190,6 +191,11 @@ function setOption(key, value) {
     settings.flip = on;
     api.screen?.flip(on);
   } else if (key === 'music') settings.music = on;
+  else if (key === 'stick') {
+    // здесь не логический переключатель: on — «плавающие»
+    settings.stick = on ? 'float' : 'static';
+    input?.setStick(settings.stick);
+  }
   else if (key.startsWith('hint:') && HINT_ID.test(key.slice(5))) {
     // подсказка показана (true) — больше не нужна; false — показать снова
     if (on && Object.keys(settings.hints).length < HINTS_MAX) settings.hints[key.slice(5)] = true;
@@ -889,6 +895,7 @@ export default {
       toWorld: (x, y, out) => renderer.toWorld(x, y, out),
       onPause: back,
       lefty: settings.lefty,
+      stick: settings.stick,
       // сила рывка мышью считается теми же числами, что и сам рывок
       tune: { reach: BASE.dashDist, reachMin: DASH.minPower },
     });

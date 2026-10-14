@@ -25,7 +25,7 @@ function make({ rotated = false, over = false } = {}) {
     exit: () => calls.push('exit'),
     set: (key, value) => {
       calls.push(`set:${key}:${value}`);
-      settings[key] = value;
+      settings[key] = key === 'stick' ? (value ? 'float' : 'static') : value;   // как в index.js
     },
     sfx: () => {},
   };
@@ -143,10 +143,10 @@ test('«Настройки» вложены в паузу; «Назад» воз
 test('настройки: музыка, звуки, левша; «Перевернуть» — только у повёрнутого экрана', () => {
   const flat = make();
   flat.ui.open('settings');
-  assert.deepEqual(flat.labels(), [T.set.music, T.set.sound, T.set.lefty, T.back]);
+  assert.deepEqual(flat.labels(), [T.set.music, T.set.sound, T.set.lefty, `${T.set.stick}: ${T.set.stickStatic}`, T.back]);
   const turned = make({ rotated: true });
   turned.ui.open('settings');
-  assert.deepEqual(turned.labels(), [T.set.music, T.set.sound, T.set.lefty, T.set.flip, T.back]);
+  assert.deepEqual(turned.labels(), [T.set.music, T.set.sound, T.set.lefty, `${T.set.stick}: ${T.set.stickStatic}`, T.set.flip, T.back]);
 });
 
 test('переключатель в настройках зовёт игру и показывает её ответ', () => {
@@ -158,6 +158,17 @@ test('переключатель в настройках зовёт игру и 
   assert.deepEqual(calls, ['pause', 'set:lefty:true']);
   assert.equal(settings.lefty, true);
   assert.equal(lefty.getAttribute('aria-checked'), 'true');
+});
+
+test('джойстики: нет поля в настройках — «Статичные»; переключатель меняет подпись', () => {
+  const { ui, labels, calls } = make();
+  ui.open('settings');
+  const sw = ui.top.el.find((n) => n.localName === 'button' && n.textContent.startsWith(T.set.stick))[0];
+  assert.equal(sw.getAttribute('aria-checked'), 'false');
+  press(sw);
+  assert.ok(calls.includes('set:stick:true'));
+  assert.ok(labels().includes(`${T.set.stick}: ${T.set.stickFloat}`));
+  assert.equal(sw.getAttribute('aria-checked'), 'true');
 });
 
 test('нет окон — «Назад» открывает паузу; конец партии окон не открывает', () => {

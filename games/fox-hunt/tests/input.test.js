@@ -1357,3 +1357,96 @@ test('game.css: что оживает — на вложенных частях, 
   assert.match(reduce, /animation: none;/);
   assert.doesNotMatch(rules, /transition[^;]*\b1ms\b/);
 });
+
+// ---------- «статичные» джойстики (настройка stick: 'static') ----------
+
+test('статичные: касание вне круга игнорируется, внутри — берёт свой джойстик', () => {
+  const { core, sticks } = make({ stick: 'static' });
+  const mh = sticks.move;
+  const ah = sticks.act;
+  assert.equal(core.stick, 'static');
+  assert.equal(core.down(1, mh.x + R * STICK.catchK + 2, mh.y), -1);
+  assert.equal(core.down(1, W / 2, Y), -1);
+  assert.equal(core.down(1, mh.x + R * STICK.catchK - 2, mh.y), 0);
+  assert.equal(core.down(2, ah.x, ah.y - R * 1.5), 1);
+  assert.equal(sticks.move.x, mh.x);               // основание не сдвинулось
+});
+
+test('статичные: основание на месте и нарисовано всегда, ручка — до края круга', () => {
+  const { core, sticks, tick } = make({ stick: 'static' });
+  const hx = sticks.move.x;
+  const hy = sticks.move.y;
+  assert.equal(sticks.move.state, 'idle');
+  core.down(1, hx + 10, hy);
+  core.move(1, hx + 500, hy - 500);
+  const input = tick();
+  assert.equal(sticks.move.x, hx);
+  assert.equal(sticks.move.y, hy);
+  close(Math.hypot(sticks.move.kx, sticks.move.ky), R, 1e-6);
+  close(Math.hypot(input.mx, input.my), 1, 1e-6);
+  assert.ok(input.mx > 0 && input.my < 0);
+  core.up(1);
+  tick();
+  assert.equal(sticks.move.state, 'idle');
+  assert.equal(sticks.move.x, hx);
+});
+
+test('статичные: ходьба считается от основания, а не от места касания', () => {
+  const { core, sticks, tick } = make({ stick: 'static' });
+  core.down(1, sticks.move.x + R, sticks.move.y);  // лёг на краю круга — уже идёт вправо
+  const input = tick();
+  close(input.mx, 1, 1e-6);
+  close(input.my, 0, 1e-6);
+});
+
+test('статичные: режим левши меняет джойстики местами', () => {
+  const usual = make({ stick: 'static' });
+  const lefty = make({ stick: 'static', lefty: true });
+  assert.equal(lefty.sticks.move.x, usual.sticks.act.x);
+  assert.equal(lefty.sticks.act.x, usual.sticks.move.x);
+  assert.equal(lefty.core.down(1, lefty.sticks.move.x, lefty.sticks.move.y), 0);
+  assert.equal(lefty.core.down(2, lefty.sticks.act.x, lefty.sticks.act.y), 1);
+});
+
+test('статичные: два пальца вместе; занятый джойстик второй палец не берёт', () => {
+  const { core, sticks, tick, wait } = make({ stick: 'static' });
+  assert.equal(core.down(1, sticks.move.x + 20, sticks.move.y), 0);
+  assert.equal(core.down(2, sticks.act.x, sticks.act.y), 1);
+  assert.equal(core.down(3, sticks.move.x, sticks.move.y), -1);
+  core.move(1, sticks.move.x + 20, sticks.move.y);
+  const input = wait(HOLD);
+  assert.ok(input.mx > 0);
+  assert.equal(input.fire, true);                  // «держу на месте» — как раньше
+  core.move(2, sticks.act.x + R, sticks.act.y);
+  core.up(2);
+  const after = tick();
+  assert.equal(after.dash, true);                  // рывок отпусканием
+  close(after.dx, 1, 1e-6);
+  assert.equal(after.dp, 1);
+});
+
+test('переключение на лету отпускает пальцы и переставляет правила', () => {
+  const { core, sticks, tick } = make({ stick: 'static' });
+  core.down(1, sticks.move.x, sticks.move.y);
+  core.setStick('float');
+  assert.equal(core.stick, 'float');
+  assert.equal(tick().mx, 0);
+  assert.equal(core.down(2, W / 2 - 30, 100), 0);  // у плавающего берётся где угодно в своей половине
+  core.setStick('static');
+  assert.equal(core.down(3, W / 2, 100), -1);
+  core.setStick('nonsense');                       // всё, кроме 'static', — плавающие
+  assert.equal(core.stick, 'float');
+});
+
+test('«float» не изменился: кольцо там, где лёг палец, и едет за ним', () => {
+  const { core, sticks, tick } = make();           // по умолчанию в ядре — плавающие
+  assert.equal(core.stick, 'float');
+  const X = 200;
+  core.down(1, X, Y);
+  tick();
+  assert.equal(sticks.move.x, X);
+  core.move(1, X + R * 3, Y);
+  const input = tick();
+  assert.equal(sticks.move.x, X + R * 2);                 // кольцо уехало за пальцем
+  close(input.mx, 1, 1e-6);
+});
