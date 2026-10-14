@@ -205,7 +205,6 @@
   --fh-hud-bg: rgba(18, 22, 20, 0.58);
   --fh-hud-ink: #fff;
   --fh-dim: rgba(0, 0, 0, 0.5);
-  --fh-strip: #10150f;               /* полоса со стороны Telegram: не поле, сплошной цвет (field.js) */
   --fh-line: color-mix(in srgb, var(--tg-theme-hint-color, #8a8f94) 38%, transparent);
   --fh-panel: var(--tg-theme-secondary-bg-color, #f1f2f4);
   --fh-slot: color-mix(in srgb, var(--tg-theme-text-color, #000) 7%, var(--tg-theme-bg-color, #fff));
@@ -230,7 +229,7 @@
 }
 
 /* ---------- каркас ---------- */
-[data-game="fox-hunt"] { display: flex; flex-direction: column; padding: 0; overflow: hidden; background: var(--fh-strip); user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+[data-game="fox-hunt"] { display: flex; flex-direction: column; padding: 0; overflow: hidden; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 [data-game="fox-hunt"] .fh { position: relative; flex: 1; min-height: 0; isolation: isolate; overflow: hidden; touch-action: none; }
 [data-game="fox-hunt"] .fh-stage { position: absolute; inset: 0; touch-action: none; }
 [data-game="fox-hunt"] .fh-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }

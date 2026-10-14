@@ -20,7 +20,6 @@ import { createSounds } from './sounds.js';
 import { createRenderer } from './render.js';
 import { createUi } from './ui.js';
 import { createInput } from './input.js';
-import { fieldOf } from './field.js';
 import { F_WALK, F_LEAP, emit, kindOf } from './core.js';
 import { BASE, DASH } from './balance.js';
 import { SIDES, DIR, dangerAt, escapeDir, fieldTo, fieldDir, castRay, entryPoint } from './world.js';
@@ -90,7 +89,6 @@ let offered = null;                  // выбор дара (G.pending), о ко
 let offeredAt = 0;
 let sizeW = 0;                       // размер сцены, под который настроен холст
 let sizeH = 0;
-let sizeBase = 0;                    // короткая сторона всего экрана (масштаб мира)
 let box = null;                      // ?fhbox=ШxВ — поле ровно такого размера (запись ролика)
 let buzzAt = 0;
 let buzzRank = 0;
@@ -242,44 +240,18 @@ function draw(dt = 0) {
   ui.place(G);
 }
 
-/**
- * Полоса со стороны Telegram (field.js): root сдвигается от неё полями, ей остаётся цвет фона контейнера; своим
- * отступам root обнуляет переменные --ls-* с этой стороны. → field (для размера) или null без альбомного экрана.
- */
-function placeField() {
-  let field = null;
-  let side = null;
-  if (!box && api.screen) {
-    const size = api.screen.size();
-    if (size.w > 0 && size.h > 0) {
-      field = fieldOf(size.w, size.h, api.screen.insets());
-      side = field.strip.size > 0 ? field.strip.side : null;
-    }
-  }
-  const st = root.style;
-  st.marginLeft = side === 'left' ? `${field.strip.size}px` : '';
-  st.marginRight = side === 'right' ? `${field.strip.size}px` : '';
-  for (const s of ['left', 'right']) {
-    if (s === side) st.setProperty(`--ls-${s[0]}`, '0px');
-    else st.removeProperty(`--ls-${s[0]}`);
-  }
-  return field;
-}
-
 function resize() {
   if (!dom || !renderer) return;
-  const field = placeField();
   let w = 0;
   let h = 0;
-  let base = 0;
   if (box) {
     w = box.w;
     h = box.h;
-  } else if (field) {
-    // экран может лежать на боку: его размер в осях игры знает оболочка; поле — за вычетом полосы Telegram
-    w = field.w;
-    h = field.h;
-    base = field.base;
+  } else if (api.screen) {
+    // экран может лежать на боку: его размер в осях игры знает оболочка
+    const size = api.screen.size();
+    w = size.w;
+    h = size.h;
   }
   if (!(w > 0 && h > 0)) {
     w = dom.stage.clientWidth;
@@ -287,13 +259,10 @@ function resize() {
   }
   w = Math.round(w);
   h = Math.round(h);
-  input?.resize();                     // сцена сдвинулась — место и отступы джойстиков заново
-  ui?.layout();
-  if (!(w > 0 && h > 0) || (w === sizeW && h === sizeH && base === sizeBase)) return;
+  if (!(w > 0 && h > 0) || (w === sizeW && h === sizeH)) return;
   sizeW = w;
   sizeH = h;
-  sizeBase = base;
-  renderer.resize(w, h, base);
+  renderer.resize(w, h);
   draw();                            // холст при смене размера очищается — рисуем сразу, не дожидаясь кадра
   kick();
 }
@@ -991,7 +960,7 @@ export default {
     seen = [];
     soundOn = true;
     pressed = finished = handed = record = cold = dirty = false;
-    raf = lastFrame = acc = offeredAt = sizeW = sizeH = sizeBase = buzzAt = buzzRank = frames = slowFrames = faults = 0;
+    raf = lastFrame = acc = offeredAt = sizeW = sizeH = buzzAt = buzzRank = frames = slowFrames = faults = 0;
     view.alpha = 0;
     view.calm = false;
     view.input = null;
