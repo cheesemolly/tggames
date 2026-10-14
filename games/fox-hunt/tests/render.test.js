@@ -246,3 +246,81 @@ test('рендер: заготовка заранее (warm) доходит до
     globalThis.document.createElement = was;
   }
 });
+
+// Удар вплотную (рисунок cone) снаряда не оставляет — раньше от него была видна только искорка. Теперь рендер рисует
+// взмах: значок оружия ведёт дугу у лисы, за ним — след до края удара; дыхание и рёв — след и облачка, без значка.
+test('рендер: удар ближним оружием виден — оружие на дуге у лисы, за ним след, потом всё гаснет', async () => {
+  const { arena } = await import('./helpers.js');
+  const { fireWeapon } = await import('../patterns.js');
+  const canvas = fakeCanvas();
+  const ctx = canvas.getContext();
+  const log = [];
+  let fills = 0;
+  let strokes = 0;
+  ctx.setTransform = (...a) => log.push(a);
+  ctx.fill = () => { fills += 1; };
+  ctx.stroke = () => { strokes += 1; };
+  const r = createRenderer({ canvas, probe: null });
+  r.resize(640, 360);
+  const G = arena({ seed: 3 });
+  const P = G.player;
+  r.enterRoom(G);
+  for (let i = 0; i < 30; i++) r.frame(G, 0.1, { alpha: 1, calm: true, input: null });   // прежнее догорело
+  const shot = (dt, calm = false) => {
+    log.length = 0;
+    fills = 0;
+    strokes = 0;
+    r.frame(G, dt, { alpha: 1, calm, input: null });
+    return { list: log.map((a) => a.map((v) => Math.round(v * 1000) / 1000 || 0).join(' ')), fills, strokes };
+  };
+  const hit = (id, a) => {
+    G.inv.weapon = { id, lvl: 0 };
+    assert.ok(fireWeapon(G, G.inv.weapon, P.x, P.y, a));
+    const evs = drain(G);
+    const e = evs.find((x) => x.t === 'shot');
+    assert.ok(e.r > 0 && e.arc > 0, `${id}: в событии удара нет дальности и раствора`);
+    for (const x of evs) r.onEvent(x, G);
+    return e;
+  };
+  const base = shot(0);
+  assert.deepEqual(shot(0).list, base.list, 'кадр без хода времени должен повторяться');
+
+  // когти: в первый миг — только значок оружия у начала дуги
+  const e = hit('claws', 0.3);
+  const first = shot(0);
+  const fresh = first.list.filter((c) => !base.list.includes(c)).map((c) => c.split(' ').map(Number));
+  assert.equal(fresh.length, 1, 'в начале взмаха должно появиться ровно одно — оружие');
+  const [m0, m1, , m3, X, Y] = fresh[0];
+  const k = r.scale;   // в тестах точек на единицу мира столько же, сколько масштаб (devicePixelRatio 1)
+  assert.ok(Math.abs(Math.hypot(m0, m1) - 1.25 * k) < 0.01, 'оружие не того размера');
+  const fx = P.x * k - Math.round(r.view.x * k);
+  const fy = (P.y - 8) * k - Math.round(r.view.y * k);
+  const at = Math.atan2(Y - fy, X - fx);
+  const start = e.a - e.arc / 2;
+  assert.ok(Math.abs(at - start) < 0.05, `оружие не у начала дуги: ${at.toFixed(2)} вместо ${start.toFixed(2)}`);
+  assert.ok(Math.abs(Math.hypot(X - fx, Y - fy) / k - clampN(e.r * 0.6, 18, 40)) < 0.5, 'оружие не на своём расстоянии');
+  assert.ok(Math.abs(Math.atan2(m1, m0) - (start + 0.8)) < 0.01 && m3 > 0, 'оружие повёрнуто не концом наружу');
+
+  // середина взмаха — заливка следа и край по дальности удара
+  const mid = shot(0.08);
+  assert.ok(mid.fills > base.fills && mid.strokes > base.strokes, 'нет следа взмаха');
+  for (let i = 0; i < 5; i++) shot(0.1);
+  const after = shot(0);
+  assert.equal(after.fills, base.fills, 'след не погас');
+  assert.equal(after.strokes, base.strokes, 'край следа не погас');
+
+  // «уменьшить движение»: дуга сразу целиком, без поворота
+  hit('club', 2);
+  const calm = shot(0, true);
+  assert.ok(calm.fills > 0 && calm.strokes > 0, 'при «уменьшить движение» взмаха не видно');
+  for (let i = 0; i < 5; i++) shot(0.1, true);
+
+  // ледяное дыхание — след без значка оружия
+  hit('frostbreath', -1);
+  const breath = shot(0.08);
+  assert.ok(breath.fills > base.fills, 'у дыхания нет следа');
+  assert.deepEqual(bad.slice(0, 5), []);
+  r.destroy();
+});
+
+const clampN = (v, a, b) => (v < a ? a : v > b ? b : v);

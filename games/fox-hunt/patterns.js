@@ -282,7 +282,12 @@ export function fireWeapon(G, item, x, y, ang, tx, ty) {
     if (typeof w.fire === 'function') w.fire(G, w, lvl, x, y, ang + 0.14, tx, ty);
     else run(G, w, x, y, ang + 0.14, dmg, tx, ty);
   }
-  emit(G, { t: 'shot', look: w.shot?.look ?? 'fx.slash', x, y, a: ang, id: item.id });
+  // удар вплотную снаряда не оставляет — рендеру нужны дальность и раствор дуги, чтобы нарисовать взмах
+  const cone = w.pattern === 'cone';
+  emit(G, {
+    t: 'shot', look: w.shot?.look ?? 'fx.slash', x, y, a: ang, id: item.id,
+    r: cone ? (w.range ?? 46) * st.wRange : 0, arc: cone ? (w.shot?.arc ?? 1.5) : 0, cd: (w.cd ?? 0.3) * st.wCd,
+  });
   sfx(G, w.sfx ?? 'shot', x, y);
   return true;
 }

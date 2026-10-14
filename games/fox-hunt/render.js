@@ -33,6 +33,12 @@ const ZONE_LOOK = {
   ice: ['rgba(110,190,255,A)', '#e6f6ff'],
 };
 const BOOM_LOOK = { fire: 1, ice: 2, poison: 3, light: 4, dark: 5 };
+// взмах ближнего оружия (рисунок cone): по картинке удара — заливка дуги, край и что вылетает по дуге
+const SWING_LOOK = { 'fx.slash': 0, 'fx.ice': 1, 'fx.puff': 2 };
+const SWING_INK = [['#ffffff', '#ff9a3c'], ['#e6f6ff', '#6ec0ff'], ['#eef2f8', '#9fb0c8']];
+const SWING_FADE = 0.12;           // след дотаивает после взмаха
+const ICON_AXIS = -0.8;            // значки оружия нарисованы наискось: рукоять внизу слева, конец вверху справа
+const ICON_SIZE = 1.25;            // оружие в лапах чуть крупнее значка в рюкзаке
 const PREY = new Set(['rabbit', 'hare', 'gold', 'fat']);
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -82,6 +88,9 @@ export function createRenderer({ canvas, probe }) {
   const air = [];             // воздух: пыльца, листья, снег — в координатах экрана
   let afterT = 0;
   let airFor = '';
+  // взмах ближнего оружия: один на лису, новый удар сменяет старый; dir — в какую сторону ведёт дугу (через раз)
+  const swing = { on: false, key: '', icon: false, look: 0, a: 0, r: 0, arc: 0, dir: -1, t: 0, life: 0.2 };
+  let calmNow = false;
 
   const partCap = () => PART_CAP[qi] ?? 140;
 
@@ -120,6 +129,31 @@ export function createRenderer({ canvas, probe }) {
         g: o.g ?? 160, drag: o.drag ?? 2, life: (o.life ?? 0.5) * (0.7 + Math.random() * 0.6),
         rot: o.rot ? Math.random() * TAU : 0, vr: o.rot ? (Math.random() - 0.5) * 10 : 0,
         s0: o.s0 ?? 1, s1: o.s1 ?? 0.6, a0: o.a0 ?? 1, a1: o.a1 ?? 0,
+      });
+    }
+  }
+
+  function startSwing(e) {
+    const s = swing;
+    s.on = true;
+    s.t = 0;
+    s.life = clamp(num(e.cd, 0.4) * 0.5, 0.12, 0.22);
+    s.a = num(e.a);
+    s.r = num(e.r);
+    s.arc = clamp(num(e.arc, 1.5), 0.3, 3);
+    s.look = SWING_LOOK[e.look] ?? 0;
+    s.key = `item.${e.id}`;
+    s.icon = s.look === 0 && hasSprite(s.key);
+    s.dir = -s.dir;
+    if (s.look === 0) return;
+    // дыхание и рёв: облачка разлетаются по дуге до края удара
+    const n = 7;
+    for (let i = 0; i < n; i++) {
+      const a = s.a + s.arc * ((i + 0.5) / n - 0.5) + (Math.random() - 0.5) * 0.15;
+      const v = s.r * (3.6 + Math.random() * 1);   // с торможением drag 4 за 0,32 с пролетит ~0,7 дальности
+      spawn(e.look, num(e.x) + Math.cos(a) * 8, num(e.y) + Math.sin(a) * 8, {
+        v: s.look === 2 ? i % 3 : 0, z: 8, vx: Math.cos(a) * v, vy: Math.sin(a) * v, g: 0, drag: 4, life: 0.32,
+        rot: Math.random() * TAU, vr: (Math.random() - 0.5) * 6, s0: 0.6, s1: 1.3, a0: 0.9,
       });
     }
   }
@@ -221,6 +255,7 @@ export function createRenderer({ canvas, probe }) {
     rings.length = 0;
     afters.length = 0;
     texts.length = 0;
+    swing.on = false;
     snap = true;
     trauma = 0;
   }
@@ -236,6 +271,7 @@ export function createRenderer({ canvas, probe }) {
     rings.length = 0;
     afters.length = 0;
     texts.length = 0;
+    swing.on = false;
     air.length = 0;
     airFor = '';
     room = null;
@@ -302,7 +338,8 @@ export function createRenderer({ canvas, probe }) {
         break;
       }
       case 'shot':
-        burst('fx.spark', e.x, e.y, 1, { speed: 20, z: 8, life: 0.15 });
+        if (num(e.r) > 0) startSwing(e);
+        else burst('fx.spark', e.x, e.y, 1, { speed: 20, z: 8, life: 0.15 });
         break;
       case 'strike': {
         const z = e.zone;
@@ -557,13 +594,86 @@ export function createRenderer({ canvas, probe }) {
     const top = Math.max(60, num(P.st?.speed, 130));
     const a = pose(P.act, P.k, Math.hypot(P.vx, P.vy) / top, P.vx, P.vy, P.z, 0, 1, false, P.dir, null);
     const dir = P.face < 0 ? -1 : 1;
+    // удар вверх — оружие за лисой, вниз и вбок — перед ней
+    const back = swing.on && Math.sin(swingHead()) < -0.3;
+    if (back) drawSwing(x, y - num(P.z));
     if (flick) ctx.globalAlpha = 0.55;
     if (art.hasRig('fox')) art.rig(ctx, 'fox', px(x), py(y - num(P.z)), dir, a);
     else blobFor(x, y, 9, num(P.z), dir, '#e8832a');
     if (flick) ctx.globalAlpha = 1;
+    if (swing.on && !back) drawSwing(x, y - num(P.z));
     if (P.shield > 0) {
       art.putX(ctx, 'fx.ring', px(x), py(y - 8), 0, 0.55, 0.55, 0.35 + 0.1 * Math.sin(t * 6), 0);
     }
+  }
+
+  // доля пройденного: быстро в начале, мягко в конце; при «уменьшить движении» — сразу всё
+  const swingDone = () => (calmNow ? 1 : 1 - (1 - clamp(swing.t / swing.life, 0, 1)) ** 3);
+  // где сейчас оружие (угол); дыхание и рёв не ведут дугу — бьют сразу всем веером
+  const swingHead = () => (swing.look === 0 ? swing.a + swing.dir * swing.arc * (swingDone() - 0.5) : swing.a);
+
+  /**
+   * Взмах ближнего оружия вокруг лисы (x, y — её ноги на земле). Когти и дубина: след-серп по дуге (внешний край —
+   * ровно дальность удара, к хвосту сужается) и само оружие на конце. Дыхание и рёв: весь веер сразу, расходится
+   * от лисы до края удара.
+   */
+  function drawSwing(x, y) {
+    const s = swing;
+    const cy = y - 8;                                  // от груди, а не от лап
+    const e = swingDone();
+    const g = clamp((s.t - s.life) / SWING_FADE, 0, 1);
+    const fade = 1 - g;
+    if (fade <= 0.01) return;
+    const slash = s.look === 0;
+    const from = s.a - s.dir * s.arc * 0.5;
+    let u0 = 0;
+    let u1 = 1;
+    let outer = s.r * (0.35 + 0.65 * e);
+    let wide = outer * 0.6;
+    if (slash) {
+      u1 = e;
+      u0 = Math.max(0, e - 0.7) + (1 - Math.max(0, e - 0.7)) * g;
+      outer = s.r;
+      wide = clamp(s.r * 0.32, 9, 24);
+    }
+    const [fill, edge] = SWING_INK[s.look] ?? SWING_INK[0];
+    const N = 10;
+    const ang = (i) => from + s.dir * s.arc * (u0 + ((u1 - u0) * i) / N);
+    const rim = () => {
+      ctx.beginPath();
+      for (let i = 0; i <= N; i++) {
+        const f = ang(i);
+        const X = px(x + Math.cos(f) * outer);
+        const Y = py(cy + Math.sin(f) * outer);
+        if (i === 0) ctx.moveTo(X, Y);
+        else ctx.lineTo(X, Y);
+      }
+    };
+    if (u1 - u0 > 0.01) {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      rim();
+      for (let i = N; i >= 0; i--) {
+        const f = ang(i);
+        const R = outer - wide * (slash ? 0.15 + 0.85 * (i / N) : 1);
+        ctx.lineTo(px(x + Math.cos(f) * R), py(cy + Math.sin(f) * R));
+      }
+      ctx.closePath();
+      ctx.globalAlpha = (slash ? 0.7 : 0.35) * fade;
+      ctx.fillStyle = fill;
+      ctx.fill();
+      ctx.globalAlpha = 0.9 * fade;
+      ctx.strokeStyle = edge;
+      ctx.lineWidth = Math.max(1, 1.3 * k);
+      rim();
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    if (!s.icon) return;
+    // само оружие: рукоять у лисы, конец смотрит наружу, ведёт дугу
+    const head = swingHead();
+    const d = clamp(s.r * 0.6, 18, 40);
+    const flip = s.dir;
+    art.putX(ctx, s.key, px(x + Math.cos(head) * d), py(cy + Math.sin(head) * d), head - flip * ICON_AXIS, ICON_SIZE, ICON_SIZE * flip, fade);
   }
 
   function drawThing(th) {
@@ -896,6 +1006,10 @@ export function createRenderer({ canvas, probe }) {
       afters[i].t += dt;
       if (afters[i].t >= AFTER_LIFE) afters.splice(i, 1);
     }
+    if (swing.on) {
+      swing.t += dt;
+      if (swing.t >= swing.life + SWING_FADE) swing.on = false;
+    }
     trauma = Math.max(0, trauma - SHAKE_DECAY * dt);
     flashA = Math.max(0, flashA - dt * 2.2);
   }
@@ -904,6 +1018,7 @@ export function createRenderer({ canvas, probe }) {
     dt = clamp(num(dt), 0, 0.1);
     t += dt;
     const calm = Boolean(opts.calm);
+    calmNow = calm;
     const alpha = clamp(num(opts.alpha, 1), 0, 1);
     if (!G || !G.room) {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
