@@ -214,6 +214,18 @@ export function stopAt(x, rect) {
   return Math.max(0, Math.min(2, Math.round(((x - rect.left) / w) * 2)));
 }
 
+/**
+ * То же для касания в повёрнутом экране (телефон держат вертикально, игра лежит набок): и точка, и рамка полосы
+ * переводятся в оси игры через screen.toLocal — иначе вдоль полосы идёт вертикаль экрана.
+ */
+export function stopAtScreen(clientX, clientY, rect, screen) {
+  if (!screen?.rotated || !screen.toLocal || !rect) return stopAt(clientX, rect);
+  const p = screen.toLocal(clientX, clientY);
+  const a = screen.toLocal(rect.left, rect.top);
+  const b = screen.toLocal(rect.right, rect.bottom);
+  return stopAt(p.x, { left: Math.min(a.x, b.x), width: Math.abs(b.x - a.x) });
+}
+
 /** Подпись к действию у предмета: «Взять: Лук охотника», «Купить: Сердце» и цена отдельно (0 — даром). */
 export function promptText(F) {
   if (!F) return { text: '', cost: 0, ok: true, sign: false };
@@ -1312,7 +1324,7 @@ export function createUi({ root, api, actions, get }) {
       say('tap');
     };
     let gfxId = null;
-    const gfxAt = (e) => stopAt(e.clientX, bar.getBoundingClientRect());
+    const gfxAt = (e) => stopAtScreen(e.clientX, e.clientY, bar.getBoundingClientRect(), screenOf());
     bar.addEventListener('pointerdown', (e) => {
       if (e.button) return;
       gfxId = e.pointerId;

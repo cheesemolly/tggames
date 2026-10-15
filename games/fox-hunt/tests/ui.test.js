@@ -8,7 +8,7 @@ import { arena } from './helpers.js';
 const page = miniPage();
 globalThis.document = page.doc;
 globalThis.matchMedia = () => ({ matches: true, addEventListener() {} });
-const { createUi, T, BOX, SET_H, BAG_H, HUD_BASE, zoomFor, hudZoomFor, stopAt } = await import('../ui.js');
+const { createUi, T, BOX, SET_H, BAG_H, HUD_BASE, zoomFor, hudZoomFor, stopAt, stopAtScreen } = await import('../ui.js');
 
 /**
  * Окно открыто, партия идёт; вернуть всё, что нужно проверять. rotated — экран лежит на боку; diag — числа окна
@@ -467,4 +467,20 @@ test('настройки: ползунок «Графика» — стрелки
     const k = zoomFor(w, h, undefined, BAG_H);
     assert.ok(BAG_H * k <= h - BOX.gap * 2 + 1e-6 || k === 0.5, `рюкзак ${w}×${h}`);
   }
+});
+
+test('ползунок «Графика» в повёрнутом экране считает касание в осях игры', () => {
+  // игра 800×400 лежит набок (turn 90): x игры = clientY − box.y, y игры = box.w − (clientX − box.x), box.w = 400
+  const box = { x: 0, y: 0, w: 400, h: 800 };
+  const screen = {
+    rotated: true,
+    toLocal: (cx, cy) => ({ x: cy - box.y, y: box.w - (cx - box.x) }),
+  };
+  // полоса в осях игры: x от 100 до 300, y 150…180 → на экране: clientX 220…250, clientY 100…300
+  const rect = { left: 220, right: 250, top: 100, bottom: 300, width: 30, height: 200 };
+  assert.equal(stopAtScreen(235, 100, rect, screen), 0);
+  assert.equal(stopAtScreen(235, 200, rect, screen), 1);
+  assert.equal(stopAtScreen(235, 300, rect, screen), 2);
+  // без поворота — как раньше
+  assert.equal(stopAtScreen(300, 0, { left: 100, width: 200 }, { rotated: false }), 2);
 });
