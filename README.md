@@ -77,17 +77,17 @@
   </tr>
   <tr>
     <td align="center"><img src="media/readme/logic-gates.gif" width="220" alt="логические схемы"><br><b>логические схемы</b><br><sub>расставь и, или, не — и лампа загорится</sub></td>
-    <td align="center"><img src="media/readme/jump-up.gif" width="220" alt="прыгалка вверх"><br><b>прыгалка вверх</b> <sup>скоро</sup><br><sub>каракуля прыгает сама — веди её вверх по тетрадке</sub></td>
-    <td align="center"><img src="media/readme/basketball.gif" width="220" alt="баскетбол"><br><b>баскетбол</b> <sup>скоро</sup><br><sub>тяни мяч, как рогатку, и бросай из корзины в корзину</sub></td>
+    <td align="center"><img src="media/readme/jump-up.gif" width="220" alt="прыгалка вверх"><br><b>прыгалка вверх</b><br><sub>каракуля прыгает сама — веди её вверх по тетрадке</sub></td>
+    <td align="center"><img src="media/readme/basketball.gif" width="220" alt="баскетбол"><br><b>баскетбол</b><br><sub>тяни мяч, как рогатку, и бросай из корзины в корзину</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="media/readme/fox-hunt.gif" width="220" alt="лисья охота"><br><b>лисья охота</b> <sup>скоро</sup><br><sub>лиса рывком ловит кроликов в лесных комнатах, уворачивается от лося и медведя, собирает оружие</sub></td>
+    <td align="center"><img src="media/readme/fox-hunt.gif" width="220" alt="лисья охота"><br><b>лисья охота</b><br><sub>лиса рывком ловит кроликов в лесных комнатах, уворачивается от лося и медведя, собирает оружие</sub></td>
   </tr>
 </table>
 
 ## что есть
 
-- 40 игр: слова, головоломки, аркады, настольные, викторина и музыка
+- 43 игры: слова, головоломки, аркады, настольные, викторина и музыка
 - рейтинг по каждой игре, видно только имя
 - прогресс сохраняется за аккаунтом telegram, можно играть с любого устройства
 - звуки, скины, светлая и тёмная тема
