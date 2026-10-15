@@ -17,7 +17,7 @@ import { reducedMotion } from '../../shared/motion.js';
 import { createAudio } from '../../shared/sfx.js';
 import { pointsInfo } from '../../shared/points-info.js';
 import { createSounds } from './sounds.js';
-import { createRenderer, readGraphics } from './render.js';
+import { createRenderer, createPacer, readGraphics } from './render.js';
 import { createUi } from './ui.js';
 import { createInput } from './input.js';
 import { createFullscreen, isDesktop, desktopFacts, readFullscreen } from './fullscreen.js';
@@ -90,6 +90,7 @@ let handed = false;                  // итог уже отдан оболоч�
 let record = false;                  // эта партия побила рекорд
 let raf = 0;
 let lastFrame = 0;
+let pacer = createPacer();           // низкая «Графика» на экране 120 Гц — рисуем через кадр
 let acc = 0;                         // время, которое расчёт ещё не прошёл
 let cold = false;                    // прошлым кадром расчёт стоял
 let dirty = false;                   // пока расчёт стоит, кадр рисуется только по делу — вот оно
@@ -451,6 +452,11 @@ let debugSlow = 1;
 function loop(now) {
   raf = 0;
   if (!ui || !G) return;
+  if (pacer.skip(now, renderer?.half === true)) {
+    // пропущенный кадр: время не трогаем — следующий получит оба промежутка разом
+    raf = requestAnimationFrame(loop);
+    return;
+  }
   // метка кадра бывает раньше performance.now() из kick() — время не должно идти назад
   const gap = Math.max(0, (now - lastFrame) / 1000) * debugSlow;
   lastFrame = now;
@@ -1120,6 +1126,7 @@ export default {
     root?.remove();
     if (globalThis.__foxHunt) delete globalThis.__foxHunt;
     debugSlow = 1;
+    pacer = createPacer();
     api = root = dom = renderer = input = ui = G = bot = box = offered = mood = fs = null;
     lockWant = false;
     autoTries = 0;

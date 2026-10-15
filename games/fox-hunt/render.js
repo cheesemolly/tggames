@@ -13,26 +13,59 @@ import { bakeText, bakeVignette, bakeFog, bakePuff, bakeLight } from './render-b
 import { T, TILE, own } from './core.js';
 import { DASH } from './balance.js';
 
-export const QUALITY = [2, 1.5, 1.15];
+export const QUALITY = [2, 1.5, 1.15, 1, 0.85];
 // «Графика» в настройках: 0 низкая, 1 средняя (по умолчанию), 2 высокая. step — ступень QUALITY, с которой начинаем
 // (она же задаёт потолок частиц PART_CAP и число пылинок воздуха), vig — рисовать ли виньетку, auto — может ли
-// игра сама опускать ступень, когда кадры не успевают (lowerQuality). Выбор игрока автоснижение не меняет и не поднимает.
+// игра сама опускать ступень, когда кадры не успевают (lowerQuality), lowest — ниже какой ступени не опускать.
+// Выбор игрока автоснижение не меняет и не поднимает.
 // puffs — сколько клоков дымки плывёт по туману (0 — туман ровный, без дрейфа). dark — во сколько раз слой темноты
 // «Ночи» меньше холста по каждой стороне (темнота мягкая — грубость слоя не видна, а смешивать его дешевле); glow —
 // цветные отсветы у светящихся вещей места; flies — сколько светлячков летает ночью.
+// Дальше — то, чем низкая отличается от средней и высокой (замер 2026-10-15: прежняя низкая уменьшала лишь число
+// точек, а команд рисования было столько же, сколько у средней): air — воздух (пыльца, листья, снег); shade — тени:
+// 2 у всех, 1 только у лисы, хозяев и тех, кто в воздухе (по ним видно, куда упадёт); burst — доля частиц во вспышках;
+// ghost — как часто остаётся тень рывка, с (каждая — целая лиса из частей); half — на экране 100 Гц и чаще рисовать
+// через кадр (createPacer).
 export const GRAPHICS = [
-  { step: 2, vig: false, auto: true, puffs: 0, dark: 4, glow: false, flies: 0 },
-  { step: 0, vig: true, auto: true, puffs: 5, dark: 3, glow: true, flies: 4 },
-  { step: 0, vig: true, auto: false, puffs: 9, dark: 2, glow: true, flies: 7 },
+  { step: 3, lowest: 4, vig: false, auto: true, puffs: 0, dark: 4, glow: false, flies: 0, air: false, shade: 1, burst: 0.5, ghost: 0.07, half: true },
+  { step: 0, lowest: 2, vig: true, auto: true, puffs: 5, dark: 3, glow: true, flies: 4, air: true, shade: 2, burst: 1, ghost: 0.035, half: false },
+  { step: 0, lowest: 0, vig: true, auto: false, puffs: 9, dark: 2, glow: true, flies: 7, air: true, shade: 2, burst: 1, ghost: 0.035, half: false },
 ];
 export const GRAPHICS_DEFAULT = 1;
 /** Сохранённое положение «Графики»: нет поля или что-то не то — средняя. */
 export const readGraphics = (v) => (Number.isInteger(v) && v >= 0 && v < GRAPHICS.length ? v : GRAPHICS_DEFAULT);
 
+// промежуток между кадрами экрана, мс: короче — экран 100 Гц и чаще
+const FAST_GAP = 10.5;
+
+/**
+ * Через кадр на быстром экране (GRAPHICS[].half). Расчёт идёт шагами по 1/60 с, так что на экране 120 Гц каждый
+ * второй кадр лишь сдвигал картинку на полшага, а стоил как настоящий. skip(now, on) — пропустить ли этот вызов
+ * requestAnimationFrame; промежуток экрана считается по всем вызовам (и пропущенным), средним за ~10 кадров.
+ */
+export function createPacer() {
+  let gap = 1000 / 60;
+  let prev = 0;
+  let odd = false;
+  return {
+    skip(now, on) {
+      if (prev && now > prev) gap += (Math.min(50, now - prev) - gap) * 0.1;
+      prev = now;
+      if (!on || gap > FAST_GAP) {
+        odd = false;
+        return false;
+      }
+      odd = !odd;
+      return odd;
+    },
+    get gap() { return gap; },
+  };
+}
+
 const TAU = Math.PI * 2;
 const VIEW_UNITS = 320;            // короткая сторона экрана — столько единиц мира
 const K_MAX = 3;
-const PART_CAP = [260, 200, 140];  // частиц живьём по ступеням чёткости
+const PART_CAP = [260, 200, 140, 70, 70];  // частиц живьём по ступеням чёткости
 const AFTER_LIFE = 0.28;           // сколько живёт тень рывка
 const FLASH_TIME = 0.12;
 const SHAKE_DECAY = 2.4;
@@ -87,6 +120,7 @@ const smooth = (v) => {
   const x = clamp(v, 0, 1);
   return x * x * (3 - 2 * x);
 };
+const BOX_SLACK = 3;                        // запас рамки предмета, ед.: заготовка шире на точку, место округляется
 const ALOFT = 260;                          // высота «под потолком» у паучьей королевы (bosses.js)
 const num = (v, d = 0) => (Number.isFinite(v) ? v : d);
 
@@ -143,6 +177,8 @@ export function createRenderer({ canvas, probe }) {
   // (takeLights, при входе); светлячки — места в комнате и где они сейчас (X, Y, a — пишутся в кадре, не создаются)
   let dark = null;
   let nightT = 0;             // часы мерцания и полёта светлячков: при «уменьшить движение» стоят
+  // что нарисовано в прошлом кадре (для проверки): предметы, плитки и заливки земли за краем комнаты, тени
+  const drawn = { props: 0, tiles: 0, fills: 0, shadows: 0 };
   let cuts = 0;               // сколько пятен вырезано и сколько отсветов нарисовано в прошлом кадре (для проверки)
   let glows = 0;
   let spot = null;
@@ -180,6 +216,7 @@ export function createRenderer({ canvas, probe }) {
 
   function burst(key, x, y, n, o = {}) {
     const sp = o.speed ?? 60;
+    if (gfx.burst < 1) n = Math.ceil(n * gfx.burst);
     for (let i = 0; i < n; i++) {
       const a = Math.random() * TAU;
       const s = sp * (0.4 + Math.random() * 0.6);
@@ -323,9 +360,32 @@ export function createRenderer({ canvas, probe }) {
 
   function takeProps() {
     const all = propsOf(room);
+    for (let i = 0; i < all.length; i++) boxOf(all[i]);
     props = all.filter((p) => !p.over).sort((a, b) => a.y - b.y);
     over = all.filter((p) => p.over).sort((a, b) => a.y - b.y);
   }
+
+  /**
+   * Рамка картинки предмета в единицах мира (x0, y0, x1, y1) — по её записи в art.js с запасом на обводку и
+   * округление; предмет за экраном не рисуется вовсе. Прежде отсекали по точке привязки с полем 70 единиц — и на
+   * экран шла половина предметов, которых на нём нет (стволы верхней стены, когда камера ниже).
+   */
+  function boxOf(p) {
+    const d = spriteDef(p.key);
+    if (!d) {
+      p.x0 = p.x - 70;
+      p.x1 = p.x + 70;
+      p.y0 = p.y - 70;
+      p.y1 = p.y + 70;
+      return;
+    }
+    p.x0 = p.x - d.ox - d.pad - BOX_SLACK;
+    p.x1 = p.x - d.ox + d.w + d.pad + BOX_SLACK;
+    p.y0 = p.y - d.oy - d.pad - BOX_SLACK;
+    p.y1 = p.y - d.oy + d.h + d.pad + BOX_SLACK;
+  }
+
+  const onView = (p) => p.x1 > view.x && p.x0 < view.x + view.w && p.y1 > view.y && p.y0 < view.y + view.h;
 
   /** Что светится в комнате сама по себе (для «Ночи»): кристаллы и грибы пещер, горячие трещины. */
   function takeLights() {
@@ -564,6 +624,7 @@ export function createRenderer({ canvas, probe }) {
   }
 
   function shadow(x, y, r, a = 1) {
+    drawn.shadows += 1;
     const sx = (r * 2) / 32;
     art.putX(ctx, 'fx.shadow', px(x), py(y), 0, sx, sx * 1.1, a);
   }
@@ -690,7 +751,8 @@ export function createRenderer({ canvas, probe }) {
   }
 
   function putProp(p) {
-    if (!visible(p.x, p.y, 70)) return;
+    if (!onView(p)) return;
+    drawn.props += 1;
     art.put(ctx, p.key, px(p.x), py(p.y), p.v ?? 0);
   }
 
@@ -1154,10 +1216,42 @@ export function createRenderer({ canvas, probe }) {
     ctx.globalAlpha = 1;
   }
 
+  /**
+   * Земля за краем комнаты — только там, куда не достаёт запечённый фон. Фон непрозрачен (кроме крайней точки по
+   * краю), так что под ним заливать и класть плитки незачем. Прежде каждый кадр заливался весь экран, а когда комната
+   * уже экрана — ещё и плитками по всему экрану (~80 картинок), и всё это закрывал фон: выходило три слоя на месте одного.
+   */
   function deepFill() {
+    const W = canvas.width;
+    const H = canvas.height;
+    // где ляжет фон (так же, как в кадре), без двух крайних точек
+    let x0 = 0;
+    let y0 = 0;
+    let x1 = 0;
+    let y1 = 0;
+    if (bg) {
+      x0 = Math.round(-camPx - bg.M * k) + 2;
+      y0 = Math.round(-camPy - bg.M * k) + 2;
+      x1 = x0 + bg.c.width - 4;
+      y1 = y0 + bg.c.height - 4;
+    }
+    if (bg && x0 <= 0 && y0 <= 0 && x1 >= W && y1 >= H) return;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = DEEP_FILL[room.biome] ?? '#1f3a22';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    if (!bg || x1 <= x0 || y1 <= y0) {
+      ctx.fillRect(0, 0, W, H);
+      drawn.fills += 1;
+      x0 = y0 = x1 = y1 = 0;
+    } else {
+      const l = clamp(x0, 0, W);
+      const r = clamp(x1, 0, W);
+      const t = clamp(y0, 0, H);
+      const b = clamp(y1, 0, H);
+      if (t > 0) fillOut(0, 0, W, t);
+      if (b < H) fillOut(0, b, W, H - b);
+      if (b > t && l > 0) fillOut(0, t, l, b - t);
+      if (b > t && r < W) fillOut(r, t, W - r, b - t);
+    }
     const rw = room.w * T;
     const rh = room.h * T;
     const M = ROOM_MARGIN;
@@ -1166,17 +1260,25 @@ export function createRenderer({ canvas, probe }) {
     const s = art.sprite(deepKey);
     if (!s) return;
     const step = 64;
-    const x0 = Math.floor(view.x / step);
-    const x1 = Math.ceil((view.x + view.w) / step);
-    const y0 = Math.floor(view.y / step);
-    const y1 = Math.ceil((view.y + view.h) / step);
-    for (let gy = y0; gy < y1; gy++) {
-      for (let gx = x0; gx < x1; gx++) {
+    const tx0 = Math.floor(view.x / step);
+    const tx1 = Math.ceil((view.x + view.w) / step);
+    const ty0 = Math.floor(view.y / step);
+    const ty1 = Math.ceil((view.y + view.h) / step);
+    const size = Math.ceil(step * k) + 1;
+    for (let gy = ty0; gy < ty1; gy++) {
+      for (let gx = tx0; gx < tx1; gx++) {
         const X = Math.round(gx * step * k - camPx);
         const Y = Math.round(gy * step * k - camPy);
-        ctx.drawImage(s.c, X, Y, Math.ceil(step * k) + 1, Math.ceil(step * k) + 1);
+        if (X >= x0 && Y >= y0 && X + size <= x1 && Y + size <= y1) continue;     // целиком под фоном
+        ctx.drawImage(s.c, X, Y, size, size);
+        drawn.tiles += 1;
       }
     }
+  }
+
+  function fillOut(x, y, w, h) {
+    ctx.fillRect(x, y, w, h);
+    drawn.fills += 1;
   }
 
   function drawAim(G) {
@@ -1346,6 +1448,7 @@ export function createRenderer({ canvas, probe }) {
       return;
     }
     if (room !== G.room) enterRoom(G);
+    drawn.props = drawn.tiles = drawn.fills = drawn.shadows = 0;
     veil = own(VEILS, room.mod) ? VEILS[room.mod] : null;
     stepFx(dt, calm);
     const P = G.player;
@@ -1354,7 +1457,7 @@ export function createRenderer({ canvas, probe }) {
     if (P.dash && !calm) {
       afterT -= dt;
       if (afterT <= 0) {
-        afterT = 0.035;
+        afterT = gfx.ghost;
         if (afters.length < 10) afters.push({ x: P.x, y: P.y, z: P.z, face: P.face, k: P.k, vx: P.vx, vy: P.vy, dir: P.dir, t: 0 });
       }
     } else afterT = 0;
@@ -1363,7 +1466,8 @@ export function createRenderer({ canvas, probe }) {
     }
 
     camera(G, dt, alpha, calm);
-    if (!calm) stepAir(dt);
+    const airOn = !calm && gfx.air;
+    if (airOn) stepAir(dt);
 
     // 1. фон
     deepFill();
@@ -1395,9 +1499,12 @@ export function createRenderer({ canvas, probe }) {
         }
       }
     }
+    // низкая «Графика»: тени только у лисы, хозяев и тех, кто в воздухе — по ним видно, где он и куда упадёт
+    const shadeAll = gfx.shade > 1;
     for (let i = 0; i < mobs.length; i++) {
       const m = mobs[i];
       if (m.dead || (m.hide && !boss(m)) || !visible(m.x, m.y, 60)) continue;
+      if (!shadeAll && !m.flying && num(m.z) < 2 && !boss(m)) continue;
       if (m.hide) {
         const L = look(m, calm);
         shadow(m.px + (m.x - m.px) * alpha, m.py + (m.y - m.py) * alpha, (m.r ?? 10) * 1.1 * L.sh, (m.flying ? 0.5 : 1) * L.sa);
@@ -1405,7 +1512,10 @@ export function createRenderer({ canvas, probe }) {
       }
       shadow(m.x, m.y, (m.r ?? 10) * 1.1, m.flying ? 0.5 : 1);
     }
-    for (let i = 0; i < room.pals.length; i++) shadow(room.pals[i].x, room.pals[i].y, (room.pals[i].r ?? 8) * 1.1);
+    for (let i = 0; i < room.pals.length; i++) {
+      const n = room.pals[i];
+      if (shadeAll || num(n.z) >= 2) shadow(n.x, n.y, (n.r ?? 8) * 1.1);
+    }
     {
       const fx = P.px + (P.x - P.px) * alpha;
       const fy = P.py + (P.y - P.py) * alpha;
@@ -1414,12 +1524,12 @@ export function createRenderer({ canvas, probe }) {
     }
     for (let i = 0; i < room.things.length; i++) {
       const th = room.things[i];
-      if (th.solid && !th.broken && visible(th.x, th.y, 60)) shadow(th.x, th.y, th.r * 1.2, 0.8);
+      if (th.solid && !th.broken && shadeAll && visible(th.x, th.y, 60)) shadow(th.x, th.y, th.r * 1.2, 0.8);
       else if (th.z > 0 && visible(th.x, th.y, 60)) shadow(th.x, th.y, th.r * 0.9, 0.5);
     }
     for (let i = 0; i < room.shots.length; i++) {
       const s = room.shots[i];
-      if (s.on && num(s.z, 8) > 3 && visible(s.x, s.y, 30)) shadow(s.x, s.y, 4, 0.5);
+      if (s.on && shadeAll && num(s.z, 8) > 3 && visible(s.x, s.y, 30)) shadow(s.x, s.y, 4, 0.5);
     }
     for (let i = 0; i < room.actors.length; i++) {
       const a = room.actors[i];
@@ -1431,7 +1541,7 @@ export function createRenderer({ canvas, probe }) {
     qn = 0;
     for (let i = 0; i < props.length; i++) {
       const p = props[i];
-      if (visible(p.x, p.y, 70)) enqueue(p.y, 0, p);
+      if (onView(p)) enqueue(p.y, 0, p);
     }
     for (let i = 0; i < afters.length; i++) enqueue(afters[i].y - 0.2, 7, afters[i]);
     for (let i = 0; i < mobs.length; i++) {
@@ -1513,12 +1623,12 @@ export function createRenderer({ canvas, probe }) {
     for (let i = 0; i < over.length; i++) putProp(over[i]);
 
     // 7. атмосфера комнаты (туман, ночь) и то, что поверх неё; воздух, виньетка
-    if (veil?.airUnder && !calm) drawAir();
+    if (veil?.airUnder && airOn) drawAir();
     if (veil) {
       veil.draw(G, alpha);
       drawAbove(G, veil);
     }
-    if (!veil?.airUnder && !calm) drawAir();
+    if (!veil?.airUnder && airOn) drawAir();
     if (vig) {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.drawImage(vig, 0, 0, canvas.width, canvas.height);
@@ -1549,9 +1659,10 @@ export function createRenderer({ canvas, probe }) {
   function lowerQuality() {
     if (!gfx.auto) return false;
     const now = Math.min(QUALITY[qi], dpr());
+    const last = Math.min(gfx.lowest, QUALITY.length - 1);
     let next = qi + 1;
-    while (next < QUALITY.length && Math.min(QUALITY[next], dpr()) >= now) next += 1;
-    if (next >= QUALITY.length) return false;
+    while (next <= last && Math.min(QUALITY[next], dpr()) >= now) next += 1;
+    if (next > last) return false;
     qi = next;
     while (parts.length > partCap()) spare.push(parts.pop());
     setScale();
@@ -1588,6 +1699,10 @@ export function createRenderer({ canvas, probe }) {
       };
     },
     get graphics() { return GRAPHICS.indexOf(gfx); },
+    /** Что нарисовано в прошлом кадре: предметы, плитки и заливки земли за краем комнаты, тени; копия. */
+    get frameInfo() { return { ...drawn, parts: parts.length }; },
+    /** Рисовать через кадр на быстром экране (низкая «Графика», createPacer). */
+    get half() { return gfx.half; },
     get scale() { return scale; },
     get view() { return view; },
   };

@@ -338,8 +338,10 @@ test('график: три положения — ступень, частицы
   };
   const low = make();
   low.setGraphics(0);
-  assert.equal(low.quality, 2, 'низкая — самая грубая ступень');
-  assert.equal(low.lowerQuality(), false, 'ниже низкой не бывает');
+  assert.equal(low.quality, 3, 'низкая — грубее всех, что бывают у средней');
+  assert.equal(low.lowerQuality(), true, 'низкая сама опускается ещё на ступень');
+  assert.equal(low.quality, 4);
+  assert.equal(low.lowerQuality(), false, 'ниже — уже нет');
   const mid = make();
   assert.equal(mid.graphics, 1, 'по умолчанию — средняя');
   assert.equal(mid.quality, 0, 'средняя — как раньше: с первой ступени');
@@ -357,12 +359,19 @@ test('график: три положения — ступень, частицы
   mid.lowerQuality();
   mid.lowerQuality();
   assert.ok(mid.quality > 0);
+  assert.equal(mid.lowerQuality(), false, 'средняя опускается не ниже, чем раньше');
+  assert.equal(mid.quality, 2);
   mid.setGraphics(1);
   assert.equal(mid.quality, 0);
   assert.equal(mid.view.w, widthMid, 'поле в единицах мира то же');
   // числа по положениям
-  assert.deepEqual(GRAPHICS.map((g) => g.step), [2, 0, 0]);
+  assert.deepEqual(GRAPHICS.map((g) => g.step), [3, 0, 0]);
+  assert.deepEqual(GRAPHICS.map((g) => g.lowest), [4, 2, 0]);
   assert.deepEqual(GRAPHICS.map((g) => g.vig), [false, true, true]);
+  assert.deepEqual(GRAPHICS.map((g) => g.air), [false, true, true]);
+  assert.deepEqual(GRAPHICS.map((g) => g.half), [true, false, false]);
+  // средняя и высокая — как до урезаний низкой (2026-10-15)
+  for (const g of GRAPHICS.slice(1)) assert.deepEqual([g.shade, g.burst, g.ghost], [2, 1, 0.035]);
   assert.ok(QUALITY[GRAPHICS[0].step] < QUALITY[GRAPHICS[1].step]);
   low.setGraphics(7);                                // мусор — средняя
   assert.equal(low.graphics, 1);
@@ -374,7 +383,118 @@ test('график: три положения — ступень, частицы
     r.resize(360, 640);
     return canvas.width;
   };
-  assert.ok(Math.abs(cv(0) / cv(2) - QUALITY[2] / QUALITY[0]) < 0.01, 'ширина холста по ступеням');
+  assert.ok(Math.abs(cv(0) / cv(2) - QUALITY[3] / QUALITY[0]) < 0.01, 'ширина холста по ступеням');
   assert.equal(cv(1), cv(2));
   delete globalThis.window;
+});
+
+// ---- урезания низкой «Графики» и кадр без лишнего (2026-10-15) ----
+
+test('кадр: предметы за экраном не рисуются — отсечка по рамке картинки, а не по точке с полем', async () => {
+  const { propsOf } = await import('../art-tiles.js');
+  const { spriteDef } = await import('../art.js');
+  for (const [w, h] of [[640, 360], [844, 342], [360, 640]]) {
+    const r = createRenderer({ canvas: fakeCanvas(), probe: null });
+    r.resize(w, h);
+    const G = newRun(11);
+    r.enterRoom(G);
+    for (const e of drain(G)) r.onEvent(e, G);
+    playBot(G, createBot(), 3);
+    r.frame(G, 0.016, { alpha: 1, calm: true, input: null });
+    const v = r.view;
+    let exact = 0;
+    let old = 0;
+    for (const p of propsOf(G.room)) {
+      const d = spriteDef(p.key);
+      const x0 = p.x - d.ox - d.pad;
+      const y0 = p.y - d.oy - d.pad;
+      // запас 3 ед. — как у рендера: точка заготовки и округление места
+      if (x0 - 3 < v.x + v.w && x0 + d.w + d.pad * 2 + 3 > v.x && y0 - 3 < v.y + v.h && y0 + d.h + d.pad * 2 + 3 > v.y) exact += 1;
+      if (p.x > v.x - 70 && p.x < v.x + v.w + 70 && p.y > v.y - 70 && p.y < v.y + v.h + 70) old += 1;
+    }
+    assert.equal(r.frameInfo.props, exact, `${w}×${h}: рисуются ровно те, что задевают экран`);
+    assert.ok(exact <= old, 'не больше, чем при старой отсечке');
+    r.destroy();
+  }
+});
+
+test('кадр: земля за краем комнаты — только там, где её не закрывает фон', () => {
+  // экран шире комнаты: плитки только по бокам, заливка — полосами по бокам, а не на весь экран
+  const wide = createRenderer({ canvas: fakeCanvas(), probe: null });
+  wide.resize(1600, 300);
+  const G = newRun(5);
+  wide.enterRoom(G);
+  wide.frame(G, 0.016, { alpha: 1, calm: true, input: null });
+  const v = wide.view;
+  const all = (Math.ceil((v.x + v.w) / 64) - Math.floor(v.x / 64)) * (Math.ceil((v.y + v.h) / 64) - Math.floor(v.y / 64));
+  const info = wide.frameInfo;
+  assert.ok(G.room.w * 32 + 2 * 48 < v.w, 'экран и правда шире комнаты с полями');
+  assert.ok(info.tiles > 0 && info.tiles < all * 0.7, `плиток ${info.tiles} из ${all}`);
+  assert.ok(info.fills >= 2 && info.fills <= 4, 'полосы по краям');
+  wide.destroy();
+  // экран внутри комнаты: под фоном ничего
+  const inside = createRenderer({ canvas: fakeCanvas(), probe: null });
+  inside.resize(320, 320);
+  inside.enterRoom(G);
+  inside.frame(G, 0.016, { alpha: 1, calm: true, input: null });
+  assert.equal(inside.frameInfo.tiles, 0);
+  assert.equal(inside.frameInfo.fills, 0);
+  inside.destroy();
+});
+
+test('низкая «Графика»: теней меньше (лиса — с тенью), частиц во вспышке вдвое меньше', () => {
+  const G = newRun(7);
+  const look = (level) => {
+    const r = createRenderer({ canvas: fakeCanvas(), probe: null });
+    r.setGraphics(level);
+    r.resize(640, 360);
+    r.enterRoom(G);
+    r.frame(G, 0.016, { alpha: 1, calm: true, input: null });
+    const shadows = r.frameInfo.shadows;
+    r.onEvent({ t: 'die', x: G.player.x + 30, y: G.player.y, elite: false }, G);
+    r.onEvent({ t: 'catch', x: G.player.x - 30, y: G.player.y }, G);
+    r.frame(G, 0, { alpha: 1, calm: true, input: null });
+    const parts = r.frameInfo.parts;
+    r.destroy();
+    return { shadows, parts };
+  };
+  assert.ok(G.room.mobs.some((m) => !m.dead && !m.flying), 'в первой комнате есть звери на земле');
+  const low = look(0);
+  const mid = look(1);
+  const high = look(2);
+  assert.ok(low.shadows >= 1, 'тень лисы есть');
+  assert.ok(low.shadows < mid.shadows, `теней ${low.shadows} против ${mid.shadows}`);
+  assert.equal(mid.shadows, high.shadows);
+  assert.equal(mid.parts, 14, 'вспышки средней — как были (3 + 4 + 5 + 2)');
+  assert.equal(high.parts, mid.parts);
+  assert.equal(low.parts, 8, 'у низкой — вдвое меньше, с округлением вверх');
+});
+
+test('через кадр на экране 100 Гц и чаще — только когда просят', async () => {
+  const { createPacer } = await import('../render.js');
+  const run = (hz, on, n = 240) => {
+    const p = createPacer();
+    let skipped = 0;
+    let t = 1000;
+    for (let i = 0; i < n; i++) {
+      t += 1000 / hz;
+      if (p.skip(t, on) && i >= 60) skipped += 1;
+    }
+    return skipped / (n - 60);
+  };
+  assert.equal(run(60, true), 0, '60 Гц — каждый кадр');
+  assert.equal(run(90, true), 0, '90 Гц — каждый кадр (через кадр вышло бы 45)');
+  assert.equal(run(120, true), 0.5, '120 Гц — через кадр');
+  assert.equal(run(144, true), 0.5);
+  assert.equal(run(120, false), 0, 'не просили — каждый кадр');
+  // экран стал медленнее (или игра не успевает) — пропуски прекращаются
+  const p = createPacer();
+  let t = 0;
+  for (let i = 0; i < 120; i++) p.skip((t += 8.33), true);
+  let late = 0;
+  for (let i = 0; i < 120; i++) if (p.skip((t += 16.7), true) && i > 40) late += 1;
+  assert.equal(late, 0);
+  // долгая пауза (свернули) не ломает счёт
+  assert.equal(typeof p.skip(t + 60000, true), 'boolean');
+  assert.ok(p.gap <= 50);
 });
