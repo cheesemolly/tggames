@@ -6,9 +6,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
-import { H, T, CAPS, REG, BIOMES, kindOf, rngFrom } from '../core.js';
+import { H, T, TILE, CAPS, REG, BIOMES, kindOf, rngFrom } from '../core.js';
 import { BASE, FOX, roomCount } from '../balance.js';
-import { validateTemplate } from '../world.js';
+import { validateTemplate, breakBush, hitTile } from '../world.js';
 import { generateFloor, checkMap, pickTemplate, tplKind, biomeOf, loopOf } from '../floor.js';
 import { hurtPlayer } from '../player.js';
 import { giveItem, hasItem, takeGift, giftOptions, spend, itemPrice, ACC_SLOTS, BAG_SLOTS } from '../inventory.js';
@@ -752,6 +752,81 @@ test('сохранённая лавка с вещью, которой больш
   assert.ok(R);
   assert.equal(R.room.things.filter((t) => t.kind === 'pedestal').length, 3);
   runSteps(R, 30, makeInput({ mx: 1, fire: true }));
+});
+
+const bushesOf = (room) => [...room.tiles].flatMap((c, i) => (c === TILE.BUSH ? [i] : []));
+const coinsOf = (room) => room.picks.filter((p) => p.kind === 'coin').length;
+
+/** Настоящая охота, лиса — в охотничьей комнате с кустами (у своей норы). */
+function bushyRun(seed = 3) {
+  const G = newRun(seed);
+  const mr = G.map.rooms.find((r) => r.type === 'hunt' && REG.ROOM_BY_ID[r.tpl].rows.join('').includes('b'));
+  enterRoom(G, mr.id, 'c');
+  drain(G);
+  return G;
+}
+
+test('сломанный куст не вырастает: вышла и вернулась — на его месте земля, монет из него больше нет', () => {
+  const G = arena({ tpl: 'forest-thicket', door: true });
+  const all = bushesOf(G.room);
+  assert.ok(all.length >= 3);
+  const [a, b] = all;
+  assert.ok(breakBush(G, a));
+  hitTile(G, b, 1);
+  hitTile(G, b, 1);
+  assert.deepEqual(G.map.rooms[0].data.bush, [a, b]);
+  enterRoom(G, 1, 'w');
+  enterRoom(G, 0, 'e');
+  assert.deepEqual(bushesOf(G.room), all.slice(2), 'вышла и зашла — куста нет');
+  assert.equal(G.room.flags[a], 0, 'по месту куста можно ходить');
+  assert.ok(!breakBush(G, a), 'ломать нечего');
+  // фарма нет: сломала всё, потом 20 раз туда-обратно — ни одного куста и ни одной новой монеты
+  for (const i of bushesOf(G.room)) breakBush(G, i);
+  assert.deepEqual([...G.map.rooms[0].data.bush].sort((x, y) => x - y), all);
+  let coins = 0;
+  for (let k = 0; k < 20; k++) {
+    enterRoom(G, 1, 'w');
+    enterRoom(G, 0, 'e');
+    assert.deepEqual(bushesOf(G.room), []);
+    for (let i = 0; i < G.room.tiles.length; i++) breakBush(G, i);
+    coins += coinsOf(G.room);
+  }
+  assert.equal(coins, 0);
+  assert.equal(G.map.rooms[0].data.bush.length, all.length, 'список не растёт');
+});
+
+test('сломанные кусты переживают сохранение и загрузку', () => {
+  const G = bushyRun();
+  const id = G.map.cur;
+  const all = bushesOf(G.room);
+  assert.ok(all.length >= 2);
+  breakBush(G, all[0]);
+  const R = restore(JSON.parse(JSON.stringify(snapshot(G))));
+  assert.ok(R);
+  assert.equal(R.map.cur, id);
+  assert.deepEqual(bushesOf(R.room), all.slice(1));
+  assert.deepEqual(R.map.rooms[id].data.bush, [all[0]]);
+});
+
+test('кусты в сохранении: старое без списка — все на месте; кривой список не роняет игру', () => {
+  const G = bushyRun();
+  const id = G.map.cur;
+  const all = bushesOf(G.room);
+  const d = JSON.parse(JSON.stringify(snapshot(G)));
+  assert.equal(d.map.rooms[id].data.bush, undefined, 'пока ничего не сломано, поля нет');
+  assert.deepEqual(bushesOf(restore(d).room), all, 'старое сохранение — кусты на месте');
+  const wall = G.room.tiles.indexOf(TILE.TALL);
+  for (const bad of ['кусты', 7, null, true, { a: 1 }, [-1, 1.5, 99999, 'x', null, wall, all[0], all[0]]]) {
+    const x = JSON.parse(JSON.stringify(d));
+    x.map.rooms[id].data.bush = bad;
+    const R = restore(x);
+    assert.ok(R, JSON.stringify(bad));
+    assert.deepEqual(bushesOf(R.room), Array.isArray(bad) ? all.slice(1) : all, JSON.stringify(bad));
+    assert.ok(R.room.tiles.includes(TILE.TALL), 'стена осталась стеной');
+    assert.ok(breakBush(R, all[1]));
+    assert.ok(R.map.rooms[id].data.bush.includes(all[1]));
+    runSteps(R, 20, makeInput({ mx: 1, fire: true }));
+  }
 });
 
 // ---------- статистика ----------

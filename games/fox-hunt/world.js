@@ -151,6 +151,15 @@ export function makeRoom(G, mr) {
       } else if (ch >= '1' && ch <= '5') room.slots.push({ n: Number(ch), x: tileX(x), y: tileY(y) });
     }
   }
+  // кусты, сломанные раньше (номера клеток в mr.data.bush), не вырастают; кривое в списке пропускается
+  const broken = mr.data?.bush;
+  if (Array.isArray(broken)) {
+    for (const i of broken) {
+      if (!Number.isInteger(i) || i < 0 || i >= n || room.tiles[i] !== TILE.BUSH) continue;
+      room.tiles[i] = TILE.FLOOR;
+      room.flags[i] = BLOCK[TILE.FLOOR];
+    }
+  }
   room.slots.sort((a, b) => a.n - b.n || a.x - b.x || a.y - b.y);
   for (const side of SIDES) {
     const to = mr.doors?.[side] ?? -1;
@@ -248,13 +257,20 @@ export function setTile(G, tx, ty, code) {
   emit(G, { t: 'tiles', tx, ty, code });
 }
 
-/** Сломать куст в клетке i: земля, шорох, иногда монетка. */
+const BUSH_MAX = 40;
+
+/** Сломать куст в клетке i: земля, шорох, иногда монетка. Комната карты запоминает клетку — куст не вырастет. */
 export function breakBush(G, i) {
   const room = G.room;
   if (i < 0 || room.tiles[i] !== TILE.BUSH) return false;
   const tx = i % room.w;
   const ty = Math.floor(i / room.w);
   setTile(G, tx, ty, TILE.FLOOR);
+  const mr = G.map?.rooms?.[room.id];
+  if (mr?.data && room.floor === G.floor) {
+    if (!Array.isArray(mr.data.bush)) mr.data.bush = [];
+    if (mr.data.bush.length < BUSH_MAX && !mr.data.bush.includes(i)) mr.data.bush.push(i);
+  }
   const x = tileX(tx);
   const y = tileY(ty);
   emit(G, { t: 'break', x, y, what: 'bush' });
